@@ -1,5 +1,15 @@
+/* ProHippo — Invoices, Communications, Matters, Misc */
 import React from 'react';
 import { Icon, Avatar, StatusPill, NOTICES, INVOICES, fmtINR, fmtDate, fmtDateLong } from './shared';
+
+function Legend({ color, label }) {
+  return (
+    <div className="center" style={{gap: 8, fontSize: 12.5}}>
+      <div style={{width: 8, height: 8, borderRadius: 3, background: color}}/>
+      <span>{label}</span>
+    </div>
+  );
+}
 
 export function Invoices() {
   return (
@@ -111,15 +121,7 @@ export function Invoices() {
   );
 }
 
-function Legend({ color, label }) {
-  return (
-    <div className="center" style={{gap: 6, fontSize: 12}}>
-      <div style={{width: 10, height: 10, borderRadius: 3, background: color}}/>
-      <span className="semi">{label}</span>
-    </div>
-  );
-}
-
+/* Matters list */
 export function Matters() {
   const matters = [
     { id: "m1", type: "ITAT", assessee: "Rajesh M. Shah", ay: "2017-18", section: "—", ita: "ITA No. 1244/Ahd/2024", bench: "Ahmedabad 'A'", status: "Active", priority: "high", next: "28 May", staff: "Priya Mehta", days: 1 },
@@ -201,6 +203,7 @@ export function Matters() {
   );
 }
 
+/* Communications */
 export function Communications() {
   const items = [
     { id: 1, channel: "WhatsApp", to: "Rajesh M. Shah", subject: "Documents required for AY 2017-18 — ITAT hearing on 28 May", time: "Today, 09:42", status: "Delivered ✓✓", icon: "whatsapp", color: "success", template: "Document request" },
@@ -263,13 +266,13 @@ export function Communications() {
             <div style={{fontSize: 12.5, fontWeight: 700}}>Body</div>
             <div style={{fontSize: 12.5, lineHeight: 1.6, color: "var(--p-text-2)"}}>
               Dear Sir,<br/><br/>
-              The Income Tax Appellate Tribunal has fixed your appeal for hearing on <b>28 May 2026 at 11:30 AM</b> before the Ahmedabad &apos;A&apos; Bench. Kindly arrange the following at the earliest:<br/><br/>
+              The Income Tax Appellate Tribunal has fixed your appeal for hearing on <b>28 May 2026 at 11:30 AM</b> before the Ahmedabad 'A' Bench. Kindly arrange the following at the earliest:<br/><br/>
               1. Audited financials AY 17-18<br/>
               2. Bank statements FY 16-17<br/>
               3. Lender confirmations + PAN<br/>
               4. Source of cash deposits<br/>
               5. Ledger of sundry creditors<br/>
-              6. ITR &amp; computation<br/><br/>
+              6. ITR & computation<br/><br/>
               Please share by <b>26 May 2026</b>.<br/><br/>
               Regards,<br/>
               Jayesh Vyas, CA
@@ -285,6 +288,7 @@ export function Communications() {
   );
 }
 
+/* AI page */
 export function AiParser({ onOpenParsed }) {
   return (
     <div className="animate-in">
@@ -317,7 +321,7 @@ export function AiParser({ onOpenParsed }) {
             <span className="pill pill-pink">4 pending review</span>
           </div>
           <div className="col" style={{gap: 8}}>
-            {NOTICES.map((n) => (
+            {NOTICES.map((n, i) => (
               <div key={n.id} className="between" onClick={n.awaiting ? onOpenParsed : undefined} style={{padding: "12px 14px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line-2)", cursor: n.awaiting ? "pointer" : "default"}}>
                 <div className="center" style={{gap: 10}}>
                   <div style={{width: 32, height: 32, borderRadius: 10, background: "white", color: "var(--p-primary)", display: "grid", placeItems: "center"}}>
@@ -341,6 +345,7 @@ export function AiParser({ onOpenParsed }) {
   );
 }
 
+/* Reports */
 export function Reports() {
   return (
     <div className="animate-in">
@@ -362,8 +367,7 @@ export function Reports() {
           { t: "Notice parsing accuracy", d: "AI confidence vs manual corrections", icon: "sparkle", color: "pink" },
           { t: "Group ledger", d: "Consolidated for selected period", icon: "doc", color: "primary" },
         ].map(r => {
-          const colorMap = { warning: ["var(--p-amber)","#B07512"], primary: ["var(--p-lavender-2)","var(--p-primary-2)"], success: ["var(--p-mint)","#1B8C5C"], pink: ["var(--p-pink)","#C13388"], danger: ["var(--p-coral)","#B8463A"] };
-          const colors = colorMap[r.color];
+          const colors = { warning: ["var(--p-amber)","#B07512"], primary: ["var(--p-lavender-2)","var(--p-primary-2)"], success: ["var(--p-mint)","#1B8C5C"], pink: ["var(--p-pink)","#C13388"], danger: ["var(--p-coral)","#B8463A"] }[r.color];
           return (
             <div key={r.t} className="card" style={{cursor: "pointer", transition: "all 0.15s"}}>
               <div className="center" style={{gap: 12, marginBottom: 14}}>
@@ -387,6 +391,7 @@ export function Reports() {
   );
 }
 
+/* Settings — integrations */
 export function SettingsPage() {
   return (
     <div className="animate-in">

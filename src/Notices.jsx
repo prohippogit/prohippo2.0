@@ -1,5 +1,67 @@
+/* ProHippo — Notices list, upload + AI parser */
 import React from 'react';
 import { Icon, StatusPill, NOTICES, PARSED_NOTICE, fmtDateLong } from './shared';
+
+function NoticeStat({ label, value, color, icon }) {
+  const map = {
+    pink: { bg: "var(--p-pink)", fg: "#C13388" },
+    info: { bg: "#E1EEFF", fg: "#2766C7" },
+    success: { bg: "var(--p-mint)", fg: "#1B8C5C" },
+    warning: { bg: "var(--p-amber)", fg: "#B07512" },
+  }[color];
+  return (
+    <div className="card" style={{padding: "16px 18px"}}>
+      <div className="between">
+        <div>
+          <div className="stat-label">{label}</div>
+          <div className="stat-value" style={{fontSize: 26}}>{value}</div>
+        </div>
+        <div style={{width: 38, height: 38, borderRadius: 12, background: map.bg, color: map.fg, display: "grid", placeItems: "center"}}>
+          <Icon name={icon} size={18}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Hl({ t, hl, mono }) {
+  return (
+    <div style={{fontSize: 10.5, lineHeight: 1.7, fontFamily: mono ? "ui-monospace, monospace" : "inherit", color: "var(--p-text-2)"}}>
+      {hl
+        ? <span style={{background: "rgba(108,92,231,0.18)", padding: "1px 4px", borderRadius: 3, fontWeight: 600, color: "var(--p-text)"}}>{t}</span>
+        : t}
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, ai, mono, full }) {
+  return (
+    <div className={`field ${ai ? "ai-extracted" : ""}`} style={{gridColumn: full ? "span 2" : "auto"}}>
+      <div className="center" style={{justifyContent: "space-between"}}>
+        <label>{label}</label>
+        {ai && <span className="ai-badge" style={{fontSize: 9}}>AI</span>}
+      </div>
+      <input value={value} onChange={e => onChange(e.target.value)} style={{fontFamily: mono ? "ui-monospace, monospace" : "inherit"}}/>
+    </div>
+  );
+}
+
+function Toggle({ on, onToggle, icon, iconColor, title, desc }) {
+  return (
+    <div onClick={onToggle} className="center" style={{gap: 12, padding: "12px 14px", borderRadius: 13, background: on ? "var(--p-card-tint)" : "white", border: `1px solid ${on ? "var(--p-primary-3)" : "var(--p-line-2)"}`, cursor: "pointer", transition: "all 0.15s ease"}}>
+      <div style={{width: 34, height: 34, borderRadius: 11, background: on ? "white" : "var(--p-card-tint)", color: iconColor, display: "grid", placeItems: "center"}}>
+        <Icon name={icon} size={16}/>
+      </div>
+      <div style={{flex: 1}}>
+        <div style={{fontWeight: 700, fontSize: 13.5}}>{title}</div>
+        <div className="muted" style={{fontSize: 12, marginTop: 2}}>{desc}</div>
+      </div>
+      <div style={{width: 38, height: 22, borderRadius: 12, background: on ? "var(--p-primary)" : "var(--p-line)", position: "relative", transition: "all 0.15s ease"}}>
+        <div style={{position: "absolute", top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: "50%", background: "white", boxShadow: "0 2px 4px rgba(0,0,0,0.15)", transition: "all 0.15s ease"}}/>
+      </div>
+    </div>
+  );
+}
 
 export default function Notices({ onOpenParsed }) {
   return (
@@ -63,7 +125,7 @@ export default function Notices({ onOpenParsed }) {
                 <td className="muted">{fmtDateLong(n.date)}</td>
                 <td>
                   <div className="center" style={{gap: 6}}>
-                    {n.status === "AI Parsed" && <Icon name="sparkle" size={12}/>}
+                    {n.status === "AI Parsed" && <Icon name="sparkle" size={12} className=""/>}
                     <StatusPill status={n.status}/>
                   </div>
                 </td>
@@ -77,28 +139,7 @@ export default function Notices({ onOpenParsed }) {
   );
 }
 
-function NoticeStat({ label, value, color, icon }) {
-  const map = {
-    pink: { bg: "var(--p-pink)", fg: "#C13388" },
-    info: { bg: "#E1EEFF", fg: "#2766C7" },
-    success: { bg: "var(--p-mint)", fg: "#1B8C5C" },
-    warning: { bg: "var(--p-amber)", fg: "#B07512" },
-  }[color];
-  return (
-    <div className="card" style={{padding: "16px 18px"}}>
-      <div className="between">
-        <div>
-          <div className="stat-label">{label}</div>
-          <div className="stat-value" style={{fontSize: 26}}>{value}</div>
-        </div>
-        <div style={{width: 38, height: 38, borderRadius: 12, background: map.bg, color: map.fg, display: "grid", placeItems: "center"}}>
-          <Icon name={icon} size={18}/>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/* AI parser — full screen review of parsed notice */
 export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
   const [edited, setEdited] = React.useState(PARSED_NOTICE);
   const [createHearing, setCreateHearing] = React.useState(true);
@@ -115,6 +156,7 @@ export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
         <span style={{fontWeight: 600}}>Review parsed notice</span>
       </div>
 
+      {/* Header banner */}
       <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)", border: "1px solid var(--p-line)", marginBottom: 18}}>
         <div className="between" style={{alignItems: "flex-start"}}>
           <div className="center" style={{gap: 14}}>
@@ -139,6 +181,7 @@ export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
       </div>
 
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 18}}>
+        {/* PDF preview */}
         <div className="card" style={{padding: 16}}>
           <div className="between" style={{marginBottom: 12}}>
             <div className="card-title">Source notice</div>
@@ -177,6 +220,7 @@ export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
           </div>
         </div>
 
+        {/* Extracted form */}
         <div className="card">
           <div className="card-head">
             <div>
@@ -201,10 +245,11 @@ export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
           </div>
           <div className="mt-4">
             <label style={{fontSize: 12, fontWeight: 600, color: "var(--p-text-2)"}}>Subject</label>
-            <input defaultValue={edited.subject} style={{display: "block", marginTop: 6, width: "100%", border: "1px solid var(--p-primary-3)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, background: "linear-gradient(90deg, rgba(108,92,231,0.04), white 30%)", outline: "none"}}/>
+            <input className="" defaultValue={edited.subject} style={{display: "block", marginTop: 6, width: "100%", border: "1px solid var(--p-primary-3)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, background: "linear-gradient(90deg, rgba(108,92,231,0.04), white 30%)", outline: "none"}}/>
           </div>
         </div>
 
+        {/* Documents called for */}
         <div className="card">
           <div className="card-head">
             <div>
@@ -226,6 +271,7 @@ export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
           </div>
         </div>
 
+        {/* Actions */}
         <div className="card">
           <div className="card-title mb-3">On save, also</div>
           <div className="col" style={{gap: 10}}>
@@ -241,45 +287,6 @@ export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function Hl({ t, hl, mono }) {
-  return (
-    <div style={{fontSize: 10.5, lineHeight: 1.7, fontFamily: mono ? "ui-monospace, monospace" : "inherit", color: "var(--p-text-2)"}}>
-      {hl
-        ? <span style={{background: "rgba(108,92,231,0.18)", padding: "1px 4px", borderRadius: 3, fontWeight: 600, color: "var(--p-text)"}}>{t}</span>
-        : t}
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, ai, mono, full }) {
-  return (
-    <div className={`field ${ai ? "ai-extracted" : ""}`} style={{gridColumn: full ? "span 2" : "auto"}}>
-      <div className="center" style={{justifyContent: "space-between"}}>
-        <label>{label}</label>
-        {ai && <span className="ai-badge" style={{fontSize: 9}}>AI</span>}
-      </div>
-      <input value={value} onChange={e => onChange(e.target.value)} style={{fontFamily: mono ? "ui-monospace, monospace" : "inherit"}}/>
-    </div>
-  );
-}
-
-function Toggle({ on, onToggle, icon, iconColor, title, desc }) {
-  return (
-    <div onClick={onToggle} className="center" style={{gap: 12, padding: "12px 14px", borderRadius: 13, background: on ? "var(--p-card-tint)" : "white", border: `1px solid ${on ? "var(--p-primary-3)" : "var(--p-line-2)"}`, cursor: "pointer", transition: "all 0.15s ease"}}>
-      <div style={{width: 34, height: 34, borderRadius: 11, background: on ? "white" : "var(--p-card-tint)", color: iconColor, display: "grid", placeItems: "center"}}>
-        <Icon name={icon} size={16}/>
-      </div>
-      <div style={{flex: 1}}>
-        <div style={{fontWeight: 700, fontSize: 13.5}}>{title}</div>
-        <div className="muted" style={{fontSize: 12, marginTop: 2}}>{desc}</div>
-      </div>
-      <div style={{width: 38, height: 22, borderRadius: 12, background: on ? "var(--p-primary)" : "var(--p-line)", position: "relative", transition: "all 0.15s ease"}}>
-        <div style={{position: "absolute", top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: "50%", background: "white", boxShadow: "0 2px 4px rgba(0,0,0,0.15)", transition: "all 0.15s ease"}}/>
       </div>
     </div>
   );

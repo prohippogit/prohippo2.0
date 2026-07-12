@@ -1,18 +1,86 @@
 /* ProHippo — Hearings calendar + list */
 import React from 'react';
-import { Icon, Avatar, StatusPill, HEARINGS, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtDateLong, daysFromNow } from './shared';
+import { useData, downloadCSV, toISO, todayISO } from './store';
+
+const AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
+const MODES = ["Physical", "Video Conference", "e-Proceeding"];
+
+export function HearingModal({ initial, onClose }) {
+  const { data, addHearing, updateHearing, notify } = useData();
+  const [form, setForm] = React.useState({
+    assessee: "", pan: "", ay: "", authority: "Scrutiny", bench: "", section: "",
+    date: todayISO(), time: "11:00", mode: "Physical", status: "Upcoming", ita: "", staff: "",
+    ...initial,
+  });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const pickAssessee = (name) => {
+    const a = data.assessees.find(x => x.name === name);
+    setForm(f => ({ ...f, assessee: name, pan: a?.pan || f.pan, staff: f.staff || a?.staff || "" }));
+  };
+  const valid = form.assessee.trim() && form.date && form.time && form.ay.trim();
+
+  const save = () => {
+    if (!valid) return;
+    if (initial?.id) {
+      updateHearing(initial.id, form);
+      notify("Hearing updated");
+    } else {
+      addHearing(form);
+      notify(`Hearing added — ${fmtDateLong(form.date)} at ${form.time}`);
+    }
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={initial?.id ? "Edit hearing" : "Add hearing"}
+      sub="Appears on the calendar, dashboard and assessee profile"
+      onClose={onClose}
+      width={620}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}>
+          <Icon name="check" size={14}/>{initial?.id ? "Save changes" : "Add hearing"}
+        </button>
+      </>}
+    >
+      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+        <FormField label="Assessee" required full>
+          {data.assessees.length > 0
+            ? <SelectInput value={form.assessee} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
+            : <TextInput value={form.assessee} onChange={set("assessee")} placeholder="Assessee name"/>}
+        </FormField>
+        <FormField label="PAN"><TextInput value={form.pan} onChange={(v) => set("pan")(v.toUpperCase())} placeholder="ABCPS1234F" mono/></FormField>
+        <FormField label="Assessment year" required><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
+        <FormField label="Authority"><SelectInput value={form.authority} onChange={set("authority")} options={AUTHORITIES}/></FormField>
+        <FormField label="Bench / Officer"><TextInput value={form.bench} onChange={set("bench")} placeholder="e.g. Ahmedabad 'A' Bench"/></FormField>
+        <FormField label="Date" required><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
+        <FormField label="Time" required><TextInput type="time" value={form.time} onChange={set("time")}/></FormField>
+        <FormField label="Mode"><SelectInput value={form.mode} onChange={set("mode")} options={MODES}/></FormField>
+        <FormField label="Section"><TextInput value={form.section} onChange={set("section")} placeholder="e.g. 143(2)"/></FormField>
+        <FormField label="ITA / Appeal No."><TextInput value={form.ita} onChange={set("ita")} placeholder="ITA No. …"/></FormField>
+        <FormField label="Staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Assigned staff"/></FormField>
+      </div>
+    </Modal>
+  );
+}
+
+function startOfWeek(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // back to Monday
+  return x;
+}
 
 function WeekView({ hearings }) {
-  // Week of 25-31 May 2026 (Mon-Sun)
-  const days = [
-    { label: "Mon", date: 25, dow: "Mon", iso: "2026-05-25" },
-    { label: "Tue", date: 26, dow: "Tue", iso: "2026-05-26" },
-    { label: "Wed", date: 27, dow: "Wed", iso: "2026-05-27", today: true },
-    { label: "Thu", date: 28, dow: "Thu", iso: "2026-05-28" },
-    { label: "Fri", date: 29, dow: "Fri", iso: "2026-05-29" },
-    { label: "Sat", date: 30, dow: "Sat", iso: "2026-05-30" },
-    { label: "Sun", date: 31, dow: "Sun", iso: "2026-05-31" },
-  ];
+  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return { date: d.getDate(), dow: d.toLocaleString("en-IN", { weekday: "short" }), iso: toISO(d), today: toISO(d) === todayISO() };
+  });
+  const shift = (n) => setWeekStart(w => { const d = new Date(w); d.setDate(d.getDate() + n * 7); return d; });
 
   const colorFor = (h) => {
     if (h.authority === "ITAT") return { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)", bar: "var(--p-primary)" };
@@ -24,16 +92,16 @@ function WeekView({ hearings }) {
   return (
     <div className="card" style={{padding: 18}}>
       <div className="between" style={{marginBottom: 14}}>
-        <div style={{fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em"}}>Week of 25 May 2026</div>
+        <div style={{fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em"}}>Week of {fmtDateLong(toISO(weekStart))}</div>
         <div className="center" style={{gap: 4}}>
-          <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}}><Icon name="chevron-left" size={14}/></button>
-          <button className="btn btn-secondary btn-sm">Today</button>
-          <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}}><Icon name="chevron-right" size={14}/></button>
+          <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}} onClick={() => shift(-1)}><Icon name="chevron-left" size={14}/></button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setWeekStart(startOfWeek(new Date()))}>Today</button>
+          <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}} onClick={() => shift(1)}><Icon name="chevron-right" size={14}/></button>
         </div>
       </div>
       <div className="grid" style={{gridTemplateColumns: "repeat(7, 1fr)", gap: 8}}>
         {days.map(day => {
-          const dayHearings = hearings.filter(h => h.date === day.iso);
+          const dayHearings = hearings.filter(h => h.date === day.iso).sort((a, b) => a.time.localeCompare(b.time));
           return (
             <div key={day.iso} style={{minHeight: 360, background: day.today ? "linear-gradient(180deg, var(--p-lavender) 0%, white 100%)" : "var(--p-card-tint)", borderRadius: 14, padding: 10, border: day.today ? "2px solid var(--p-primary)" : "1px solid var(--p-line-2)"}}>
               <div className="between" style={{marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--p-line-2)"}}>
@@ -47,7 +115,7 @@ function WeekView({ hearings }) {
                 {dayHearings.map(h => {
                   const c = colorFor(h);
                   return (
-                    <div key={h.id} style={{background: c.bg, borderRadius: 10, padding: "8px 10px", borderLeft: `3px solid ${c.bar}`, cursor: "pointer"}}>
+                    <div key={h.id} style={{background: c.bg, borderRadius: 10, padding: "8px 10px", borderLeft: `3px solid ${c.bar}`}}>
                       <div style={{fontSize: 10, fontWeight: 700, color: c.fg, marginBottom: 2}}>{h.time}</div>
                       <div style={{fontSize: 11.5, fontWeight: 700, lineHeight: 1.25, marginBottom: 2}}>{h.assessee}</div>
                       <div style={{fontSize: 10, color: "var(--p-text-3)"}}>{h.authority} · AY {h.ay}</div>
@@ -66,41 +134,53 @@ function WeekView({ hearings }) {
 }
 
 function CalendarView({ hearings }) {
-  const today = 27;
-  const eventDays = hearings.map(h => parseInt(h.date.slice(-2)));
-  const days = 31;
-  const mondayOffset = 4; // May 1 2026 is Friday => Mon-first offset = 4
+  const now = new Date();
+  const [month, setMonth] = React.useState(new Date(now.getFullYear(), now.getMonth(), 1));
+  const [selected, setSelected] = React.useState(todayISO());
+
+  const year = month.getFullYear();
+  const m = month.getMonth();
+  const daysInMonth = new Date(year, m + 1, 0).getDate();
+  const mondayOffset = (new Date(year, m, 1).getDay() + 6) % 7;
+  const monthPrefix = toISO(month).slice(0, 7);
+  const monthHearings = hearings.filter(h => (h.date || "").startsWith(monthPrefix));
+  const isoFor = (d) => `${monthPrefix}-${String(d).padStart(2, "0")}`;
+
   const cells = [];
   for (let i = 0; i < mondayOffset; i++) cells.push(null);
-  for (let d = 1; d <= days; d++) cells.push(d);
-  const [selected, setSelected] = React.useState(28);
-  const selectedISO = `2026-05-${String(selected).padStart(2, "00")}`;
-  const selectedHearings = hearings.filter(h => h.date === selectedISO);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const selectedHearings = hearings.filter(h => h.date === selected).sort((a, b) => a.time.localeCompare(b.time));
+
+  const byAuthority = {};
+  monthHearings.forEach(h => { byAuthority[h.authority] = (byAuthority[h.authority] || 0) + 1; });
+  const legendColor = { "ITAT": "var(--p-primary)", "CIT(A)": "#C13388", "Scrutiny": "#F39C12", "Penalty": "#B8463A" };
 
   return (
     <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18}}>
       <div className="card">
         <div className="cal-head" style={{marginBottom: 16}}>
           <div>
-            <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>May 2026</div>
-            <div className="card-sub">{hearings.length} hearings scheduled</div>
+            <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>{month.toLocaleString("en-IN", { month: "long", year: "numeric" })}</div>
+            <div className="card-sub">{monthHearings.length} hearing{monthHearings.length !== 1 ? "s" : ""} this month</div>
           </div>
           <div className="center" style={{gap: 4}}>
-            <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}}><Icon name="chevron-left" size={14}/></button>
-            <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}}><Icon name="chevron-right" size={14}/></button>
+            <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}} onClick={() => setMonth(new Date(year, m - 1, 1))}><Icon name="chevron-left" size={14}/></button>
+            <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}} onClick={() => setMonth(new Date(year, m + 1, 1))}><Icon name="chevron-right" size={14}/></button>
           </div>
         </div>
         <div className="cal-grid" style={{gap: 6}}>
           {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => <div key={d} className="cal-dow">{d}</div>)}
           {cells.map((d, i) => {
             if (d === null) return <div key={i}/>;
-            const hasEvent = eventDays.includes(d);
-            const isToday = d === today;
-            const isSelected = d === selected;
+            const iso = isoFor(d);
+            const dayHearings = monthHearings.filter(h => h.date === iso);
+            const isToday = iso === todayISO();
+            const isSelected = iso === selected;
             return (
               <div
                 key={i}
-                onClick={() => setSelected(d)}
+                onClick={() => setSelected(iso)}
                 style={{
                   aspectRatio: "1.05",
                   borderRadius: 12,
@@ -114,9 +194,9 @@ function CalendarView({ hearings }) {
                 }}
               >
                 <div style={{fontSize: 13, fontWeight: 700}}>{d}</div>
-                {hasEvent && (
+                {dayHearings.length > 0 && (
                   <div className="col" style={{gap: 2, marginTop: 4}}>
-                    {hearings.filter(h => parseInt(h.date.slice(-2)) === d).slice(0,2).map(h => (
+                    {dayHearings.slice(0, 2).map(h => (
                       <div key={h.id} style={{fontSize: 9, fontWeight: 600, padding: "1px 4px", borderRadius: 4, background: isToday ? "rgba(255,255,255,0.22)" : "white", color: isToday ? "white" : "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
                         {h.time} {h.authority}
                       </div>
@@ -130,7 +210,7 @@ function CalendarView({ hearings }) {
       </div>
       <div className="col" style={{gap: 16}}>
         <div className="card">
-          <div className="card-title mb-3">{new Date(selectedISO).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}</div>
+          <div className="card-title mb-3">{new Date(selected + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}</div>
           {selectedHearings.length === 0 && <div className="muted" style={{padding: "20px 0", textAlign: "center", fontSize: 13}}>No hearings on this date.</div>}
           <div className="col" style={{gap: 10}}>
             {selectedHearings.map(h => (
@@ -147,15 +227,16 @@ function CalendarView({ hearings }) {
             ))}
           </div>
         </div>
-        <div className="card">
-          <div className="card-title mb-3">Legend</div>
-          <div className="col" style={{gap: 8}}>
-            <Legend color="var(--p-primary)" label="ITAT — 2 matters"/>
-            <Legend color="#C13388" label="CIT(A) — 1 matter"/>
-            <Legend color="#F39C12" label="Scrutiny — 3 matters"/>
-            <Legend color="#20B978" label="Synced with Google Calendar"/>
+        {Object.keys(byAuthority).length > 0 && (
+          <div className="card">
+            <div className="card-title mb-3">This month</div>
+            <div className="col" style={{gap: 8}}>
+              {Object.entries(byAuthority).map(([auth, count]) => (
+                <Legend key={auth} color={legendColor[auth] || "#20B978"} label={`${auth} — ${count} hearing${count > 1 ? "s" : ""}`}/>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -170,11 +251,12 @@ function Legend({ color, label }) {
   );
 }
 
-function ListView({ hearings }) {
+function ListView({ hearings, onEdit }) {
+  const { updateHearing, removeHearing, notify } = useData();
   return (
     <div className="card" style={{padding: 0}}>
       <table className="tbl">
-        <thead><tr><th>Date / Time</th><th>Assessee</th><th>Authority</th><th>Bench / Officer</th><th>AY</th><th>Mode</th><th>Staff</th><th>Status</th></tr></thead>
+        <thead><tr><th>Date / Time</th><th>Assessee</th><th>Authority</th><th>Bench / Officer</th><th>AY</th><th>Mode</th><th>Staff</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {hearings.map(h => (
             <tr key={h.id}>
@@ -187,7 +269,7 @@ function ListView({ hearings }) {
                 <div className="muted" style={{fontFamily: "ui-monospace, monospace"}}>{h.pan}</div>
               </td>
               <td><span className="pill pill-primary">{h.authority}</span></td>
-              <td className="semi">{h.bench}</td>
+              <td className="semi">{h.bench || "—"}</td>
               <td>{h.ay}</td>
               <td>
                 <div className="center" style={{gap: 6, fontSize: 12.5}}>
@@ -195,30 +277,41 @@ function ListView({ hearings }) {
                   {h.mode}
                 </div>
               </td>
-              <td><Avatar name={h.staff} color="mint" size="sm"/></td>
-              <td><StatusPill status={h.status}/></td>
+              <td>{h.staff ? <Avatar name={h.staff} color="mint" size="sm"/> : <span className="muted">—</span>}</td>
+              <td><StatusPill status={h.date < todayISO() && h.status === "Upcoming" ? "Completed" : h.status}/></td>
+              <td>
+                <div className="row" style={{gap: 4}}>
+                  <button className="btn btn-ghost btn-xs" title="Edit" onClick={() => onEdit(h)}><Icon name="edit" size={12}/></button>
+                  {h.status !== "Adjourned" && h.date >= todayISO() && (
+                    <button className="btn btn-ghost btn-xs" title="Mark adjourned" onClick={() => { updateHearing(h.id, { status: "Adjourned" }); notify("Hearing marked adjourned"); }}><Icon name="clock" size={12}/></button>
+                  )}
+                  <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this hearing?")) { removeHearing(h.id); notify("Hearing deleted"); } }}><Icon name="trash" size={12}/></button>
+                </div>
+              </td>
             </tr>
           ))}
+          {hearings.length === 0 && <tr><td colSpan="9" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings recorded.</td></tr>}
         </tbody>
       </table>
     </div>
   );
 }
 
-function AuthorityView({ hearings }) {
+function GroupedView({ hearings, groupBy }) {
   const grouped = hearings.reduce((acc, h) => {
-    acc[h.authority] = acc[h.authority] || [];
-    acc[h.authority].push(h);
+    const key = (groupBy === "staff" ? h.staff : h.authority) || "Unassigned";
+    acc[key] = acc[key] || [];
+    acc[key].push(h);
     return acc;
   }, {});
   return (
     <div className="col" style={{gap: 16}}>
-      {Object.entries(grouped).map(([auth, items]) => (
-        <div key={auth} className="card">
+      {Object.entries(grouped).map(([group, items]) => (
+        <div key={group} className="card">
           <div className="card-head">
             <div>
-              <div className="card-title">{auth}</div>
-              <div className="card-sub">{items.length} upcoming · across {new Set(items.map(i => i.bench)).size} benches</div>
+              <div className="card-title">{group}</div>
+              <div className="card-sub">{items.length} hearing{items.length > 1 ? "s" : ""}{groupBy === "authority" ? ` · across ${new Set(items.map(i => i.bench)).size} benches` : ""}</div>
             </div>
             <span className="pill pill-primary">{items.length}</span>
           </div>
@@ -236,7 +329,7 @@ function AuthorityView({ hearings }) {
                       <div style={{fontWeight: 700}}>{h.assessee}</div>
                       <div className="muted" style={{fontSize: 12}}><Icon name="clock" size={11}/> {h.time} · {h.mode}</div>
                     </div>
-                    <div className="muted" style={{fontSize: 12, marginTop: 2}}>{h.bench} · AY {h.ay} {h.section !== "—" && `· u/s ${h.section}`}</div>
+                    <div className="muted" style={{fontSize: 12, marginTop: 2}}>{h.bench} · AY {h.ay} {h.section && `· u/s ${h.section}`}</div>
                   </div>
                 </div>
               );
@@ -244,28 +337,41 @@ function AuthorityView({ hearings }) {
           </div>
         </div>
       ))}
+      {Object.keys(grouped).length === 0 && (
+        <div className="card"><EmptyState icon="calendar" title="No hearings" sub="Add a hearing to see it grouped here."/></div>
+      )}
     </div>
   );
 }
 
 export default function Hearings() {
-  const [view, setView] = React.useState("Week"); // Calendar | Week | List
+  const { data } = useData();
+  const [view, setView] = React.useState("Week");
   const [filterAuthority, setFilterAuthority] = React.useState("All");
-  const filtered = HEARINGS.filter(h => filterAuthority === "All" || h.authority === filterAuthority);
+  const [modal, setModal] = React.useState(null); // null | {} | hearing record
+
+  const filtered = data.hearings.filter(h => filterAuthority === "All" || h.authority === filterAuthority);
+  const upcoming = data.hearings.filter(h => h.date >= todayISO() && h.status !== "Adjourned");
+  const next48 = upcoming.filter(h => daysFromNow(h.date) <= 2);
+
+  const exportCSV = () => downloadCSV(
+    "hearings.csv",
+    ["Date", "Time", "Assessee", "PAN", "AY", "Authority", "Bench", "Section", "Mode", "Staff", "Status"],
+    filtered.map(h => [h.date, h.time, h.assessee, h.pan, h.ay, h.authority, h.bench, h.section, h.mode, h.staff, h.status])
+  );
 
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Hearings & Calendar</div>
-          <div className="page-sub">7 upcoming · 3 in the next 48 hours · Google Calendar synced 2 min ago</div>
+          <div className="page-sub">
+            {upcoming.length ? `${upcoming.length} upcoming${next48.length ? ` · ${next48.length} in the next 48 hours` : ""}` : "No upcoming hearings"}
+          </div>
         </div>
         <div className="topbar-actions">
-          <span className="pill pill-success" style={{padding: "6px 10px"}}>
-            <Icon name="check" size={11}/> Google Calendar
-          </span>
-          <button className="btn btn-secondary"><Icon name="download" size={14}/>Cause list PDF</button>
-          <button className="btn btn-primary"><Icon name="plus" size={14}/>Add hearing</button>
+          <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export CSV</button>
+          <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>Add hearing</button>
         </div>
       </div>
 
@@ -284,9 +390,11 @@ export default function Hearings() {
 
       {view === "Week" && <WeekView hearings={filtered}/>}
       {view === "Calendar" && <CalendarView hearings={filtered}/>}
-      {view === "List" && <ListView hearings={filtered}/>}
-      {view === "Authority-wise" && <AuthorityView hearings={filtered}/>}
-      {view === "Staff-wise" && <AuthorityView hearings={filtered}/>}
+      {view === "List" && <ListView hearings={[...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))} onEdit={(h) => setModal(h)}/>}
+      {view === "Authority-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="authority"/>}
+      {view === "Staff-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="staff"/>}
+
+      {modal && <HearingModal initial={modal.id ? modal : undefined} onClose={() => setModal(null)}/>}
     </div>
   );
 }

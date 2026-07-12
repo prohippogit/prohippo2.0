@@ -1,11 +1,12 @@
 import React from 'react';
 import { Icon } from './shared';
+import { useData, awaitingNotices } from './store';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { id: "assessees", label: "Assessees", icon: "users", badge: "247" },
+  { id: "assessees", label: "Assessees", icon: "users" },
   { id: "matters", label: "Matters", icon: "scale" },
-  { id: "notices", label: "Notices", icon: "doc", badge: "4" },
+  { id: "notices", label: "Notices", icon: "doc" },
   { id: "hearings", label: "Hearings", icon: "calendar" },
   { id: "invoices", label: "Invoices", icon: "invoice" },
   { id: "communications", label: "Communications", icon: "chat" },
@@ -18,6 +19,12 @@ const NAV_BOTTOM = [
 ];
 
 export default function Sidebar({ active, onNav }) {
+  const { data } = useData();
+  const badges = {
+    assessees: data.assessees.length || null,
+    notices: awaitingNotices(data).length || null,
+  };
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -45,7 +52,7 @@ export default function Sidebar({ active, onNav }) {
           >
             <Icon name={item.icon} size={18} className="nav-icon"/>
             <span>{item.label}</span>
-            {item.badge && <span className="nav-badge">{item.badge}</span>}
+            {badges[item.id] && <span className="nav-badge">{badges[item.id]}</span>}
           </div>
         ))}
       </div>
@@ -64,10 +71,10 @@ export default function Sidebar({ active, onNav }) {
           ))}
         </div>
         <div className="firm-card">
-          <div className="firm-avatar">JV</div>
+          <div className="firm-avatar">{(data.profile.firmName || "Your Firm").split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()}</div>
           <div style={{flex: 1, minWidth: 0}}>
-            <div className="firm-name">Jayesh Vyas & Co.</div>
-            <div className="firm-role">Chartered Accountants</div>
+            <div className="firm-name">{data.profile.firmName || "Your firm"}</div>
+            <div className="firm-role">{data.profile.ownerName ? "Chartered Accountants" : "Set up in Settings"}</div>
           </div>
           <Icon name="chevron-right" size={14}/>
         </div>

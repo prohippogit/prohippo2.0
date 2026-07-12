@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from './shared';
 import { useData, awaitingNotices } from './store';
+import { useAuth } from './auth';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -20,6 +21,7 @@ const NAV_BOTTOM = [
 
 export default function Sidebar({ active, onNav }) {
   const { data } = useData();
+  const { user, signOutUser } = useAuth();
   const badges = {
     assessees: data.assessees.length || null,
     notices: awaitingNotices(data).length || null,
@@ -71,12 +73,19 @@ export default function Sidebar({ active, onNav }) {
           ))}
         </div>
         <div className="firm-card">
-          <div className="firm-avatar">{(data.profile.firmName || "Your Firm").split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()}</div>
+          <div className="firm-avatar">{(data.profile.firmName || data.profile.ownerName || "You").split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()}</div>
           <div style={{flex: 1, minWidth: 0}}>
-            <div className="firm-name">{data.profile.firmName || "Your firm"}</div>
-            <div className="firm-role">{data.profile.ownerName ? "Chartered Accountants" : "Set up in Settings"}</div>
+            <div className="firm-name">{data.profile.firmName || data.profile.ownerName || "Your practice"}</div>
+            <div className="firm-role" style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{user?.email || ""}</div>
           </div>
-          <Icon name="chevron-right" size={14}/>
+          <button
+            className="icon-btn"
+            style={{width: 30, height: 30, borderRadius: 9, flexShrink: 0}}
+            title="Sign out"
+            onClick={(e) => { e.stopPropagation(); if (window.confirm("Sign out of ProHippo?")) signOutUser(); }}
+          >
+            <Icon name="logout" size={14}/>
+          </button>
         </div>
       </div>
     </aside>

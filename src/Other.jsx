@@ -1,6 +1,7 @@
-/* ProHippo — Invoices, Communications, Matters, Misc */
+/* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
-import { Icon, Avatar, StatusPill, NOTICES, INVOICES, fmtINR, fmtDate, fmtDateLong } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
 
 function Legend({ color, label }) {
   return (
@@ -11,129 +12,312 @@ function Legend({ color, label }) {
   );
 }
 
+/* ---------------- Invoices ---------------- */
+
+export function InvoiceModal({ initial, onClose }) {
+  const { data, addInvoice, notify } = useData();
+  const [form, setForm] = React.useState({
+    assessee: "", date: todayISO(), ay: "", service: "", amount: "", due: daysAway(30),
+    ...initial,
+  });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const amount = Number(form.amount);
+  const valid = form.assessee.trim() && form.date && amount > 0;
+
+  const save = () => {
+    if (!valid) return;
+    const inv = addInvoice({ ...form, amount });
+    notify(`Invoice ${inv.number || ""} raised — ${fmtINR(amount)}`);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="New invoice"
+      sub="The invoice number is assigned automatically"
+      onClose={onClose}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>Raise invoice</button>
+      </>}
+    >
+      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+        <FormField label="Assessee" required full>
+          {data.assessees.length > 0
+            ? <SelectInput value={form.assessee} onChange={set("assessee")} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
+            : <TextInput value={form.assessee} onChange={set("assessee")} placeholder="Assessee name"/>}
+        </FormField>
+        <FormField label="Service description" full><TextInput value={form.service} onChange={set("service")} placeholder="e.g. ITAT appeal — drafting & hearing fees"/></FormField>
+        <FormField label="Assessment year"><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
+        <FormField label="Amount (₹)" required><TextInput type="number" value={form.amount} onChange={set("amount")} placeholder="0"/></FormField>
+        <FormField label="Invoice date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
+        <FormField label="Due date"><TextInput type="date" value={form.due} onChange={set("due")}/></FormField>
+      </div>
+    </Modal>
+  );
+}
+
+function PaymentModal({ invoice, onClose }) {
+  const { updateInvoice, notify } = useData();
+  const balance = invoiceOutstanding(invoice);
+  const [amount, setAmount] = React.useState(String(balance));
+  const val = Number(amount);
+  const valid = val > 0 && val <= balance;
+
+  const save = () => {
+    if (!valid) return;
+    updateInvoice(invoice.id, { received: (invoice.received || 0) + val });
+    notify(`Payment of ${fmtINR(val)} recorded against ${invoice.number}`);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="Record payment"
+      sub={`${invoice.number} · ${invoice.assessee} · balance ${fmtINR(balance)}`}
+      onClose={onClose}
+      width={420}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>Record payment</button>
+      </>}
+    >
+      <FormField label="Amount received (₹)" required>
+        <TextInput type="number" value={amount} onChange={setAmount}/>
+      </FormField>
+    </Modal>
+  );
+}
+
 export function Invoices() {
+  const { data, removeInvoice, notify } = useData();
+  const [filter, setFilter] = React.useState("All");
+  const [showNew, setShowNew] = React.useState(false);
+  const [payFor, setPayFor] = React.useState(null);
+
+  const invoices = [...data.invoices].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const monthPrefix = todayISO().slice(0, 7);
+  const billedThisMonth = invoices.filter(i => (i.date || "").startsWith(monthPrefix)).reduce((s, i) => s + i.amount, 0);
+  const receivedTotal = invoices.reduce((s, i) => s + (i.received || 0), 0);
+  const outstanding = totalOutstanding(data);
+
+  const counts = { All: invoices.length };
+  ["Outstanding", "Overdue", "Partial", "Paid"].forEach(st => { counts[st] = invoices.filter(i => invoiceStatus(i) === st).length; });
+  const filtered = invoices.filter(i => filter === "All" || invoiceStatus(i) === filter);
+
+  // billing trend — last 6 calendar months
+  const months = [];
+  for (let k = 5; k >= 0; k--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - k);
+    const prefix = toISO(d).slice(0, 7);
+    const monthInvs = invoices.filter(i => (i.date || "").startsWith(prefix));
+    months.push({
+      l: d.toLocaleString("en-IN", { month: "short" }),
+      billed: monthInvs.reduce((s, i) => s + i.amount, 0),
+      received: monthInvs.reduce((s, i) => s + (i.received || 0), 0),
+    });
+  }
+  const maxMonth = Math.max(1, ...months.map(mo => Math.max(mo.billed, mo.received)));
+
+  const topOutstanding = invoices
+    .filter(i => invoiceOutstanding(i) > 0)
+    .sort((a, b) => (a.due || "").localeCompare(b.due || ""))
+    .slice(0, 4);
+
+  const exportCSV = () => downloadCSV(
+    "invoices.csv",
+    ["Invoice #", "Assessee", "Date", "AY", "Service", "Amount", "Received", "Balance", "Due", "Status"],
+    filtered.map(i => [i.number, i.assessee, i.date, i.ay, i.service, i.amount, i.received || 0, invoiceOutstanding(i), i.due, invoiceStatus(i)])
+  );
+
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Invoices</div>
-          <div className="page-sub">May 2026 · ₹6.42L billed · ₹4.96L received · ₹8.42L outstanding</div>
+          <div className="page-sub">
+            {invoices.length
+              ? `${fmtLakhs(billedThisMonth)} billed this month · ${fmtLakhs(receivedTotal)} received · ${fmtLakhs(outstanding)} outstanding`
+              : "Raise invoices and track receipts"}
+          </div>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-secondary"><Icon name="download" size={14}/>Export</button>
-          <button className="btn btn-primary"><Icon name="plus" size={14}/>New invoice</button>
+          <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export</button>
+          <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New invoice</button>
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18, marginBottom: 18}}>
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Billing trend</div>
-              <div className="card-sub">Last 6 months · ₹ in lakhs</div>
+      {invoices.length > 0 && (
+        <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18, marginBottom: 18}}>
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">Billing trend</div>
+                <div className="card-sub">Last 6 months</div>
+              </div>
+              <div className="row" style={{gap: 14}}>
+                <Legend color="var(--p-primary)" label="Billed"/>
+                <Legend color="#FFB3D9" label="Received"/>
+              </div>
             </div>
-            <div className="row" style={{gap: 14}}>
-              <Legend color="var(--p-primary)" label="Billed"/>
-              <Legend color="#FFB3D9" label="Received"/>
+            <div className="bars" style={{height: 140, marginTop: 8}}>
+              {months.map(mo => (
+                <div key={mo.l} style={{flex: 1, height: "100%", display: "flex", gap: 4, alignItems: "flex-end", position: "relative"}}>
+                  <div className="bar accent" style={{height: `${Math.max(3, (mo.billed / maxMonth) * 100)}%`}} title={`Billed ${fmtINR(mo.billed)}`}/>
+                  <div className="bar" style={{height: `${Math.max(3, (mo.received / maxMonth) * 100)}%`, background: "#FFB3D9"}} title={`Received ${fmtINR(mo.received)}`}/>
+                  <div className="bar-label">{mo.l}</div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="bars" style={{height: 140, marginTop: 8}}>
-            {[
-              { l: "Dec", a: 70, b: 65 },
-              { l: "Jan", a: 60, b: 70 },
-              { l: "Feb", a: 85, b: 75 },
-              { l: "Mar", a: 92, b: 78 },
-              { l: "Apr", a: 78, b: 88 },
-              { l: "May", a: 100, b: 82 },
-            ].map(m => (
-              <div key={m.l} style={{flex: 1, display: "flex", gap: 4, alignItems: "flex-end", position: "relative"}}>
-                <div className="bar accent" style={{height: `${m.a}%`}}/>
-                <div className="bar" style={{height: `${m.b}%`, background: "#FFB3D9"}}/>
-                <div className="bar-label">{m.l}</div>
+          <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)"}}>
+            <div className="card-head">
+              <div>
+                <div className="card-title">Top outstanding</div>
+                <div className="card-sub">Sorted by due date</div>
               </div>
-            ))}
+            </div>
+            {topOutstanding.length === 0 && <div className="muted" style={{fontSize: 13, textAlign: "center", padding: "16px 0"}}>Nothing outstanding. 🎉</div>}
+            <div className="col" style={{gap: 8}}>
+              {topOutstanding.map(inv => (
+                <div key={inv.id} className="between" style={{padding: "10px 12px", background: "white", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
+                  <div>
+                    <div style={{fontWeight: 700, fontSize: 13}}>{inv.assessee}</div>
+                    <div className="muted" style={{fontSize: 11.5}}>{inv.number}{inv.due ? ` · due ${fmtDateLong(inv.due)}` : ""}</div>
+                  </div>
+                  <div style={{textAlign: "right"}}>
+                    <div className="strong" style={{fontSize: 14}}>{fmtINR(invoiceOutstanding(inv))}</div>
+                    <StatusPill status={invoiceStatus(inv)}/>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)"}}>
-          <div className="card-head">
-            <div>
-              <div className="card-title">Top outstanding</div>
-              <div className="card-sub">5 oldest invoices · ageing 30+ days</div>
-            </div>
-            <button className="btn btn-ghost btn-sm"><Icon name="whatsapp" size={14}/>Send reminders</button>
-          </div>
-          <div className="col" style={{gap: 8}}>
-            {INVOICES.filter(i => i.status !== "Paid").slice(0,4).map(inv => (
-              <div key={inv.id} className="between" style={{padding: "10px 12px", background: "white", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
-                <div>
-                  <div style={{fontWeight: 700, fontSize: 13}}>{inv.assessee}</div>
-                  <div className="muted" style={{fontSize: 11.5}}>{inv.id} · {fmtDateLong(inv.due)} due</div>
-                </div>
-                <div style={{textAlign: "right"}}>
-                  <div className="strong" style={{fontSize: 14}}>{fmtINR(inv.amount)}</div>
-                  <StatusPill status={inv.status}/>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      )}
 
       <div className="card" style={{padding: 0, overflow: "hidden"}}>
         <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center"}}>
           <div className="row" style={{gap: 6}}>
-            <span className="fchip active">All invoices</span>
-            <span className="fchip">Outstanding · 23</span>
-            <span className="fchip">Overdue · 4</span>
-            <span className="fchip">Paid · 18</span>
-            <span className="fchip">Drafts · 2</span>
-          </div>
-          <div className="row" style={{gap: 6}}>
-            <button className="fchip"><Icon name="filter" size={14}/>This month</button>
-            <button className="fchip"><Icon name="filter" size={14}/>All staff</button>
+            {["All", "Outstanding", "Overdue", "Partial", "Paid"].map(f => (
+              <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+                {f}{counts[f] ? ` · ${counts[f]}` : ""}
+              </span>
+            ))}
           </div>
         </div>
-        <table className="tbl">
-          <thead><tr><th>Invoice #</th><th>Assessee</th><th>Service</th><th>AY</th><th>Issued</th><th>Due</th><th>Amount</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {INVOICES.map(inv => (
-              <tr key={inv.id}>
-                <td className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12.5}}>{inv.id}</td>
-                <td className="strong">{inv.assessee}</td>
-                <td className="semi" style={{maxWidth: 280}}>{inv.service}</td>
-                <td>{inv.ay}</td>
-                <td className="muted">{fmtDateLong(inv.date)}</td>
-                <td className="muted">{fmtDateLong(inv.due)}</td>
-                <td className="strong">{fmtINR(inv.amount)}</td>
-                <td><StatusPill status={inv.status}/></td>
-                <td>
-                  <div className="row" style={{gap: 4}}>
-                    <button className="btn btn-ghost btn-xs"><Icon name="download" size={12}/></button>
-                    <button className="btn btn-ghost btn-xs"><Icon name="more" size={12}/></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon="invoice"
+            title={invoices.length === 0 ? "No invoices yet" : "No invoices match this filter"}
+            sub={invoices.length === 0 ? "Raise your first invoice to start tracking fees." : undefined}
+            action={invoices.length === 0 ? <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New invoice</button> : undefined}
+          />
+        ) : (
+          <table className="tbl">
+            <thead><tr><th>Invoice #</th><th>Assessee</th><th>Service</th><th>AY</th><th>Issued</th><th>Due</th><th>Amount</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {filtered.map(inv => (
+                <tr key={inv.id}>
+                  <td className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12.5}}>{inv.number}</td>
+                  <td className="strong">{inv.assessee}</td>
+                  <td className="semi" style={{maxWidth: 280}}>{inv.service}</td>
+                  <td>{inv.ay || "—"}</td>
+                  <td className="muted">{fmtDateLong(inv.date)}</td>
+                  <td className="muted">{inv.due ? fmtDateLong(inv.due) : "—"}</td>
+                  <td className="strong">{fmtINR(inv.amount)}</td>
+                  <td>{invoiceOutstanding(inv) ? fmtINR(invoiceOutstanding(inv)) : "—"}</td>
+                  <td><StatusPill status={invoiceStatus(inv)}/></td>
+                  <td>
+                    <div className="row" style={{gap: 4}}>
+                      {invoiceOutstanding(inv) > 0 && (
+                        <button className="btn btn-ghost btn-xs" title="Record payment" onClick={() => setPayFor(inv)}><Icon name="wallet" size={12}/></button>
+                      )}
+                      <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm(`Delete invoice ${inv.number}?`)) { removeInvoice(inv.id); notify("Invoice deleted"); } }}><Icon name="trash" size={12}/></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {showNew && <InvoiceModal onClose={() => setShowNew(false)}/>}
+      {payFor && <PaymentModal invoice={payFor} onClose={() => setPayFor(null)}/>}
     </div>
   );
 }
 
-/* Matters list */
+/* ---------------- Matters ---------------- */
+
+const MATTER_TYPES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Rectification", "High Court"];
+const MATTER_STATUSES = ["Active", "Pending", "Submitted", "Decided", "Closed"];
+
+export function MatterModal({ initial, onClose }) {
+  const { data, addMatter, updateMatter, notify } = useData();
+  const [form, setForm] = React.useState({
+    type: "Scrutiny", assessee: "", pan: "", ay: "", section: "", ref: "", bench: "",
+    status: "Active", priority: "medium", staff: "",
+    ...initial,
+  });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const pickAssessee = (name) => {
+    const a = data.assessees.find(x => x.name === name);
+    setForm(f => ({ ...f, assessee: name, pan: a?.pan || f.pan, staff: f.staff || a?.staff || "" }));
+  };
+  const valid = form.assessee.trim() && form.ay.trim();
+
+  const save = () => {
+    if (!valid) return;
+    if (initial?.id) {
+      updateMatter(initial.id, form);
+      notify("Matter updated");
+    } else {
+      addMatter(form);
+      notify(`${form.type} matter added for ${form.assessee}`);
+    }
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={initial?.id ? "Edit matter" : "New matter"}
+      sub="A matter tracks one proceeding for one assessment year"
+      onClose={onClose}
+      width={620}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{initial?.id ? "Save changes" : "Add matter"}</button>
+      </>}
+    >
+      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+        <FormField label="Assessee" required full>
+          {data.assessees.length > 0
+            ? <SelectInput value={form.assessee} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
+            : <TextInput value={form.assessee} onChange={set("assessee")} placeholder="Assessee name"/>}
+        </FormField>
+        <FormField label="Type"><SelectInput value={form.type} onChange={set("type")} options={MATTER_TYPES}/></FormField>
+        <FormField label="Assessment year" required><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
+        <FormField label="Section"><TextInput value={form.section} onChange={set("section")} placeholder="e.g. 143(2)"/></FormField>
+        <FormField label="Reference / ITA No."><TextInput value={form.ref} onChange={set("ref")} placeholder="ITA No. …"/></FormField>
+        <FormField label="Bench / Officer"><TextInput value={form.bench} onChange={set("bench")} placeholder="e.g. Circle 4(1), Ahmedabad"/></FormField>
+        <FormField label="Status"><SelectInput value={form.status} onChange={set("status")} options={MATTER_STATUSES}/></FormField>
+        <FormField label="Priority"><SelectInput value={form.priority} onChange={set("priority")} options={["high", "medium", "low"]}/></FormField>
+        <FormField label="Staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Assigned staff"/></FormField>
+      </div>
+    </Modal>
+  );
+}
+
 export function Matters() {
-  const matters = [
-    { id: "m1", type: "ITAT", assessee: "Rajesh M. Shah", ay: "2017-18", section: "—", ita: "ITA No. 1244/Ahd/2024", bench: "Ahmedabad 'A'", status: "Active", priority: "high", next: "28 May", staff: "Priya Mehta", days: 1 },
-    { id: "m2", type: "Scrutiny", assessee: "Shah Textiles Pvt. Ltd.", ay: "2021-22", section: "142(1)", ita: "—", bench: "Circle 4(1), Ahd", status: "Pending", priority: "medium", next: "29 May", staff: "Priya Mehta", days: 2 },
-    { id: "m3", type: "CIT(A)", assessee: "Mehul Patel & Sons HUF", ay: "2019-20", section: "250", ita: "Appeal 1029/AHD/CIT(A)/2024-25", bench: "NFAC", status: "Submitted", priority: "medium", next: "02 Jun", staff: "Arjun Desai", days: 6 },
-    { id: "m4", type: "Scrutiny", assessee: "Nirvana Infotech LLP", ay: "2020-21", section: "143(2)", ita: "—", bench: "Circle 2(2), Surat", status: "Active", priority: "low", next: "04 Jun", staff: "Arjun Desai", days: 8 },
-    { id: "m5", type: "Penalty", assessee: "Vinod Bros. Trading", ay: "2018-19", section: "271(1)(c)", ita: "—", bench: "Circle 3, Mumbai", status: "Pending", priority: "high", next: "—", staff: "Riya Kapoor", days: null },
-    { id: "m6", type: "ITAT", assessee: "Vinod Bros. Trading", ay: "2018-19", section: "—", ita: "ITA No. 0987/Mum/2024", bench: "Mumbai 'C'", status: "Active", priority: "high", next: "09 Jun", staff: "Riya Kapoor", days: 13 },
-    { id: "m7", type: "Rectification", assessee: "Kavita R. Joshi", ay: "2023-24", section: "154", ita: "—", bench: "CPC, Bengaluru", status: "Submitted", priority: "low", next: "—", staff: "Priya Mehta", days: null },
-    { id: "m8", type: "Scrutiny", assessee: "Hari Om Charitable Trust", ay: "2022-23", section: "143(2)", ita: "—", bench: "Exemption Ward, Ahd", status: "Active", priority: "low", next: "11 Jun", staff: "Riya Kapoor", days: 15 },
-  ];
+  const { data, removeMatter, notify } = useData();
   const [tab, setTab] = React.useState("All");
+  const [search, setSearch] = React.useState("");
+  const [modal, setModal] = React.useState(null);
+
   const typeColor = (t) => {
     if (t === "ITAT") return "primary";
     if (t === "CIT(A)") return "pink";
@@ -142,199 +326,334 @@ export function Matters() {
     return "muted";
   };
 
+  const active = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
+  const q = search.toLowerCase();
+  const filtered = data.matters.filter(m => {
+    if (tab === "Closed") { if (!["Closed", "Decided"].includes(m.status)) return false; }
+    else if (tab !== "All") { if (m.type !== tab || ["Closed", "Decided"].includes(m.status)) return false; }
+    if (q && ![m.assessee, m.pan, m.ref, m.ay, m.section].some(v => (v || "").toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  const nextHearingFor = (m) =>
+    upcomingHearings(data).find(h => h.pan === m.pan && (h.ay === m.ay || h.authority === m.type));
+
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Matters</div>
-          <div className="page-sub">42 active proceedings across 7 authorities</div>
+          <div className="page-sub">{active.length ? `${active.length} active proceeding${active.length > 1 ? "s" : ""}` : "Track each proceeding from notice to disposal"}</div>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-secondary"><Icon name="download" size={14}/>Matter summary PDF</button>
-          <button className="btn btn-primary"><Icon name="plus" size={14}/>New matter</button>
+          <button className="btn btn-secondary" onClick={() => downloadCSV("matters.csv", ["Type", "Assessee", "PAN", "AY", "Section", "Reference", "Bench", "Status", "Staff"], filtered.map(m => [m.type, m.assessee, m.pan, m.ay, m.section, m.ref, m.bench, m.status, m.staff]))}><Icon name="download" size={14}/>Export CSV</button>
+          <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>New matter</button>
         </div>
       </div>
 
       <div className="row" style={{marginBottom: 16, alignItems: "center", justifyContent: "space-between"}}>
         <div className="tabs">
-          {["All","Scrutiny","CIT(A)","ITAT","Penalty","Rectification","High Court","Closed"].map(t => (
+          {["All", ...MATTER_TYPES, "Closed"].map(t => (
             <div key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</div>
           ))}
         </div>
         <div className="search" style={{width: 240}}>
           <Icon name="search" size={15}/>
-          <input placeholder="Search ITA, PAN, assessee…"/>
+          <input placeholder="Search ITA, PAN, assessee…" value={search} onChange={e => setSearch(e.target.value)}/>
         </div>
       </div>
 
       <div className="card" style={{padding: 0}}>
-        <table className="tbl">
-          <thead><tr><th>Matter</th><th>Assessee</th><th>AY</th><th>Section</th><th>Bench / Officer</th><th>Status</th><th>Next hearing</th><th>Staff</th></tr></thead>
-          <tbody>
-            {matters.map(m => (
-              <tr key={m.id}>
-                <td>
-                  <div className="center" style={{gap: 10}}>
-                    <span className={`pill pill-${typeColor(m.type)}`}>{m.type}</span>
-                    {m.priority === "high" && <span style={{width: 6, height: 6, borderRadius: "50%", background: "var(--p-danger)"}} title="High priority"/>}
-                  </div>
-                  {m.ita !== "—" && <div className="muted" style={{fontSize: 11, marginTop: 4, fontFamily: "ui-monospace, monospace"}}>{m.ita}</div>}
-                </td>
-                <td className="strong">{m.assessee}</td>
-                <td>{m.ay}</td>
-                <td>{m.section !== "—" ? <span className="pill pill-muted">u/s {m.section}</span> : <span className="muted">—</span>}</td>
-                <td className="semi">{m.bench}</td>
-                <td><StatusPill status={m.status}/></td>
-                <td>
-                  {m.next === "—"
-                    ? <span className="muted">—</span>
-                    : <div>
-                        <div className="strong">{m.next}</div>
-                        <div className="muted">{m.days === 1 ? "in 1 day" : m.days != null ? `in ${m.days} days` : ""}</div>
-                      </div>}
-                </td>
-                <td><Avatar name={m.staff} color="mint" size="sm"/></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon="scale"
+            title={data.matters.length === 0 ? "No matters yet" : "No matters match this filter"}
+            sub={data.matters.length === 0 ? "Add a matter to track a scrutiny, appeal or penalty proceeding." : undefined}
+            action={data.matters.length === 0 ? <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>New matter</button> : undefined}
+          />
+        ) : (
+          <table className="tbl">
+            <thead><tr><th>Matter</th><th>Assessee</th><th>AY</th><th>Section</th><th>Bench / Officer</th><th>Status</th><th>Next hearing</th><th>Staff</th><th></th></tr></thead>
+            <tbody>
+              {filtered.map(m => {
+                const nh = nextHearingFor(m);
+                const days = nh ? daysFromNow(nh.date) : null;
+                return (
+                  <tr key={m.id}>
+                    <td>
+                      <div className="center" style={{gap: 10}}>
+                        <span className={`pill pill-${typeColor(m.type)}`}>{m.type}</span>
+                        {m.priority === "high" && <span style={{width: 6, height: 6, borderRadius: "50%", background: "var(--p-danger)"}} title="High priority"/>}
+                      </div>
+                      {m.ref && <div className="muted" style={{fontSize: 11, marginTop: 4, fontFamily: "ui-monospace, monospace"}}>{m.ref}</div>}
+                    </td>
+                    <td className="strong">{m.assessee}</td>
+                    <td>{m.ay}</td>
+                    <td>{m.section ? <span className="pill pill-muted">u/s {m.section}</span> : <span className="muted">—</span>}</td>
+                    <td className="semi">{m.bench || "—"}</td>
+                    <td><StatusPill status={m.status}/></td>
+                    <td>
+                      {nh
+                        ? <div>
+                            <div className="strong">{fmtDate(nh.date)}</div>
+                            <div className="muted">{days === 0 ? "today" : days === 1 ? "in 1 day" : `in ${days} days`}</div>
+                          </div>
+                        : <span className="muted">—</span>}
+                    </td>
+                    <td>{m.staff ? <Avatar name={m.staff} color="mint" size="sm"/> : <span className="muted">—</span>}</td>
+                    <td>
+                      <div className="row" style={{gap: 4}}>
+                        <button className="btn btn-ghost btn-xs" title="Edit" onClick={() => setModal(m)}><Icon name="edit" size={12}/></button>
+                        <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this matter?")) { removeMatter(m.id); notify("Matter deleted"); } }}><Icon name="trash" size={12}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {modal && <MatterModal initial={modal.id ? modal : undefined} onClose={() => setModal(null)}/>}
     </div>
   );
 }
 
-/* Communications */
+/* ---------------- Communications ---------------- */
+
+function MessageModal({ onClose }) {
+  const { data, addCommunication, notify } = useData();
+  const [form, setForm] = React.useState({ channel: "WhatsApp", to: "", subject: "", body: "", template: "Custom" });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const valid = form.to.trim() && form.subject.trim();
+
+  const save = (status) => {
+    if (!valid) return;
+    addCommunication({ ...form, time: new Date().toISOString(), status });
+    if (status === "Sent") {
+      const a = data.assessees.find(x => x.name === form.to);
+      const text = encodeURIComponent(`${form.subject}\n\n${form.body}`);
+      if (form.channel === "WhatsApp" && a?.mobile) {
+        window.open(`https://wa.me/${a.mobile.replace(/\D/g, "")}?text=${text}`, "_blank");
+      } else if (form.channel === "Email" && a?.email) {
+        window.open(`mailto:${a.email}?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(form.body)}`);
+      }
+    }
+    notify(status === "Sent" ? "Message logged & opened in " + form.channel : "Draft saved");
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="New message"
+      sub="Sending opens WhatsApp / your mail app with the message pre-filled"
+      onClose={onClose}
+      width={560}
+      footer={<>
+        <button className="btn btn-secondary" onClick={() => save("Draft")} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}>Save draft</button>
+        <button className="btn btn-primary" onClick={() => save("Sent")} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}><Icon name="arrow-right" size={14}/>Send</button>
+      </>}
+    >
+      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+        <FormField label="Channel"><SelectInput value={form.channel} onChange={set("channel")} options={["WhatsApp", "Email"]}/></FormField>
+        <FormField label="To" required>
+          {data.assessees.length > 0
+            ? <SelectInput value={form.to} onChange={set("to")} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
+            : <TextInput value={form.to} onChange={set("to")} placeholder="Recipient"/>}
+        </FormField>
+        <FormField label="Subject" required full><TextInput value={form.subject} onChange={set("subject")} placeholder="Subject"/></FormField>
+        <div className="field" style={{gridColumn: "1 / -1"}}>
+          <label>Message</label>
+          <textarea value={form.body} onChange={e => set("body")(e.target.value)} rows={6} placeholder="Message body…"/>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function Communications() {
-  const items = [
-    { id: 1, channel: "WhatsApp", to: "Rajesh M. Shah", subject: "Documents required for AY 2017-18 — ITAT hearing on 28 May", time: "Today, 09:42", status: "Delivered ✓✓", icon: "whatsapp", color: "success", template: "Document request" },
-    { id: 2, channel: "Email", to: "accounts@nirvanainfotech.com", subject: "Income Tax Notice u/s 143(2) — submission of details", time: "Yesterday", status: "Read", icon: "mail", color: "info", template: "Reminder" },
-    { id: 3, channel: "WhatsApp", to: "Mehul Patel & Sons HUF", subject: "CIT(A) appeal hearing on 02 Jun — please confirm attendance", time: "24 May, 14:20", status: "Sent", icon: "whatsapp", color: "success", template: "Hearing confirmation" },
-    { id: 4, channel: "Email", to: "trust@hariomtrust.org", subject: "Notice u/s 143(2) received — please send 8 documents", time: "23 May", status: "Delivered", icon: "mail", color: "info", template: "Document request" },
-    { id: 5, channel: "WhatsApp", to: "Shah Textiles Pvt. Ltd.", subject: "Invoice PH/26-27/0123 — Payment received ₹85,000 ✓", time: "21 May", status: "Read", icon: "whatsapp", color: "success", template: "Receipt ack." },
-  ];
+  const { data, notify } = useData();
+  const [filter, setFilter] = React.useState("All");
+  const [showNew, setShowNew] = React.useState(false);
+
+  const comms = [...data.communications].sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+  const counts = {
+    All: comms.length,
+    WhatsApp: comms.filter(c => c.channel === "WhatsApp").length,
+    Email: comms.filter(c => c.channel === "Email").length,
+    Drafts: comms.filter(c => c.status === "Draft").length,
+  };
+  const filtered = comms.filter(c => {
+    if (filter === "All") return true;
+    if (filter === "Drafts") return c.status === "Draft";
+    return c.channel === filter;
+  });
+
+  const draft = comms.find(c => c.status === "Draft");
+  const draftAssessee = draft && data.assessees.find(a => a.name === draft.to);
+
+  const openDraft = (channel) => {
+    if (!draft) return;
+    const text = `${draft.subject}\n\n${draft.body || ""}`;
+    if (channel === "WhatsApp" && draftAssessee?.mobile) {
+      window.open(`https://wa.me/${draftAssessee.mobile.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank");
+    } else if (channel === "Email" && draftAssessee?.email) {
+      window.open(`mailto:${draftAssessee.email}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body || "")}`);
+    } else {
+      notify("No contact details on file for " + (draft.to || "recipient"), "alert");
+    }
+  };
+
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Communications</div>
-          <div className="page-sub">All client messages, drafts and templates</div>
+          <div className="page-sub">Log of client messages and drafts</div>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-secondary"><Icon name="doc" size={14}/>Manage templates</button>
-          <button className="btn btn-primary"><Icon name="plus" size={14}/>New message</button>
+          <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New message</button>
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "1.5fr 1fr", gap: 18}}>
+      <div className="grid" style={{gridTemplateColumns: draft ? "1.5fr 1fr" : "1fr", gap: 18}}>
         <div className="card" style={{padding: 0}}>
           <div className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", justifyContent: "space-between"}}>
             <div className="row" style={{gap: 6}}>
-              <span className="fchip active">All</span>
-              <span className="fchip">WhatsApp · 18</span>
-              <span className="fchip">Email · 9</span>
-              <span className="fchip">Drafts · 2</span>
+              {["All", "WhatsApp", "Email", "Drafts"].map(f => (
+                <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+                  {f}{counts[f] ? ` · ${counts[f]}` : ""}
+                </span>
+              ))}
             </div>
           </div>
-          <div className="col">
-            {items.map(c => (
-              <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12, alignItems: "flex-start", cursor: "pointer"}}>
-                <div style={{width: 38, height: 38, borderRadius: 11, background: c.color === "success" ? "var(--p-mint)" : "#E1EEFF", color: c.color === "success" ? "#1B8C5C" : "#2766C7", display: "grid", placeItems: "center", flexShrink: 0}}>
-                  <Icon name={c.icon} size={16}/>
-                </div>
-                <div style={{flex: 1, minWidth: 0}}>
-                  <div className="between">
-                    <div className="center" style={{gap: 8}}>
-                      <div style={{fontWeight: 700, fontSize: 13.5}}>{c.to}</div>
-                      <span className="pill pill-muted" style={{fontSize: 10}}>{c.template}</span>
-                    </div>
-                    <div className="muted" style={{fontSize: 11.5}}>{c.time}</div>
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon="chat"
+              title={comms.length === 0 ? "No messages yet" : "No messages match this filter"}
+              sub={comms.length === 0 ? "Messages you log or draft — including document requests generated from notices — appear here." : undefined}
+              action={comms.length === 0 ? <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New message</button> : undefined}
+            />
+          ) : (
+            <div className="col">
+              {filtered.map(c => (
+                <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12, alignItems: "flex-start"}}>
+                  <div style={{width: 38, height: 38, borderRadius: 11, background: c.channel === "WhatsApp" ? "var(--p-mint)" : "#E1EEFF", color: c.channel === "WhatsApp" ? "#1B8C5C" : "#2766C7", display: "grid", placeItems: "center", flexShrink: 0}}>
+                    <Icon name={c.channel === "WhatsApp" ? "whatsapp" : "mail"} size={16}/>
                   </div>
-                  <div className="semi" style={{fontSize: 13, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{c.subject}</div>
-                  <div className="muted" style={{fontSize: 11.5, marginTop: 4}}>{c.channel} · {c.status}</div>
+                  <div style={{flex: 1, minWidth: 0}}>
+                    <div className="between">
+                      <div className="center" style={{gap: 8}}>
+                        <div style={{fontWeight: 700, fontSize: 13.5}}>{c.to}</div>
+                        {c.template && <span className="pill pill-muted" style={{fontSize: 10}}>{c.template}</span>}
+                      </div>
+                      <div className="muted" style={{fontSize: 11.5}}>{new Date(c.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                    </div>
+                    <div className="semi" style={{fontSize: 13, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{c.subject}</div>
+                    <div className="muted" style={{fontSize: 11.5, marginTop: 4}}>{c.channel} · <StatusPill status={c.status}/></div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="card">
-          <div className="card-title mb-3">Document request — draft</div>
-          <div className="card-sub mb-4">Auto-prepared from AI-parsed notice for Rajesh M. Shah</div>
-          <div className="col" style={{gap: 12, padding: 16, background: "var(--p-card-tint)", borderRadius: 14, border: "1px solid var(--p-line-2)"}}>
-            <div style={{fontSize: 12.5, fontWeight: 700}}>Subject</div>
-            <div style={{fontSize: 13}}>Details required for ITAT hearing — AY 2017-18</div>
-            <div style={{height: 1, background: "var(--p-line)"}}/>
-            <div style={{fontSize: 12.5, fontWeight: 700}}>Body</div>
-            <div style={{fontSize: 12.5, lineHeight: 1.6, color: "var(--p-text-2)"}}>
-              Dear Sir,<br/><br/>
-              The Income Tax Appellate Tribunal has fixed your appeal for hearing on <b>28 May 2026 at 11:30 AM</b> before the Ahmedabad 'A' Bench. Kindly arrange the following at the earliest:<br/><br/>
-              1. Audited financials AY 17-18<br/>
-              2. Bank statements FY 16-17<br/>
-              3. Lender confirmations + PAN<br/>
-              4. Source of cash deposits<br/>
-              5. Ledger of sundry creditors<br/>
-              6. ITR & computation<br/><br/>
-              Please share by <b>26 May 2026</b>.<br/><br/>
-              Regards,<br/>
-              Jayesh Vyas, CA
+
+        {draft && (
+          <div className="card">
+            <div className="card-title mb-3">{draft.template || "Draft"} — draft</div>
+            <div className="card-sub mb-4">For {draft.to}</div>
+            <div className="col" style={{gap: 12, padding: 16, background: "var(--p-card-tint)", borderRadius: 14, border: "1px solid var(--p-line-2)"}}>
+              <div style={{fontSize: 12.5, fontWeight: 700}}>Subject</div>
+              <div style={{fontSize: 13}}>{draft.subject}</div>
+              {draft.body && <>
+                <div style={{height: 1, background: "var(--p-line)"}}/>
+                <div style={{fontSize: 12.5, fontWeight: 700}}>Body</div>
+                <div style={{fontSize: 12.5, lineHeight: 1.6, color: "var(--p-text-2)", whiteSpace: "pre-wrap"}}>{draft.body}</div>
+              </>}
+            </div>
+            <div className="row" style={{gap: 8, marginTop: 14}}>
+              <button className="btn btn-primary" style={{flex: 1, justifyContent: "center"}} onClick={() => openDraft("WhatsApp")}><Icon name="whatsapp" size={14}/>Send WhatsApp</button>
+              <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}} onClick={() => openDraft("Email")}><Icon name="mail" size={14}/>Send Email</button>
             </div>
           </div>
-          <div className="row" style={{gap: 8, marginTop: 14}}>
-            <button className="btn btn-primary" style={{flex: 1, justifyContent: "center"}}><Icon name="whatsapp" size={14}/>Send WhatsApp</button>
-            <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}}><Icon name="mail" size={14}/>Send Email</button>
-          </div>
-        </div>
+        )}
       </div>
+
+      {showNew && <MessageModal onClose={() => setShowNew(false)}/>}
     </div>
   );
 }
 
-/* AI page */
-export function AiParser({ onOpenParsed }) {
+/* ---------------- AI Parser ---------------- */
+
+export function AiParser({ onOpenNotice }) {
+  const { data } = useData();
+  const fileRef = React.useRef(null);
+  const [dragOver, setDragOver] = React.useState(false);
+
+  const openWithFile = (file) => onOpenNotice({ fileName: file?.name || "" });
+  const recent = [...data.notices].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 6);
+
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
-          <div className="page-title">AI Parser</div>
-          <div className="page-sub">Extract structured details from any Income-tax notice PDF</div>
+          <div className="page-title">Notice intake</div>
+          <div className="page-sub">Attach a notice PDF and record its details in one flow</div>
         </div>
       </div>
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 18}}>
-        <div className="card" style={{padding: 28, border: "2px dashed var(--p-primary-3)", background: "linear-gradient(180deg, #F8F6FF, white)"}}>
+        <div
+          className="card"
+          style={{padding: 28, border: `2px dashed ${dragOver ? "var(--p-primary)" : "var(--p-primary-3)"}`, background: "linear-gradient(180deg, #F8F6FF, white)", cursor: "pointer"}}
+          onClick={() => fileRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); openWithFile(e.dataTransfer.files?.[0]); }}
+        >
+          <input ref={fileRef} type="file" accept=".pdf" style={{display: "none"}} onChange={e => { if (e.target.files?.[0]) openWithFile(e.target.files[0]); }}/>
           <div style={{textAlign: "center", padding: "30px 20px"}}>
             <div style={{width: 64, height: 64, borderRadius: 18, background: "var(--p-primary)", color: "white", display: "grid", placeItems: "center", margin: "0 auto 16px"}}>
               <Icon name="upload" size={28}/>
             </div>
             <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>Drop notice PDF here</div>
-            <div className="card-sub mt-1">or click to browse — supports up to 20 MB</div>
-            <button className="btn btn-primary mt-4" onClick={onOpenParsed}><Icon name="sparkle" size={14}/>Parse with AI</button>
+            <div className="card-sub mt-1">or click to browse — the file opens the intake form</div>
+            <button className="btn btn-primary mt-4" onClick={e => { e.stopPropagation(); onOpenNotice(null); }}><Icon name="edit" size={14}/>Enter details manually</button>
           </div>
           <div style={{borderTop: "1px solid var(--p-line)", paddingTop: 16, marginTop: 16}}>
-            <div style={{fontSize: 12, fontWeight: 700, color: "var(--p-text-2)", marginBottom: 8}}>WHAT THE AI EXTRACTS</div>
+            <div style={{fontSize: 12, fontWeight: 700, color: "var(--p-text-2)", marginBottom: 8}}>WHAT GETS RECORDED</div>
             <div className="row" style={{gap: 6, flexWrap: "wrap"}}>
-              {["Assessee","PAN","AY","Section","DIN","Notice date","Hearing date","Hearing time","ITA No.","Bench / AO","Mode (VC / Physical)","Documents called for","Subject","Important instructions"].map(t => <span key={t} className="pill pill-primary">{t}</span>)}
+              {["Assessee","PAN","AY","Section","DIN","Notice date","Hearing date","Hearing time","ITA No.","Bench / AO","Mode","Documents called for","Subject"].map(t => <span key={t} className="pill pill-primary">{t}</span>)}
+            </div>
+            <div className="muted" style={{fontSize: 11.5, marginTop: 10}}>
+              <Icon name="info" size={11}/> Automatic AI extraction needs a parsing backend, which isn't connected yet — details are entered in the form and saved to your registers.
             </div>
           </div>
         </div>
         <div className="card">
           <div className="card-head">
-            <div className="card-title">Recent AI runs</div>
-            <span className="pill pill-pink">4 pending review</span>
+            <div className="card-title">Recently recorded notices</div>
+            {data.notices.filter(n => n.status === "Awaiting review").length > 0 && (
+              <span className="pill pill-pink">{data.notices.filter(n => n.status === "Awaiting review").length} awaiting review</span>
+            )}
           </div>
+          {recent.length === 0 && <EmptyState icon="doc" title="No notices recorded yet" sub="Notices you record appear here with their review status."/>}
           <div className="col" style={{gap: 8}}>
-            {NOTICES.map((n, i) => (
-              <div key={n.id} className="between" onClick={n.awaiting ? onOpenParsed : undefined} style={{padding: "12px 14px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line-2)", cursor: n.awaiting ? "pointer" : "default"}}>
+            {recent.map(n => (
+              <div key={n.id} className="between" onClick={() => onOpenNotice(n)} style={{padding: "12px 14px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line-2)", cursor: "pointer"}}>
                 <div className="center" style={{gap: 10}}>
                   <div style={{width: 32, height: 32, borderRadius: 10, background: "white", color: "var(--p-primary)", display: "grid", placeItems: "center"}}>
-                    <Icon name="sparkle" size={14}/>
+                    <Icon name="doc" size={14}/>
                   </div>
                   <div>
                     <div style={{fontWeight: 700, fontSize: 13}}>{n.assessee}</div>
-                    <div className="muted" style={{fontSize: 11.5}}>u/s {n.section} · AY {n.ay} · {n.authority}</div>
+                    <div className="muted" style={{fontSize: 11.5}}>{n.section ? `u/s ${n.section} · ` : ""}AY {n.ay} · {n.authority}</div>
                   </div>
                 </div>
                 <div style={{textAlign: "right"}}>
                   <StatusPill status={n.status}/>
-                  <div className="muted" style={{fontSize: 11, marginTop: 3}}>{fmtDate(n.date)}</div>
+                  {n.date && <div className="muted" style={{fontSize: 11, marginTop: 3}}>{fmtDate(n.date)}</div>}
                 </div>
               </div>
             ))}
@@ -345,31 +664,78 @@ export function AiParser({ onOpenParsed }) {
   );
 }
 
-/* Reports */
+/* ---------------- Reports ---------------- */
+
 export function Reports() {
+  const { data, notify } = useData();
+
+  const reports = [
+    {
+      t: "Outstanding receivables", d: "Assessee-wise outstanding fees", icon: "wallet", color: "warning",
+      file: "receivables.csv", headers: ["Assessee", "Invoice #", "Due date", "Amount", "Received", "Outstanding"],
+      rows: () => data.invoices.filter(i => invoiceOutstanding(i) > 0).map(i => [i.assessee, i.number, i.due, i.amount, i.received || 0, invoiceOutstanding(i)]),
+    },
+    {
+      t: "Billing report", d: "All invoices raised with status", icon: "invoice", color: "primary",
+      file: "billing.csv", headers: ["Invoice #", "Assessee", "Date", "AY", "Service", "Amount", "Status"],
+      rows: () => data.invoices.map(i => [i.number, i.assessee, i.date, i.ay, i.service, i.amount, invoiceStatus(i)]),
+    },
+    {
+      t: "Payments received", d: "Invoices with amounts received", icon: "trend-up", color: "success",
+      file: "payments.csv", headers: ["Invoice #", "Assessee", "Invoice date", "Amount", "Received"],
+      rows: () => data.invoices.filter(i => (i.received || 0) > 0).map(i => [i.number, i.assessee, i.date, i.amount, i.received]),
+    },
+    {
+      t: "Authority-wise case load", d: "Active matters by authority", icon: "scale", color: "primary",
+      file: "matters.csv", headers: ["Type", "Assessee", "PAN", "AY", "Section", "Bench", "Status", "Staff"],
+      rows: () => data.matters.filter(m => !["Closed", "Decided"].includes(m.status)).map(m => [m.type, m.assessee, m.pan, m.ay, m.section, m.bench, m.status, m.staff]),
+    },
+    {
+      t: "Upcoming hearings", d: "Cause list of scheduled hearings", icon: "calendar", color: "pink",
+      file: "cause-list.csv", headers: ["Date", "Time", "Assessee", "PAN", "AY", "Authority", "Bench", "Mode", "Staff"],
+      rows: () => upcomingHearings(data).map(h => [h.date, h.time, h.assessee, h.pan, h.ay, h.authority, h.bench, h.mode, h.staff]),
+    },
+    {
+      t: "Notice register", d: "All notices with review status", icon: "doc", color: "danger",
+      file: "notices.csv", headers: ["Assessee", "PAN", "AY", "Section", "Authority", "DIN", "Notice date", "Hearing date", "Status"],
+      rows: () => data.notices.map(n => [n.assessee, n.pan, n.ay, n.section, n.authority, n.din, n.date, n.hearingDate, n.status]),
+    },
+    {
+      t: "Assessee master", d: "Full assessee register", icon: "users", color: "primary",
+      file: "assessees.csv", headers: ["Name", "PAN", "Status", "Group", "Mobile", "Email", "Staff", "Address"],
+      rows: () => data.assessees.map(a => [a.name, a.pan, a.status, a.group, a.mobile, a.email, a.staff, a.address]),
+    },
+    {
+      t: "Communication log", d: "Messages sent and drafted", icon: "chat", color: "pink",
+      file: "communications.csv", headers: ["Time", "Channel", "To", "Subject", "Template", "Status"],
+      rows: () => data.communications.map(c => [c.time, c.channel, c.to, c.subject, c.template, c.status]),
+    },
+  ];
+
+  const run = (r) => {
+    const rows = r.rows();
+    if (rows.length === 0) {
+      notify("No data for this report yet", "info");
+      return;
+    }
+    downloadCSV(r.file, r.headers, rows);
+    notify(`${r.t} exported — ${rows.length} row${rows.length > 1 ? "s" : ""}`);
+  };
+
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Reports</div>
-          <div className="page-sub">Generate PDF / Excel reports across the practice</div>
+          <div className="page-sub">Export CSV reports across the practice — opens in Excel</div>
         </div>
       </div>
       <div className="grid" style={{gridTemplateColumns: "repeat(3, 1fr)", gap: 16}}>
-        {[
-          { t: "Outstanding receivables", d: "Assessee-wise and group-wise ageing", icon: "wallet", color: "warning" },
-          { t: "Monthly billing report", d: "Invoices raised, GST collected, services", icon: "invoice", color: "primary" },
-          { t: "Payments received", d: "Mode-wise, bank-wise reconciliation", icon: "trend-up", color: "success" },
-          { t: "Authority-wise case load", d: "Active matters by ITAT/CIT(A)/Scrutiny", icon: "scale", color: "primary" },
-          { t: "Upcoming hearings", d: "Cause list — 7/15/30 days", icon: "calendar", color: "pink" },
-          { t: "Overdue replies", d: "Notices nearing due-date", icon: "alert", color: "danger" },
-          { t: "Staff allocation", d: "Hours, matters and load per staff", icon: "users", color: "primary" },
-          { t: "Notice parsing accuracy", d: "AI confidence vs manual corrections", icon: "sparkle", color: "pink" },
-          { t: "Group ledger", d: "Consolidated for selected period", icon: "doc", color: "primary" },
-        ].map(r => {
+        {reports.map(r => {
           const colors = { warning: ["var(--p-amber)","#B07512"], primary: ["var(--p-lavender-2)","var(--p-primary-2)"], success: ["var(--p-mint)","#1B8C5C"], pink: ["var(--p-pink)","#C13388"], danger: ["var(--p-coral)","#B8463A"] }[r.color];
+          const count = r.rows().length;
           return (
-            <div key={r.t} className="card" style={{cursor: "pointer", transition: "all 0.15s"}}>
+            <div key={r.t} className="card">
               <div className="center" style={{gap: 12, marginBottom: 14}}>
                 <div style={{width: 40, height: 40, borderRadius: 12, background: colors[0], color: colors[1], display: "grid", placeItems: "center"}}>
                   <Icon name={r.icon} size={18}/>
@@ -378,11 +744,10 @@ export function Reports() {
                   <div style={{fontWeight: 700, fontSize: 14}}>{r.t}</div>
                 </div>
               </div>
-              <div className="card-sub mb-4">{r.d}</div>
-              <div className="row" style={{gap: 6}}>
-                <button className="btn btn-secondary btn-sm" style={{flex: 1, justifyContent: "center"}}><Icon name="pdf" size={12}/>PDF</button>
-                <button className="btn btn-secondary btn-sm" style={{flex: 1, justifyContent: "center"}}><Icon name="download" size={12}/>Excel</button>
-              </div>
+              <div className="card-sub mb-4">{r.d} · {count} row{count !== 1 ? "s" : ""}</div>
+              <button className="btn btn-secondary btn-sm" style={{width: "100%", justifyContent: "center"}} onClick={() => run(r)}>
+                <Icon name="download" size={12}/>Export CSV
+              </button>
             </div>
           );
         })}
@@ -391,27 +756,72 @@ export function Reports() {
   );
 }
 
-/* Settings — integrations */
+/* ---------------- Settings ---------------- */
+
 export function SettingsPage() {
+  const { data, setProfile, loadSampleData, clearAllData, notify } = useData();
+  const [owner, setOwner] = React.useState(data.profile.ownerName);
+  const [firm, setFirm] = React.useState(data.profile.firmName);
+
+  const saveProfile = () => {
+    setProfile({ ownerName: owner.trim(), firmName: firm.trim() });
+    notify("Profile saved");
+  };
+
+  const exportBackup = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prohippo-backup-${todayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify("Backup downloaded");
+  };
+
+  const integrations = [
+    { t: "Google Calendar", d: "Sync hearings to your Google account", icon: "calendar" },
+    { t: "Income-tax portal fetch", d: "Auto-fetch notices from the ITD portal", icon: "link" },
+    { t: "AI parsing engine", d: "PDF → structured notice fields", icon: "sparkle" },
+    { t: "WhatsApp Business Cloud", d: "Send notices and reminders in-app", icon: "whatsapp" },
+    { t: "Transactional email", d: "Send emails from your own domain", icon: "mail" },
+    { t: "Tally / Zoho Books", d: "Push invoices to accounting", icon: "invoice" },
+  ];
+
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
-          <div className="page-title">Integrations</div>
-          <div className="page-sub">Connect ProHippo to portals and channels</div>
+          <div className="page-title">Settings</div>
+          <div className="page-sub">Profile, data and integrations</div>
         </div>
       </div>
+
+      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16}}>
+        <div className="card">
+          <div className="card-title mb-3">Practice profile</div>
+          <div className="col" style={{gap: 12}}>
+            <FormField label="Your name"><TextInput value={owner} onChange={setOwner} placeholder="e.g. Jayesh Vyas"/></FormField>
+            <FormField label="Firm name"><TextInput value={firm} onChange={setFirm} placeholder="e.g. Jayesh Vyas & Co."/></FormField>
+            <button className="btn btn-primary" style={{alignSelf: "flex-start"}} onClick={saveProfile}><Icon name="check" size={14}/>Save profile</button>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-title mb-3">Your data</div>
+          <div className="card-sub mb-4">All records are stored in this browser (localStorage). Download a JSON backup before clearing your browser data.</div>
+          <div className="col" style={{gap: 8}}>
+            <button className="btn btn-secondary" onClick={exportBackup}><Icon name="download" size={14}/>Download backup (JSON)</button>
+            <button className="btn btn-secondary" onClick={() => { if (window.confirm("Replace all current data with sample data?")) loadSampleData(); }}><Icon name="sparkle" size={14}/>Load sample data</button>
+            <button className="btn btn-secondary" style={{color: "var(--p-danger)"}} onClick={() => { if (window.confirm("Delete ALL data? This cannot be undone.")) clearAllData(); }}><Icon name="trash" size={14}/>Clear all data</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-title mb-3" style={{fontSize: 15}}>Integrations</div>
       <div className="grid" style={{gridTemplateColumns: "repeat(2, 1fr)", gap: 16}}>
-        {[
-          { t: "Google Calendar", d: "Sync hearings to your Google account", status: "Connected", last: "Synced 2 min ago", icon: "calendar", color: "success" },
-          { t: "Income-tax notice fetch API", d: "Auto-fetch notices from the ITD portal", status: "Connected", last: "Last run: today 06:00 IST · 3 new", icon: "link", color: "success" },
-          { t: "AI parsing engine", d: "PDF → structured fields", status: "Connected", last: "GPT-class · 99.1% extraction accuracy", icon: "sparkle", color: "success" },
-          { t: "WhatsApp Business Cloud", d: "Send notices and reminders", status: "Connected", last: "Sender: +91 87654 03210", icon: "whatsapp", color: "success" },
-          { t: "Email (Postmark)", d: "Transactional emails from your domain", status: "Connected", last: "From: jayesh@vyas-ca.in", icon: "mail", color: "success" },
-          { t: "Tally / Zoho Books", d: "Push invoices to accounting", status: "Not connected", last: "—", icon: "invoice", color: "warning" },
-        ].map(i => (
+        {integrations.map(i => (
           <div key={i.t} className="card">
-            <div className="between" style={{marginBottom: 10}}>
+            <div className="between">
               <div className="center" style={{gap: 12}}>
                 <div style={{width: 42, height: 42, borderRadius: 12, background: "var(--p-card-tint)", color: "var(--p-primary)", display: "grid", placeItems: "center"}}>
                   <Icon name={i.icon} size={18}/>
@@ -421,17 +831,7 @@ export function SettingsPage() {
                   <div className="muted" style={{fontSize: 12}}>{i.d}</div>
                 </div>
               </div>
-              <span className={`pill pill-${i.color === "success" ? "success" : "warning"}`}>
-                {i.color === "success" ? <Icon name="check" size={10}/> : <Icon name="alert" size={10}/>}
-                {i.status}
-              </span>
-            </div>
-            <div className="between" style={{paddingTop: 12, borderTop: "1px solid var(--p-line-2)"}}>
-              <div className="muted" style={{fontSize: 12}}>{i.last}</div>
-              <div className="row" style={{gap: 6}}>
-                <button className="btn btn-secondary btn-sm">Test</button>
-                <button className="btn btn-secondary btn-sm">Configure</button>
-              </div>
+              <span className="pill pill-muted">Coming soon</span>
             </div>
           </div>
         ))}

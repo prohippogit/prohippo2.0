@@ -1,6 +1,7 @@
-/* ProHippo — Notices list, upload + AI parser */
+/* ProHippo — Notices list + review/entry form */
 import React from 'react';
-import { Icon, StatusPill, NOTICES, PARSED_NOTICE, fmtDateLong } from './shared';
+import { Icon, StatusPill, EmptyState, fmtDateLong, daysFromNow } from './shared';
+import { useData, awaitingNotices, todayISO } from './store';
 
 function NoticeStat({ label, value, color, icon }) {
   const map = {
@@ -24,31 +25,125 @@ function NoticeStat({ label, value, color, icon }) {
   );
 }
 
-function Hl({ t, hl, mono }) {
-  return (
-    <div style={{fontSize: 10.5, lineHeight: 1.7, fontFamily: mono ? "ui-monospace, monospace" : "inherit", color: "var(--p-text-2)"}}>
-      {hl
-        ? <span style={{background: "rgba(108,92,231,0.18)", padding: "1px 4px", borderRadius: 3, fontWeight: 600, color: "var(--p-text)"}}>{t}</span>
-        : t}
-    </div>
-  );
-}
+const FILTERS = ["All notices", "Awaiting review", "Scrutiny", "CIT(A)", "ITAT", "Penalty"];
 
-function Field({ label, value, onChange, ai, mono, full }) {
+export default function Notices({ onOpenNotice }) {
+  const { data, removeNotice, notify } = useData();
+  const [filter, setFilter] = React.useState("All notices");
+
+  const awaiting = awaitingNotices(data);
+  const monthPrefix = todayISO().slice(0, 7);
+  const drafted = data.notices.filter(n => n.status === "Reply drafted");
+  const submittedThisMonth = data.notices.filter(n => n.status === "Submitted" && (n.date || "").startsWith(monthPrefix));
+  const dueSoon = data.notices.filter(n => n.hearingDate && n.hearingDate >= todayISO() && daysFromNow(n.hearingDate) <= 3);
+
+  const filtered = data.notices.filter(n => {
+    if (filter === "All notices") return true;
+    if (filter === "Awaiting review") return n.status === "Awaiting review";
+    return n.authority === filter;
+  }).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
   return (
-    <div className={`field ${ai ? "ai-extracted" : ""}`} style={{gridColumn: full ? "span 2" : "auto"}}>
-      <div className="center" style={{justifyContent: "space-between"}}>
-        <label>{label}</label>
-        {ai && <span className="ai-badge" style={{fontSize: 9}}>AI</span>}
+    <div className="animate-in">
+      <div className="topbar">
+        <div>
+          <div className="page-title">Notices</div>
+          <div className="page-sub">
+            {data.notices.length
+              ? `${data.notices.filter(n => (n.date || "").startsWith(monthPrefix)).length} received this month · ${awaiting.length} awaiting review`
+              : "Record incoming notices to track replies and hearings"}
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <button className="btn btn-primary" onClick={() => onOpenNotice(null)}><Icon name="upload" size={14}/>Add notice</button>
+        </div>
       </div>
-      <input value={value} onChange={e => onChange(e.target.value)} style={{fontFamily: mono ? "ui-monospace, monospace" : "inherit"}}/>
+
+      <div className="grid" style={{gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 18}}>
+        <NoticeStat label="Awaiting review" value={awaiting.length} color="pink" icon="sparkle"/>
+        <NoticeStat label="Reply drafted" value={drafted.length} color="info" icon="edit"/>
+        <NoticeStat label="Submitted this month" value={submittedThisMonth.length} color="success" icon="check"/>
+        <NoticeStat label="Hearing in 3 days" value={dueSoon.length} color="warning" icon="alert"/>
+      </div>
+
+      <div className="card" style={{padding: 0, overflow: "hidden"}}>
+        <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center"}}>
+          <div className="row" style={{gap: 6}}>
+            {FILTERS.map(f => (
+              <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f}</span>
+            ))}
+          </div>
+        </div>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon="doc"
+            title={data.notices.length === 0 ? "No notices recorded" : "No notices match this filter"}
+            sub={data.notices.length === 0 ? "Add a notice to track its reply, hearing date and documents called for." : undefined}
+            action={data.notices.length === 0 ? <button className="btn btn-primary" onClick={() => onOpenNotice(null)}><Icon name="upload" size={14}/>Add notice</button> : undefined}
+          />
+        ) : (
+          <table className="tbl">
+            <thead>
+              <tr><th>Notice</th><th>Assessee / PAN</th><th>AY</th><th>Section</th><th>Authority</th><th>Notice date</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {filtered.map(n => (
+                <tr key={n.id} onClick={() => onOpenNotice(n)} style={{cursor: "pointer"}}>
+                  <td>
+                    <div className="center" style={{gap: 10}}>
+                      <div style={{width: 36, height: 44, borderRadius: 6, background: "var(--p-pink)", display: "grid", placeItems: "center", color: "#C13388", fontSize: 9, fontWeight: 800, position: "relative"}}>
+                        PDF
+                        <div style={{position: "absolute", top: 0, right: 0, width: 10, height: 10, background: "white", clipPath: "polygon(0 0, 100% 100%, 100% 0)"}}/>
+                      </div>
+                      <div>
+                        <div className="strong">{n.din ? `DIN ending ${n.din.slice(-6)}` : (n.subject || "Notice")}</div>
+                        <div className="muted" style={{fontSize: 11.5, fontFamily: "ui-monospace, monospace"}}>{n.din || n.fileName || "—"}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="strong">{n.assessee}</div>
+                    <div className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>{n.pan}</div>
+                  </td>
+                  <td>{n.ay}</td>
+                  <td>{n.section ? <span className="pill pill-muted">u/s {n.section}</span> : <span className="muted">—</span>}</td>
+                  <td>{n.authority}</td>
+                  <td className="muted">{n.date ? fmtDateLong(n.date) : "—"}</td>
+                  <td><StatusPill status={n.status}/></td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this notice?")) { removeNotice(n.id); notify("Notice deleted"); } }}>
+                      <Icon name="trash" size={12}/>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
 
-function Toggle({ on, onToggle, icon, iconColor, title, desc }) {
+/* Full-screen notice entry / review */
+const AUTHORITY_OPTIONS = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
+const STATUS_OPTIONS = ["Awaiting review", "Reply drafted", "Submitted"];
+const MODE_OPTIONS = ["Physical", "Video Conference", "e-Proceeding"];
+
+function Field({ label, value, onChange, mono, full, type = "text", options }) {
   return (
-    <div onClick={onToggle} className="center" style={{gap: 12, padding: "12px 14px", borderRadius: 13, background: on ? "var(--p-card-tint)" : "white", border: `1px solid ${on ? "var(--p-primary-3)" : "var(--p-line-2)"}`, cursor: "pointer", transition: "all 0.15s ease"}}>
+    <div className="field" style={{gridColumn: full ? "span 2" : "auto"}}>
+      <label>{label}</label>
+      {options
+        ? <select value={value} onChange={e => onChange(e.target.value)}>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>
+        : <input type={type} value={value} onChange={e => onChange(e.target.value)} style={{fontFamily: mono ? "ui-monospace, monospace" : "inherit"}}/>}
+    </div>
+  );
+}
+
+function Toggle({ on, onToggle, icon, iconColor, title, desc, disabled }) {
+  return (
+    <div onClick={disabled ? undefined : onToggle} className="center" style={{gap: 12, padding: "12px 14px", borderRadius: 13, background: on ? "var(--p-card-tint)" : "white", border: `1px solid ${on ? "var(--p-primary-3)" : "var(--p-line-2)"}`, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1, transition: "all 0.15s ease"}}>
       <div style={{width: 34, height: 34, borderRadius: 11, background: on ? "white" : "var(--p-card-tint)", color: iconColor, display: "grid", placeItems: "center"}}>
         <Icon name={icon} size={16}/>
       </div>
@@ -56,235 +151,186 @@ function Toggle({ on, onToggle, icon, iconColor, title, desc }) {
         <div style={{fontWeight: 700, fontSize: 13.5}}>{title}</div>
         <div className="muted" style={{fontSize: 12, marginTop: 2}}>{desc}</div>
       </div>
-      <div style={{width: 38, height: 22, borderRadius: 12, background: on ? "var(--p-primary)" : "var(--p-line)", position: "relative", transition: "all 0.15s ease"}}>
+      <div style={{width: 38, height: 22, borderRadius: 12, background: on ? "var(--p-primary)" : "var(--p-line)", position: "relative", transition: "all 0.15s ease", flexShrink: 0}}>
         <div style={{position: "absolute", top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: "50%", background: "white", boxShadow: "0 2px 4px rgba(0,0,0,0.15)", transition: "all 0.15s ease"}}/>
       </div>
     </div>
   );
 }
 
-export default function Notices({ onOpenParsed }) {
-  return (
-    <div className="animate-in">
-      <div className="topbar">
-        <div>
-          <div className="page-title">Notices</div>
-          <div className="page-sub">12 received this month · 4 awaiting AI review</div>
-        </div>
-        <div className="topbar-actions">
-          <button className="btn btn-secondary"><Icon name="link" size={14}/>Fetch from ITD portal</button>
-          <button className="btn btn-primary" onClick={onOpenParsed}><Icon name="upload" size={14}/>Upload notice</button>
-        </div>
-      </div>
+export function NoticeReview({ notice, onClose, onSaved }) {
+  const { data, addNotice, updateNotice, addHearing, addCommunication, notify } = useData();
+  const isNew = !notice?.id;
+  const [edited, setEdited] = React.useState({
+    assessee: "", pan: "", ay: "", authority: "Scrutiny", section: "", din: "",
+    date: todayISO(), hearingDate: "", hearingTime: "", bench: "", mode: "e-Proceeding",
+    ita: "", subject: "", status: "Awaiting review", documents: [], fileName: "",
+    ...notice,
+  });
+  const [createHearing, setCreateHearing] = React.useState(isNew);
+  const [requestDocs, setRequestDocs] = React.useState(false);
+  const [newDoc, setNewDoc] = React.useState("");
+  const fileRef = React.useRef(null);
 
-      <div className="grid" style={{gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 18}}>
-        <NoticeStat label="Awaiting AI review" value="4" color="pink" icon="sparkle"/>
-        <NoticeStat label="Reply drafted" value="6" color="info" icon="edit"/>
-        <NoticeStat label="Submitted this month" value="9" color="success" icon="check"/>
-        <NoticeStat label="Due in 3 days" value="2" color="warning" icon="alert"/>
-      </div>
+  const update = (k, v) => setEdited(e => ({ ...e, [k]: v }));
+  const pickAssessee = (name) => {
+    const a = data.assessees.find(x => x.name === name);
+    setEdited(e => ({ ...e, assessee: name, pan: a?.pan || e.pan }));
+  };
 
-      <div className="card" style={{padding: 0, overflow: "hidden"}}>
-        <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center"}}>
-          <div className="row" style={{gap: 6}}>
-            <span className="fchip active">All notices</span>
-            <span className="fchip">Awaiting review</span>
-            <span className="fchip">Scrutiny</span>
-            <span className="fchip">CIT(A)</span>
-            <span className="fchip">ITAT</span>
-            <span className="fchip">Penalty</span>
-          </div>
-          <button className="btn btn-ghost btn-sm"><Icon name="filter" size={14}/>Sort: Newest</button>
-        </div>
-        <table className="tbl">
-          <thead>
-            <tr><th>Notice</th><th>Assessee / PAN</th><th>AY</th><th>Section</th><th>Authority</th><th>Notice date</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody>
-            {NOTICES.map(n => (
-              <tr key={n.id} onClick={n.awaiting ? onOpenParsed : undefined} style={{cursor: n.awaiting ? "pointer" : "default"}}>
-                <td>
-                  <div className="center" style={{gap: 10}}>
-                    <div style={{width: 36, height: 44, borderRadius: 6, background: "var(--p-pink)", display: "grid", placeItems: "center", color: "#C13388", fontSize: 9, fontWeight: 800, position: "relative"}}>
-                      PDF
-                      <div style={{position: "absolute", top: 0, right: 0, width: 10, height: 10, background: "white", clipPath: "polygon(0 0, 100% 100%, 100% 0)"}}/>
-                    </div>
-                    <div>
-                      <div className="strong">DIN ending {n.din.slice(-6)}</div>
-                      <div className="muted" style={{fontSize: 11.5, fontFamily: "ui-monospace, monospace"}}>{n.din}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <div className="strong">{n.assessee}</div>
-                  <div className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>{n.pan}</div>
-                </td>
-                <td>{n.ay}</td>
-                <td><span className="pill pill-muted">u/s {n.section}</span></td>
-                <td>{n.authority}</td>
-                <td className="muted">{fmtDateLong(n.date)}</td>
-                <td>
-                  <div className="center" style={{gap: 6}}>
-                    {n.status === "AI Parsed" && <Icon name="sparkle" size={12} className=""/>}
-                    <StatusPill status={n.status}/>
-                  </div>
-                </td>
-                <td><Icon name="chevron-right" size={16} className="muted"/></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+  const valid = edited.assessee.trim() && edited.ay.trim() && edited.date;
+  const canCreateHearing = Boolean(edited.hearingDate);
 
-/* AI parser — full screen review of parsed notice */
-export function ParsedNoticeReview({ onClose, onSaveAndCreate }) {
-  const [edited, setEdited] = React.useState(PARSED_NOTICE);
-  const [createHearing, setCreateHearing] = React.useState(true);
-  const [syncCal, setSyncCal] = React.useState(true);
-  const [requestDocs, setRequestDocs] = React.useState(true);
+  const save = () => {
+    if (!valid) return;
+    const rec = { ...edited };
+    if (isNew) addNotice(rec);
+    else updateNotice(notice.id, rec);
 
-  const update = (k, v) => setEdited({ ...edited, [k]: v });
+    const done = ["Notice saved"];
+    if (createHearing && canCreateHearing) {
+      addHearing({
+        assessee: rec.assessee, pan: rec.pan, ay: rec.ay,
+        authority: rec.authority, bench: rec.bench, section: rec.section,
+        date: rec.hearingDate, time: rec.hearingTime || "11:00",
+        mode: rec.mode, status: "Upcoming", ita: rec.ita, staff: data.assessees.find(a => a.pan === rec.pan)?.staff || "",
+      });
+      done.push("Hearing created");
+    }
+    if (requestDocs && rec.documents.length > 0) {
+      addCommunication({
+        channel: "WhatsApp", to: rec.assessee,
+        subject: `Documents required — ${rec.authority} ${rec.hearingDate ? `hearing on ${fmtDateLong(rec.hearingDate)}` : `notice AY ${rec.ay}`}`,
+        body: rec.documents.map((d, i) => `${i + 1}. ${d}`).join("\n"),
+        time: new Date().toISOString(), template: "Document request", status: "Draft",
+      });
+      done.push("Document request drafted");
+    }
+    notify(done.join(" · "));
+    onSaved(createHearing && canCreateHearing ? "hearings" : null);
+  };
 
   return (
     <div className="animate-in">
       <div className="center" style={{gap: 8, marginBottom: 16, fontSize: 13}}>
         <button className="btn btn-ghost btn-sm" onClick={onClose}><Icon name="arrow-left" size={14}/>Back</button>
-        <span className="muted">Notices / AI Parser / </span>
-        <span style={{fontWeight: 600}}>Review parsed notice</span>
+        <span className="muted">Notices / </span>
+        <span style={{fontWeight: 600}}>{isNew ? "Add notice" : "Review notice"}</span>
       </div>
 
-      {/* Header banner */}
       <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)", border: "1px solid var(--p-line)", marginBottom: 18}}>
         <div className="between" style={{alignItems: "flex-start"}}>
           <div className="center" style={{gap: 14}}>
             <div style={{width: 48, height: 48, borderRadius: 14, background: "white", display: "grid", placeItems: "center", color: "var(--p-primary)"}}>
-              <Icon name="sparkle" size={22}/>
+              <Icon name="doc" size={22}/>
             </div>
             <div>
-              <div className="center" style={{gap: 8}}>
-                <div style={{fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em"}}>AI parsed notice</div>
-                <span className="pill pill-success">{edited.confidence.high} of {edited.confidence.high + edited.confidence.low} fields high confidence</span>
-              </div>
+              <div style={{fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em"}}>{isNew ? "Record a notice" : `Notice — ${edited.assessee}`}</div>
               <div className="card-sub" style={{marginTop: 4}}>
-                <Icon name="alert" size={12}/> AI extracted data may contain errors. Please verify before saving.
+                Verify every field against the original notice before saving.
               </div>
             </div>
           </div>
           <div className="center" style={{gap: 8}}>
-            <button className="btn btn-secondary btn-sm"><Icon name="download" size={14}/>Open PDF</button>
-            <button className="btn btn-secondary btn-sm"><Icon name="sparkle" size={14}/>Re-run AI</button>
+            <input ref={fileRef} type="file" accept=".pdf" style={{display: "none"}} onChange={e => { const f = e.target.files?.[0]; if (f) update("fileName", f.name); }}/>
+            <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
+              <Icon name="upload" size={14}/>{edited.fileName ? "Replace PDF" : "Attach PDF"}
+            </button>
+            {edited.fileName && <span className="pill pill-muted">{edited.fileName}</span>}
           </div>
         </div>
       </div>
 
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 18}}>
-        {/* PDF preview */}
-        <div className="card" style={{padding: 16}}>
-          <div className="between" style={{marginBottom: 12}}>
-            <div className="card-title">Source notice</div>
-            <span className="pill pill-muted">notice_142(1)_ABCPS1234F.pdf · 412 KB</span>
-          </div>
-          <div className="pdf-preview">
-            <span className="pdf-label">Page 1 of 3</span>
-            <div style={{background: "white", borderRadius: 8, padding: "22px 24px", boxShadow: "var(--p-shadow-sm)"}}>
-              <div className="center" style={{gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--p-line-2)"}}>
-                <div style={{width: 36, height: 36, borderRadius: "50%", background: "var(--p-lavender-2)", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, color: "var(--p-primary-2)"}}>ITD</div>
-                <div>
-                  <div style={{fontSize: 13, fontWeight: 800, letterSpacing: "-0.01em"}}>Income Tax Appellate Tribunal</div>
-                  <div className="muted" style={{fontSize: 10.5}}>Ahmedabad Bench</div>
-                </div>
-              </div>
-              <Hl t="Notice u/s 142(1) of the Income-tax Act, 1961" hl/>
-              <Hl t="DIN: ITBA/AST/F/142(1)/2026-27/103412" mono hl/>
-              <Hl t="Name: Rajesh M. Shah" hl/>
-              <Hl t="PAN: ABCPS1234F" mono hl/>
-              <Hl t="Assessment Year: 2017-18" hl/>
-              <Hl t="ITA No. 1244/Ahd/2024 · 'A' Bench"/>
-              <Hl t="Date: 12 May 2026"/>
-              <div style={{height: 12}}/>
-              <Hl t="Whereas in connection with the appeal pending before the undersigned for the assessment year mentioned above, you are required to attend hearing on:"/>
-              <div style={{height: 8}}/>
-              <Hl t="Date: 28 May 2026 at 11:30 AM" hl/>
-              <div style={{height: 8}}/>
-              <Hl t="You are required to produce or cause to be produced the following documents/details:"/>
-              <div className="col" style={{gap: 4, marginTop: 8}}>
-                {edited.documents.slice(0,4).map((d, i) => (
-                  <div key={i} style={{fontSize: 10.5, color: "var(--p-text-2)"}}>{i+1}. {d}</div>
-                ))}
-                <div style={{fontSize: 10.5, color: "var(--p-text-3)"}}>5. … (cont. on next page)</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Extracted form */}
         <div className="card">
           <div className="card-head">
             <div>
-              <div className="card-title">Extracted details</div>
-              <div className="card-sub">Edit any field before saving</div>
+              <div className="card-title">Notice details</div>
+              <div className="card-sub">Assessee, AY and notice date are required</div>
             </div>
-            <span className="ai-badge"><Icon name="sparkle" size={10}/>AI</span>
           </div>
           <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
-            <Field label="Assessee" value={edited.assessee} onChange={v => update("assessee", v)} ai/>
-            <Field label="PAN" value={edited.pan} onChange={v => update("pan", v)} ai mono/>
-            <Field label="Assessment Year" value={edited.ay} onChange={v => update("ay", v)} ai/>
-            <Field label="ITA / Appeal No." value={edited.itaNo} onChange={v => update("itaNo", v)} ai/>
-            <Field label="Authority" value={edited.authority} onChange={v => update("authority", v)} ai full/>
-            <Field label="Bench / Officer" value={edited.bench} onChange={v => update("bench", v)} ai/>
-            <Field label="Section" value={edited.section} onChange={v => update("section", v)} ai/>
-            <Field label="DIN" value={edited.din} onChange={v => update("din", v)} ai mono full/>
-            <Field label="Notice date" value={edited.noticeDate} onChange={v => update("noticeDate", v)} ai/>
-            <Field label="Hearing date" value={edited.hearingDate} onChange={v => update("hearingDate", v)} ai/>
-            <Field label="Hearing time" value={edited.hearingTime} onChange={v => update("hearingTime", v)} ai/>
-            <Field label="Mode" value={edited.mode} onChange={v => update("mode", v)} ai/>
-          </div>
-          <div className="mt-4">
-            <label style={{fontSize: 12, fontWeight: 600, color: "var(--p-text-2)"}}>Subject</label>
-            <input className="" defaultValue={edited.subject} style={{display: "block", marginTop: 6, width: "100%", border: "1px solid var(--p-primary-3)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, background: "linear-gradient(90deg, rgba(108,92,231,0.04), white 30%)", outline: "none"}}/>
-          </div>
-        </div>
-
-        {/* Documents called for */}
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Documents called for</div>
-              <div className="card-sub">Auto-extracted by AI · used in client communication</div>
+            <div className="field">
+              <label>Assessee *</label>
+              {data.assessees.length > 0
+                ? <select value={edited.assessee} onChange={e => pickAssessee(e.target.value)}>
+                    <option value="">Select assessee…</option>
+                    {data.assessees.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </select>
+                : <input value={edited.assessee} onChange={e => update("assessee", e.target.value)} placeholder="Assessee name"/>}
             </div>
-            <span className="ai-badge"><Icon name="sparkle" size={10}/>{edited.documents.length} items</span>
+            <Field label="PAN" value={edited.pan} onChange={v => update("pan", v.toUpperCase())} mono/>
+            <Field label="Assessment Year *" value={edited.ay} onChange={v => update("ay", v)}/>
+            <Field label="Authority" value={edited.authority} onChange={v => update("authority", v)} options={AUTHORITY_OPTIONS}/>
+            <Field label="Section" value={edited.section} onChange={v => update("section", v)}/>
+            <Field label="ITA / Appeal No." value={edited.ita} onChange={v => update("ita", v)}/>
+            <Field label="DIN" value={edited.din} onChange={v => update("din", v)} mono full/>
+            <Field label="Notice date *" value={edited.date} onChange={v => update("date", v)} type="date"/>
+            <Field label="Bench / Officer" value={edited.bench} onChange={v => update("bench", v)}/>
+            <Field label="Hearing date" value={edited.hearingDate} onChange={v => update("hearingDate", v)} type="date"/>
+            <Field label="Hearing time" value={edited.hearingTime} onChange={v => update("hearingTime", v)} type="time"/>
+            <Field label="Mode" value={edited.mode} onChange={v => update("mode", v)} options={MODE_OPTIONS}/>
+            <Field label="Status" value={edited.status} onChange={v => update("status", v)} options={STATUS_OPTIONS}/>
           </div>
-          <div className="col" style={{gap: 8}}>
-            {edited.documents.map((d, i) => (
-              <div key={i} className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
-                <div style={{width: 22, height: 22, borderRadius: 7, background: "white", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800, color: "var(--p-primary-2)"}}>{i + 1}</div>
-                <div style={{flex: 1, fontSize: 13}}>{d}</div>
-                <button className="btn btn-ghost btn-xs"><Icon name="edit" size={12}/></button>
-                <button className="btn btn-ghost btn-xs"><Icon name="trash" size={12}/></button>
-              </div>
-            ))}
-            <button className="btn btn-secondary btn-sm" style={{justifyContent: "center"}}><Icon name="plus" size={14}/>Add item</button>
+          <div className="mt-4 field">
+            <label>Subject</label>
+            <input value={edited.subject} onChange={e => update("subject", e.target.value)} placeholder="e.g. Appeal hearing — addition u/s 68"/>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="card">
-          <div className="card-title mb-3">On save, also</div>
-          <div className="col" style={{gap: 10}}>
-            <Toggle on={createHearing} onToggle={() => setCreateHearing(!createHearing)} icon="calendar" iconColor="var(--p-primary)" title="Create hearing entry" desc="ITAT · Ahmedabad 'A' Bench · 28 May, 11:30 AM"/>
-            <Toggle on={syncCal} onToggle={() => setSyncCal(!syncCal)} icon="link" iconColor="#2766C7" title="Sync to Google Calendar" desc="Will appear on jayesh@vyas-ca.in · default calendar"/>
-            <Toggle on={requestDocs} onToggle={() => setRequestDocs(!requestDocs)} icon="whatsapp" iconColor="var(--p-success)" title="Draft client document request" desc="WhatsApp + Email · 6 items · Due 28 May"/>
-            <Toggle on={false} onToggle={() => {}} icon="invoice" iconColor="#B07512" title="Pre-fill billing entry" desc="ITAT hearing fees · service template"/>
+        <div className="col" style={{gap: 18}}>
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">Documents called for</div>
+                <div className="card-sub">Used in the client document request</div>
+              </div>
+              <span className="pill pill-primary">{edited.documents.length} items</span>
+            </div>
+            <div className="col" style={{gap: 8}}>
+              {edited.documents.map((d, i) => (
+                <div key={i} className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
+                  <div style={{width: 22, height: 22, borderRadius: 7, background: "white", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800, color: "var(--p-primary-2)"}}>{i + 1}</div>
+                  <div style={{flex: 1, fontSize: 13}}>{d}</div>
+                  <button className="btn btn-ghost btn-xs" onClick={() => update("documents", edited.documents.filter((_, j) => j !== i))}><Icon name="trash" size={12}/></button>
+                </div>
+              ))}
+              <div className="center" style={{gap: 8}}>
+                <div className="search" style={{flex: 1}}>
+                  <Icon name="plus" size={14}/>
+                  <input placeholder="Add a document item…" value={newDoc} onChange={e => setNewDoc(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newDoc.trim()) { update("documents", [...edited.documents, newDoc.trim()]); setNewDoc(""); } }}/>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={() => { if (newDoc.trim()) { update("documents", [...edited.documents, newDoc.trim()]); setNewDoc(""); } }}>Add</button>
+              </div>
+            </div>
           </div>
-          <div className="row" style={{gap: 8, marginTop: 18}}>
-            <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}} onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" style={{flex: 2, justifyContent: "center"}} onClick={onSaveAndCreate}>
-              <Icon name="check" size={14}/>Save · Create hearing · Notify client
-            </button>
+
+          <div className="card">
+            <div className="card-title mb-3">On save, also</div>
+            <div className="col" style={{gap: 10}}>
+              <Toggle
+                on={createHearing && canCreateHearing}
+                onToggle={() => setCreateHearing(!createHearing)}
+                disabled={!canCreateHearing}
+                icon="calendar" iconColor="var(--p-primary)"
+                title="Create hearing entry"
+                desc={canCreateHearing ? `${edited.authority}${edited.bench ? ` · ${edited.bench}` : ""} · ${fmtDateLong(edited.hearingDate)}${edited.hearingTime ? `, ${edited.hearingTime}` : ""}` : "Set a hearing date above to enable"}
+              />
+              <Toggle
+                on={requestDocs && edited.documents.length > 0}
+                onToggle={() => setRequestDocs(!requestDocs)}
+                disabled={edited.documents.length === 0}
+                icon="whatsapp" iconColor="var(--p-success)"
+                title="Draft client document request"
+                desc={edited.documents.length ? `${edited.documents.length} items · saved as draft in Communications` : "Add document items to enable"}
+              />
+            </div>
+            <div className="row" style={{gap: 8, marginTop: 18}}>
+              <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}} onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" disabled={!valid} style={{flex: 2, justifyContent: "center", opacity: valid ? 1 : 0.5}} onClick={save}>
+                <Icon name="check" size={14}/>{isNew ? "Save notice" : "Save changes"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

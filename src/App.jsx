@@ -3,53 +3,57 @@ import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import { Assessees, AssesseeProfile } from './Assessees';
 import Hearings from './Hearings';
-import Notices, { ParsedNoticeReview } from './Notices';
+import Notices, { NoticeReview } from './Notices';
 import { Matters, Invoices, Communications, AiParser, Reports, SettingsPage } from './Other';
 import { Icon } from './shared';
+import { DataProvider, useData } from './store';
 
-export default function App() {
+function Shell() {
+  const { data, toast } = useData();
   const [route, setRoute] = React.useState("dashboard");
-  const [openAssessee, setOpenAssessee] = React.useState(null);
-  const [showParsed, setShowParsed] = React.useState(false);
-  const [toast, setToast] = React.useState(null);
-
-  React.useEffect(() => {
-    if (toast) {
-      const t = setTimeout(() => setToast(null), 3500);
-      return () => clearTimeout(t);
-    }
-  }, [toast]);
+  const [openAssesseeId, setOpenAssesseeId] = React.useState(null);
+  const [reviewNotice, setReviewNotice] = React.useState(null); // notice record, or {} for a new one
+  const [assesseeQuery, setAssesseeQuery] = React.useState("");
 
   const handleNav = (id) => {
     setRoute(id);
-    setOpenAssessee(null);
-    setShowParsed(false);
+    setOpenAssesseeId(null);
+    setReviewNotice(null);
   };
 
-  const handleSaveAndCreate = () => {
-    setShowParsed(false);
-    setRoute("hearings");
-    setToast({ msg: "Hearing created · Calendar synced · Client notified", icon: "check" });
+  const openReview = (notice) => setReviewNotice(notice || {});
+
+  const handleSearch = (q) => {
+    setAssesseeQuery(q);
+    handleNav("assessees");
   };
+
+  const openAssessee = openAssesseeId ? data.assessees.find((a) => a.id === openAssesseeId) : null;
 
   let content;
-  if (showParsed) {
-    content = <ParsedNoticeReview onClose={() => setShowParsed(false)} onSaveAndCreate={handleSaveAndCreate}/>;
+  if (reviewNotice) {
+    content = (
+      <NoticeReview
+        notice={reviewNotice}
+        onClose={() => setReviewNotice(null)}
+        onSaved={(dest) => { setReviewNotice(null); if (dest) setRoute(dest); }}
+      />
+    );
   } else if (openAssessee) {
-    content = <AssesseeProfile assessee={openAssessee} onBack={() => setOpenAssessee(null)} onNav={handleNav}/>;
+    content = <AssesseeProfile assessee={openAssessee} onBack={() => setOpenAssesseeId(null)} onNav={handleNav}/>;
   } else {
     switch (route) {
-      case "dashboard": content = <Dashboard onNav={handleNav} onOpenParsedNotice={() => setShowParsed(true)}/>; break;
-      case "assessees": content = <Assessees onOpen={setOpenAssessee}/>; break;
+      case "dashboard": content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>; break;
+      case "assessees": content = <Assessees onOpen={(a) => setOpenAssesseeId(a.id)} initialSearch={assesseeQuery}/>; break;
       case "matters": content = <Matters/>; break;
-      case "notices": content = <Notices onOpenParsed={() => setShowParsed(true)}/>; break;
+      case "notices": content = <Notices onOpenNotice={openReview}/>; break;
       case "hearings": content = <Hearings/>; break;
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
-      case "ai": content = <AiParser onOpenParsed={() => setShowParsed(true)}/>; break;
+      case "ai": content = <AiParser onOpenNotice={openReview}/>; break;
       case "reports": content = <Reports/>; break;
       case "settings": content = <SettingsPage/>; break;
-      default: content = <Dashboard onNav={handleNav} onOpenParsedNotice={() => setShowParsed(true)}/>;
+      default: content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>;
     }
   }
 
@@ -68,5 +72,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <DataProvider>
+      <Shell/>
+    </DataProvider>
   );
 }

@@ -59,68 +59,12 @@ export const Icon = ({ name, size = 18, stroke = 1.6, className = "" }) => {
   }
 };
 
-export const ASSESSEES = [
-  { id: "a1", name: "Rajesh M. Shah", pan: "ABCPS1234F", status: "Individual", group: "Shah Group", mobile: "+91 98250 11234", email: "rajesh.shah@example.com", staff: "Priya Mehta", matters: 3, outstanding: 245000, hearings: 2, color: "violet" },
-  { id: "a2", name: "Shah Textiles Pvt. Ltd.", pan: "AABCS9821K", status: "Company", group: "Shah Group", mobile: "+91 98245 88210", email: "accounts@shahtextiles.in", staff: "Priya Mehta", matters: 4, outstanding: 0, hearings: 1, color: "pink" },
-  { id: "a3", name: "Mehul Patel & Sons HUF", pan: "AAFHM2210C", status: "HUF", group: "Patel Family", mobile: "+91 99099 22310", email: "mehul.patel@example.com", staff: "Arjun Desai", matters: 2, outstanding: 86500, hearings: 1, color: "amber" },
-  { id: "a4", name: "Nirvana Infotech LLP", pan: "AALFN6712M", status: "LLP", group: "Nirvana Group", mobile: "+91 90999 14523", email: "ca@nirvanainfotech.com", staff: "Arjun Desai", matters: 1, outstanding: 132000, hearings: 0, color: "violet" },
-  { id: "a5", name: "Kavita R. Joshi", pan: "BHJPK4517A", status: "Individual", group: "—", mobile: "+91 98980 09812", email: "kavita.j@example.com", staff: "Priya Mehta", matters: 1, outstanding: 0, hearings: 0, color: "mint" },
-  { id: "a6", name: "Vinod Bros. Trading", pan: "AAFFV1209L", status: "Firm", group: "Vinod Bros.", mobile: "+91 99879 31200", email: "vinodbros@example.in", staff: "Riya Kapoor", matters: 2, outstanding: 54200, hearings: 1, color: "pink" },
-  { id: "a7", name: "Hari Om Charitable Trust", pan: "AAATH7621J", status: "Trust", group: "—", mobile: "+91 98765 43210", email: "trust@hariomtrust.org", staff: "Riya Kapoor", matters: 1, outstanding: 18000, hearings: 1, color: "amber" },
-];
-
-export const HEARINGS = [
-  { id: "h1", assessee: "Rajesh M. Shah", pan: "ABCPS1234F", ay: "2017-18", authority: "ITAT", bench: "Ahmedabad 'A' Bench", section: "—", date: "2026-05-28", time: "11:30", mode: "Physical", status: "Upcoming", priority: "high", ita: "ITA No. 1244/Ahd/2024", staff: "Priya Mehta" },
-  { id: "h2", assessee: "Shah Textiles Pvt. Ltd.", pan: "AABCS9821K", ay: "2021-22", authority: "Scrutiny", bench: "Circle 4(1), Ahmedabad", section: "142(1)", date: "2026-05-29", time: "14:00", mode: "e-Proceeding", status: "Upcoming", priority: "medium", staff: "Priya Mehta" },
-  { id: "h3", assessee: "Mehul Patel & Sons HUF", pan: "AAFHM2210C", ay: "2019-20", authority: "CIT(A)", bench: "NFAC", section: "250", date: "2026-06-02", time: "10:30", mode: "Video Conference", status: "Upcoming", priority: "medium", staff: "Arjun Desai" },
-  { id: "h4", assessee: "Nirvana Infotech LLP", pan: "AALFN6712M", ay: "2020-21", authority: "Scrutiny", bench: "Circle 2(2), Surat", section: "143(2)", date: "2026-06-04", time: "11:00", mode: "e-Proceeding", status: "Upcoming", priority: "low", staff: "Arjun Desai" },
-  { id: "h5", assessee: "Vinod Bros. Trading", pan: "AAFFV1209L", ay: "2018-19", authority: "ITAT", bench: "Mumbai 'C' Bench", section: "—", date: "2026-06-09", time: "15:00", mode: "Physical", status: "Upcoming", priority: "high", ita: "ITA No. 0987/Mum/2024", staff: "Riya Kapoor" },
-  { id: "h6", assessee: "Hari Om Charitable Trust", pan: "AAATH7621J", ay: "2022-23", authority: "Scrutiny", bench: "Exemption Ward, Ahmedabad", section: "143(2)", date: "2026-06-11", time: "12:30", mode: "e-Proceeding", status: "Upcoming", priority: "low", staff: "Riya Kapoor" },
-];
-
-export const NOTICES = [
-  { id: "n1", assessee: "Rajesh M. Shah", pan: "ABCPS1234F", ay: "2017-18", section: "142(1)", authority: "ITAT", date: "2026-05-12", din: "ITBA/AST/F/142(1)/2026-27/103412", status: "AI Parsed", awaiting: true },
-  { id: "n2", assessee: "Nirvana Infotech LLP", pan: "AALFN6712M", ay: "2020-21", section: "143(2)", authority: "Scrutiny", date: "2026-05-19", din: "ITBA/AST/F/143(2)/2026-27/103299", status: "Reply Drafted", awaiting: false },
-  { id: "n3", assessee: "Mehul Patel & Sons HUF", pan: "AAFHM2210C", ay: "2019-20", section: "250", authority: "CIT(A)", date: "2026-05-21", din: "ITBA/APL/F/250/2026-27/104088", status: "Submitted", awaiting: false },
-  { id: "n4", assessee: "Hari Om Charitable Trust", pan: "AAATH7621J", ay: "2022-23", section: "143(2)", authority: "Scrutiny", date: "2026-05-22", din: "ITBA/AST/F/143(2)/2026-27/104201", status: "AI Parsed", awaiting: true },
-];
-
-export const INVOICES = [
-  { id: "PH/26-27/0124", assessee: "Rajesh M. Shah", date: "2026-05-15", ay: "2017-18", service: "ITAT appeal — Drafting & hearing fees", amount: 125000, status: "Outstanding", due: "2026-06-14" },
-  { id: "PH/26-27/0123", assessee: "Shah Textiles Pvt. Ltd.", date: "2026-05-12", ay: "2021-22", service: "Scrutiny assessment professional fees", amount: 85000, status: "Paid", due: "2026-06-11" },
-  { id: "PH/26-27/0122", assessee: "Mehul Patel & Sons HUF", date: "2026-05-08", ay: "2019-20", service: "CIT(A) appeal drafting", amount: 65000, status: "Outstanding", due: "2026-06-07" },
-  { id: "PH/26-27/0121", assessee: "Nirvana Infotech LLP", date: "2026-05-05", ay: "2020-21", service: "Scrutiny assessment + Penalty reply", amount: 132000, status: "Partial", due: "2026-06-04" },
-  { id: "PH/26-27/0120", assessee: "Vinod Bros. Trading", date: "2026-04-29", ay: "2018-19", service: "ITAT appeal filing", amount: 54200, status: "Overdue", due: "2026-05-29" },
-  { id: "PH/26-27/0119", assessee: "Kavita R. Joshi", date: "2026-04-26", ay: "2023-24", service: "ITR filing + consultation", amount: 18500, status: "Paid", due: "2026-05-26" },
-];
-
-export const PARSED_NOTICE = {
-  assessee: "Rajesh M. Shah",
-  pan: "ABCPS1234F",
-  ay: "2017-18",
-  authority: "Income Tax Appellate Tribunal",
-  section: "—",
-  noticeDate: "12/05/2026",
-  hearingDate: "28/05/2026",
-  hearingTime: "11:30 AM",
-  dueDate: "—",
-  din: "ITBA/AST/F/142(1)/2026-27/103412",
-  itaNo: "ITA No. 1244/Ahd/2024",
-  bench: "Ahmedabad 'A' Bench",
-  mode: "Physical hearing",
-  subject: "Appeal hearing — addition u/s 68 of unexplained cash credits",
-  documents: [
-    "Copy of audited financial statements for AY 2017-18",
-    "Bank statements of all accounts for FY 2016-17",
-    "Confirmations from unsecured lenders with PAN & ITR copies",
-    "Source of cash deposits exceeding ₹2 lakh",
-    "Ledger copies for sundry creditors",
-    "Computation of income and ITR acknowledgement",
-  ],
-  confidence: { high: 11, low: 1 },
-};
-
 export const fmtINR = (n) => "₹" + new Intl.NumberFormat("en-IN").format(n);
+export const fmtLakhs = (n) => {
+  if (n >= 10000000) return "₹" + (n / 10000000).toFixed(2).replace(/\.?0+$/, "") + "Cr";
+  if (n >= 100000) return "₹" + (n / 100000).toFixed(2).replace(/\.?0+$/, "") + "L";
+  return fmtINR(n);
+};
 export const fmtDate = (iso) => {
   const d = new Date(iso);
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
@@ -130,16 +74,19 @@ export const fmtDateLong = (iso) => {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 export const daysFromNow = (iso) => {
-  const ms = new Date(iso) - new Date("2026-05-27");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const ms = new Date(iso + "T00:00:00") - today;
   return Math.round(ms / (1000 * 60 * 60 * 24));
 };
 
 export const StatusPill = ({ status }) => {
   const map = {
     "Upcoming": "primary",
+    "Completed": "muted",
     "Submitted": "success",
-    "AI Parsed": "pink",
-    "Reply Drafted": "info",
+    "Awaiting review": "pink",
+    "Reply drafted": "info",
     "Paid": "success",
     "Outstanding": "warning",
     "Overdue": "danger",
@@ -148,6 +95,9 @@ export const StatusPill = ({ status }) => {
     "Active": "primary",
     "Decided": "success",
     "Pending": "warning",
+    "Closed": "muted",
+    "Sent": "success",
+    "Draft": "muted",
   };
   return <span className={`pill pill-${map[status] || "muted"}`}><span className="pill-dot" style={{background: "currentColor"}}/>{status}</span>;
 };
@@ -162,3 +112,74 @@ export const Avatar = ({ name, color = "violet", size = "" }) => {
   };
   return <div className={`avatar ${size}`} style={{background: grads[color] || grads.violet}}>{initials}</div>;
 };
+
+export function Modal({ title, sub, onClose, children, footer, width = 560 }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal animate-in" style={{maxWidth: width}}>
+        <div className="modal-head">
+          <div>
+            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>{title}</div>
+            {sub && <div className="muted" style={{fontSize: 12.5, marginTop: 3}}>{sub}</div>}
+          </div>
+          <button className="icon-btn" style={{width: 32, height: 32}} onClick={onClose}><Icon name="x" size={15}/></button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-foot">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+export function FormField({ label, required, children, full }) {
+  return (
+    <div className="field" style={{gridColumn: full ? "1 / -1" : "auto"}}>
+      <label>{label}{required && <span style={{color: "var(--p-danger)"}}> *</span>}</label>
+      {children}
+    </div>
+  );
+}
+
+export function TextInput({ value, onChange, placeholder, type = "text", mono, required }) {
+  return (
+    <input
+      type={type}
+      value={value}
+      required={required}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      style={mono ? {fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"} : undefined}
+    />
+  );
+}
+
+export function SelectInput({ value, onChange, options, placeholder }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map((o) => (
+        <option key={typeof o === "string" ? o : o.value} value={typeof o === "string" ? o : o.value}>
+          {typeof o === "string" ? o : o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export function EmptyState({ icon = "folder", title, sub, action }) {
+  return (
+    <div style={{textAlign: "center", padding: "48px 20px"}}>
+      <div style={{width: 52, height: 52, borderRadius: 16, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", display: "grid", placeItems: "center", margin: "0 auto 14px"}}>
+        <Icon name={icon} size={24}/>
+      </div>
+      <div style={{fontWeight: 800, fontSize: 15, letterSpacing: "-0.01em"}}>{title}</div>
+      {sub && <div className="muted" style={{fontSize: 13, marginTop: 5, maxWidth: 380, marginLeft: "auto", marginRight: "auto"}}>{sub}</div>}
+      {action && <div style={{marginTop: 16, display: "flex", justifyContent: "center", gap: 8}}>{action}</div>}
+    </div>
+  );
+}

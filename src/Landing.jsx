@@ -4,8 +4,8 @@ import { Icon } from "./shared";
 import heroImg from "./assets/hero.png";
 import "./landing.css";
 
-function BrandMark({ size = 36 }) {
-  return <img src="/prohippo-mark.png" alt="ProHippo" style={{ width: size, height: size, objectFit: "contain" }} />;
+function BrandMark({ height = 36 }) {
+  return <img src="/prohippo-logo.png" alt="ProHippo" style={{ height, width: "auto" }} />;
 }
 
 /* Adds .visible to .reveal children when they scroll into view */
@@ -95,7 +95,7 @@ export default function Landing({ onSignIn }) {
       <div className="landing-inner">
         {/* Nav */}
         <nav className="landing-nav hero-in d1">
-          <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 46 }} />
+          <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 56 }} />
           <div className="spacer" />
           <a className="landing-nav-link" href="#features">Features</a>
           <a className="landing-nav-link" href="#how">How it works</a>
@@ -216,7 +216,7 @@ export default function Landing({ onSignIn }) {
 
         {/* Final CTA */}
         <section className="landing-cta reveal">
-          <BrandMark size={64} />
+          <BrandMark height={92} />
           <h2>Ready to tidy up your practice?</h2>
           <p>Sign in and set up your firm in under a minute. Your data stays private to your account.</p>
           <button className="btn btn-primary btn-lg" onClick={onSignIn}>

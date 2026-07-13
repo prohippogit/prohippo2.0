@@ -35,7 +35,7 @@ export default function Onboarding() {
       <div style={{ width: "100%", maxWidth: 460 }}>
         <div className="card" style={{ padding: 28 }}>
           <div className="center" style={{ gap: 12, marginBottom: 6 }}>
-            <img src="/prohippo-mark.png" alt="ProHippo" style={{ width: 46, height: 46, objectFit: "contain" }} />
+            <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 50, width: "auto" }} />
             <div>
               <div style={{ fontWeight: 800, fontSize: 19, letterSpacing: "-0.02em" }}>Welcome to ProHippo 👋</div>
               <div className="muted" style={{ fontSize: 12.5 }}>Signed in as <b>{user?.email}</b></div>

@@ -22,7 +22,7 @@ const GoogleGlyph = () => (
   </svg>
 );
 
-export default function Login() {
+export default function Login({ onBack }) {
   const { signInWithGoogle, sendMagicLink, pendingEmail, resetPendingEmail, error, clearError } = useAuth();
   const [email, setEmail] = React.useState("");
   const [sending, setSending] = React.useState(false);
@@ -108,6 +108,14 @@ export default function Login() {
         <div className="muted" style={{ fontSize: 11, textAlign: "center", marginTop: 18 }}>
           Your practice data is private to your account.
         </div>
+
+        {onBack && (
+          <div style={{ textAlign: "center", marginTop: 14 }}>
+            <button className="btn btn-ghost btn-sm" onClick={onBack}>
+              <Icon name="arrow-left" size={14} /> Back to overview
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

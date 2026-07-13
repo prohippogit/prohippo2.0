@@ -31,15 +31,7 @@ export default function Sidebar({ active, onNav }) {
     <aside className="sidebar">
       <div className="brand">
         <div className="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M6 4c3 0 3 4 6 4s3-4 6-4v16c-3 0-3-4-6-4s-3 4-6 4V4z" fill="url(#g1)"/>
-            <defs>
-              <linearGradient id="g1" x1="0" y1="0" x2="24" y2="24">
-                <stop offset="0" stopColor="#6C5CE7"/>
-                <stop offset="1" stopColor="#C13388"/>
-              </linearGradient>
-            </defs>
-          </svg>
+          <img src="/prohippo-mark.png" alt="ProHippo" style={{width: 30, height: 30, objectFit: "contain"}}/>
         </div>
         <div className="brand-name">Pro<span className="tld">Hippo</span></div>
       </div>

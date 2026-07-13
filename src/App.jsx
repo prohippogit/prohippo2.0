@@ -16,11 +16,7 @@ function Splash({ label = "Loading your practice…" }) {
   return (
     <div style={{minHeight: "100vh", display: "grid", placeItems: "center", background: "#F7F6FB"}}>
       <div style={{display: "flex", flexDirection: "column", alignItems: "center", gap: 16}}>
-        <div style={{width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #6C5CE7, #C13388)", display: "grid", placeItems: "center", animation: "pulse 1.2s ease-in-out infinite"}}>
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
-            <path d="M6 4c3 0 3 4 6 4s3-4 6-4v16c-3 0-3-4-6-4s-3 4-6 4V4z" fill="white"/>
-          </svg>
-        </div>
+        <img src="/prohippo-mark.png" alt="ProHippo" style={{width: 56, height: 56, objectFit: "contain", animation: "pulse 1.2s ease-in-out infinite"}}/>
         <div className="muted" style={{fontSize: 13}}>{label}</div>
         <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.92); opacity: 0.75; } }`}</style>
       </div>

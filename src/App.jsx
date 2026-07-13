@@ -7,6 +7,25 @@ import Notices, { NoticeReview } from './Notices';
 import { Matters, Invoices, Communications, AiParser, Reports, SettingsPage } from './Other';
 import { Icon } from './shared';
 import { DataProvider, useData } from './store';
+import { AuthProvider, useAuth } from './auth';
+import Login from './Login';
+import Onboarding from './Onboarding';
+
+function Splash({ label = "Loading your practice…" }) {
+  return (
+    <div style={{minHeight: "100vh", display: "grid", placeItems: "center", background: "#F7F6FB"}}>
+      <div style={{display: "flex", flexDirection: "column", alignItems: "center", gap: 16}}>
+        <div style={{width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #6C5CE7, #C13388)", display: "grid", placeItems: "center", animation: "pulse 1.2s ease-in-out infinite"}}>
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
+            <path d="M6 4c3 0 3 4 6 4s3-4 6-4v16c-3 0-3-4-6-4s-3 4-6 4V4z" fill="white"/>
+          </svg>
+        </div>
+        <div className="muted" style={{fontSize: 13}}>{label}</div>
+        <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.92); opacity: 0.75; } }`}</style>
+      </div>
+    </div>
+  );
+}
 
 function Shell() {
   const { data, toast } = useData();
@@ -65,7 +84,7 @@ function Shell() {
       </main>
       {toast && (
         <div className="toast animate-in">
-          <div style={{width: 22, height: 22, borderRadius: "50%", background: "var(--p-success)", display: "grid", placeItems: "center"}}>
+          <div style={{width: 22, height: 22, borderRadius: "50%", background: toast.icon === "alert" ? "var(--p-danger)" : "var(--p-success)", display: "grid", placeItems: "center"}}>
             <Icon name={toast.icon} size={13} stroke={3}/>
           </div>
           {toast.msg}
@@ -75,10 +94,28 @@ function Shell() {
   );
 }
 
-export default function App() {
+function ProfileGate() {
+  const { profile, profileLoading } = useData();
+  if (profileLoading) return <Splash/>;
+  if (!profile) return <Onboarding/>;
+  return <Shell/>;
+}
+
+function AuthGate() {
+  const { user, loading } = useAuth();
+  if (loading) return <Splash label="Signing you in…"/>;
+  if (!user) return <Login/>;
   return (
     <DataProvider>
-      <Shell/>
+      <ProfileGate/>
     </DataProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate/>
+    </AuthProvider>
   );
 }

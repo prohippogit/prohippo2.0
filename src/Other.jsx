@@ -2,6 +2,16 @@
 import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
+import { useAuth } from './auth';
+
+function KVRow({ label, value }) {
+  return (
+    <div style={{fontSize: 13, display: "flex", gap: 10, alignItems: "baseline"}}>
+      <span className="muted" style={{fontSize: 12, minWidth: 110, flexShrink: 0}}>{label}</span>
+      <span style={{fontWeight: 600, overflowWrap: "anywhere"}}>{value}</span>
+    </div>
+  );
+}
 
 function Legend({ color, label }) {
   return (
@@ -760,8 +770,15 @@ export function Reports() {
 
 export function SettingsPage() {
   const { data, setProfile, loadSampleData, clearAllData, notify } = useData();
+  const { user, signOutUser } = useAuth();
   const [owner, setOwner] = React.useState(data.profile.ownerName);
   const [firm, setFirm] = React.useState(data.profile.firmName);
+
+  // Profile streams in from Firestore after mount — sync the form when it lands.
+  React.useEffect(() => {
+    setOwner(data.profile.ownerName);
+    setFirm(data.profile.firmName);
+  }, [data.profile.ownerName, data.profile.firmName]);
 
   const saveProfile = () => {
     setProfile({ ownerName: owner.trim(), firmName: firm.trim() });
@@ -807,12 +824,26 @@ export function SettingsPage() {
           </div>
         </div>
         <div className="card">
+          <div className="card-title mb-3">Account</div>
+          <div className="col" style={{gap: 10}}>
+            <KVRow label="Signed in as" value={user?.email || "—"}/>
+            <KVRow label="Sign-in method" value={user?.providerData?.[0]?.providerId === "google.com" ? "Google" : "Email link"}/>
+            <KVRow label="Data storage" value="Cloud Firestore — private to your account, synced across your devices"/>
+            <button className="btn btn-secondary" style={{alignSelf: "flex-start", marginTop: 4}} onClick={() => { if (window.confirm("Sign out of ProHippo?")) signOutUser(); }}>
+              <Icon name="logout" size={14}/>Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16}}>
+        <div className="card">
           <div className="card-title mb-3">Your data</div>
-          <div className="card-sub mb-4">All records are stored in this browser (localStorage). Download a JSON backup before clearing your browser data.</div>
+          <div className="card-sub mb-4">Records are saved securely in the cloud under your account. You can still download a JSON backup anytime.</div>
           <div className="col" style={{gap: 8}}>
             <button className="btn btn-secondary" onClick={exportBackup}><Icon name="download" size={14}/>Download backup (JSON)</button>
-            <button className="btn btn-secondary" onClick={() => { if (window.confirm("Replace all current data with sample data?")) loadSampleData(); }}><Icon name="sparkle" size={14}/>Load sample data</button>
-            <button className="btn btn-secondary" style={{color: "var(--p-danger)"}} onClick={() => { if (window.confirm("Delete ALL data? This cannot be undone.")) clearAllData(); }}><Icon name="trash" size={14}/>Clear all data</button>
+            <button className="btn btn-secondary" onClick={() => { if (window.confirm("Add sample data to your practice?")) loadSampleData(); }}><Icon name="sparkle" size={14}/>Load sample data</button>
+            <button className="btn btn-secondary" style={{color: "var(--p-danger)"}} onClick={() => { if (window.confirm("Delete ALL practice data? This cannot be undone.")) clearAllData(); }}><Icon name="trash" size={14}/>Clear all data</button>
           </div>
         </div>
       </div>

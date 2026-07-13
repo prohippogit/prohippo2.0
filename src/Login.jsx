@@ -3,14 +3,8 @@ import React from "react";
 import { Icon } from "./shared";
 import { useAuth } from "./auth";
 
-function BrandMark({ size = 44 }) {
-  return (
-    <div style={{ width: size, height: size, borderRadius: size * 0.28, background: "linear-gradient(135deg, #6C5CE7, #C13388)", display: "grid", placeItems: "center", boxShadow: "0 8px 20px rgba(108,92,231,0.35)" }}>
-      <svg viewBox="0 0 24 24" width={size * 0.62} height={size * 0.62} fill="none">
-        <path d="M6 4c3 0 3 4 6 4s3-4 6-4v16c-3 0-3-4-6-4s-3 4-6 4V4z" fill="white" />
-      </svg>
-    </div>
-  );
+function BrandMark({ size = 52 }) {
+  return <img src="/prohippo-mark.png" alt="ProHippo" style={{ width: size, height: size, objectFit: "contain" }} />;
 }
 
 const GoogleGlyph = () => (

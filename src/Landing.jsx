@@ -5,13 +5,7 @@ import heroImg from "./assets/hero.png";
 import "./landing.css";
 
 function BrandMark({ size = 36 }) {
-  return (
-    <div className="brand-mark" style={{ width: size, height: size, background: "linear-gradient(135deg, #6C5CE7, #C13388)" }}>
-      <svg viewBox="0 0 24 24" width={size * 0.6} height={size * 0.6} fill="none">
-        <path d="M6 4c3 0 3 4 6 4s3-4 6-4v16c-3 0-3-4-6-4s-3 4-6 4V4z" fill="white" />
-      </svg>
-    </div>
-  );
+  return <img src="/prohippo-mark.png" alt="ProHippo" style={{ width: size, height: size, objectFit: "contain" }} />;
 }
 
 /* Adds .visible to .reveal children when they scroll into view */
@@ -101,10 +95,7 @@ export default function Landing({ onSignIn }) {
       <div className="landing-inner">
         {/* Nav */}
         <nav className="landing-nav hero-in d1">
-          <BrandMark />
-          <div className="brand-name" style={{ fontSize: 19 }}>
-            Pro<span style={{ color: "var(--p-primary-2)" }}>Hippo</span>
-          </div>
+          <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 46 }} />
           <div className="spacer" />
           <a className="landing-nav-link" href="#features">Features</a>
           <a className="landing-nav-link" href="#how">How it works</a>
@@ -225,7 +216,7 @@ export default function Landing({ onSignIn }) {
 
         {/* Final CTA */}
         <section className="landing-cta reveal">
-          <BrandMark size={52} />
+          <BrandMark size={64} />
           <h2>Ready to tidy up your practice?</h2>
           <p>Sign in and set up your firm in under a minute. Your data stays private to your account.</p>
           <button className="btn btn-primary btn-lg" onClick={onSignIn}>
@@ -236,8 +227,7 @@ export default function Landing({ onSignIn }) {
         {/* Footer */}
         <footer className="landing-footer">
           <div className="foot-brand">
-            <BrandMark size={26} />
-            <span>Pro<span style={{ color: "var(--p-primary-2)" }}>Hippo</span></span>
+            <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 30 }} />
           </div>
           <div className="spacer" />
           <span>Income-tax litigation & practice management</span>

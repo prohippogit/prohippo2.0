@@ -23,8 +23,14 @@ const friendly = (code) => {
     "auth/popup-blocked": "Your browser blocked the sign-in popup — redirecting instead.",
     "auth/invalid-email": "That doesn't look like a valid email address.",
     "auth/invalid-action-code": "This sign-in link has expired or was already used. Please request a new one.",
-    "auth/unauthorized-domain": "This site isn't authorized for sign-in yet. Add it in Firebase console → Authentication → Settings → Authorized domains.",
-    "auth/operation-not-allowed": "This sign-in method isn't enabled yet in the Firebase console.",
+    "auth/unauthorized-domain": "This site's domain isn't authorized. Add prohippo2.web.app in Firebase console → Authentication → Settings → Authorized domains.",
+    "auth/unauthorized-continue-uri": "This site's domain isn't authorized for email links. Add prohippo2.web.app in Firebase console → Authentication → Settings → Authorized domains.",
+    "auth/invalid-continue-uri": "The sign-in link's return address is invalid. Please contact support.",
+    "auth/missing-continue-uri": "The sign-in link is missing a return address. Please contact support.",
+    "auth/operation-not-allowed": "Email-link sign-in isn't switched on. In Firebase console → Authentication → Sign-in method → Email/Password, enable the second toggle 'Email link (passwordless sign-in)' and Save.",
+    "auth/admin-restricted-operation": "Email-link sign-in isn't switched on. In Firebase console → Authentication → Sign-in method → Email/Password, enable the second toggle 'Email link (passwordless sign-in)' and Save.",
+    "auth/too-many-requests": "Too many attempts. Please wait a minute and try again.",
+    "auth/network-request-failed": "Network problem — check your connection and try again.",
   };
   return map[code] || null;
 };
@@ -50,7 +56,7 @@ export function AuthProvider({ children }) {
         // Remove the sign-in parameters from the URL bar.
         window.history.replaceState({}, document.title, window.location.pathname);
       })
-      .catch((e) => setError(friendly(e.code) || "Could not complete sign-in. Please request a new link."))
+      .catch((e) => { console.error("email-link sign-in:", e); setError(friendly(e.code) || `Could not complete sign-in (${e.code || "unknown"}). Please request a new link.`); })
       .finally(() => setCompletingLink(false));
   }, []);
 
@@ -75,12 +81,14 @@ export function AuthProvider({ children }) {
             await signInWithRedirect(auth, provider);
             return;
           } catch (e2) {
-            setError(friendly(e2.code) || "Google sign-in failed. Please try again.");
+            console.error("google redirect sign-in:", e2);
+            setError(friendly(e2.code) || `Google sign-in failed (${e2.code || "unknown"}). Please try again.`);
             return;
           }
         }
         if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
-          setError(friendly(e.code) || "Google sign-in failed. Please try again.");
+          console.error("google popup sign-in:", e);
+          setError(friendly(e.code) || `Google sign-in failed (${e.code || "unknown"}). Please try again.`);
         }
       }
     },
@@ -100,7 +108,8 @@ export function AuthProvider({ children }) {
         setPendingEmail(clean);
         return true;
       } catch (e) {
-        setError(friendly(e.code) || "Could not send the sign-in link. Please try again.");
+        console.error("sendSignInLinkToEmail:", e);
+        setError(friendly(e.code) || `Could not send the sign-in link (${e.code || "unknown"}). Please try again.`);
         return false;
       }
     },

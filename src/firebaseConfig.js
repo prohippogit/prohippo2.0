@@ -14,12 +14,13 @@
  *      messagingSenderId, appId).
  */
 export const firebaseConfig = {
-  apiKey: "REPLACE_WITH_apiKey",
+  apiKey: "AIzaSyBgs1cgmwmF0OtT-2HzaPgXS1XuagUoDsU",
   authDomain: "prohippo2.firebaseapp.com",
   projectId: "prohippo2",
-  storageBucket: "prohippo2.appspot.com",
-  messagingSenderId: "REPLACE_WITH_messagingSenderId",
-  appId: "REPLACE_WITH_appId",
+  storageBucket: "prohippo2.firebasestorage.app",
+  messagingSenderId: "172465235057",
+  appId: "1:172465235057:web:cb2718881728d4e8b467d0",
+  measurementId: "G-FK13JZ2DND",
 };
 
 // When true (set via VITE_USE_EMULATORS=true), the app talks to local

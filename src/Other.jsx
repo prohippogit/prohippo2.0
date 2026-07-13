@@ -1,9 +1,10 @@
 /* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
+import { downloadInvoicePDF, amountInWords } from './invoicePdf';
 
 const NEEDS_ASSESSEE = "Every record in ProHippo is linked to an assessee profile. Add the assessee first — this form unlocks once they're on file.";
 
@@ -28,7 +29,8 @@ function Legend({ color, label }) {
 /* ---------------- Invoices ---------------- */
 
 export function InvoiceModal({ initial, onClose }) {
-  const { data, addInvoice, notify } = useData();
+  const { data, addInvoice, updateInvoice, notify } = useData();
+  const isEdit = Boolean(initial?.id);
   const [form, setForm] = React.useState({
     assessee: "", date: todayISO(), ay: "", service: "", amount: "", due: daysAway(30),
     ...initial,
@@ -39,22 +41,44 @@ export function InvoiceModal({ initial, onClose }) {
   const linked = data.assessees.find(a => a.name === form.assessee);
   const valid = Boolean(linked) && form.date && amount > 0;
 
+  const assesseeOptions = data.assessees.map(a => ({ value: a.name, label: a.name, sub: a.pan }));
+  // Ongoing proceedings of the selected assessee feed the service and AY
+  // suggestions; both fields still accept free text.
+  const proceedings = linked ? data.matters.filter(m => m.pan === linked.pan && !["Closed", "Decided"].includes(m.status)) : [];
+  const serviceOptions = proceedings.map(m => ({
+    value: `${m.type}${m.section ? ` u/s ${m.section}` : ""} — professional fees`,
+    label: `${m.type}${m.section ? ` u/s ${m.section}` : ""} — AY ${m.ay}`,
+    sub: [m.ref, m.bench, m.status].filter(Boolean).join(" · "),
+    ay: m.ay,
+  }));
+  const ayOptions = [...new Set([
+    ...proceedings.map(m => m.ay),
+    ...(linked ? data.notices.filter(n => n.pan === linked.pan).map(n => n.ay) : []),
+    ...(linked ? data.hearings.filter(h => h.pan === linked.pan).map(h => h.ay) : []),
+  ].filter(Boolean))].sort().reverse();
+
   const save = async () => {
     if (!valid) return;
-    const inv = await addInvoice({ ...form, amount });
-    if (!inv) return;
-    notify(`Invoice ${inv.number || ""} raised — ${fmtINR(amount)}`);
+    const rec = { assessee: form.assessee, date: form.date, ay: form.ay, service: form.service, amount, due: form.due };
+    if (isEdit) {
+      updateInvoice(initial.id, rec);
+      notify(`Invoice ${initial.number} updated`);
+    } else {
+      const inv = await addInvoice(rec);
+      if (!inv) return;
+      notify(`Invoice ${inv.number || ""} raised — ${fmtINR(amount)}`);
+    }
     onClose();
   };
 
   return (
     <Modal
-      title="New invoice"
-      sub="The invoice number is assigned automatically"
+      title={isEdit ? "Edit invoice" : "New invoice"}
+      sub={isEdit ? `${initial.number} — the invoice number stays unchanged` : "The invoice number is assigned automatically"}
       onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>Raise invoice</button>
+        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{isEdit ? "Save changes" : "Raise invoice"}</button>
       </>}
     >
       {data.assessees.length === 0 && (
@@ -64,10 +88,20 @@ export function InvoiceModal({ initial, onClose }) {
       )}
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
         <FormField label="Assessee" required full>
-          <SelectInput value={linked ? linked.name : ""} onChange={set("assessee")} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
+          <ComboBox value={form.assessee} onChange={set("assessee")} options={assesseeOptions} subMono placeholder={data.assessees.length ? "Search name or PAN…" : "No assessees yet"}/>
         </FormField>
-        <FormField label="Service description" full><TextInput value={form.service} onChange={set("service")} placeholder="e.g. ITAT appeal — drafting & hearing fees"/></FormField>
-        <FormField label="Assessment year"><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
+        <FormField label="Service description" full>
+          <ComboBox
+            value={form.service}
+            onChange={set("service")}
+            options={serviceOptions}
+            onPick={(o) => { if (o.ay) set("ay")(o.ay); }}
+            placeholder={linked ? (serviceOptions.length ? "Pick an ongoing proceeding or type your own…" : "e.g. ITAT appeal — drafting & hearing fees") : "Select an assessee to see their proceedings…"}
+          />
+        </FormField>
+        <FormField label="Assessment year">
+          <ComboBox value={form.ay} onChange={set("ay")} options={ayOptions} placeholder={ayOptions.length ? "Pick or type an AY…" : "2021-22"}/>
+        </FormField>
         <FormField label="Amount (₹)" required><TextInput type="number" value={form.amount} onChange={set("amount")} placeholder="0"/></FormField>
         <FormField label="Invoice date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
         <FormField label="Due date"><TextInput type="date" value={form.due} onChange={set("due")}/></FormField>
@@ -114,12 +148,115 @@ function PaymentModal({ invoice, onClose }) {
   );
 }
 
+function MetaCell({ label, value }) {
+  return (
+    <div>
+      <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>{label}</div>
+      <div style={{fontSize: 13.5, fontWeight: 800, marginTop: 3}}>{value}</div>
+    </div>
+  );
+}
+
+/* On-screen preview of the vector PDF invoice, with download / edit actions. */
+function InvoiceView({ invoice, onClose, onEdit }) {
+  const { data, profile } = useData();
+  const assessee = data.assessees.find(a => a.name === invoice.assessee);
+  const firmName = (profile?.firmName || "").trim() || (profile?.ownerName || "").trim() || "Tax practice";
+  const balance = invoiceOutstanding(invoice);
+  const fmt2 = (n) => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  return (
+    <Modal
+      title={`Invoice ${invoice.number}`}
+      sub="Preview of the PDF that will be downloaded"
+      onClose={onClose}
+      width={660}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        <button className="btn btn-secondary" onClick={onEdit}><Icon name="edit" size={14}/>Edit</button>
+        <button className="btn btn-primary" onClick={() => downloadInvoicePDF({ invoice, assessee, profile })}><Icon name="download" size={14}/>Download PDF</button>
+      </>}
+    >
+      <div style={{border: "1px solid var(--p-line)", borderRadius: 14, padding: "22px 24px", background: "white"}}>
+        <div className="between" style={{alignItems: "flex-start"}}>
+          <div>
+            <div style={{fontSize: 19, fontWeight: 800, letterSpacing: "-0.02em"}}>{firmName}</div>
+            {profile?.ownerName && profile.ownerName !== firmName && <div className="muted" style={{fontSize: 12, marginTop: 2}}>{profile.ownerName}</div>}
+            {profile?.firmAddress && <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{profile.firmAddress}</div>}
+            {(profile?.email || profile?.firmMobile) && <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{[profile?.email, profile?.firmMobile].filter(Boolean).join("  ·  ")}</div>}
+          </div>
+          <div style={{fontSize: 19, fontWeight: 800, letterSpacing: "0.12em", color: "var(--p-primary)"}}>INVOICE</div>
+        </div>
+        <div style={{height: 3, background: "var(--p-primary)", borderRadius: 2, margin: "14px 0 16px"}}/>
+        <div className="grid" style={{gridTemplateColumns: "1fr 1fr 1fr", gap: 12}}>
+          <MetaCell label="INVOICE NO." value={invoice.number}/>
+          <MetaCell label="INVOICE DATE" value={fmtDateLong(invoice.date)}/>
+          <MetaCell label="DUE DATE" value={invoice.due ? fmtDateLong(invoice.due) : "—"}/>
+        </div>
+        <div style={{marginTop: 18}}>
+          <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>BILLED TO</div>
+          <div style={{fontSize: 15, fontWeight: 800, marginTop: 4}}>{invoice.assessee}</div>
+          {assessee?.pan && <div style={{fontSize: 12, marginTop: 2, fontFamily: "ui-monospace, monospace"}}>PAN: {assessee.pan}</div>}
+          {assessee?.address && <div className="muted" style={{fontSize: 12, marginTop: 2}}>{assessee.address}</div>}
+        </div>
+        <table style={{width: "100%", marginTop: 16, borderCollapse: "collapse", fontSize: 13}}>
+          <thead>
+            <tr style={{background: "var(--p-lavender-2)"}}>
+              <th style={{textAlign: "left", padding: "8px 10px", fontSize: 10.5, letterSpacing: "0.06em", color: "var(--p-text-3)"}}>PARTICULARS</th>
+              <th style={{textAlign: "left", padding: "8px 10px", fontSize: 10.5, letterSpacing: "0.06em", color: "var(--p-text-3)", width: 90}}>AY</th>
+              <th style={{textAlign: "right", padding: "8px 10px", fontSize: 10.5, letterSpacing: "0.06em", color: "var(--p-text-3)", width: 130}}>AMOUNT (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{padding: "10px", borderBottom: "1px solid var(--p-line-2)"}}>{invoice.service || "Professional fees"}</td>
+              <td style={{padding: "10px", borderBottom: "1px solid var(--p-line-2)"}}>{invoice.ay || "—"}</td>
+              <td style={{padding: "10px", borderBottom: "1px solid var(--p-line-2)", textAlign: "right", fontWeight: 700}}>{fmt2(invoice.amount)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style={{display: "flex", justifyContent: "flex-end", marginTop: 12}}>
+          <div style={{minWidth: 240}}>
+            <div className="between" style={{padding: "4px 10px"}}>
+              <span style={{fontWeight: 800, fontSize: 14}}>Total</span>
+              <span style={{fontWeight: 800, fontSize: 15}}>₹ {fmt2(invoice.amount)}</span>
+            </div>
+            {(invoice.received || 0) > 0 && <>
+              <div className="between" style={{padding: "3px 10px", fontSize: 12.5}}>
+                <span className="muted">Received</span><span style={{fontWeight: 700}}>₹ {fmt2(invoice.received)}</span>
+              </div>
+              <div className="between" style={{padding: "3px 10px", fontSize: 12.5}}>
+                <span className="muted">Balance due</span>
+                <span style={{fontWeight: 800, color: balance > 0 ? "#C13388" : "var(--p-success)"}}>₹ {fmt2(balance)}</span>
+              </div>
+            </>}
+          </div>
+        </div>
+        <div style={{marginTop: 14}}>
+          <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>AMOUNT IN WORDS</div>
+          <div style={{fontSize: 12.5, marginTop: 3}}>{amountInWords(invoice.amount)}</div>
+        </div>
+        <div className="between" style={{marginTop: 20, alignItems: "flex-end"}}>
+          <StatusPill status={invoiceStatus(invoice)}/>
+          <div style={{textAlign: "right"}}>
+            <div style={{fontWeight: 800, fontSize: 12.5}}>For {firmName}</div>
+            <div className="muted" style={{fontSize: 11, marginTop: 26, borderTop: "1px solid var(--p-line)", paddingTop: 5}}>Authorised Signatory</div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function Invoices() {
-  const { data, removeInvoice, notify } = useData();
+  const { data, profile, removeInvoice, notify } = useData();
   const [filter, setFilter] = React.useState("All");
+  const [search, setSearch] = React.useState("");
   const [showNew, setShowNew] = React.useState(false);
   const [payFor, setPayFor] = React.useState(null);
+  const [editFor, setEditFor] = React.useState(null);
+  const [viewFor, setViewFor] = React.useState(null);
 
+  const assesseeOf = (inv) => data.assessees.find(a => a.name === inv.assessee);
   const invoices = [...data.invoices].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const monthPrefix = todayISO().slice(0, 7);
   const billedThisMonth = invoices.filter(i => (i.date || "").startsWith(monthPrefix)).reduce((s, i) => s + i.amount, 0);
@@ -128,7 +265,11 @@ export function Invoices() {
 
   const counts = { All: invoices.length };
   ["Outstanding", "Overdue", "Partial", "Paid"].forEach(st => { counts[st] = invoices.filter(i => invoiceStatus(i) === st).length; });
-  const filtered = invoices.filter(i => filter === "All" || invoiceStatus(i) === filter);
+  const q = search.toLowerCase().trim();
+  const filtered = invoices.filter(i =>
+    (filter === "All" || invoiceStatus(i) === filter) &&
+    (!q || [i.number, i.assessee, i.service, i.ay, assesseeOf(i)?.pan].some(v => (v || "").toLowerCase().includes(q)))
+  );
 
   // billing trend — last 6 calendar months
   const months = [];
@@ -224,13 +365,17 @@ export function Invoices() {
       )}
 
       <div className="card" style={{padding: 0, overflow: "hidden"}}>
-        <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center"}}>
+        <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center", gap: 12, flexWrap: "wrap"}}>
           <div className="row" style={{gap: 6}}>
             {["All", "Outstanding", "Overdue", "Partial", "Paid"].map(f => (
               <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
                 {f}{counts[f] ? ` · ${counts[f]}` : ""}
               </span>
             ))}
+          </div>
+          <div className="search" style={{width: 250}}>
+            <Icon name="search" size={15}/>
+            <input placeholder="Invoice #, assessee, PAN, service…" value={search} onChange={e => setSearch(e.target.value)}/>
           </div>
         </div>
         {filtered.length === 0 ? (
@@ -245,7 +390,7 @@ export function Invoices() {
             <thead><tr><th>Invoice #</th><th>Assessee</th><th>Service</th><th>AY</th><th>Issued</th><th>Due</th><th>Amount</th><th>Balance</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {filtered.map(inv => (
-                <tr key={inv.id}>
+                <tr key={inv.id} onClick={() => setViewFor(inv)} style={{cursor: "pointer"}}>
                   <td className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12.5}}>{inv.number}</td>
                   <td className="strong">{inv.assessee}</td>
                   <td className="semi" style={{maxWidth: 280}}>{inv.service}</td>
@@ -255,11 +400,13 @@ export function Invoices() {
                   <td className="strong">{fmtINR(inv.amount)}</td>
                   <td>{invoiceOutstanding(inv) ? fmtINR(invoiceOutstanding(inv)) : "—"}</td>
                   <td><StatusPill status={invoiceStatus(inv)}/></td>
-                  <td>
+                  <td onClick={e => e.stopPropagation()}>
                     <div className="row" style={{gap: 4}}>
                       {invoiceOutstanding(inv) > 0 && (
                         <button className="btn btn-ghost btn-xs" title="Record payment" onClick={() => setPayFor(inv)}><Icon name="wallet" size={12}/></button>
                       )}
+                      <button className="btn btn-ghost btn-xs" title="Download PDF" onClick={() => downloadInvoicePDF({ invoice: inv, assessee: assesseeOf(inv), profile })}><Icon name="download" size={12}/></button>
+                      <button className="btn btn-ghost btn-xs" title="Edit" onClick={() => setEditFor(inv)}><Icon name="edit" size={12}/></button>
                       <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm(`Delete invoice ${inv.number}?`)) { removeInvoice(inv.id); notify("Invoice deleted"); } }}><Icon name="trash" size={12}/></button>
                     </div>
                   </td>
@@ -272,6 +419,14 @@ export function Invoices() {
 
       {showNew && <InvoiceModal onClose={() => setShowNew(false)}/>}
       {payFor && <PaymentModal invoice={payFor} onClose={() => setPayFor(null)}/>}
+      {editFor && <InvoiceModal initial={editFor} onClose={() => setEditFor(null)}/>}
+      {viewFor && (
+        <InvoiceView
+          invoice={viewFor}
+          onClose={() => setViewFor(null)}
+          onEdit={() => { setEditFor(viewFor); setViewFor(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -807,19 +962,23 @@ export function Reports() {
 /* ---------------- Settings ---------------- */
 
 export function SettingsPage() {
-  const { data, setProfile, loadSampleData, clearAllData, notify } = useData();
+  const { data, profile, setProfile, loadSampleData, clearAllData, notify } = useData();
   const { user, signOutUser } = useAuth();
   const [owner, setOwner] = React.useState(data.profile.ownerName);
   const [firm, setFirm] = React.useState(data.profile.firmName);
+  const [firmAddress, setFirmAddress] = React.useState(profile?.firmAddress || "");
+  const [firmMobile, setFirmMobile] = React.useState(profile?.firmMobile || "");
 
   // Profile streams in from Firestore after mount — sync the form when it lands.
   React.useEffect(() => {
     setOwner(data.profile.ownerName);
     setFirm(data.profile.firmName);
-  }, [data.profile.ownerName, data.profile.firmName]);
+    setFirmAddress(profile?.firmAddress || "");
+    setFirmMobile(profile?.firmMobile || "");
+  }, [data.profile.ownerName, data.profile.firmName, profile?.firmAddress, profile?.firmMobile]);
 
   const saveProfile = () => {
-    setProfile({ ownerName: owner.trim(), firmName: firm.trim() });
+    setProfile({ ownerName: owner.trim(), firmName: firm.trim(), firmAddress: firmAddress.trim(), firmMobile: firmMobile.trim() });
     notify("Profile saved");
   };
 
@@ -858,6 +1017,8 @@ export function SettingsPage() {
           <div className="col" style={{gap: 12}}>
             <FormField label="Your name"><TextInput value={owner} onChange={setOwner} placeholder="e.g. Jayesh Vyas"/></FormField>
             <FormField label="Firm name"><TextInput value={firm} onChange={setFirm} placeholder="e.g. Jayesh Vyas & Co."/></FormField>
+            <FormField label="Firm address (shown on invoice PDFs)"><TextInput value={firmAddress} onChange={setFirmAddress} placeholder="Office address"/></FormField>
+            <FormField label="Firm phone (shown on invoice PDFs)"><TextInput value={firmMobile} onChange={setFirmMobile} placeholder="+91 …"/></FormField>
             <button className="btn btn-primary" style={{alignSelf: "flex-start"}} onClick={saveProfile}><Icon name="check" size={14}/>Save profile</button>
           </div>
         </div>

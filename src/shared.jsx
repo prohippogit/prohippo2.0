@@ -171,6 +171,65 @@ export function SelectInput({ value, onChange, options, placeholder }) {
   );
 }
 
+/* Searchable input with a suggestion dropdown. Typing filters the options;
+   picking one calls onChange with its value (and onPick with the option).
+   Free text stays allowed — validity is the caller's concern. */
+export function ComboBox({ value, onChange, onPick, options, placeholder, mono, subMono }) {
+  const [open, setOpen] = React.useState(false);
+  const [hi, setHi] = React.useState(-1);
+  const wrapRef = React.useRef(null);
+  const norm = (options || []).map((o) => (typeof o === "string" ? { value: o, label: o } : o));
+  const q = (value || "").toLowerCase().trim();
+  const exact = norm.some((o) => o.value === value);
+  const filtered = (!q || exact)
+    ? norm
+    : norm.filter((o) => `${o.label} ${o.sub || ""}`.toLowerCase().includes(q));
+
+  React.useEffect(() => {
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, []);
+
+  const pick = (o) => { onChange(o.value); onPick?.(o); setOpen(false); setHi(-1); };
+
+  return (
+    <div ref={wrapRef} style={{position: "relative"}}>
+      <input
+        value={value}
+        placeholder={placeholder}
+        style={{paddingRight: 32, ...(mono ? {fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"} : null)}}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setHi(-1); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHi((h) => Math.min(h + 1, filtered.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+          else if (e.key === "Enter" && open && hi >= 0 && filtered[hi]) { e.preventDefault(); pick(filtered[hi]); }
+          else if (e.key === "Escape" && open) { e.stopPropagation(); setOpen(false); }
+        }}
+      />
+      <span style={{position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--p-text-3)", display: "flex"}}>
+        <Icon name="search" size={13}/>
+      </span>
+      {open && filtered.length > 0 && (
+        <div style={{position: "absolute", top: "100%", left: 0, right: 0, zIndex: 80, background: "white", border: "1px solid var(--p-line)", borderRadius: 12, marginTop: 4, boxShadow: "0 14px 32px rgba(31,27,58,0.16)", maxHeight: 230, overflowY: "auto", padding: 4}}>
+          {filtered.map((o, i) => (
+            <div
+              key={`${o.value}-${i}`}
+              onPointerDown={(e) => { e.preventDefault(); pick(o); }}
+              onMouseEnter={() => setHi(i)}
+              style={{padding: "8px 10px", borderRadius: 9, cursor: "pointer", background: i === hi ? "var(--p-lavender-2)" : "transparent"}}
+            >
+              <div style={{fontSize: 13, fontWeight: 600}}>{o.label}</div>
+              {o.sub && <div className="muted" style={{fontSize: 11, marginTop: 1, fontFamily: subMono ? "ui-monospace, monospace" : "inherit"}}>{o.sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EmptyState({ icon = "folder", title, sub, action }) {
   return (
     <div style={{textAlign: "center", padding: "48px 20px"}}>

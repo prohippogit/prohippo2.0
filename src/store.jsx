@@ -197,7 +197,33 @@ export function DataProvider({ children }) {
       },
       setProfile: (patch) => updateDoc(userRef(), patch).catch(fail),
       // collections
-      addAssessee: addTo("assessees"), updateAssessee: updateIn("assessees"), removeAssessee: removeFrom("assessees"),
+      addAssessee: addTo("assessees"), updateAssessee: updateIn("assessees"),
+      /* The app is assessee-centric: deleting an assessee also removes every
+         record linked to them. Returns the number of linked records removed,
+         or null on failure. */
+      removeAssessee: async (a) => {
+        try {
+          const linkedBy = {
+            matters: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
+            hearings: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
+            notices: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
+            invoices: (r) => r.assessee === a.name,
+            communications: (r) => r.to === a.name || (a.email && r.to === a.email) || (a.mobile && r.to === a.mobile),
+          };
+          const refs = [doc(db, "users", uid, "assessees", a.id)];
+          for (const [name, isLinked] of Object.entries(linkedBy)) {
+            const snap = await getDocs(colRef(name));
+            snap.docs.forEach((d) => { if (isLinked(d.data())) refs.push(d.ref); });
+          }
+          // Firestore batches are capped at 500 ops; chunk to be safe.
+          for (let i = 0; i < refs.length; i += 450) {
+            const batch = writeBatch(db);
+            refs.slice(i, i + 450).forEach((ref) => batch.delete(ref));
+            await batch.commit();
+          }
+          return refs.length - 1;
+        } catch (e) { fail(e); return null; }
+      },
       addMatter: addTo("matters"), updateMatter: updateIn("matters"), removeMatter: removeFrom("matters"),
       addHearing: addTo("hearings"), updateHearing: updateIn("hearings"), removeHearing: removeFrom("hearings"),
       addNotice: addTo("notices"), updateNotice: updateIn("notices"), removeNotice: removeFrom("notices"),

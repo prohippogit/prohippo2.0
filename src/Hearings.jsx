@@ -2,6 +2,7 @@
 import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtDateLong, daysFromNow } from './shared';
 import { useData, downloadCSV, toISO, todayISO } from './store';
+import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 
 const AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
 const MODES = ["Physical", "Video Conference", "e-Proceeding"];
@@ -13,21 +14,24 @@ export function HearingModal({ initial, onClose }) {
     date: todayISO(), time: "11:00", mode: "Physical", status: "Upcoming", ita: "", staff: "",
     ...initial,
   });
+  const [showAddAssessee, setShowAddAssessee] = React.useState(false);
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const pickAssessee = (name) => {
     const a = data.assessees.find(x => x.name === name);
     setForm(f => ({ ...f, assessee: name, pan: a?.pan || f.pan, staff: f.staff || a?.staff || "" }));
   };
-  const valid = form.assessee.trim() && form.date && form.time && form.ay.trim();
+  const linked = data.assessees.find(a => a.name === form.assessee);
+  const valid = Boolean(linked) && form.date && form.time && form.ay.trim();
 
   const save = () => {
     if (!valid) return;
+    const rec = { ...form, pan: linked.pan };
     if (initial?.id) {
-      updateHearing(initial.id, form);
+      updateHearing(initial.id, rec);
       notify("Hearing updated");
     } else {
-      addHearing(form);
-      notify(`Hearing added — ${fmtDateLong(form.date)} at ${form.time}`);
+      addHearing(rec);
+      notify(`Hearing added — ${fmtDateLong(rec.date)} at ${rec.time}`);
     }
     onClose();
   };
@@ -45,13 +49,19 @@ export function HearingModal({ initial, onClose }) {
         </button>
       </>}
     >
+      {data.assessees.length === 0 && (
+        <div style={{marginBottom: 14}}>
+          <AssesseeRequiredNote
+            message="Every hearing is linked to an assessee profile. Add the assessee first — this form unlocks once they're on file."
+            onCreate={() => setShowAddAssessee(true)}
+          />
+        </div>
+      )}
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
         <FormField label="Assessee" required full>
-          {data.assessees.length > 0
-            ? <SelectInput value={form.assessee} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
-            : <TextInput value={form.assessee} onChange={set("assessee")} placeholder="Assessee name"/>}
+          <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
-        <FormField label="PAN"><TextInput value={form.pan} onChange={(v) => set("pan")(v.toUpperCase())} placeholder="ABCPS1234F" mono/></FormField>
+        <FormField label="PAN"><TextInput value={linked ? linked.pan : form.pan} onChange={(v) => set("pan")(v.toUpperCase())} placeholder="ABCPS1234F" mono/></FormField>
         <FormField label="Assessment year" required><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
         <FormField label="Authority"><SelectInput value={form.authority} onChange={set("authority")} options={AUTHORITIES}/></FormField>
         <FormField label="Bench / Officer"><TextInput value={form.bench} onChange={set("bench")} placeholder="e.g. Ahmedabad 'A' Bench"/></FormField>
@@ -62,6 +72,12 @@ export function HearingModal({ initial, onClose }) {
         <FormField label="ITA / Appeal No."><TextInput value={form.ita} onChange={set("ita")} placeholder="ITA No. …"/></FormField>
         <FormField label="Staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Assigned staff"/></FormField>
       </div>
+      {showAddAssessee && (
+        <AssesseeModal
+          onClose={() => setShowAddAssessee(false)}
+          onSaved={(a) => setForm(f => ({ ...f, assessee: a.name, pan: a.pan, staff: f.staff || a.staff || "" }))}
+        />
+      )}
     </Modal>
   );
 }

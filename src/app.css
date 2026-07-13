@@ -280,7 +280,33 @@ input, select, textarea { font-family: inherit; color: inherit; }
   overflow: hidden;
   box-shadow: var(--p-shadow-sm);
   border: 1px solid rgba(236, 232, 251, 0.7);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
+.stat.clickable { cursor: pointer; }
+.stat.clickable::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: radial-gradient(150px 110px at 82% 12%, var(--stat-glow, rgba(108, 92, 231, 0.22)), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
+}
+.stat.clickable:hover {
+  transform: translateY(-3px);
+  border-color: var(--p-primary-3);
+  box-shadow: 0 14px 34px rgba(83, 70, 198, 0.18), 0 0 0 4px var(--stat-glow, rgba(108, 92, 231, 0.10));
+}
+.stat.clickable:hover::after { opacity: 1; }
+.stat.clickable:active { transform: translateY(-1px); }
+.stat.clickable:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 2px; }
+.stat .stat-go {
+  position: absolute; right: 16px; bottom: 14px;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; color: var(--p-primary-2);
+  opacity: 0; transform: translateX(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.stat.clickable:hover .stat-go { opacity: 1; transform: translateX(0); }
 .stat-label { color: var(--p-text-3); font-size: 12px; font-weight: 500; }
 .stat-value { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; margin-top: 6px; }
 .stat-delta { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 3px 8px; border-radius: 8px; margin-top: 10px; }

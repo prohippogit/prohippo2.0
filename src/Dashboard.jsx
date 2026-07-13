@@ -73,10 +73,14 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
       )}
 
       <div className="grid" style={{gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 18}}>
-        <Stat label="Active matters" value={activeMatters.length} delta={`${data.matters.length} total`} deltaKind="neutral" icon="scale" iconBg="var(--p-lavender-2)" iconColor="var(--p-primary-2)"/>
-        <Stat label="Hearings this week" value={weekAhead.length} delta={next48h.length ? `${next48h.length} in next 48h` : "None in next 48h"} deltaKind="neutral" icon="calendar" iconBg="var(--p-pink)" iconColor="#C13388"/>
-        <Stat label="Outstanding fees" value={fmtLakhs(outstanding)} delta={overdue ? `${fmtLakhs(overdue)} overdue` : "Nothing overdue"} deltaKind={overdue ? "down" : "up"} icon="wallet" iconBg="var(--p-amber)" iconColor="#B07512"/>
-        <Stat label="Notices this month" value={noticesThisMonth.length} delta={awaiting.length ? `${awaiting.length} awaiting review` : "All reviewed"} deltaKind="neutral" icon="doc" iconBg="var(--p-mint)" iconColor="#1B8C5C"/>
+        <Stat label="Active matters" value={activeMatters.length} delta={`${data.matters.length} total`} deltaKind="neutral" icon="scale" iconBg="var(--p-lavender-2)" iconColor="var(--p-primary-2)"
+          glow="rgba(108, 92, 231, 0.24)" goLabel="Matters" onClick={() => onNav("matters")}/>
+        <Stat label="Hearings this week" value={weekAhead.length} delta={next48h.length ? `${next48h.length} in next 48h` : "None in next 48h"} deltaKind="neutral" icon="calendar" iconBg="var(--p-pink)" iconColor="#C13388"
+          glow="rgba(255, 140, 200, 0.30)" goLabel="Hearings" onClick={() => onNav("hearings")}/>
+        <Stat label="Outstanding fees" value={fmtLakhs(outstanding)} delta={overdue ? `${fmtLakhs(overdue)} overdue` : "Nothing overdue"} deltaKind={overdue ? "down" : "up"} icon="wallet" iconBg="var(--p-amber)" iconColor="#B07512"
+          glow="rgba(255, 193, 84, 0.32)" goLabel="Invoices" onClick={() => onNav("invoices")}/>
+        <Stat label="Notices this month" value={noticesThisMonth.length} delta={awaiting.length ? `${awaiting.length} awaiting review` : "All reviewed"} deltaKind="neutral" icon="doc" iconBg="var(--p-mint)" iconColor="#1B8C5C"
+          glow="rgba(74, 222, 164, 0.30)" goLabel="Notices" onClick={() => onNav("notices")}/>
       </div>
 
       <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18}}>
@@ -212,9 +216,17 @@ function ReceivablesCard({ data }) {
   );
 }
 
-function Stat({ label, value, delta, deltaKind, icon, iconBg, iconColor }) {
+function Stat({ label, value, delta, deltaKind, icon, iconBg, iconColor, glow, goLabel, onClick }) {
   return (
-    <div className="stat">
+    <div
+      className={`stat ${onClick ? "clickable" : ""}`}
+      style={glow ? { "--stat-glow": glow } : undefined}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+      title={onClick ? `Open ${goLabel || label}` : undefined}
+    >
       <div className="stat-icon" style={{background: iconBg, color: iconColor}}>
         <Icon name={icon} size={18}/>
       </div>
@@ -225,6 +237,7 @@ function Stat({ label, value, delta, deltaKind, icon, iconBg, iconColor }) {
         {deltaKind === "down" && <Icon name="alert" size={12}/>}
         {delta}
       </div>
+      {onClick && <span className="stat-go">{goLabel || "View"} <Icon name="arrow-right" size={11}/></span>}
     </div>
   );
 }

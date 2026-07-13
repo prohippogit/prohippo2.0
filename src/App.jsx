@@ -9,6 +9,7 @@ import { Icon } from './shared';
 import { DataProvider, useData } from './store';
 import { AuthProvider, useAuth } from './auth';
 import Login from './Login';
+import Landing from './Landing';
 import Onboarding from './Onboarding';
 
 function Splash({ label = "Loading your practice…" }) {
@@ -103,8 +104,12 @@ function ProfileGate() {
 
 function AuthGate() {
   const { user, loading } = useAuth();
+  const [showLogin, setShowLogin] = React.useState(false);
   if (loading) return <Splash label="Signing you in…"/>;
-  if (!user) return <Login/>;
+  if (!user) {
+    if (!showLogin) return <Landing onSignIn={() => setShowLogin(true)}/>;
+    return <Login onBack={() => setShowLogin(false)}/>;
+  }
   return (
     <DataProvider>
       <ProfileGate/>

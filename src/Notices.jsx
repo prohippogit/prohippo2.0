@@ -2,6 +2,7 @@
 import React from 'react';
 import { Icon, StatusPill, EmptyState, fmtDateLong, daysFromNow } from './shared';
 import { useData, awaitingNotices, todayISO } from './store';
+import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
 
 function NoticeStat({ label, value, color, icon }) {
   const map = {
@@ -170,6 +171,7 @@ export function NoticeReview({ notice, onClose, onSaved }) {
   const [createHearing, setCreateHearing] = React.useState(isNew);
   const [requestDocs, setRequestDocs] = React.useState(false);
   const [newDoc, setNewDoc] = React.useState("");
+  const [showCreateAssessee, setShowCreateAssessee] = React.useState(false);
   const fileRef = React.useRef(null);
 
   const update = (k, v) => setEdited(e => ({ ...e, [k]: v }));
@@ -177,13 +179,29 @@ export function NoticeReview({ notice, onClose, onSaved }) {
     const a = data.assessees.find(x => x.name === name);
     setEdited(e => ({ ...e, assessee: name, pan: a?.pan || e.pan }));
   };
+  const setPan = (v) => {
+    const pan = v.toUpperCase();
+    const a = data.assessees.find(x => x.pan === pan);
+    setEdited(e => ({ ...e, pan, assessee: a ? a.name : e.assessee }));
+  };
 
-  const valid = edited.assessee.trim() && edited.ay.trim() && edited.date;
+  // The app is assessee-centric: a notice can only be saved against an
+  // assessee already on file, matched by PAN (or name if PAN is blank).
+  const linked =
+    data.assessees.find(a => edited.pan && a.pan === edited.pan) ||
+    data.assessees.find(a => !edited.pan && edited.assessee && a.name === edited.assessee);
+  const valid = Boolean(linked) && edited.ay.trim() && edited.date;
   const canCreateHearing = Boolean(edited.hearingDate);
+
+  const assesseeNote = data.assessees.length === 0
+    ? "Everything in ProHippo hangs off an assessee profile — create the assessee for this notice first. The name and PAN entered here are carried over."
+    : PAN_RE.test(edited.pan)
+      ? `PAN ${edited.pan} isn't in your assessee list. Create the assessee to save this notice — the details are carried over from the notice.`
+      : "Select the assessee this notice belongs to, or create a new profile if they aren't on your list yet.";
 
   const save = () => {
     if (!valid) return;
-    const rec = { ...edited };
+    const rec = { ...edited, assessee: linked.name, pan: linked.pan };
     if (isNew) addNotice(rec);
     else updateNotice(notice.id, rec);
 
@@ -249,17 +267,20 @@ export function NoticeReview({ notice, onClose, onSaved }) {
               <div className="card-sub">Assessee, AY and notice date are required</div>
             </div>
           </div>
+          {!linked && (
+            <div style={{marginBottom: 14}}>
+              <AssesseeRequiredNote message={assesseeNote} onCreate={() => setShowCreateAssessee(true)}/>
+            </div>
+          )}
           <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
             <div className="field">
               <label>Assessee *</label>
-              {data.assessees.length > 0
-                ? <select value={edited.assessee} onChange={e => pickAssessee(e.target.value)}>
-                    <option value="">Select assessee…</option>
-                    {data.assessees.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
-                  </select>
-                : <input value={edited.assessee} onChange={e => update("assessee", e.target.value)} placeholder="Assessee name"/>}
+              <select value={linked ? linked.name : ""} onChange={e => pickAssessee(e.target.value)}>
+                <option value="">{data.assessees.length ? "Select assessee…" : "No assessees yet"}</option>
+                {data.assessees.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+              </select>
             </div>
-            <Field label="PAN" value={edited.pan} onChange={v => update("pan", v.toUpperCase())} mono/>
+            <Field label="PAN" value={edited.pan} onChange={setPan} mono/>
             <Field label="Assessment Year *" value={edited.ay} onChange={v => update("ay", v)}/>
             <Field label="Authority" value={edited.authority} onChange={v => update("authority", v)} options={AUTHORITY_OPTIONS}/>
             <Field label="Section" value={edited.section} onChange={v => update("section", v)}/>
@@ -334,6 +355,14 @@ export function NoticeReview({ notice, onClose, onSaved }) {
           </div>
         </div>
       </div>
+
+      {showCreateAssessee && (
+        <AssesseeModal
+          initial={{ name: edited.assessee, pan: edited.pan }}
+          onClose={() => setShowCreateAssessee(false)}
+          onSaved={(a) => setEdited(e => ({ ...e, assessee: a.name, pan: a.pan }))}
+        />
+      )}
     </div>
   );
 }

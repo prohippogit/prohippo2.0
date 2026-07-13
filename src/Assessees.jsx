@@ -1,58 +1,12 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
-import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, nextColor, fyOf, todayISO } from './store';
+import { Icon, Avatar, StatusPill, EmptyState, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
+import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO } from './store';
 import { MatterModal } from './Other';
+import { AssesseeModal } from './AssesseeModal';
 
-const STATUS_OPTIONS = ["Individual", "Company", "Firm", "LLP", "HUF", "Trust", "AOP/BOI"];
+export { AssesseeModal };
+
 const PAGE_SIZE = 25;
-
-export function AssesseeModal({ initial, onClose }) {
-  const { data, addAssessee, updateAssessee, notify } = useData();
-  const [form, setForm] = React.useState({
-    name: "", pan: "", status: "Individual", group: "", mobile: "", email: "", staff: "", address: "",
-    ...initial,
-  });
-  const set = (k) => (v) => setForm(f => ({ ...f, [k]: k === "pan" ? v.toUpperCase() : v }));
-  const valid = form.name.trim() && /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan.trim());
-
-  const save = () => {
-    if (!valid) return;
-    const rec = { ...form, name: form.name.trim(), pan: form.pan.trim() };
-    if (initial?.id) {
-      updateAssessee(initial.id, rec);
-      notify(`${rec.name} updated`);
-    } else {
-      addAssessee({ ...rec, color: nextColor(data.assessees) });
-      notify(`${rec.name} added`);
-    }
-    onClose();
-  };
-
-  return (
-    <Modal
-      title={initial?.id ? "Edit assessee" : "Add assessee"}
-      sub="PAN is validated in the standard format (e.g. ABCPS1234F)"
-      onClose={onClose}
-      footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}>
-          <Icon name="check" size={14}/>{initial?.id ? "Save changes" : "Add assessee"}
-        </button>
-      </>}
-    >
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
-        <FormField label="Name" required full><TextInput value={form.name} onChange={set("name")} placeholder="Assessee name"/></FormField>
-        <FormField label="PAN" required><TextInput value={form.pan} onChange={set("pan")} placeholder="ABCPS1234F" mono/></FormField>
-        <FormField label="Status"><SelectInput value={form.status} onChange={set("status")} options={STATUS_OPTIONS}/></FormField>
-        <FormField label="Group"><TextInput value={form.group} onChange={set("group")} placeholder="e.g. Shah Group"/></FormField>
-        <FormField label="Assigned staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Staff name"/></FormField>
-        <FormField label="Mobile"><TextInput value={form.mobile} onChange={set("mobile")} placeholder="+91 …"/></FormField>
-        <FormField label="Email"><TextInput value={form.email} onChange={set("email")} type="email" placeholder="name@example.com"/></FormField>
-        <FormField label="Address" full><TextInput value={form.address} onChange={set("address")} placeholder="Address"/></FormField>
-      </div>
-    </Modal>
-  );
-}
 
 export function Assessees({ onOpen, initialSearch = "" }) {
   const { data } = useData();
@@ -235,11 +189,15 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
 
   const waLink = a.mobile ? `https://wa.me/${a.mobile.replace(/\D/g, "")}` : null;
 
-  const doDelete = () => {
-    if (!window.confirm(`Delete ${a.name}? Their matters, hearings, notices and invoices stay in the registers.`)) return;
-    removeAssessee(a.id);
-    notify(`${a.name} deleted`);
+  const doDelete = async () => {
+    if (!window.confirm(`Delete ${a.name}? Their matters, hearings, notices, invoices and messages will also be removed. This cannot be undone.`)) return;
     onBack();
+    const removed = await removeAssessee(a);
+    if (removed !== null) {
+      notify(removed > 0
+        ? `${a.name} deleted along with ${removed} linked record${removed > 1 ? "s" : ""}`
+        : `${a.name} deleted`);
+    }
   };
 
   return (

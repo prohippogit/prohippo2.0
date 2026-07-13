@@ -3,6 +3,9 @@ import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
 import { useAuth } from './auth';
+import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
+
+const NEEDS_ASSESSEE = "Every record in ProHippo is linked to an assessee profile. Add the assessee first — this form unlocks once they're on file.";
 
 function KVRow({ label, value }) {
   return (
@@ -30,13 +33,16 @@ export function InvoiceModal({ initial, onClose }) {
     assessee: "", date: todayISO(), ay: "", service: "", amount: "", due: daysAway(30),
     ...initial,
   });
+  const [showAddAssessee, setShowAddAssessee] = React.useState(false);
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const amount = Number(form.amount);
-  const valid = form.assessee.trim() && form.date && amount > 0;
+  const linked = data.assessees.find(a => a.name === form.assessee);
+  const valid = Boolean(linked) && form.date && amount > 0;
 
-  const save = () => {
+  const save = async () => {
     if (!valid) return;
-    const inv = addInvoice({ ...form, amount });
+    const inv = await addInvoice({ ...form, amount });
+    if (!inv) return;
     notify(`Invoice ${inv.number || ""} raised — ${fmtINR(amount)}`);
     onClose();
   };
@@ -51,11 +57,14 @@ export function InvoiceModal({ initial, onClose }) {
         <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>Raise invoice</button>
       </>}
     >
+      {data.assessees.length === 0 && (
+        <div style={{marginBottom: 14}}>
+          <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
+        </div>
+      )}
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
         <FormField label="Assessee" required full>
-          {data.assessees.length > 0
-            ? <SelectInput value={form.assessee} onChange={set("assessee")} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
-            : <TextInput value={form.assessee} onChange={set("assessee")} placeholder="Assessee name"/>}
+          <SelectInput value={linked ? linked.name : ""} onChange={set("assessee")} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
         <FormField label="Service description" full><TextInput value={form.service} onChange={set("service")} placeholder="e.g. ITAT appeal — drafting & hearing fees"/></FormField>
         <FormField label="Assessment year"><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
@@ -63,6 +72,12 @@ export function InvoiceModal({ initial, onClose }) {
         <FormField label="Invoice date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
         <FormField label="Due date"><TextInput type="date" value={form.due} onChange={set("due")}/></FormField>
       </div>
+      {showAddAssessee && (
+        <AssesseeModal
+          onClose={() => setShowAddAssessee(false)}
+          onSaved={(a) => set("assessee")(a.name)}
+        />
+      )}
     </Modal>
   );
 }
@@ -273,21 +288,24 @@ export function MatterModal({ initial, onClose }) {
     status: "Active", priority: "medium", staff: "",
     ...initial,
   });
+  const [showAddAssessee, setShowAddAssessee] = React.useState(false);
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const pickAssessee = (name) => {
     const a = data.assessees.find(x => x.name === name);
     setForm(f => ({ ...f, assessee: name, pan: a?.pan || f.pan, staff: f.staff || a?.staff || "" }));
   };
-  const valid = form.assessee.trim() && form.ay.trim();
+  const linked = data.assessees.find(a => a.name === form.assessee);
+  const valid = Boolean(linked) && form.ay.trim();
 
   const save = () => {
     if (!valid) return;
+    const rec = { ...form, pan: linked.pan };
     if (initial?.id) {
-      updateMatter(initial.id, form);
+      updateMatter(initial.id, rec);
       notify("Matter updated");
     } else {
-      addMatter(form);
-      notify(`${form.type} matter added for ${form.assessee}`);
+      addMatter(rec);
+      notify(`${rec.type} matter added for ${rec.assessee}`);
     }
     onClose();
   };
@@ -303,11 +321,14 @@ export function MatterModal({ initial, onClose }) {
         <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{initial?.id ? "Save changes" : "Add matter"}</button>
       </>}
     >
+      {data.assessees.length === 0 && (
+        <div style={{marginBottom: 14}}>
+          <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
+        </div>
+      )}
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
         <FormField label="Assessee" required full>
-          {data.assessees.length > 0
-            ? <SelectInput value={form.assessee} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
-            : <TextInput value={form.assessee} onChange={set("assessee")} placeholder="Assessee name"/>}
+          <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
         <FormField label="Type"><SelectInput value={form.type} onChange={set("type")} options={MATTER_TYPES}/></FormField>
         <FormField label="Assessment year" required><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
@@ -318,6 +339,12 @@ export function MatterModal({ initial, onClose }) {
         <FormField label="Priority"><SelectInput value={form.priority} onChange={set("priority")} options={["high", "medium", "low"]}/></FormField>
         <FormField label="Staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Assigned staff"/></FormField>
       </div>
+      {showAddAssessee && (
+        <AssesseeModal
+          onClose={() => setShowAddAssessee(false)}
+          onSaved={(a) => setForm(f => ({ ...f, assessee: a.name, pan: a.pan, staff: f.staff || a.staff || "" }))}
+        />
+      )}
     </Modal>
   );
 }
@@ -435,19 +462,20 @@ export function Matters() {
 function MessageModal({ onClose }) {
   const { data, addCommunication, notify } = useData();
   const [form, setForm] = React.useState({ channel: "WhatsApp", to: "", subject: "", body: "", template: "Custom" });
+  const [showAddAssessee, setShowAddAssessee] = React.useState(false);
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
-  const valid = form.to.trim() && form.subject.trim();
+  const linked = data.assessees.find(a => a.name === form.to);
+  const valid = Boolean(linked) && form.subject.trim();
 
   const save = (status) => {
     if (!valid) return;
     addCommunication({ ...form, time: new Date().toISOString(), status });
     if (status === "Sent") {
-      const a = data.assessees.find(x => x.name === form.to);
       const text = encodeURIComponent(`${form.subject}\n\n${form.body}`);
-      if (form.channel === "WhatsApp" && a?.mobile) {
-        window.open(`https://wa.me/${a.mobile.replace(/\D/g, "")}?text=${text}`, "_blank");
-      } else if (form.channel === "Email" && a?.email) {
-        window.open(`mailto:${a.email}?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(form.body)}`);
+      if (form.channel === "WhatsApp" && linked?.mobile) {
+        window.open(`https://wa.me/${linked.mobile.replace(/\D/g, "")}?text=${text}`, "_blank");
+      } else if (form.channel === "Email" && linked?.email) {
+        window.open(`mailto:${linked.email}?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(form.body)}`);
       }
     }
     notify(status === "Sent" ? "Message logged & opened in " + form.channel : "Draft saved");
@@ -465,12 +493,15 @@ function MessageModal({ onClose }) {
         <button className="btn btn-primary" onClick={() => save("Sent")} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}><Icon name="arrow-right" size={14}/>Send</button>
       </>}
     >
+      {data.assessees.length === 0 && (
+        <div style={{marginBottom: 14}}>
+          <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
+        </div>
+      )}
       <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
         <FormField label="Channel"><SelectInput value={form.channel} onChange={set("channel")} options={["WhatsApp", "Email"]}/></FormField>
         <FormField label="To" required>
-          {data.assessees.length > 0
-            ? <SelectInput value={form.to} onChange={set("to")} options={data.assessees.map(a => a.name)} placeholder="Select assessee…"/>
-            : <TextInput value={form.to} onChange={set("to")} placeholder="Recipient"/>}
+          <SelectInput value={linked ? linked.name : ""} onChange={set("to")} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
         <FormField label="Subject" required full><TextInput value={form.subject} onChange={set("subject")} placeholder="Subject"/></FormField>
         <div className="field" style={{gridColumn: "1 / -1"}}>
@@ -478,6 +509,12 @@ function MessageModal({ onClose }) {
           <textarea value={form.body} onChange={e => set("body")(e.target.value)} rows={6} placeholder="Message body…"/>
         </div>
       </div>
+      {showAddAssessee && (
+        <AssesseeModal
+          onClose={() => setShowAddAssessee(false)}
+          onSaved={(a) => set("to")(a.name)}
+        />
+      )}
     </Modal>
   );
 }
@@ -638,6 +675,7 @@ export function AiParser({ onOpenNotice }) {
             </div>
             <div className="muted" style={{fontSize: 11.5, marginTop: 10}}>
               <Icon name="info" size={11}/> Automatic AI extraction needs a parsing backend, which isn't connected yet — details are entered in the form and saved to your registers.
+              If the PAN on the notice isn't in your assessee list, you'll be prompted to create that assessee first — the notice details are carried over.
             </div>
           </div>
         </div>

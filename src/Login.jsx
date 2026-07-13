@@ -3,8 +3,8 @@ import React from "react";
 import { Icon } from "./shared";
 import { useAuth } from "./auth";
 
-function BrandMark({ size = 52 }) {
-  return <img src="/prohippo-mark.png" alt="ProHippo" style={{ width: size, height: size, objectFit: "contain" }} />;
+function BrandMark({ height = 88 }) {
+  return <img src="/prohippo-logo.png" alt="ProHippo" style={{ height, width: "auto" }} />;
 }
 
 const GoogleGlyph = () => (
@@ -33,9 +33,6 @@ export default function Login({ onBack }) {
       <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <BrandMark />
-          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Pro<span style={{ color: "var(--p-primary-2)" }}>Hippo</span>
-          </div>
           <div className="muted" style={{ fontSize: 13.5, textAlign: "center" }}>
             Income-tax litigation & practice management
           </div>

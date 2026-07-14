@@ -159,7 +159,10 @@ function Toggle({ on, onToggle, icon, iconColor, title, desc, disabled }) {
   );
 }
 
-export function NoticeReview({ notice, onClose, onSaved }) {
+// Normalise a DIN for comparison — ignore case and any spacing.
+const normDin = (s) => (s || "").replace(/\s+/g, "").toUpperCase();
+
+export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
   const { data, addNotice, updateNotice, addHearing, addCommunication, notify } = useData();
   const isNew = !notice?.id;
   const [edited, setEdited] = React.useState({
@@ -172,7 +175,19 @@ export function NoticeReview({ notice, onClose, onSaved }) {
   const [requestDocs, setRequestDocs] = React.useState(false);
   const [newDoc, setNewDoc] = React.useState("");
   const [showCreateAssessee, setShowCreateAssessee] = React.useState(false);
+  // DIN the user has explicitly chosen to save as a duplicate anyway.
+  const [ackDupDin, setAckDupDin] = React.useState("");
   const fileRef = React.useRef(null);
+
+  // Another notice already recorded with this DIN (excluding this one).
+  const dupNotice = React.useMemo(() => {
+    const d = normDin(edited.din);
+    if (!d) return null;
+    return data.notices.find(n => n.id !== notice?.id && normDin(n.din) === d) || null;
+  }, [data.notices, edited.din, notice?.id]);
+
+  // Block the save only until the user acknowledges this specific DIN.
+  const dupBlocking = Boolean(dupNotice) && ackDupDin !== normDin(edited.din);
 
   // Fields pre-filled by the AI parser — highlighted so each gets verified.
   const aiFilled = React.useMemo(() => {
@@ -210,6 +225,10 @@ export function NoticeReview({ notice, onClose, onSaved }) {
 
   const save = () => {
     if (!valid) return;
+    if (dupBlocking) {
+      notify("This DIN is already recorded — choose an option in the duplicate notice above", "alert");
+      return;
+    }
     const rec = { ...edited, assessee: linked.name, pan: linked.pan };
     delete rec.aiParsed;
     delete rec.aiWarnings;
@@ -246,6 +265,37 @@ export function NoticeReview({ notice, onClose, onSaved }) {
         <span className="muted">Notices / </span>
         <span style={{fontWeight: 600}}>{isNew ? "Add notice" : "Review notice"}</span>
       </div>
+
+      {dupNotice && (
+        <div className="card" style={{border: "1px solid var(--p-danger)", background: "#FFF3F3", marginBottom: 18}}>
+          <div className="center" style={{gap: 12, alignItems: "flex-start"}}>
+            <div style={{width: 38, height: 38, borderRadius: 12, background: "white", color: "var(--p-danger)", display: "grid", placeItems: "center", flexShrink: 0}}>
+              <Icon name="alert" size={18}/>
+            </div>
+            <div style={{flex: 1}}>
+              <div style={{fontWeight: 800, fontSize: 15}}>This notice is already recorded</div>
+              <div className="card-sub" style={{marginTop: 3}}>
+                A notice with DIN <b style={{fontFamily: "ui-monospace, monospace"}}>{edited.din}</b> already exists
+                for <b>{dupNotice.assessee}</b> — {dupNotice.authority}{dupNotice.ay ? ` · AY ${dupNotice.ay}` : ""}
+                {dupNotice.date ? ` · ${fmtDateLong(dupNotice.date)}` : ""}.
+              </div>
+              <div className="center" style={{gap: 8, marginTop: 12, flexWrap: "wrap", justifyContent: "flex-start"}}>
+                <button className="btn btn-primary btn-sm" onClick={() => onOpenNotice && onOpenNotice(dupNotice)}>
+                  <Icon name="arrow-left" size={13}/>Open the existing notice
+                </button>
+                {dupBlocking ? (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setAckDupDin(normDin(edited.din))}>
+                    Save as a separate notice anyway
+                  </button>
+                ) : (
+                  <span className="pill pill-muted"><Icon name="check" size={11}/> Will be saved as a separate notice</span>
+                )}
+                {isNew && <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)", border: "1px solid var(--p-line)", marginBottom: 18}}>
         <div className="between" style={{alignItems: "flex-start"}}>
@@ -370,7 +420,7 @@ export function NoticeReview({ notice, onClose, onSaved }) {
             </div>
             <div className="row" style={{gap: 8, marginTop: 18}}>
               <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}} onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" disabled={!valid} style={{flex: 2, justifyContent: "center", opacity: valid ? 1 : 0.5}} onClick={save}>
+              <button className="btn btn-primary" disabled={!valid || dupBlocking} title={dupBlocking ? "This DIN is already recorded — choose an option in the duplicate warning above" : ""} style={{flex: 2, justifyContent: "center", opacity: (valid && !dupBlocking) ? 1 : 0.5}} onClick={save}>
                 <Icon name="check" size={14}/>{isNew ? "Save notice" : "Save changes"}
               </button>
             </div>

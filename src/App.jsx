@@ -52,9 +52,11 @@ function Shell() {
   if (reviewNotice) {
     content = (
       <NoticeReview
+        key={reviewNotice.id || "new"}
         notice={reviewNotice}
         onClose={() => setReviewNotice(null)}
         onSaved={(dest) => { setReviewNotice(null); if (dest) setRoute(dest); }}
+        onOpenNotice={openReview}
       />
     );
   } else if (openAssessee) {

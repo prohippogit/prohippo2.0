@@ -5,6 +5,8 @@ import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingH
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { downloadInvoicePDF, amountInWords } from './invoicePdf';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './firebase';
 
 const NEEDS_ASSESSEE = "Every record in ProHippo is linked to an assessee profile. Add the assessee first — this form unlocks once they're on file.";
 
@@ -789,12 +791,54 @@ export function Communications() {
 
 /* ---------------- AI Parser ---------------- */
 
+/* Read a File as a bare base64 string (no data: prefix). */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(new Error("Could not read the file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function AiParser({ onOpenNotice }) {
-  const { data } = useData();
+  const { data, notify } = useData();
   const fileRef = React.useRef(null);
   const [dragOver, setDragOver] = React.useState(false);
+  const [parsing, setParsing] = React.useState(false);
 
-  const openWithFile = (file) => onOpenNotice({ fileName: file?.name || "" });
+  const openWithFile = async (file) => {
+    if (!file || parsing) return;
+    if (file.size > 9 * 1024 * 1024) {
+      notify("PDF is larger than 9 MB — enter the details manually.", "alert");
+      onOpenNotice({ fileName: file.name });
+      return;
+    }
+    setParsing(true);
+    try {
+      const pdfBase64 = await fileToBase64(file);
+      const res = await httpsCallable(functions, "parseNotice", { timeout: 120000 })({ pdfBase64 });
+      const { fields, warnings } = res.data || {};
+      // Keep only fields the AI actually read, so form defaults survive.
+      const filled = Object.fromEntries(
+        Object.entries(fields || {}).filter(([, v]) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))
+      );
+      onOpenNotice({
+        ...filled,
+        fileName: file.name,
+        aiParsed: true,
+        aiWarnings: warnings || [],
+      });
+      notify("Notice parsed — verify the highlighted details");
+    } catch (err) {
+      // Backend missing / not deployed / model error: fall back to manual entry.
+      console.error("AI parse failed:", err);
+      notify(err?.message?.slice(0, 120) || "AI parsing failed — enter the details manually.", "alert");
+      onOpenNotice({ fileName: file.name });
+    } finally {
+      setParsing(false);
+    }
+  };
   const recent = [...data.notices].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 6);
 
   return (
@@ -808,20 +852,21 @@ export function AiParser({ onOpenNotice }) {
       <div className="grid-split">
         <div
           className="card"
-          style={{padding: 28, border: `2px dashed ${dragOver ? "var(--p-primary)" : "var(--p-primary-3)"}`, background: "linear-gradient(180deg, #F8F6FF, white)", cursor: "pointer"}}
-          onClick={() => fileRef.current?.click()}
+          style={{padding: 28, border: `2px dashed ${dragOver ? "var(--p-primary)" : "var(--p-primary-3)"}`, background: "linear-gradient(180deg, #F8F6FF, white)", cursor: parsing ? "wait" : "pointer", opacity: parsing ? 0.75 : 1}}
+          onClick={() => { if (!parsing) fileRef.current?.click(); }}
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={e => { e.preventDefault(); setDragOver(false); openWithFile(e.dataTransfer.files?.[0]); }}
         >
-          <input ref={fileRef} type="file" accept=".pdf" style={{display: "none"}} onChange={e => { if (e.target.files?.[0]) openWithFile(e.target.files[0]); }}/>
+          <input ref={fileRef} type="file" accept=".pdf" style={{display: "none"}} onChange={e => { if (e.target.files?.[0]) openWithFile(e.target.files[0]); e.target.value = ""; }}/>
           <div style={{textAlign: "center", padding: "30px 20px"}}>
-            <div style={{width: 64, height: 64, borderRadius: 18, background: "var(--p-primary)", color: "white", display: "grid", placeItems: "center", margin: "0 auto 16px"}}>
-              <Icon name="upload" size={28}/>
+            <div style={{width: 64, height: 64, borderRadius: 18, background: "var(--p-primary)", color: "white", display: "grid", placeItems: "center", margin: "0 auto 16px", animation: parsing ? "pulse 1.2s ease-in-out infinite" : "none"}}>
+              <Icon name={parsing ? "sparkle" : "upload"} size={28}/>
             </div>
-            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>Drop notice PDF here</div>
-            <div className="card-sub mt-1">or click to browse — the file opens the intake form</div>
-            <button className="btn btn-primary mt-4" onClick={e => { e.stopPropagation(); onOpenNotice(null); }}><Icon name="edit" size={14}/>Enter details manually</button>
+            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>{parsing ? "Reading the notice…" : "Drop notice PDF here"}</div>
+            <div className="card-sub mt-1">{parsing ? "AI is extracting the section, AY, dates and DIN — usually a few seconds" : "or click to browse — AI fills the intake form from the PDF"}</div>
+            {parsing && <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.92); opacity: 0.75; } }`}</style>}
+            <button className="btn btn-primary mt-4" disabled={parsing} onClick={e => { e.stopPropagation(); onOpenNotice(null); }}><Icon name="edit" size={14}/>Enter details manually</button>
           </div>
           <div style={{borderTop: "1px solid var(--p-line)", paddingTop: 16, marginTop: 16}}>
             <div style={{fontSize: 12, fontWeight: 700, color: "var(--p-text-2)", marginBottom: 8}}>WHAT GETS RECORDED</div>
@@ -829,7 +874,7 @@ export function AiParser({ onOpenNotice }) {
               {["Assessee","PAN","AY","Section","DIN","Notice date","Hearing date","Hearing time","ITA No.","Bench / AO","Mode","Documents called for","Subject"].map(t => <span key={t} className="pill pill-primary">{t}</span>)}
             </div>
             <div className="muted" style={{fontSize: 11.5, marginTop: 10}}>
-              <Icon name="info" size={11}/> Automatic AI extraction needs a parsing backend, which isn't connected yet — details are entered in the form and saved to your registers.
+              <Icon name="info" size={11}/> AI reads the PDF and pre-fills the intake form — always verify every field against the original notice before saving.
               If the PAN on the notice isn't in your assessee list, you'll be prompted to create that assessee first — the notice details are carried over.
             </div>
           </div>
@@ -996,7 +1041,6 @@ export function SettingsPage() {
   const integrations = [
     { t: "Google Calendar", d: "Sync hearings to your Google account", icon: "calendar" },
     { t: "Income-tax portal fetch", d: "Auto-fetch notices from the ITD portal", icon: "link" },
-    { t: "AI parsing engine", d: "PDF → structured notice fields", icon: "sparkle" },
     { t: "WhatsApp Business Cloud", d: "Send notices and reminders in-app", icon: "whatsapp" },
     { t: "Transactional email", d: "Send emails from your own domain", icon: "mail" },
     { t: "Tally / Zoho Books", d: "Push invoices to accounting", icon: "invoice" },

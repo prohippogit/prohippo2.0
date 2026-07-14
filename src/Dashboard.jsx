@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icon, Avatar, fmtINR, fmtLakhs, daysFromNow } from './shared';
+import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 
 export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
@@ -43,6 +44,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
               onKeyDown={e => { if (e.key === "Enter") onSearch(query); }}
             />
           </div>
+          <InstallAppButton className="btn btn-secondary" label="Download app"/>
           <div className="user-chip">
             <Avatar name={data.profile.ownerName || "You"} color="violet"/>
             <div style={{lineHeight: 1.2}}>

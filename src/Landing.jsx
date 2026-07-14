@@ -1,6 +1,7 @@
 /* ProHippo — public landing page (shown before sign-in) */
 import React from "react";
 import { Icon } from "./shared";
+import { InstallAppButton } from "./InstallApp";
 import heroImg from "./assets/hero.png";
 import "./landing.css";
 
@@ -99,6 +100,7 @@ export default function Landing({ onSignIn }) {
           <div className="spacer" />
           <a className="landing-nav-link" href="#features">Features</a>
           <a className="landing-nav-link" href="#how">How it works</a>
+          <InstallAppButton className="btn btn-secondary btn-sm"/>
           <button className="btn btn-primary btn-sm" onClick={onSignIn}>Sign in</button>
         </nav>
 

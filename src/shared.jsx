@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 export const Icon = ({ name, size = 18, stroke = 1.6, className = "" }) => {
   const s = size;
@@ -119,7 +120,9 @@ export function Modal({ title, sub, onClose, children, footer, width = 560 }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return (
+  // Portal to <body> so position:fixed works even when the modal is opened
+  // from inside a transformed/animated container (e.g. the landing nav).
+  return createPortal(
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal animate-in" style={{maxWidth: width}}>
         <div className="modal-head">
@@ -132,7 +135,8 @@ export function Modal({ title, sub, onClose, children, footer, width = 560 }) {
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

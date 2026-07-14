@@ -1,9 +1,10 @@
 /*
  * ProHippo — AI notice parsing backend.
  *
- * Flow: Gemini Flash-Lite reads the notice PDF and returns structured JSON →
+ * Flow: Gemini Flash-Lite reads the notice (a single PDF, or one-or-more page
+ * images that together make up one notice) and returns structured JSON →
  * deterministic validation in code (PAN / AY / date rules) → if a critical
- * field is missing or invalid, the same PDF is retried once on a stronger
+ * field is missing or invalid, the same input is retried once on a stronger
  * Gemini model. The extracted fields are returned to the app, where the
  * practitioner reviews them before anything is saved.
  *
@@ -21,13 +22,22 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const PRIMARY_MODEL = "gemini-3.1-flash-lite";
 const ESCALATION_MODEL = "gemini-3.1-flash";
 
-const MAX_PDF_BYTES = 9 * 1024 * 1024; // callable request limit is 10 MB
+// File types Gemini can read for a notice. HEIC (iPhone) is not accepted by
+// the API — the app tells the user to share as JPG/PNG instead.
+const ALLOWED_MIME = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const MAX_TOTAL_BYTES = 9 * 1024 * 1024; // callable request limit is 10 MB
+const MAX_FILES = 10; // a notice spread across at most this many page images
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const AY_RE = /^(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const EXTRACTION_PROMPT = `You are reading an Indian Income Tax Department notice (scrutiny notice, demand notice, penalty notice, or appeal/hearing notice from CIT(A) or ITAT).
+const EXTRACTION_PROMPT = `You are reading a single Indian Income Tax Department notice (scrutiny notice, demand notice, penalty notice, or appeal/hearing notice from CIT(A) or ITAT). The input may be one PDF, or several page images (photos or scans) that together make up ONE notice — read all of them and extract a single combined set of fields, not one per page.
 
 Extract the fields defined in the response schema, following these rules strictly:
 - Return null for any field that is not clearly present in the document. NEVER guess or infer a value. A blank field is correct; a wrong deadline or amount is harmful.
@@ -70,14 +80,14 @@ const RESPONSE_SCHEMA = {
   required: ["documents"],
 };
 
-async function callGemini(model, apiKey, pdfBase64) {
+async function callGemini(model, apiKey, files) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
     contents: [
       {
         role: "user",
         parts: [
-          { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
+          ...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })),
           { text: EXTRACTION_PROMPT },
         ],
       },
@@ -200,17 +210,37 @@ exports.parseNotice = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in to use AI notice parsing.");
     }
-    const pdfBase64 = request.data?.pdfBase64;
-    if (typeof pdfBase64 !== "string" || pdfBase64.length < 100) {
-      throw new HttpsError("invalid-argument", "Send the notice PDF as base64 in { pdfBase64 }.");
+
+    // Accept the new multi-file shape { files: [{ mimeType, data }] }, and stay
+    // backward-compatible with the original single-PDF shape { pdfBase64 }.
+    let files = request.data?.files;
+    if (!Array.isArray(files) && typeof request.data?.pdfBase64 === "string") {
+      files = [{ mimeType: "application/pdf", data: request.data.pdfBase64 }];
     }
-    if (pdfBase64.length > (MAX_PDF_BYTES * 4) / 3) {
-      throw new HttpsError("invalid-argument", "PDF is too large — maximum 9 MB.");
+    if (!Array.isArray(files) || files.length === 0) {
+      throw new HttpsError("invalid-argument", "Send the notice as { files: [{ mimeType, data }] }.");
+    }
+    if (files.length > MAX_FILES) {
+      throw new HttpsError("invalid-argument", `Too many files — attach at most ${MAX_FILES} pages.`);
+    }
+
+    let totalBytes = 0;
+    for (const f of files) {
+      if (!f || typeof f.data !== "string" || f.data.length < 50 || !ALLOWED_MIME.has(f.mimeType)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "Each file must be a PDF or JPG/PNG/WebP image. iPhone HEIC photos aren't supported — share as JPG."
+        );
+      }
+      totalBytes += (f.data.length * 3) / 4; // approx decoded size of base64
+    }
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      throw new HttpsError("invalid-argument", "Files are too large — keep the total under 9 MB.");
     }
 
     const apiKey = geminiApiKey.value();
 
-    const primaryRaw = await callGemini(PRIMARY_MODEL, apiKey, pdfBase64);
+    const primaryRaw = await callGemini(PRIMARY_MODEL, apiKey, files);
     let result = validate(primaryRaw);
     let modelUsed = PRIMARY_MODEL;
     let escalated = false;
@@ -218,7 +248,7 @@ exports.parseNotice = onCall(
     if (result.criticalMissing.length > 0) {
       escalated = true;
       try {
-        const strongRaw = await callGemini(ESCALATION_MODEL, apiKey, pdfBase64);
+        const strongRaw = await callGemini(ESCALATION_MODEL, apiKey, files);
         const strong = validate(strongRaw);
         // Keep whichever attempt reads more of the critical fields.
         if (strong.criticalMissing.length <= result.criticalMissing.length) {

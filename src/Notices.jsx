@@ -60,7 +60,7 @@ export default function Notices({ onOpenNotice }) {
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 18}}>
+      <div className="grid-stats" style={{gap: 14, marginBottom: 18}}>
         <NoticeStat label="Awaiting review" value={awaiting.length} color="pink" icon="sparkle"/>
         <NoticeStat label="Reply drafted" value={drafted.length} color="info" icon="edit"/>
         <NoticeStat label="Submitted this month" value={submittedThisMonth.length} color="success" icon="check"/>
@@ -133,7 +133,7 @@ const MODE_OPTIONS = ["Physical", "Video Conference", "e-Proceeding"];
 
 function Field({ label, value, onChange, mono, full, type = "text", options }) {
   return (
-    <div className="field" style={{gridColumn: full ? "span 2" : "auto"}}>
+    <div className="field" style={{gridColumn: full ? "1 / -1" : "auto"}}>
       <label>{label}</label>
       {options
         ? <select value={value} onChange={e => onChange(e.target.value)}>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>
@@ -259,7 +259,7 @@ export function NoticeReview({ notice, onClose, onSaved }) {
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 18}}>
+      <div className="grid-split">
         <div className="card">
           <div className="card-head">
             <div>
@@ -272,7 +272,7 @@ export function NoticeReview({ notice, onClose, onSaved }) {
               <AssesseeRequiredNote message={assesseeNote} onCreate={() => setShowCreateAssessee(true)}/>
             </div>
           )}
-          <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+          <div className="form-grid">
             <div className="field">
               <label>Assessee *</label>
               <select value={linked ? linked.name : ""} onChange={e => pickAssessee(e.target.value)}>

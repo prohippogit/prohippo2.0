@@ -1,4 +1,3 @@
-import React from 'react';
 import { Icon } from './shared';
 import { useData, awaitingNotices } from './store';
 import { useAuth } from './auth';
@@ -19,7 +18,7 @@ const NAV_BOTTOM = [
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 
-export default function Sidebar({ active, onNav }) {
+export default function Sidebar({ active, onNav, open }) {
   const { data } = useData();
   const { user, signOutUser } = useAuth();
   const badges = {
@@ -28,7 +27,7 @@ export default function Sidebar({ active, onNav }) {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? "open" : ""}`}>
       <div className="brand">
         <div style={{background: "white", borderRadius: 18, padding: "12px 16px", boxShadow: "0 6px 20px rgba(0,0,0,0.18)", display: "grid", placeItems: "center", width: "100%"}}>
           <img src="/prohippo-logo.png" alt="ProHippo" style={{width: "100%", maxWidth: 180, height: "auto"}}/>

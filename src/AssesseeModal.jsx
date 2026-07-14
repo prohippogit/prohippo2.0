@@ -49,7 +49,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         </button>
       </>}
     >
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+      <div className="form-grid">
         <FormField label="Name" required full><TextInput value={form.name} onChange={set("name")} placeholder="Assessee name"/></FormField>
         <FormField label="PAN" required>
           <TextInput value={form.pan} onChange={set("pan")} placeholder="ABCPS1234F" mono/>

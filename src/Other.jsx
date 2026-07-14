@@ -86,7 +86,7 @@ export function InvoiceModal({ initial, onClose }) {
           <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
         </div>
       )}
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+      <div className="form-grid">
         <FormField label="Assessee" required full>
           <ComboBox value={form.assessee} onChange={set("assessee")} options={assesseeOptions} subMono placeholder={data.assessees.length ? "Search name or PAN…" : "No assessees yet"}/>
         </FormField>
@@ -187,7 +187,7 @@ function InvoiceView({ invoice, onClose, onEdit }) {
           <div style={{fontSize: 19, fontWeight: 800, letterSpacing: "0.12em", color: "var(--p-primary)"}}>INVOICE</div>
         </div>
         <div style={{height: 3, background: "var(--p-primary)", borderRadius: 2, margin: "14px 0 16px"}}/>
-        <div className="grid" style={{gridTemplateColumns: "1fr 1fr 1fr", gap: 12}}>
+        <div className="grid" style={{gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12}}>
           <MetaCell label="INVOICE NO." value={invoice.number}/>
           <MetaCell label="INVOICE DATE" value={fmtDateLong(invoice.date)}/>
           <MetaCell label="DUE DATE" value={invoice.due ? fmtDateLong(invoice.due) : "—"}/>
@@ -316,7 +316,7 @@ export function Invoices() {
       </div>
 
       {invoices.length > 0 && (
-        <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18, marginBottom: 18}}>
+        <div className="grid-main" style={{marginBottom: 18}}>
           <div className="card">
             <div className="card-head">
               <div>
@@ -481,7 +481,7 @@ export function MatterModal({ initial, onClose }) {
           <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
         </div>
       )}
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+      <div className="form-grid">
         <FormField label="Assessee" required full>
           <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
@@ -653,7 +653,7 @@ function MessageModal({ onClose }) {
           <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
         </div>
       )}
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+      <div className="form-grid">
         <FormField label="Channel"><SelectInput value={form.channel} onChange={set("channel")} options={["WhatsApp", "Email"]}/></FormField>
         <FormField label="To" required>
           <SelectInput value={linked ? linked.name : ""} onChange={set("to")} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
@@ -719,7 +719,7 @@ export function Communications() {
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: draft ? "1.5fr 1fr" : "1fr", gap: 18}}>
+      <div className={draft ? "grid-main" : "grid"} style={{gap: 18}}>
         <div className="card" style={{padding: 0}}>
           <div className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", justifyContent: "space-between"}}>
             <div className="row" style={{gap: 6}}>
@@ -805,7 +805,7 @@ export function AiParser({ onOpenNotice }) {
           <div className="page-sub">Attach a notice PDF and record its details in one flow</div>
         </div>
       </div>
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 18}}>
+      <div className="grid-split">
         <div
           className="card"
           style={{padding: 28, border: `2px dashed ${dragOver ? "var(--p-primary)" : "var(--p-primary-3)"}`, background: "linear-gradient(180deg, #F8F6FF, white)", cursor: "pointer"}}
@@ -933,7 +933,7 @@ export function Reports() {
           <div className="page-sub">Export CSV reports across the practice — opens in Excel</div>
         </div>
       </div>
-      <div className="grid" style={{gridTemplateColumns: "repeat(3, 1fr)", gap: 16}}>
+      <div className="grid-cards">
         {reports.map(r => {
           const colors = { warning: ["var(--p-amber)","#B07512"], primary: ["var(--p-lavender-2)","var(--p-primary-2)"], success: ["var(--p-mint)","#1B8C5C"], pink: ["var(--p-pink)","#C13388"], danger: ["var(--p-coral)","#B8463A"] }[r.color];
           const count = r.rows().length;
@@ -1011,7 +1011,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16}}>
+      <div className="grid-split" style={{gap: 16, marginBottom: 16}}>
         <div className="card">
           <div className="card-title mb-3">Practice profile</div>
           <div className="col" style={{gap: 12}}>
@@ -1035,7 +1035,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16}}>
+      <div className="grid-split" style={{gap: 16, marginBottom: 16}}>
         <div className="card">
           <div className="card-title mb-3">Your data</div>
           <div className="card-sub mb-4">Records are saved securely in the cloud under your account. You can still download a JSON backup anytime.</div>
@@ -1048,7 +1048,7 @@ export function SettingsPage() {
       </div>
 
       <div className="card-title mb-3" style={{fontSize: 15}}>Integrations</div>
-      <div className="grid" style={{gridTemplateColumns: "repeat(2, 1fr)", gap: 16}}>
+      <div className="grid-split" style={{gap: 16}}>
         {integrations.map(i => (
           <div key={i.t} className="card">
             <div className="between">

@@ -659,3 +659,59 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .form-grid { grid-template-columns: 1fr; }
   .page-title { font-size: 20px; }
 }
+
+/* Floating menu button (mobile) — bottom-right for one-thumb reach */
+.fab-menu { display: none; }
+
+@media (max-width: 920px) {
+  .fab-menu {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    position: fixed;
+    right: 18px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #6C5CE7 0%, #8E7CFF 100%);
+    box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45);
+    z-index: 130;
+    cursor: pointer;
+    transition: transform 0.2s ease, background 0.25s ease;
+    animation: fab-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, fab-pulse 2.8s ease-in-out 1.2s infinite;
+  }
+  .fab-menu:active { transform: scale(0.9); }
+  .fab-menu span {
+    display: block;
+    width: 22px;
+    height: 2.5px;
+    border-radius: 2px;
+    background: white;
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+  }
+  /* hamburger → X morph when the drawer is open */
+  .fab-menu.open {
+    animation: none;
+    background: linear-gradient(135deg, #2B2270 0%, #5146C6 100%);
+  }
+  .fab-menu.open span:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
+  .fab-menu.open span:nth-child(2) { opacity: 0; transform: scaleX(0.2); }
+  .fab-menu.open span:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
+}
+
+@keyframes fab-pop {
+  from { transform: scale(0) rotate(-90deg); }
+  to { transform: scale(1) rotate(0deg); }
+}
+@keyframes fab-pulse {
+  0%, 100% { box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45), 0 0 0 0 rgba(108, 92, 231, 0.4); }
+  50% { box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45), 0 0 0 14px rgba(108, 92, 231, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-menu { animation: none; }
+}

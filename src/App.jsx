@@ -78,13 +78,17 @@ function Shell() {
   return (
     <div className="app">
       <div className="mobile-topbar">
-        <button className="icon-btn" style={{width: 38, height: 38, flexShrink: 0}} aria-label="Open menu" onClick={() => setMenuOpen(true)}>
-          <Icon name="menu" size={18}/>
-        </button>
         <img src="/prohippo-logo.png" alt="ProHippo" style={{height: 34, width: "auto"}}/>
       </div>
       <Sidebar active={route} onNav={handleNav} open={menuOpen}/>
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)}/>}
+      <button
+        className={`fab-menu ${menuOpen ? "open" : ""}`}
+        aria-label={menuOpen ? "Close menu" : "Open menu"}
+        onClick={() => setMenuOpen(o => !o)}
+      >
+        <span/><span/><span/>
+      </button>
       <main className="main">
         {content}
       </main>

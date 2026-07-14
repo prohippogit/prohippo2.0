@@ -309,6 +309,7 @@
   .feature-grid { grid-template-columns: 1fr; }
   .hero-chip.c1 { left: -6px; }
   .hero-chip.c2 { right: -6px; }
+  .landing-nav-link { display: none; }
 }
 
 /* Respect reduced motion */

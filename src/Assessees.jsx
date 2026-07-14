@@ -233,7 +233,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
             <button className="icon-btn" style={{width: 36, height: 36}} onClick={doDelete} title="Delete assessee"><Icon name="trash" size={15}/></button>
           </div>
         </div>
-        <div className="grid" style={{gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginTop: 20}}>
+        <div className="grid-stats" style={{gap: 12, marginTop: 20}}>
           <MiniStat label="Active matters" value={s.matters} icon="scale"/>
           <MiniStat label="Upcoming hearings" value={hearings.length} icon="calendar" accent="pink"/>
           <MiniStat label="Outstanding" value={s.outstanding ? fmtINR(s.outstanding) : "—"} icon="wallet" accent={s.outstanding > 100000 ? "warn" : "default"}/>
@@ -248,7 +248,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       </div>
 
       {tab === "Overview" && (
-        <div className="grid" style={{gridTemplateColumns: "1.4fr 1fr", gap: 18}}>
+        <div className="grid-main">
           <div className="col" style={{gap: 18}}>
             <div className="card">
               <div className="card-head">

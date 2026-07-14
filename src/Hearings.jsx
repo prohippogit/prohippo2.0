@@ -57,7 +57,7 @@ export function HearingModal({ initial, onClose }) {
           />
         </div>
       )}
-      <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: 12}}>
+      <div className="form-grid">
         <FormField label="Assessee" required full>
           <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
@@ -106,7 +106,7 @@ function WeekView({ hearings }) {
   };
 
   return (
-    <div className="card" style={{padding: 18}}>
+    <div className="card week-scroll" style={{padding: 18}}>
       <div className="between" style={{marginBottom: 14}}>
         <div style={{fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em"}}>Week of {fmtDateLong(toISO(weekStart))}</div>
         <div className="center" style={{gap: 4}}>
@@ -115,7 +115,7 @@ function WeekView({ hearings }) {
           <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 9}} onClick={() => shift(1)}><Icon name="chevron-right" size={14}/></button>
         </div>
       </div>
-      <div className="grid" style={{gridTemplateColumns: "repeat(7, 1fr)", gap: 8}}>
+      <div className="grid week-grid" style={{gridTemplateColumns: "repeat(7, 1fr)", gap: 8}}>
         {days.map(day => {
           const dayHearings = hearings.filter(h => h.date === day.iso).sort((a, b) => a.time.localeCompare(b.time));
           return (
@@ -173,7 +173,7 @@ function CalendarView({ hearings }) {
   const legendColor = { "ITAT": "var(--p-primary)", "CIT(A)": "#C13388", "Scrutiny": "#F39C12", "Penalty": "#B8463A" };
 
   return (
-    <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18}}>
+    <div className="grid-main">
       <div className="card">
         <div className="cal-head" style={{marginBottom: 16}}>
           <div>

@@ -30,11 +30,13 @@ function Shell() {
   const [openAssesseeId, setOpenAssesseeId] = React.useState(null);
   const [reviewNotice, setReviewNotice] = React.useState(null); // notice record, or {} for a new one
   const [assesseeQuery, setAssesseeQuery] = React.useState("");
+  const [menuOpen, setMenuOpen] = React.useState(false); // mobile drawer
 
   const handleNav = (id) => {
     setRoute(id);
     setOpenAssesseeId(null);
     setReviewNotice(null);
+    setMenuOpen(false);
   };
 
   const openReview = (notice) => setReviewNotice(notice || {});
@@ -75,7 +77,14 @@ function Shell() {
 
   return (
     <div className="app">
-      <Sidebar active={route} onNav={handleNav}/>
+      <div className="mobile-topbar">
+        <button className="icon-btn" style={{width: 38, height: 38, flexShrink: 0}} aria-label="Open menu" onClick={() => setMenuOpen(true)}>
+          <Icon name="menu" size={18}/>
+        </button>
+        <img src="/prohippo-logo.png" alt="ProHippo" style={{height: 34, width: "auto"}}/>
+      </div>
+      <Sidebar active={route} onNav={handleNav} open={menuOpen}/>
+      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)}/>}
       <main className="main">
         {content}
       </main>

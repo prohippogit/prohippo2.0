@@ -72,7 +72,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
         </div>
       )}
 
-      <div className="grid" style={{gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 18}}>
+      <div className="grid-stats" style={{marginBottom: 18}}>
         <Stat label="Active matters" value={activeMatters.length} delta={`${data.matters.length} total`} deltaKind="neutral" icon="scale" iconBg="var(--p-lavender-2)" iconColor="var(--p-primary-2)"
           glow="rgba(108, 92, 231, 0.24)" goLabel="Matters" onClick={() => onNav("matters")}/>
         <Stat label="Hearings this week" value={weekAhead.length} delta={next48h.length ? `${next48h.length} in next 48h` : "None in next 48h"} deltaKind="neutral" icon="calendar" iconBg="var(--p-pink)" iconColor="#C13388"
@@ -83,7 +83,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
           glow="rgba(74, 222, 164, 0.30)" goLabel="Notices" onClick={() => onNav("notices")}/>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns: "1.6fr 1fr", gap: 18}}>
+      <div className="grid-main">
         <div className="col" style={{gap: 18}}>
           {awaiting.length > 0 && (
             <div className="card" style={{padding: 0, overflow: "hidden", border: "none", background: "linear-gradient(120deg, #2B2270 0%, #5146C6 55%, #8E7CFF 100%)", color: "white", position: "relative"}}>

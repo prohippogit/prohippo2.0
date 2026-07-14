@@ -163,7 +163,7 @@ function Toggle({ on, onToggle, icon, iconColor, title, desc, disabled }) {
 const normDin = (s) => (s || "").replace(/\s+/g, "").toUpperCase();
 
 export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
-  const { data, addNotice, updateNotice, addHearing, addCommunication, notify } = useData();
+  const { data, addNotice, updateNotice, addHearing, addCommunication, addMatter, notify } = useData();
   const isNew = !notice?.id;
   const [edited, setEdited] = React.useState({
     assessee: "", pan: "", ay: "", authority: "Scrutiny", section: "", din: "",
@@ -172,6 +172,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
     ...notice,
   });
   const [createHearing, setCreateHearing] = React.useState(isNew);
+  const [createMatter, setCreateMatter] = React.useState(isNew);
   const [requestDocs, setRequestDocs] = React.useState(false);
   const [newDoc, setNewDoc] = React.useState("");
   const [showCreateAssessee, setShowCreateAssessee] = React.useState(false);
@@ -217,6 +218,19 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
   const valid = Boolean(linked) && edited.ay.trim() && edited.date;
   const canCreateHearing = Boolean(edited.hearingDate);
 
+  // Does a matter (case file) already exist for this assessee, year and
+  // proceeding? A notice usually belongs to an ongoing matter — if none is on
+  // file, offer to open one so the notice/hearing has a case to sit under.
+  const matterOnFile = React.useMemo(() => {
+    if (!linked) return null;
+    return data.matters.find(m =>
+      ((m.pan && m.pan === linked.pan) || m.assessee === linked.name) &&
+      m.ay === edited.ay &&
+      m.type === edited.authority
+    ) || null;
+  }, [data.matters, linked, edited.ay, edited.authority]);
+  const canCreateMatter = Boolean(linked) && edited.ay.trim() && !matterOnFile;
+
   const assesseeNote = data.assessees.length === 0
     ? "Everything in ProHippo hangs off an assessee profile — create the assessee for this notice first. The name and PAN entered here are carried over."
     : PAN_RE.test(edited.pan)
@@ -235,13 +249,22 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
     if (isNew) addNotice(rec);
     else updateNotice(notice.id, rec);
 
+    const staffOf = data.assessees.find(a => a.pan === rec.pan)?.staff || "";
     const done = ["Notice saved"];
+    if (createMatter && canCreateMatter) {
+      addMatter({
+        type: rec.authority, assessee: rec.assessee, pan: rec.pan, ay: rec.ay,
+        section: rec.section, ref: rec.ita, bench: rec.bench,
+        status: "Active", priority: "medium", staff: staffOf,
+      });
+      done.push("Matter opened");
+    }
     if (createHearing && canCreateHearing) {
       addHearing({
         assessee: rec.assessee, pan: rec.pan, ay: rec.ay,
         authority: rec.authority, bench: rec.bench, section: rec.section,
         date: rec.hearingDate, time: rec.hearingTime || "11:00",
-        mode: rec.mode, status: "Upcoming", ita: rec.ita, staff: data.assessees.find(a => a.pan === rec.pan)?.staff || "",
+        mode: rec.mode, status: "Upcoming", ita: rec.ita, staff: staffOf,
       });
       done.push("Hearing created");
     }
@@ -255,7 +278,10 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
       done.push("Document request drafted");
     }
     notify(done.join(" · "));
-    onSaved(createHearing && canCreateHearing ? "hearings" : null);
+    const dest = (createHearing && canCreateHearing) ? "hearings"
+      : (createMatter && canCreateMatter) ? "matters"
+      : null;
+    onSaved(dest);
   };
 
   return (
@@ -401,6 +427,20 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
           <div className="card">
             <div className="card-title mb-3">On save, also</div>
             <div className="col" style={{gap: 10}}>
+              <Toggle
+                on={createMatter && canCreateMatter}
+                onToggle={() => setCreateMatter(!createMatter)}
+                disabled={!canCreateMatter}
+                icon="scale" iconColor="#2766C7"
+                title="Open a matter (case file)"
+                desc={
+                  matterOnFile
+                    ? `Already on file — ${matterOnFile.ref || matterOnFile.type} · AY ${matterOnFile.ay}`
+                    : canCreateMatter
+                      ? `No ${edited.authority} matter for this assessee · AY ${edited.ay || "—"}${edited.ita ? ` · ${edited.ita}` : ""}`
+                      : "Select assessee and AY to enable"
+                }
+              />
               <Toggle
                 on={createHearing && canCreateHearing}
                 onToggle={() => setCreateHearing(!createHearing)}

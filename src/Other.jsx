@@ -801,40 +801,70 @@ function fileToBase64(file) {
   });
 }
 
+const ALLOWED_TYPES = /^(application\/pdf|image\/(jpeg|png|webp))$/;
+const isHeic = (f) => /heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name);
+const MAX_PAGES = 10;
+const MAX_TOTAL = 9 * 1024 * 1024;
+const kb = (n) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
 export function AiParser({ onOpenNotice }) {
   const { data, notify } = useData();
   const fileRef = React.useRef(null);
   const [dragOver, setDragOver] = React.useState(false);
   const [parsing, setParsing] = React.useState(false);
+  // Files staged to be parsed together as ONE notice (a PDF, or page images).
+  const [staged, setStaged] = React.useState([]);
 
-  const openWithFile = async (file) => {
-    if (!file || parsing) return;
-    if (file.size > 9 * 1024 * 1024) {
-      notify("PDF is larger than 9 MB — enter the details manually.", "alert");
-      onOpenNotice({ fileName: file.name });
+  const addFiles = (list) => {
+    const incoming = Array.from(list || []);
+    if (!incoming.length || parsing) return;
+    let heic = false, bad = false;
+    const next = [...staged];
+    for (const f of incoming) {
+      if (isHeic(f)) { heic = true; continue; }
+      if (!ALLOWED_TYPES.test(f.type)) { bad = true; continue; }
+      if (next.some(x => x.name === f.name && x.size === f.size)) continue; // dedupe
+      next.push(f);
+    }
+    if (next.length > MAX_PAGES) { notify(`You can attach at most ${MAX_PAGES} pages.`, "alert"); return; }
+    if (next.reduce((s, f) => s + f.size, 0) > MAX_TOTAL) {
+      notify("Total size over 9 MB — use smaller images or fewer pages.", "alert");
       return;
     }
+    setStaged(next);
+    if (heic) notify("iPhone HEIC photos aren't supported — share as JPG.", "alert");
+    else if (bad) notify("Only PDF or JPG/PNG/WebP images can be attached.", "alert");
+  };
+  const removeStaged = (i) => setStaged(s => s.filter((_, j) => j !== i));
+
+  const parseStaged = async () => {
+    if (!staged.length || parsing) return;
     setParsing(true);
+    const label = staged.length === 1 ? staged[0].name : `${staged.length} images`;
     try {
-      const pdfBase64 = await fileToBase64(file);
-      const res = await httpsCallable(functions, "parseNotice", { timeout: 120000 })({ pdfBase64 });
+      const files = await Promise.all(staged.map(async (f) => ({
+        mimeType: f.type, data: await fileToBase64(f),
+      })));
+      // Also send the legacy single-PDF field so a not-yet-redeployed backend
+      // still parses a lone PDF. Images/multi-page need the new backend.
+      const payload = { files };
+      if (files.length === 1 && files[0].mimeType === "application/pdf") {
+        payload.pdfBase64 = files[0].data;
+      }
+      const res = await httpsCallable(functions, "parseNotice", { timeout: 120000 })(payload);
       const { fields, warnings } = res.data || {};
       // Keep only fields the AI actually read, so form defaults survive.
       const filled = Object.fromEntries(
         Object.entries(fields || {}).filter(([, v]) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))
       );
-      onOpenNotice({
-        ...filled,
-        fileName: file.name,
-        aiParsed: true,
-        aiWarnings: warnings || [],
-      });
+      onOpenNotice({ ...filled, fileName: label, aiParsed: true, aiWarnings: warnings || [] });
       notify("Notice parsed — verify the highlighted details");
+      setStaged([]);
     } catch (err) {
       // Backend missing / not deployed / model error: fall back to manual entry.
       console.error("AI parse failed:", err);
-      notify(err?.message?.slice(0, 120) || "AI parsing failed — enter the details manually.", "alert");
-      onOpenNotice({ fileName: file.name });
+      notify(err?.message?.slice(0, 140) || "AI parsing failed — enter the details manually.", "alert");
+      onOpenNotice({ fileName: label });
     } finally {
       setParsing(false);
     }
@@ -846,7 +876,7 @@ export function AiParser({ onOpenNotice }) {
       <div className="topbar">
         <div>
           <div className="page-title">Notice intake</div>
-          <div className="page-sub">Attach a notice PDF and record its details in one flow</div>
+          <div className="page-sub">Attach a notice PDF or page photos and record its details in one flow</div>
         </div>
       </div>
       <div className="grid-split">
@@ -854,28 +884,64 @@ export function AiParser({ onOpenNotice }) {
           className="card"
           style={{padding: 28, border: `2px dashed ${dragOver ? "var(--p-primary)" : "var(--p-primary-3)"}`, background: "linear-gradient(180deg, #F8F6FF, white)", cursor: parsing ? "wait" : "pointer", opacity: parsing ? 0.75 : 1}}
           onClick={() => { if (!parsing) fileRef.current?.click(); }}
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={e => { e.preventDefault(); if (!parsing) setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={e => { e.preventDefault(); setDragOver(false); openWithFile(e.dataTransfer.files?.[0]); }}
+          onDrop={e => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
         >
-          <input ref={fileRef} type="file" accept=".pdf" style={{display: "none"}} onChange={e => { if (e.target.files?.[0]) openWithFile(e.target.files[0]); e.target.value = ""; }}/>
-          <div style={{textAlign: "center", padding: "30px 20px"}}>
+          <input ref={fileRef} type="file" accept=".pdf,image/jpeg,image/png,image/webp" multiple style={{display: "none"}} onChange={e => { addFiles(e.target.files); e.target.value = ""; }}/>
+          <div style={{textAlign: "center", padding: staged.length ? "10px 10px 4px" : "30px 20px"}}>
             <div style={{width: 64, height: 64, borderRadius: 18, background: "var(--p-primary)", color: "white", display: "grid", placeItems: "center", margin: "0 auto 16px", animation: parsing ? "pulse 1.2s ease-in-out infinite" : "none"}}>
               <Icon name={parsing ? "sparkle" : "upload"} size={28}/>
             </div>
-            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>{parsing ? "Reading the notice…" : "Drop notice PDF here"}</div>
-            <div className="card-sub mt-1">{parsing ? "AI is extracting the section, AY, dates and DIN — usually a few seconds" : "or click to browse — AI fills the intake form from the PDF"}</div>
+            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>
+              {parsing ? "Reading the notice…" : staged.length ? `${staged.length} page${staged.length > 1 ? "s" : ""} ready` : "Drop notice PDF or photos here"}
+            </div>
+            <div className="card-sub mt-1">
+              {parsing
+                ? "AI is extracting the section, AY, dates and DIN — usually a few seconds"
+                : staged.length
+                  ? "Add more pages, or parse them together as one notice"
+                  : "PDF or JPG/PNG photos — click to browse. Drop several photos to combine them into one notice."}
+            </div>
             {parsing && <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.92); opacity: 0.75; } }`}</style>}
-            <button className="btn btn-primary mt-4" disabled={parsing} onClick={e => { e.stopPropagation(); onOpenNotice(null); }}><Icon name="edit" size={14}/>Enter details manually</button>
           </div>
+
+          {staged.length > 0 && !parsing && (
+            <div className="col" style={{gap: 8, margin: "6px 0 14px"}} onClick={e => e.stopPropagation()}>
+              {staged.map((f, i) => (
+                <div key={`${f.name}-${i}`} className="center" style={{gap: 10, padding: "9px 12px", background: "white", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
+                  <div style={{width: 26, height: 26, borderRadius: 8, background: "var(--p-card-tint)", color: "var(--p-primary)", display: "grid", placeItems: "center", flexShrink: 0}}>
+                    <Icon name={f.type === "application/pdf" ? "pdf" : "doc"} size={13}/>
+                  </div>
+                  <div style={{flex: 1, minWidth: 0}}>
+                    <div style={{fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{f.name}</div>
+                    <div className="muted" style={{fontSize: 11}}>{kb(f.size)}</div>
+                  </div>
+                  <button className="btn btn-ghost btn-xs" title="Remove" onClick={() => removeStaged(i)}><Icon name="trash" size={12}/></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="center" style={{gap: 8, justifyContent: "center", flexWrap: "wrap"}} onClick={e => e.stopPropagation()}>
+            {staged.length > 0 && !parsing ? (
+              <>
+                <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}><Icon name="upload" size={13}/>Add more</button>
+                <button className="btn btn-primary btn-sm" onClick={parseStaged}><Icon name="sparkle" size={13}/>Parse {staged.length} page{staged.length > 1 ? "s" : ""}</button>
+              </>
+            ) : (
+              <button className="btn btn-primary" disabled={parsing} onClick={() => onOpenNotice(null)}><Icon name="edit" size={14}/>Enter details manually</button>
+            )}
+          </div>
+
           <div style={{borderTop: "1px solid var(--p-line)", paddingTop: 16, marginTop: 16}}>
             <div style={{fontSize: 12, fontWeight: 700, color: "var(--p-text-2)", marginBottom: 8}}>WHAT GETS RECORDED</div>
             <div className="row" style={{gap: 6, flexWrap: "wrap"}}>
               {["Assessee","PAN","AY","Section","DIN","Notice date","Hearing date","Hearing time","ITA No.","Bench / AO","Mode","Documents called for","Subject"].map(t => <span key={t} className="pill pill-primary">{t}</span>)}
             </div>
             <div className="muted" style={{fontSize: 11.5, marginTop: 10}}>
-              <Icon name="info" size={11}/> AI reads the PDF and pre-fills the intake form — always verify every field against the original notice before saving.
-              If the PAN on the notice isn't in your assessee list, you'll be prompted to create that assessee first — the notice details are carried over.
+              <Icon name="info" size={11}/> AI reads the notice (PDF or photos) and pre-fills the intake form — always verify every field against the original before saving.
+              iPhone HEIC photos aren't supported — share as JPG. If the PAN isn't in your assessee list, you'll be prompted to create that assessee first.
             </div>
           </div>
         </div>

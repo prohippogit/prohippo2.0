@@ -231,10 +231,16 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
   }, [data.matters, linked, edited.ay, edited.authority]);
   const canCreateMatter = Boolean(linked) && edited.ay.trim() && !matterOnFile;
 
+  // How to refer to the not-yet-created assessee in the prompt — prefer the
+  // name read from the notice, and add the PAN when it's present and valid.
+  const hasPan = PAN_RE.test(edited.pan);
+  const who = edited.assessee.trim()
+    ? (hasPan ? `${edited.assessee.trim()} (PAN ${edited.pan})` : edited.assessee.trim())
+    : (hasPan ? `PAN ${edited.pan}` : "");
   const assesseeNote = data.assessees.length === 0
-    ? "Everything in ProHippo hangs off an assessee profile — create the assessee for this notice first. The name and PAN entered here are carried over."
-    : PAN_RE.test(edited.pan)
-      ? `PAN ${edited.pan} isn't in your assessee list. Create the assessee to save this notice — the details are carried over from the notice.`
+    ? `Everything in ProHippo hangs off an assessee profile — create ${who || "the assessee for this notice"} first. The name and PAN entered here are carried over.`
+    : who
+      ? `${who} isn't in your assessee list. Create the assessee to save this notice — the details are carried over from the notice.`
       : "Select the assessee this notice belongs to, or create a new profile if they aren't on your list yet.";
 
   const save = () => {

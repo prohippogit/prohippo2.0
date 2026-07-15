@@ -3,6 +3,9 @@ import { Icon, Avatar, StatusPill, EmptyState, fmtINR, fmtDate, fmtDateLong, fmt
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO } from './store';
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './firebase';
+import { detectExtension, openPortalLogin } from './portalSync';
 
 export { AssesseeModal };
 
@@ -288,6 +291,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
           </div>
 
           <div className="col" style={{gap: 18}}>
+            <PortalCard a={a} onAddLogin={() => setShowEdit(true)}/>
             <div className="card">
               <div className="card-title mb-3">Particulars</div>
               <KV label="PAN" value={a.pan} mono/>
@@ -421,6 +425,73 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
 
       {showEdit && <AssesseeModal initial={a} onClose={() => setShowEdit(false)}/>}
       {showMatter && <MatterModal initial={{ assessee: a.name, pan: a.pan, staff: a.staff }} onClose={() => setShowMatter(false)}/>}
+    </div>
+  );
+}
+
+/* Income-tax portal card — open e-Proceedings already logged in (Phase 1). */
+function PortalCard({ a, onAddLogin }) {
+  const { notify } = useData();
+  const [hasExt, setHasExt] = React.useState(null); // null = checking
+  const [busy, setBusy] = React.useState(false);
+
+  const check = React.useCallback(() => {
+    setHasExt(null);
+    detectExtension().then(setHasExt);
+  }, []);
+  React.useEffect(() => {
+    let alive = true;
+    detectExtension().then((v) => { if (alive) setHasExt(v); });
+    return () => { alive = false; };
+  }, []);
+
+  const openPortal = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
+      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id });
+      notify("Opening the portal — logging you in…");
+    } catch (e) {
+      console.error(e);
+      notify(e?.message?.slice(0, 120) || "Couldn't open the portal.", "alert");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">Income-tax portal</div>
+        {a.portalCredSet
+          ? <span className="pill pill-success"><Icon name="check" size={11}/> Login saved</span>
+          : <span className="pill pill-muted">No login</span>}
+      </div>
+
+      {!a.portalCredSet ? (
+        <div className="col" style={{gap: 10}}>
+          <div className="muted" style={{fontSize: 12.5}}>Add this assessee's e-filing login to open the portal in one click.</div>
+          <button className="btn btn-secondary btn-sm" style={{alignSelf: "flex-start"}} onClick={onAddLogin}><Icon name="plus" size={13}/>Add portal login</button>
+        </div>
+      ) : hasExt === false ? (
+        <div className="col" style={{gap: 8}}>
+          <div className="center" style={{gap: 8, padding: "10px 12px", background: "var(--p-amber)", borderRadius: 10, fontSize: 12.5}}>
+            <Icon name="info" size={13}/>
+            <span>Install the <b>ProHippo Sync</b> Chrome extension to open the portal automatically.</span>
+          </div>
+          <button className="btn btn-ghost btn-sm" style={{alignSelf: "flex-start"}} onClick={check}><Icon name="arrow-right" size={12}/>I've installed it — recheck</button>
+        </div>
+      ) : (
+        <div className="col" style={{gap: 10}}>
+          <button className="btn btn-primary btn-sm" style={{alignSelf: "flex-start"}} disabled={busy || hasExt === null} onClick={openPortal}>
+            <Icon name="link" size={13}/>{busy ? "Opening…" : "Open e-Proceedings (auto-login)"}
+          </button>
+          <div className="muted" style={{fontSize: 11.5}}>
+            Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"} · syncing proceedings arrives in the next update.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

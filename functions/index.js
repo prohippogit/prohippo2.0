@@ -13,8 +13,18 @@
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const crypto = require("crypto");
+const admin = require("firebase-admin");
+
+admin.initializeApp();
+const db = admin.firestore();
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+
+// App-managed key for encrypting stored income-tax-portal passwords at rest.
+// Set once with:  firebase functions:secrets:set CREDENTIAL_ENC_KEY
+// The value must be 32 random bytes, base64-encoded (openssl rand -base64 32).
+const credentialEncKey = defineSecret("CREDENTIAL_ENC_KEY");
 
 // Model IDs are config, not code — swap them here if Google renames a model.
 // To list the models your key can use, run:
@@ -277,3 +287,102 @@ exports.parseNotice = onCall(
     };
   }
 );
+
+/* ============================================================
+   Income-tax portal credential vault (Phase 0)
+
+   Stores each assessee's e-filing portal password encrypted at rest
+   (AES-256-GCM with an app-held key). Ciphertext lives in a top-level
+   `portalCreds` collection that clients cannot read (Firestore rules deny
+   everything outside users/{uid}); only these Cloud Functions, using the
+   Admin SDK, can read or write it. A lightweight { portalUserId,
+   portalCredSet } flag is mirrored onto the assessee doc for the UI.
+   ============================================================ */
+
+function encKeyBuffer() {
+  const buf = Buffer.from(credentialEncKey.value(), "base64");
+  if (buf.length !== 32) {
+    throw new HttpsError(
+      "failed-precondition",
+      "CREDENTIAL_ENC_KEY must be 32 bytes, base64-encoded (openssl rand -base64 32)."
+    );
+  }
+  return buf;
+}
+
+function encryptSecret(plaintext) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", encKeyBuffer(), iv);
+  const ct = Buffer.concat([cipher.update(String(plaintext), "utf8"), cipher.final()]);
+  return {
+    iv: iv.toString("base64"),
+    ct: ct.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+  };
+}
+
+function decryptSecret({ iv, ct, tag }) {
+  const decipher = crypto.createDecipheriv("aes-256-gcm", encKeyBuffer(), Buffer.from(iv, "base64"));
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(ct, "base64")), decipher.final()]).toString("utf8");
+}
+
+const credDocPath = (uid, assesseeId) => `portalCreds/${uid}__${assesseeId}`;
+const CALLABLE_OPTS = { region: "us-central1", secrets: [credentialEncKey], maxInstances: 10 };
+
+// Save (or replace) an assessee's portal login.
+exports.savePortalCredential = onCall(CALLABLE_OPTS, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId, portalUserId, portalPassword } = request.data || {};
+  if (!assesseeId || !portalUserId || !portalPassword) {
+    throw new HttpsError("invalid-argument", "assesseeId, portalUserId and portalPassword are required.");
+  }
+  const enc = encryptSecret(portalPassword);
+  await db.doc(credDocPath(uid, assesseeId)).set({
+    uid,
+    assesseeId,
+    portalUserId: String(portalUserId).trim(),
+    ...enc,
+    updatedAt: new Date().toISOString(),
+  });
+  // Mirror a non-secret flag onto the assessee doc for the UI.
+  await db.doc(`users/${uid}/assessees/${assesseeId}`).set(
+    { portalUserId: String(portalUserId).trim(), portalCredSet: true },
+    { merge: true }
+  );
+  return { ok: true };
+});
+
+// Return the decrypted login (called by the app, which hands it to the
+// extension at login time). Logs each access for the owner's audit.
+exports.getPortalCredential = onCall(CALLABLE_OPTS, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId } = request.data || {};
+  if (!assesseeId) throw new HttpsError("invalid-argument", "assesseeId is required.");
+  const snap = await db.doc(credDocPath(uid, assesseeId)).get();
+  if (!snap.exists) throw new HttpsError("not-found", "No portal login saved for this assessee.");
+  const d = snap.data();
+  let portalPassword;
+  try {
+    portalPassword = decryptSecret(d);
+  } catch {
+    throw new HttpsError("internal", "Could not decrypt the stored password — was CREDENTIAL_ENC_KEY changed?");
+  }
+  db.collection(`users/${uid}/portalCredLogs`)
+    .add({ assesseeId, at: new Date().toISOString() })
+    .catch(() => {});
+  return { portalUserId: d.portalUserId, portalPassword };
+});
+
+// Remove a saved portal login.
+exports.deletePortalCredential = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId } = request.data || {};
+  if (!assesseeId) throw new HttpsError("invalid-argument", "assesseeId is required.");
+  await db.doc(credDocPath(uid, assesseeId)).delete();
+  await db.doc(`users/${uid}/assessees/${assesseeId}`).set({ portalCredSet: false }, { merge: true });
+  return { ok: true };
+});

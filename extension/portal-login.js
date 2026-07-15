@@ -11,8 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v5";
-  const EPROCEEDINGS_HASH = "#/pendingActions/eProceedings"; // best-effort; calibrate
+  const BUILD = "v6";
   const INTERVAL_MS = 1000;
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
@@ -46,10 +45,13 @@
       try {
         if (Date.now() - started > 90000) { finish(false); return; }
 
+        // Logged in once we leave the login screen. Do NOT change the URL to
+        // jump to e-Proceedings — the portal treats Back/Forward/URL changes as
+        // a blocked action and prompts logout. Just stop here; Phase 2 opens
+        // e-Proceedings by clicking the menu.
         if (sawPassword && !onLoginScreen()) {
           navigated = true;
-          setTimeout(() => { try { location.hash = EPROCEEDINGS_HASH; } catch { /* noop */ } }, 1500);
-          finish(true);
+          finish(true, "Logged in ✓ — you're in the portal.");
           return;
         }
 

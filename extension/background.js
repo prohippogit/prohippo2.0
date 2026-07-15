@@ -1,11 +1,12 @@
 /*
  * ProHippo Sync — background service worker.
  *
- * Receives requests from the page bridge and drives the portal tab. For a
- * login request it opens the e-filing login page and stashes the credential
- * in session storage keyed by the new tab's id; the portal content script
- * then asks for it and fills the form. Credentials live only in memory
- * (chrome.storage.session) and are deleted as soon as they're handed over.
+ * Opens the portal tab for login, and (Phase 2) relays scraped e-Proceedings
+ * data from the portal tab back to the ProHippo app tab that started the sync,
+ * where the authenticated app saves it via a Cloud Function.
+ *
+ * Credentials live only in chrome.storage.session and are deleted as soon as
+ * the portal tab picks them up.
  */
 const LOGIN_URL = "https://eportal.incometax.gov.in/iec/foservices/#/login";
 
@@ -18,6 +19,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false, error: "Missing portal credentials." });
       return true;
     }
+    const appTabId = sender.tab && sender.tab.id; // the ProHippo app tab
     chrome.tabs.create({ url: LOGIN_URL, active: true }, async (tab) => {
       if (!tab || tab.id == null) {
         sendResponse({ ok: false, error: "Could not open a portal tab." });
@@ -28,31 +30,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           portalUserId: creds.portalUserId,
           portalPassword: creds.portalPassword,
           assesseeId: creds.assesseeId || null,
+          mode: creds.mode || "open", // "open" | "sync"
+          appTabId: appTabId != null ? appTabId : null,
           createdAt: Date.now(),
         },
       });
       sendResponse({ ok: true, tabId: tab.id });
     });
-    return true; // async response
+    return true;
   }
 
-  // The portal content script asks for the credential stashed for its tab.
+  // Portal content script asks for the credential stashed for its tab.
   if (type === "GET_PORTAL_CREDS") {
     const tabId = sender.tab && sender.tab.id;
-    if (tabId == null) {
-      sendResponse({ ok: false });
-      return true;
-    }
+    if (tabId == null) { sendResponse({ ok: false }); return true; }
     const key = "creds_" + tabId;
     chrome.storage.session.get(key, (obj) => {
       const creds = obj[key];
-      if (!creds) {
-        sendResponse({ ok: false });
-        return;
-      }
-      // Hand over once, then delete so it doesn't linger.
-      chrome.storage.session.remove(key);
+      if (!creds) { sendResponse({ ok: false }); return; }
+      // Keep the entry (mode/appTabId needed for the sync return path); the
+      // content script uses the password immediately and doesn't re-request.
       sendResponse({ ok: true, creds });
+    });
+    return true;
+  }
+
+  // Portal content script pushes scraped data → relay to the app tab.
+  if (type === "SYNC_DATA") {
+    const tabId = sender.tab && sender.tab.id;
+    const key = "creds_" + tabId;
+    chrome.storage.session.get(key, (obj) => {
+      const appTabId = obj[key] && obj[key].appTabId;
+      if (appTabId == null) { sendResponse({ ok: false, error: "No app tab to receive data." }); return; }
+      chrome.tabs.sendMessage(appTabId, { type: "SYNC_DATA", payload }, () => {
+        // Ignore lastError; the app may not have a listener yet.
+        sendResponse({ ok: true });
+      });
     });
     return true;
   }
@@ -60,7 +73,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-// Clean up any stashed creds if a portal tab is closed before use.
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove("creds_" + tabId);
 });

@@ -5,7 +5,7 @@ import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
-import { detectExtension, openPortalLogin } from './portalSync';
+import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 
 export { AssesseeModal };
 
@@ -445,13 +445,13 @@ function PortalCard({ a, onAddLogin }) {
     return () => { alive = false; };
   }, []);
 
-  const openPortal = async () => {
+  const launch = async (mode) => {
     if (busy) return;
     setBusy(true);
     try {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id });
-      notify("Opening the portal — logging you in…");
+      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode });
+      notify(mode === "sync" ? "Syncing from the portal — watch the new tab…" : "Opening the portal — logging you in…");
     } catch (e) {
       console.error(e);
       notify(e?.message?.slice(0, 120) || "Couldn't open the portal.", "alert");
@@ -459,6 +459,24 @@ function PortalCard({ a, onAddLogin }) {
       setBusy(false);
     }
   };
+
+  // Receive the e-Proceedings list the extension scrapes and save it.
+  React.useEffect(() => {
+    const off = onSyncData(async (payload) => {
+      if (!payload || payload.assesseeId !== a.id || payload.kind !== "proceedings") return;
+      try {
+        const { data } = await httpsCallable(functions, "ingestPortalProceedings")({
+          assesseeId: a.id,
+          proceedings: payload.proceedings || [],
+        });
+        notify(`Synced ${data.total} proceedings (${data.added} new)`);
+      } catch (e) {
+        console.error(e);
+        notify("Sync received but couldn't be saved.", "alert");
+      }
+    });
+    return off;
+  }, [a.id, notify]);
 
   return (
     <div className="card">
@@ -484,11 +502,17 @@ function PortalCard({ a, onAddLogin }) {
         </div>
       ) : (
         <div className="col" style={{gap: 10}}>
-          <button className="btn btn-primary btn-sm" style={{alignSelf: "flex-start"}} disabled={busy || hasExt === null} onClick={openPortal}>
-            <Icon name="link" size={13}/>{busy ? "Opening…" : "Open e-Proceedings (auto-login)"}
-          </button>
+          <div className="row" style={{gap: 8, flexWrap: "wrap"}}>
+            <button className="btn btn-primary btn-sm" disabled={busy || hasExt === null} onClick={() => launch("sync")}>
+              <Icon name="sparkle" size={13}/>{busy ? "Working…" : "Update status (sync)"}
+            </button>
+            <button className="btn btn-secondary btn-sm" disabled={busy || hasExt === null} onClick={() => launch("open")}>
+              <Icon name="link" size={13}/>Open portal
+            </button>
+          </div>
           <div className="muted" style={{fontSize: 11.5}}>
-            Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"} · syncing proceedings arrives in the next update.
+            Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"}
+            {typeof a.portalProceedingCount === "number" ? ` · ${a.portalProceedingCount} proceedings` : ""}
           </div>
         </div>
       )}

@@ -4,12 +4,16 @@
  * Asks the background worker for a credential stashed for THIS tab. If none,
  * does nothing. Otherwise fills the multi-step Angular login:
  *   User ID -> Continue  [-> secure-access confirm -> Continue]  -> Password -> Continue
- * Angular briefly disables Continue after a field changes, so we re-attempt
- * every tick. Field/button detection is heuristic and may need calibration.
+ *
+ * IMPORTANT: we poll on a gentle timer only. An earlier version also used a
+ * MutationObserver over the whole page; because filling a field / clicking
+ * mutates the DOM, that re-triggered the observer in a tight loop and froze
+ * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v3";
+  const BUILD = "v4";
   const EPROCEEDINGS_HASH = "#/pendingActions/eProceedings"; // best-effort; calibrate
+  const INTERVAL_MS = 1000;
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
     if (chrome.runtime.lastError || !resp || !resp.ok || !resp.creds) return; // not our tab
@@ -23,60 +27,63 @@
   function run(creds) {
     const badge = makeBadge();
     const started = Date.now();
+    let busy = false;
     let navigated = false;
     let sawPassword = false;
-    let uidSet = false;
-    let pwdSet = false;
+    let lastUid = "";
+    let lastPwd = "";
     log("started");
 
     const finish = (ok, msg) => {
       clearInterval(timer);
-      obs.disconnect();
       badge.set(msg || (ok ? "Logged in — opening e-Proceedings…" : "Couldn't finish — please continue manually."), !ok);
       setTimeout(() => badge.remove(), ok ? 4000 : 10000);
     };
 
     const tick = () => {
-      if (navigated) return;
-      if (Date.now() - started > 60000) { finish(false); return; }
+      if (busy || navigated) return;
+      busy = true;
+      try {
+        if (Date.now() - started > 90000) { finish(false); return; }
 
-      if (sawPassword && !onLoginScreen()) {
-        navigated = true;
-        setTimeout(() => { try { location.hash = EPROCEEDINGS_HASH; } catch { /* noop */ } }, 1500);
-        finish(true);
-        return;
+        if (sawPassword && !onLoginScreen()) {
+          navigated = true;
+          setTimeout(() => { try { location.hash = EPROCEEDINGS_HASH; } catch { /* noop */ } }, 1500);
+          finish(true);
+          return;
+        }
+
+        // Password step.
+        const pwd = findPassword();
+        if (pwd) {
+          sawPassword = true;
+          // Set the value at most once per rendered field (avoid event storms).
+          if (lastPwd !== creds.portalPassword) { setValue(pwd, creds.portalPassword); lastPwd = creds.portalPassword; badge.set("Entered password…"); }
+          tickConfirmCheckbox();
+          const clicked = clickContinue();
+          log("password step, clicked=", clicked);
+          return;
+        }
+
+        // User ID step.
+        const uid = findUserId();
+        if (uid) {
+          if (lastUid !== creds.portalUserId) { setValue(uid, creds.portalUserId); lastUid = creds.portalUserId; badge.set("Entered User ID…"); }
+          const clicked = clickContinue();
+          log("userid step, clicked=", clicked);
+          return;
+        }
+
+        // Intermediate page (secure-access confirm) or still LOADING.
+        if (onLoginScreen()) { tickConfirmCheckbox(); }
+      } finally {
+        busy = false;
       }
-
-      // Password step.
-      const pwd = findPassword();
-      if (pwd) {
-        sawPassword = true;
-        if (!pwdSet || pwd.value !== creds.portalPassword) { setValue(pwd, creds.portalPassword); pwdSet = true; badge.set("Entered password…"); }
-        tickConfirmCheckbox();
-        const clicked = clickContinue();
-        log("password step, continue clicked=", clicked);
-        return;
-      }
-
-      // User ID step.
-      const uid = findUserId();
-      if (uid) {
-        // Always drive the value through events at least once so Angular's
-        // model updates even if the box was pre-filled by the browser.
-        if (!uidSet || uid.value !== creds.portalUserId) { setValue(uid, creds.portalUserId); uidSet = true; badge.set("Entered User ID…"); }
-        const clicked = clickContinue();
-        log("userid step, continue clicked=", clicked);
-        return;
-      }
-
-      // Intermediate page (secure-access confirm) with no input.
-      if (onLoginScreen()) { tickConfirmCheckbox(); clickContinue(); }
     };
 
-    const timer = setInterval(tick, 700);
-    const obs = new MutationObserver(tick);
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-    tick();
+    // Timer only — NO MutationObserver (that caused the freeze).
+    const timer = setInterval(tick, INTERVAL_MS);
+    setTimeout(tick, 1200); // first attempt after the SPA has a moment to render
   }
 
   /* ---------- detection ---------- */
@@ -118,14 +125,12 @@
     return true;
   }
 
-  /* ---------- robust value + click ---------- */
+  /* ---------- value + click ---------- */
   function setValue(el, value) {
     el.focus();
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }));
-    el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
     el.dispatchEvent(new Event("blur", { bubbles: true }));
   }
@@ -141,7 +146,7 @@
 
   function log(...a) { try { console.log("[ProHippo " + BUILD + "]", ...a); } catch { /* noop */ } }
 
-  /* ---------- badge (shows build tag so you can confirm the reload) ---------- */
+  /* ---------- badge ---------- */
   function makeBadge() {
     const box = document.createElement("div");
     box.style.cssText = [

@@ -13,6 +13,8 @@
   "content_scripts": [
     {
       "matches": [
+        "https://prohippo.in/*",
+        "https://*.prohippo.in/*",
         "https://prohippo2.web.app/*",
         "https://prohippo2.firebaseapp.com/*",
         "http://localhost/*",

@@ -25,6 +25,14 @@
   announce();
   window.addEventListener("DOMContentLoaded", announce);
 
+  // Pushes from the background worker (e.g. scraped sync data) → to the page.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message && message.type) {
+      toPage({ type: message.type, payload: message.payload });
+    }
+    return false;
+  });
+
   window.addEventListener("message", (event) => {
     // Only accept messages from this same page directed to the extension.
     if (event.source !== window) return;

@@ -386,3 +386,50 @@ exports.deletePortalCredential = onCall({ region: "us-central1", maxInstances: 1
   await db.doc(`users/${uid}/assessees/${assesseeId}`).set({ portalCredSet: false }, { merge: true });
   return { ok: true };
 });
+
+/* ============================================================
+   Portal e-Proceedings sync (Phase 2, step 1: proceedings list)
+
+   The extension scrapes the logged-in e-Proceedings list and posts it here
+   (relayed through the authenticated app). Proceedings are stored under the
+   assessee and deduped by a stable content hash so repeat syncs only add
+   what's new. Notice-level detail (deduped by DIN) and PDFs come next.
+   ============================================================ */
+exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId, proceedings } = request.data || {};
+  if (!assesseeId || !Array.isArray(proceedings)) {
+    throw new HttpsError("invalid-argument", "assesseeId and proceedings[] are required.");
+  }
+
+  const col = db.collection(`users/${uid}/assessees/${assesseeId}/portalProceedings`);
+  let added = 0, updated = 0;
+  for (const p of proceedings) {
+    const key = [p.name, p.ay, p.fy, p.pan, p.statusDate].map((x) => (x || "")).join("|");
+    const id = crypto.createHash("sha1").update(key).digest("hex").slice(0, 24);
+    const ref = col.doc(id);
+    const snap = await ref.get();
+    if (snap.exists) updated++; else added++;
+    await ref.set(
+      {
+        name: p.name || "",
+        ay: p.ay || "",
+        fy: p.fy || "",
+        pan: p.pan || "",
+        assessee: p.assessee || "",
+        act: p.act || "",
+        statusDate: p.statusDate || "",
+        noticeCount: typeof p.noticeCount === "number" ? p.noticeCount : null,
+        tab: p.tab || "",
+        syncedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  }
+  await db.doc(`users/${uid}/assessees/${assesseeId}`).set(
+    { portalLastSyncedAt: new Date().toISOString(), portalProceedingCount: proceedings.length },
+    { merge: true }
+  );
+  return { ok: true, added, updated, total: proceedings.length };
+});

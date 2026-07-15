@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v6";
+  const BUILD = "v7";
   const INTERVAL_MS = 1000;
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
@@ -47,11 +47,15 @@
 
         // Logged in once we leave the login screen. Do NOT change the URL to
         // jump to e-Proceedings — the portal treats Back/Forward/URL changes as
-        // a blocked action and prompts logout. Just stop here; Phase 2 opens
-        // e-Proceedings by clicking the menu.
+        // a blocked action and prompts logout. Navigate by clicking the menu.
         if (sawPassword && !onLoginScreen()) {
           navigated = true;
-          finish(true, "Logged in ✓ — you're in the portal.");
+          clearInterval(timer);
+          if (creds.mode === "sync") {
+            beginSync(creds, badge).catch((e) => { log("sync error", e); badge.set("Sync failed — " + (e.message || e), true); });
+          } else {
+            finish(true, "Logged in ✓ — you're in the portal.");
+          }
           return;
         }
 
@@ -171,6 +175,82 @@
   }
 
   function log(...a) { try { console.log("[ProHippo " + BUILD + "]", ...a); } catch { /* noop */ } }
+
+  /* ---------- Phase 2 step 1: sync the e-Proceedings list ---------- */
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function waitFor(pred, timeout) {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const t = setInterval(() => {
+        let ok = false; try { ok = pred(); } catch { ok = false; }
+        if (ok) { clearInterval(t); resolve(true); }
+        else if (Date.now() - start > timeout) { clearInterval(t); resolve(false); }
+      }, 500);
+    });
+  }
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Click a small, visible element whose text starts with one of the labels.
+  function clickByText(cands) {
+    const els = [...document.querySelectorAll('a, button, span, li, [role="menuitem"], [routerlink]')].filter(isVisible);
+    for (const c of cands) {
+      const matches = els
+        .filter((e) => { const t = (e.textContent || "").trim(); return t && t.length < 40 && new RegExp("^" + escapeRe(c) + "\\b", "i").test(t); })
+        .sort((a, b) => a.textContent.trim().length - b.textContent.trim().length);
+      if (matches[0]) { realClick(matches[0]); return true; }
+    }
+    return false;
+  }
+  async function goToEProceedings() {
+    clickByText(["Pending Actions"]);
+    await sleep(800);
+    if (!clickByText(["e-Proceedings", "e-Proceeding"])) { await sleep(700); clickByText(["e-Proceedings", "e-Proceeding"]); }
+    await sleep(1200);
+  }
+  // Parse the proceedings list from the page text (labels are stable).
+  function scrapeList(tab) {
+    const text = document.body.innerText || "";
+    const segs = text.split(/Proceeding Name\s*:/i).slice(1);
+    const out = [];
+    for (const seg of segs) {
+      const grab = (re) => { const m = seg.match(re); return m ? m[1].trim().replace(/\s+/g, " ") : ""; };
+      const name = (seg.split(/Assessment Year\s*:/i)[0] || "").trim().replace(/\s+/g, " ");
+      const pan = grab(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/);
+      const ay = grab(/Assessment Year\s*:\s*([^\n]+)/i);
+      const assessee = grab(/Name of Assessee\s*\n?\s*([^\n]+(?:\n[A-Z][^\n]+){0,2})/i).replace(/\s+/g, " ");
+      const fy = grab(/Financial Year\s*:\s*([^\n]+)/i);
+      const act = grab(/Applicable Act\s*:\s*([^\n]+)/i);
+      const statusDate = grab(/\b(\d{1,2}-[A-Za-z]{3}-\d{4})\b/);
+      const nc = seg.match(/View Notices\/Orders\s*\((\d+)\)/i);
+      if (name || pan) out.push({ tab, name, ay, pan, assessee, fy, act, statusDate, noticeCount: nc ? Number(nc[1]) : null });
+    }
+    return out;
+  }
+  async function beginSync(creds, badge) {
+    badge.set("Opening e-Proceedings…");
+    await goToEProceedings();
+    let onList = await waitFor(() => /eProceedings/i.test(location.href) && !/viewNotices/i.test(location.href) && /Proceeding Name/i.test(document.body.innerText), 45000);
+    if (!onList) {
+      badge.set("Open Pending Actions → e-Proceedings; sync continues automatically…", true);
+      onList = await waitFor(() => /Proceeding Name/i.test(document.body.innerText), 90000);
+      if (!onList) { badge.set("Couldn't open e-Proceedings — open it and click Update status again.", true); return; }
+    }
+    await sleep(1500);
+    const list = [];
+    const seen = new Set();
+    const collect = (tab) => {
+      for (const p of scrapeList(tab)) {
+        const k = [p.name, p.ay, p.fy, p.statusDate].join("|");
+        if (!seen.has(k)) { seen.add(k); list.push(p); }
+      }
+    };
+    collect("For your Action");
+    if (clickByText(["For your Information"])) { await sleep(1800); collect("For your Information"); }
+    log("scraped proceedings", list);
+    badge.set("Found " + list.length + " proceedings — saving to ProHippo…");
+    chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "proceedings", proceedings: list } }, () => {});
+    setTimeout(() => badge.set("Synced " + list.length + " proceedings ✓ — check ProHippo."), 900);
+    setTimeout(() => badge.remove(), 10000);
+  }
 
   /* ---------- badge ---------- */
   function makeBadge() {

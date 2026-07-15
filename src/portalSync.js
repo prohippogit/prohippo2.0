@@ -51,9 +51,26 @@ export async function detectExtension() {
   }
 }
 
-/** Ask the extension to open the portal and auto-login. */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId }, 8000);
+/** Ask the extension to open the portal and auto-login (mode "open" or "sync"). */
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open" }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
+}
+
+/**
+ * Listen for data the extension scrapes from the portal and pushes back
+ * (e.g. the e-Proceedings list). Returns an unsubscribe function.
+ */
+export function onSyncData(handler) {
+  if (typeof window === "undefined") return () => {};
+  const onMsg = (event) => {
+    if (event.source !== window) return;
+    const d = event.data;
+    if (d && d[TAG] === true && d.dir === "from-ext" && d.type === "SYNC_DATA") {
+      handler(d.payload || {});
+    }
+  };
+  window.addEventListener("message", onMsg);
+  return () => window.removeEventListener("message", onMsg);
 }

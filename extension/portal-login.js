@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v7";
+  const BUILD = "v8";
   const INTERVAL_MS = 1000;
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
@@ -189,22 +189,44 @@
     });
   }
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Click a small, visible element whose text starts with one of the labels.
-  function clickByText(cands) {
+  // Find a small, visible element whose text starts with one of the labels.
+  function findByText(cands) {
     const els = [...document.querySelectorAll('a, button, span, li, [role="menuitem"], [routerlink]')].filter(isVisible);
     for (const c of cands) {
       const matches = els
         .filter((e) => { const t = (e.textContent || "").trim(); return t && t.length < 40 && new RegExp("^" + escapeRe(c) + "\\b", "i").test(t); })
         .sort((a, b) => a.textContent.trim().length - b.textContent.trim().length);
-      if (matches[0]) { realClick(matches[0]); return true; }
+      if (matches[0]) return matches[0];
     }
-    return false;
+    return null;
+  }
+  function clickByText(cands) { const el = findByText(cands); if (el) { realClick(el); return true; } return false; }
+  // The e-Proceedings menu anchor exists in the DOM even when the dropdown is
+  // closed; clicking it triggers Angular router navigation (no logout guard).
+  function findEProceedingsLink() {
+    const links = [...document.querySelectorAll("a")];
+    const attr = (a, n) => (a.getAttribute(n) || "");
+    return (
+      links.find((a) => /eproceeding/i.test(attr(a, "href")) || /eproceeding/i.test(attr(a, "routerlink"))) ||
+      links.find((a) => /e-?proceeding/i.test((a.textContent || "").trim()) && (a.textContent || "").trim().length < 40) ||
+      null
+    );
   }
   async function goToEProceedings() {
-    clickByText(["Pending Actions"]);
-    await sleep(800);
-    if (!clickByText(["e-Proceedings", "e-Proceeding"])) { await sleep(700); clickByText(["e-Proceedings", "e-Proceeding"]); }
-    await sleep(1200);
+    // 1) Direct router-link click (works even if the dropdown is closed).
+    let link = findEProceedingsLink();
+    if (link) { realClick(link); await sleep(1500); if (/eProceedings/i.test(location.href)) return; }
+    // 2) Open the "Pending Actions" menu (hover + click), then click the item.
+    const trig = findByText(["Pending Actions"]);
+    if (trig) {
+      for (const t of ["pointerenter", "mouseenter", "mouseover", "mousedown", "mouseup", "click"]) {
+        try { trig.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })); } catch { /* noop */ }
+      }
+    }
+    await waitFor(() => !!findEProceedingsLink() || !!findByText(["e-Proceeding"]), 6000);
+    link = findEProceedingsLink() || findByText(["e-Proceeding"]);
+    if (link) realClick(link);
+    await sleep(1500);
   }
   // Parse the proceedings list from the page text (labels are stable).
   function scrapeList(tab) {

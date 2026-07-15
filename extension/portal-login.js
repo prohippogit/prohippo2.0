@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v4";
+  const BUILD = "v5";
   const EPROCEEDINGS_HASH = "#/pendingActions/eProceedings"; // best-effort; calibrate
   const INTERVAL_MS = 1000;
 
@@ -109,9 +109,33 @@
     }
     return null;
   }
+  // Tick the "confirm secure access message" checkbox. It's an Angular
+  // Material checkbox whose real <input> is visually hidden (0x0), so we can't
+  // require it to be "visible" — click the label / mat-checkbox wrapper that a
+  // human would click, which lets Material update its form model.
   function tickConfirmCheckbox() {
-    const chk = findVisible('input[type="checkbox"]');
-    if (chk && !chk.checked) realClick(chk);
+    let acted = false;
+    for (const chk of document.querySelectorAll('input[type="checkbox"]')) {
+      if (chk.checked) continue;
+      const wrap =
+        chk.closest("mat-checkbox, .mat-checkbox, .mat-mdc-checkbox") ||
+        (chk.id && document.querySelector('label[for="' + cssEscape(chk.id) + '"]')) ||
+        chk.closest("label") ||
+        chk.parentElement ||
+        chk;
+      realClick(wrap);
+      if (!chk.checked) { try { chk.click(); } catch { /* noop */ } }
+      if (!chk.checked) {
+        chk.checked = true;
+        chk.dispatchEvent(new Event("input", { bubbles: true }));
+        chk.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      acted = true;
+    }
+    return acted;
+  }
+  function cssEscape(s) {
+    return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
   }
   function clickContinue() {
     const btns = [...document.querySelectorAll('button, input[type="submit"], a[role="button"]')].filter(isVisible);

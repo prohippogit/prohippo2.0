@@ -1,8 +1,21 @@
 /* ProHippo — Notices list + review/entry form */
 import React from 'react';
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { storage } from './firebase';
 import { Icon, StatusPill, EmptyState, fmtDateLong, daysFromNow } from './shared';
 import { useData, awaitingNotices, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
+
+// Open a notice's PDF stored in Firebase Storage (portal-synced notices).
+async function openStoragePdf(storagePath) {
+  if (!storagePath) return;
+  try {
+    const url = await getDownloadURL(storageRef(storage, storagePath));
+    window.open(url, "_blank", "noopener");
+  } catch (e) {
+    console.error("open notice pdf", e);
+  }
+}
 
 function NoticeStat({ label, value, color, icon }) {
   const map = {
@@ -112,9 +125,16 @@ export default function Notices({ onOpenNotice }) {
                   <td className="muted">{n.date ? fmtDateLong(n.date) : "—"}</td>
                   <td><StatusPill status={n.status}/></td>
                   <td onClick={e => e.stopPropagation()}>
-                    <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this notice?")) { removeNotice(n.id); notify("Notice deleted"); } }}>
-                      <Icon name="trash" size={12}/>
-                    </button>
+                    <div className="center" style={{gap: 4, justifyContent: "flex-end"}}>
+                      {n.storagePath && (
+                        <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={() => openStoragePdf(n.storagePath)}>
+                          <Icon name="doc" size={12}/>PDF
+                        </button>
+                      )}
+                      <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this notice?")) { removeNotice(n.id); notify("Notice deleted"); } }}>
+                        <Icon name="trash" size={12}/>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -354,6 +374,11 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
             </div>
           </div>
           <div className="center" style={{gap: 8}}>
+            {edited.storagePath && (
+              <button className="btn btn-secondary btn-sm" title="Open the PDF synced from the portal" onClick={() => openStoragePdf(edited.storagePath)}>
+                <Icon name="doc" size={14}/>View portal PDF
+              </button>
+            )}
             <input ref={fileRef} type="file" accept=".pdf" style={{display: "none"}} onChange={e => { const f = e.target.files?.[0]; if (f) update("fileName", f.name); }}/>
             <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
               <Icon name="upload" size={14}/>{edited.fileName ? "Replace PDF" : "Attach PDF"}

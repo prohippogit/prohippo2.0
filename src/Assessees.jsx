@@ -4,10 +4,8 @@ import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstan
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
-import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { functions, storage, auth, db } from './firebase';
-import { useAuth } from './auth';
+import { ref as storageRef, uploadString } from 'firebase/storage';
+import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 
 export { AssesseeModal };
@@ -316,7 +314,6 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
 
           <div className="col" style={{gap: 18}}>
             <PortalCard a={a} onAddLogin={() => setShowEdit(true)}/>
-            <PortalNotices a={a}/>
             <div className="card">
               <div className="card-title mb-3">Particulars</div>
               <KV label="PAN" value={a.pan} mono/>
@@ -596,74 +593,6 @@ function PortalCard({ a, onAddLogin }) {
           {syncInfo && <SyncTiming info={syncInfo}/>}
         </div>
       )}
-    </div>
-  );
-}
-
-/* Notices & orders pulled from the e-filing portal (with their PDFs in Storage). */
-function PortalNotices({ a }) {
-  const { user } = useAuth();
-  const uid = user?.uid;
-  const [notices, setNotices] = React.useState(null); // null = loading
-  const [opening, setOpening] = React.useState("");
-
-  React.useEffect(() => {
-    if (!uid) return undefined;
-    const col = collection(db, "users", uid, "assessees", a.id, "portalNotices");
-    const unsub = onSnapshot(
-      col,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        rows.sort((x, y) => (y.issuedOn || "").localeCompare(x.issuedOn || ""));
-        setNotices(rows);
-      },
-      (e) => { console.error("portalNotices read", e); setNotices([]); }
-    );
-    return unsub;
-  }, [uid, a.id]);
-
-  const openPdf = async (n) => {
-    if (!n.storagePath) return;
-    setOpening(n.id);
-    try {
-      const url = await getDownloadURL(storageRef(storage, n.storagePath));
-      window.open(url, "_blank", "noopener");
-    } catch (e) {
-      console.error("open notice pdf", e);
-    } finally {
-      setOpening("");
-    }
-  };
-
-  if (!notices || notices.length === 0) return null; // appears only after a sync
-
-  const withPdf = notices.filter((n) => n.storagePath).length;
-  return (
-    <div className="card">
-      <div className="card-head">
-        <div>
-          <div className="card-title">Portal notices &amp; orders</div>
-          <div className="card-sub">{notices.length} synced · {withPdf} with PDF</div>
-        </div>
-        <span className="pill pill-primary">{notices.length}</span>
-      </div>
-      <div className="col" style={{gap: 8, maxHeight: 360, overflowY: "auto"}}>
-        {notices.map((n) => (
-          <div key={n.id} className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, border: "1px solid var(--p-line-2)", alignItems: "flex-start"}}>
-            <div style={{width: 32, height: 40, borderRadius: 6, background: "var(--p-pink)", display: "grid", placeItems: "center", color: "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
-            <div style={{flex: 1, minWidth: 0}}>
-              <div className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.description || n.proceedingName || "Notice"}</div>
-              <div className="muted" style={{fontSize: 11}}>
-                {[n.section ? `u/s ${n.section}` : "", n.ay ? `AY ${n.ay}` : "", n.issuedOn || ""].filter(Boolean).join(" · ")}
-              </div>
-              {n.din ? <div className="muted" style={{fontSize: 10.5, fontFamily: "ui-monospace, monospace"}}>DIN {n.din}</div> : null}
-            </div>
-            {n.storagePath
-              ? <button className="btn btn-ghost btn-xs" onClick={() => openPdf(n)} disabled={opening === n.id} title="Open the PDF">{opening === n.id ? "…" : <><Icon name="doc" size={12}/>View</>}</button>
-              : <span className="pill pill-muted" style={{fontSize: 10}}>no PDF</span>}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

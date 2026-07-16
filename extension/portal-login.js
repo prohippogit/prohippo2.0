@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v11";
+  const BUILD = "v12";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -21,13 +21,41 @@
    */
   const NET = (() => {
     const caps = [];
+    let authReady = false;   // MAIN-world probe has captured the session token
+    let sessionPan = null;   // PAN learned from the portal's own API traffic
     if (typeof window !== "undefined") {
       window.addEventListener("message", (e) => {
         if (e.source !== window) return;
         const d = e.data;
-        if (d && d.__prohippoNet === true && d.kind === "capture" && d.entry) caps.push(d.entry);
+        if (!d || d.__prohippoNet !== true) return;
+        if (d.kind === "capture" && d.entry) caps.push(d.entry);
+        if (d.kind === "auth") { if (d.hasSn) authReady = true; if (d.pan) sessionPan = d.pan; }
       });
     }
+    // Resolve once the probe reports it has captured the session token.
+    const waitAuth = (timeoutMs = 15000) => new Promise((resolve) => {
+      if (authReady) return resolve(true);
+      const start = Date.now();
+      const t = setInterval(() => {
+        if (authReady) { clearInterval(t); resolve(true); }
+        else if (Date.now() - start > timeoutMs) { clearInterval(t); resolve(false); }
+      }, 400);
+    });
+    const pan = () => sessionPan;
+    // Ask the probe to call the e-Proceedings API directly for one status flag.
+    const proceedings = (opts, timeoutMs = 20000) => new Promise((resolve) => {
+      const id = "pr-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+      const onMsg = (e) => {
+        if (e.source !== window) return;
+        const d = e.data;
+        if (!d || d.__prohippoNet !== true || d.kind !== "fetchResult" || d.id !== id) return;
+        window.removeEventListener("message", onMsg);
+        resolve(d.result || { ok: false, error: "empty result" });
+      };
+      window.addEventListener("message", onMsg);
+      window.postMessage(Object.assign({ __prohippoNet: true, kind: "proceedings", id }, opts), window.location.origin);
+      setTimeout(() => { window.removeEventListener("message", onMsg); resolve({ ok: false, error: "timeout" }); }, timeoutMs);
+    });
     // The most recent capture that looks like the proceedings list, if any.
     const bestProceedingId = () => {
       const hits = caps.filter((c) => c.looksLikeProceedings).sort((a, b) => b.at - a.at);
@@ -47,7 +75,7 @@
       window.postMessage({ __prohippoNet: true, kind: "fetch", id, capId }, window.location.origin);
       setTimeout(() => { window.removeEventListener("message", onMsg); resolve({ ok: false, error: "timeout" }); }, timeoutMs);
     });
-    return { caps, bestProceedingId, apiFetch };
+    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings };
   })();
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
@@ -392,7 +420,60 @@
     return { proceedings: rows, ms: res.ms, status: res.status, endpoint: res.url };
   }
 
+  // Map one API proceeding object → the row shape the app/Cloud Function expect.
+  function mapRow(o, tab) {
+    return {
+      tab,
+      name: o.proceedingName || "",
+      ay: o.assessmentYear || "",
+      pan: o.pan || "",
+      assessee: o.nameOfAssesse || "",
+      fy: o.financialYr || "",
+      act: o.proceedingType || "",
+      statusDate: o.issuedOn || o.servedOn || "",
+      noticeCount: typeof o.viewNoticeCount === "number" ? o.viewNoticeCount : (Number(o.viewNoticeCount) || null),
+    };
+  }
+
+  // Approach (a), the real thing: after login, call the e-Proceedings API
+  // directly (For your Action + For your Information) using the session token
+  // the probe captured from the dashboard. No menu navigation. Returns true if
+  // it handled the sync; false to fall back to navigate + scrape.
+  async function tryDirectApi(creds, badge) {
+    badge.set("Fetching via portal API…");
+    const ready = await NET.waitAuth(15000);
+    if (!ready) { log("direct api: no session token captured yet"); return false; }
+    const pan = (NET.pan() || creds.portalUserId || "").toString().toUpperCase().trim();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) { log("direct api: no valid PAN", pan); return false; }
+
+    const t0 = performance.now();
+    const fya = await NET.proceedings({ pan, statusFlag: "FYA", pageSize: 100 });
+    const fyi = await NET.proceedings({ pan, statusFlag: "FYI", pageSize: 100 });
+    const ms = Math.round(performance.now() - t0);
+
+    const rows = [];
+    const push = (res, tab) => {
+      const list = res && res.json && res.json.eProceedingPaginatedRequests;
+      if (Array.isArray(list)) for (const o of list) rows.push(mapRow(o, tab));
+    };
+    push(fya, "For your Action");
+    push(fyi, "For your Information");
+
+    if (!rows.length) { log("direct api: no rows", { fya: fya && fya.status, fyi: fyi && fyi.status, err: (fya && fya.error) || (fyi && fyi.error) }); return false; }
+
+    log("DIRECT API OK — " + rows.length + " proceedings in " + ms + " ms");
+    badge.set("API sync ✓ " + rows.length + " proceedings in " + ms + " ms");
+    chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "proceedings", via: "api", ms, endpoint: "/auth/getEntity · eProceedingsPaginatedService", proceedings: rows } }, () => {});
+    setTimeout(() => badge.remove(), 10000);
+    return true;
+  }
+
   async function beginSync(creds, badge) {
+    // Fast path: call the API directly — no e-Proceedings navigation needed.
+    try { if (await tryDirectApi(creds, badge)) return; }
+    catch (e) { log("direct api error", e); }
+
+    // Fallback: open e-Proceedings and use the replay/scrape path.
     badge.set("Opening e-Proceedings…");
     await goToEProceedings();
 

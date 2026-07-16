@@ -11,6 +11,27 @@ export { AssesseeModal };
 
 const PAGE_SIZE = 25;
 
+// Small readout of how the last portal sync was fetched + how long it took.
+// "api" = the fast portal JSON path (approach a); "scrape" = screen fallback.
+function SyncTiming({ info }) {
+  const fast = info.via === "api";
+  const ms = typeof info.ms === "number" ? info.ms : null;
+  const bg = fast ? "var(--p-mint)" : "var(--p-card-tint)";
+  const fg = fast ? "#1B8C5C" : "var(--p-primary-2)";
+  const label = info.calibrating
+    ? `API reached${ms != null ? ` in ${ms} ms` : ""} · mapping calibration pending`
+    : fast
+      ? `Portal API${ms != null ? ` · ${ms} ms` : ""}${typeof info.count === "number" ? ` · ${info.count} proceedings` : ""}`
+      : `Screen scrape${typeof info.count === "number" ? ` · ${info.count} proceedings` : ""}`;
+  return (
+    <div className="center" style={{gap: 6, justifyContent: "flex-start", padding: "6px 10px", background: bg, color: fg, borderRadius: 9, fontSize: 11.5, fontWeight: 700, alignSelf: "flex-start"}}
+         title={info.endpoint || undefined}>
+      <Icon name={fast ? "sparkle" : "doc"} size={12}/>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function Assessees({ onOpen, initialSearch = "" }) {
   const { data } = useData();
   const [tab, setTab] = React.useState("All");
@@ -434,6 +455,8 @@ function PortalCard({ a, onAddLogin }) {
   const { notify } = useData();
   const [hasExt, setHasExt] = React.useState(null); // null = checking
   const [busy, setBusy] = React.useState(false);
+  // Last sync's method + timing (approach "a" readout). null until a sync runs.
+  const [syncInfo, setSyncInfo] = React.useState(null);
 
   const check = React.useCallback(() => {
     setHasExt(null);
@@ -460,10 +483,29 @@ function PortalCard({ a, onAddLogin }) {
     }
   };
 
-  // Receive the e-Proceedings list the extension scrapes and save it.
+  // Receive the e-Proceedings list the extension fetches and save it, and
+  // record how it was fetched (portal JSON API vs screen scrape) + how long.
   React.useEffect(() => {
     const off = onSyncData(async (payload) => {
-      if (!payload || payload.assesseeId !== a.id || payload.kind !== "proceedings") return;
+      if (!payload || payload.assesseeId !== a.id) return;
+
+      // Approach (a) probe: the API was reached fast but its JSON shape still
+      // needs a one-time mapping calibration. No data to save — just show the
+      // timing so the speed is visible while scraping fills in the data.
+      if (payload.kind === "api-probe") {
+        setSyncInfo({ via: "api", ms: payload.ms, endpoint: payload.endpoint, calibrating: true, at: Date.now() });
+        return;
+      }
+
+      if (payload.kind !== "proceedings") return;
+      setSyncInfo({
+        via: payload.via || "scrape",
+        ms: typeof payload.ms === "number" ? payload.ms : null,
+        endpoint: payload.endpoint || null,
+        count: (payload.proceedings || []).length,
+        calibrating: false,
+        at: Date.now(),
+      });
       try {
         const { data } = await httpsCallable(functions, "ingestPortalProceedings")({
           assesseeId: a.id,
@@ -514,6 +556,7 @@ function PortalCard({ a, onAddLogin }) {
             Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"}
             {typeof a.portalProceedingCount === "number" ? ` · ${a.portalProceedingCount} proceedings` : ""}
           </div>
+          {syncInfo && <SyncTiming info={syncInfo}/>}
         </div>
       )}
     </div>

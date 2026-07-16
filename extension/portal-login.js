@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v14";
+  const BUILD = "v15";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -261,6 +261,18 @@
     realClick(link);
     return true;
   }
+  // Navigating within the SPA (our hash route to e-Proceedings) trips the
+  // portal's guard: "…disabled Back, Forward and Refresh… Are you sure you want
+  // to Logout?". Auto-click "No" to stay logged in. The data is already fetched
+  // by then, so this just clears the popup so the user needn't dismiss it.
+  function dismissLogoutDialog() {
+    if (!/want to logout|disabled back,?\s*forward/i.test(document.body.innerText || "")) return false;
+    const btn = [...document.querySelectorAll("button, a")].filter(isVisible)
+      .find((x) => /^(no|cancel)$/i.test((x.textContent || "").trim()));
+    if (!btn) return false;
+    realClick(btn);
+    return true;
+  }
 
   /* ---------- value + click ---------- */
   function setValue(el, value) {
@@ -503,6 +515,12 @@
   }
 
   async function beginSync(creds, badge) {
+    // Auto-dismiss the portal's "Are you sure you want to Logout?" guard for the
+    // duration of the sync — our hash navigation trips it, but the data fetch is
+    // unaffected, so the user shouldn't have to click "No".
+    const logoutGuard = setInterval(dismissLogoutDialog, 350);
+    setTimeout(() => clearInterval(logoutGuard), 30000);
+
     // 1) Quick direct attempt — succeeds if the dashboard already exposed the
     //    e-Proceedings session token (short wait so we don't stall if it hasn't).
     try { if (await tryDirectApi(creds, badge, 4000)) return; }

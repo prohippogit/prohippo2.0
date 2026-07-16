@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v12";
+  const BUILD = "v13";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -319,21 +319,43 @@
       null
     );
   }
-  async function goToEProceedings() {
-    // 1) Direct router-link click (works even if the dropdown is closed).
-    let link = findEProceedingsLink();
-    if (link) { realClick(link); await sleep(1500); if (/eProceedings/i.test(location.href)) return; }
-    // 2) Open the "Pending Actions" menu (hover + click), then click the item.
+  // Any small, visible element whose text contains "e-proceeding(s)". NOTE: we
+  // match by CONTAINS, not a word-boundary — the menu label is "E-Proceedings"
+  // (plural), and an earlier `\b` after "Proceeding" never matched the "s".
+  function findEProceedingsItem() {
+    const els = [...document.querySelectorAll('a, button, span, li, [role="menuitem"], [routerlink]')].filter(isVisible);
+    return els
+      .filter((e) => { const t = (e.textContent || "").trim(); return t && t.length < 40 && /e-?proceeding/i.test(t); })
+      .sort((a, b) => a.textContent.trim().length - b.textContent.trim().length)[0] || null;
+  }
+  function openPendingActionsMenu() {
     const trig = findByText(["Pending Actions"]);
-    if (trig) {
-      for (const t of ["pointerenter", "mouseenter", "mouseover", "mousedown", "mouseup", "click"]) {
-        try { trig.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })); } catch { /* noop */ }
-      }
+    if (!trig) return false;
+    for (const t of ["pointerenter", "mouseenter", "mouseover", "mousedown", "mouseup", "click"]) {
+      try { trig.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })); } catch { /* noop */ }
     }
-    await waitFor(() => !!findEProceedingsLink() || !!findByText(["e-Proceeding"]), 6000);
-    link = findEProceedingsLink() || findByText(["e-Proceeding"]);
-    if (link) realClick(link);
-    await sleep(1500);
+    return true;
+  }
+  function clickEProceedingsItem() {
+    const el = findEProceedingsLink() || findEProceedingsItem();
+    if (!el) return false;
+    // Click the nearest actually-clickable ancestor (router link / menu item).
+    const target = el.closest('a, [routerlink], [role="menuitem"], button, li') || el;
+    realClick(target);
+    return true;
+  }
+  async function goToEProceedings() {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      // Open the menu so the item is in the DOM, then click it.
+      openPendingActionsMenu();
+      await waitFor(() => !!findEProceedingsLink() || !!findEProceedingsItem(), 6000);
+      if (clickEProceedingsItem()) {
+        await sleep(1800);
+        if (/eProceedings/i.test(location.href)) return true;
+      }
+      await sleep(700);
+    }
+    return /eProceedings/i.test(location.href);
   }
   // Parse the proceedings list from the page text (labels are stable).
   function scrapeList(tab) {
@@ -439,9 +461,9 @@
   // directly (For your Action + For your Information) using the session token
   // the probe captured from the dashboard. No menu navigation. Returns true if
   // it handled the sync; false to fall back to navigate + scrape.
-  async function tryDirectApi(creds, badge) {
+  async function tryDirectApi(creds, badge, waitMs = 15000) {
     badge.set("Fetching via portal API…");
-    const ready = await NET.waitAuth(15000);
+    const ready = await NET.waitAuth(waitMs);
     if (!ready) { log("direct api: no session token captured yet"); return false; }
     const pan = (NET.pan() || creds.portalUserId || "").toString().toUpperCase().trim();
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) { log("direct api: no valid PAN", pan); return false; }
@@ -469,18 +491,23 @@
   }
 
   async function beginSync(creds, badge) {
-    // Fast path: call the API directly — no e-Proceedings navigation needed.
-    try { if (await tryDirectApi(creds, badge)) return; }
+    // 1) Quick direct attempt — succeeds if the dashboard already exposed the
+    //    e-Proceedings session token (short wait so we don't stall if it hasn't).
+    try { if (await tryDirectApi(creds, badge, 4000)) return; }
     catch (e) { log("direct api error", e); }
 
-    // Fallback: open e-Proceedings and use the replay/scrape path.
+    // 2) Open e-Proceedings. This makes the portal load the module and fire its
+    //    OWN proceedings API — which hands us the session token + the captured
+    //    call, even though we won't need to read the screen.
     badge.set("Opening e-Proceedings…");
     await goToEProceedings();
+    await sleep(1200); // let the portal's own API call land + be captured
 
-    // --- Approach (a): try the JSON API first, and TIME it. Navigating to
-    // e-Proceedings above makes the portal call its own API, which the
-    // MAIN-world probe captured; here we replay that call directly. ---
-    await sleep(1200); // give the portal's own API call a moment to land + be captured
+    // 3) Direct attempt again — the token is captured now.
+    try { if (await tryDirectApi(creds, badge, 8000)) return; }
+    catch (e) { log("direct api retry error", e); }
+
+    // 4) Replay the portal's own captured call as a secondary API path.
     try {
       const api = await tryApiFetch(badge);
       if (api && api.proceedings && api.proceedings.length) {

@@ -433,3 +433,47 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
   );
   return { ok: true, added, updated, total: proceedings.length };
 });
+
+// Record one portal notice/order (metadata + the Storage path of its PDF, which
+// the app uploads client-side). Deduped by DIN when present, else by a hash of
+// the identifying fields. The PDF bytes never pass through this function.
+exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId, notice, storagePath, filename } = request.data || {};
+  if (!assesseeId || !notice || typeof notice !== "object") {
+    throw new HttpsError("invalid-argument", "assesseeId and notice are required.");
+  }
+
+  const din = (notice.din || "").toString().trim();
+  const keySource = din || [notice.proceedingReqId, notice.docRefId, notice.issuedOn].map((x) => x || "").join("|");
+  const id = din
+    ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20)
+    : crypto.createHash("sha1").update(keySource).digest("hex").slice(0, 24);
+
+  const ref = db.doc(`users/${uid}/assessees/${assesseeId}/portalNotices/${id}`);
+  const snap = await ref.get();
+  const hadPdf = snap.exists && snap.get("storagePath");
+  await ref.set(
+    {
+      din,
+      proceedingReqId: notice.proceedingReqId || "",
+      proceedingName: notice.proceedingName || "",
+      section: notice.section || "",
+      description: notice.description || "",
+      issuedOn: notice.issuedOn || "",
+      servedOn: notice.servedOn || "",
+      responseDueDate: notice.responseDueDate || "",
+      docRefId: notice.docRefId || "",
+      ay: notice.ay || "",
+      pan: notice.pan || "",
+      proceedingStatus: notice.proceedingStatus || "",
+      filename: filename || notice.filename || "",
+      storagePath: storagePath || (snap.exists ? snap.get("storagePath") : "") || "",
+      bytes: typeof notice.bytes === "number" ? notice.bytes : 0,
+      syncedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  return { ok: true, id, added: !snap.exists, pdfAdded: Boolean(storagePath) && !hadPdf };
+});

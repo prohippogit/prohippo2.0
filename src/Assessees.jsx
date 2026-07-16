@@ -4,7 +4,8 @@ import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstan
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from './firebase';
+import { ref as storageRef, uploadString } from 'firebase/storage';
+import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 
 export { AssesseeModal };
@@ -488,6 +489,27 @@ function PortalCard({ a, onAddLogin }) {
   React.useEffect(() => {
     const off = onSyncData(async (payload) => {
       if (!payload || payload.assesseeId !== a.id) return;
+
+      // A notice/order document streamed from the portal. Upload its PDF (if
+      // present) to Storage under the user's own path, then record the metadata.
+      if (payload.kind === "notice") {
+        const n = payload.notice || {};
+        try {
+          let storagePath = null;
+          if (n.contentBase64) {
+            const uid = auth.currentUser?.uid;
+            const safeId = (n.din || `${n.proceedingReqId}-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, "");
+            storagePath = `users/${uid}/assessees/${a.id}/notices/${safeId}.pdf`;
+            await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64", { contentType: n.contentType || "application/pdf" });
+          }
+          const meta = { ...n };
+          delete meta.contentBase64;
+          await httpsCallable(functions, "ingestPortalNotice")({ assesseeId: a.id, notice: meta, storagePath, filename: n.filename });
+        } catch (e) {
+          console.error("Notice ingest failed", e);
+        }
+        return;
+      }
 
       // Approach (a) probe: the API was reached fast but its JSON shape still
       // needs a one-time mapping calibration. No data to save — just show the

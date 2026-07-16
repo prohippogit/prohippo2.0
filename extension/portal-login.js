@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v9";
+  const BUILD = "v10";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -67,6 +67,7 @@
     let sawPassword = false;
     let lastUid = "";
     let lastPwd = "";
+    let retriedLogin = false; // allow one auto-retry after a session-expiry bounce
     log("started");
 
     const finish = (ok, msg) => {
@@ -81,10 +82,29 @@
       try {
         if (Date.now() - started > 90000) { finish(false); return; }
 
+        // The portal allows only ONE active session per PAN. If it finds an
+        // existing one it shows a "Dual Login Detected" dialog — click
+        // "Login Here" to take the session over and keep authenticating here.
+        if (handleDualLogin()) { badge.set("Dual login — taking over the existing session…"); return; }
+
+        // If the portal bounced us to "Session has Expired", our login didn't
+        // stick (usually a leftover session or idle timeout). Try the on-screen
+        // "Login" link ONCE — the loop then re-fills the credentials. If it
+        // expires again, stop and tell the user exactly what to fix.
+        if (isSessionExpired()) {
+          if (!retriedLogin && clickSessionExpiryLogin()) {
+            retriedLogin = true; sawPassword = false; lastUid = ""; lastPwd = "";
+            badge.set("Session expired — retrying login…", true);
+            return;
+          }
+          finish(false, "Portal keeps ending the session. Log out of the Income-tax portal in every other tab, browser and device, then run the sync again.");
+          return;
+        }
+
         // Logged in once we leave the login screen. Do NOT change the URL to
         // jump to e-Proceedings — the portal treats Back/Forward/URL changes as
         // a blocked action and prompts logout. Navigate by clicking the menu.
-        if (sawPassword && !onLoginScreen()) {
+        if (sawPassword && !onLoginScreen() && !isSessionExpired()) {
           navigated = true;
           clearInterval(timer);
           if (creds.mode === "sync") {
@@ -188,6 +208,29 @@
     if (!b) return false;
     if (b.disabled || b.getAttribute("aria-disabled") === "true") return false;
     realClick(b);
+    return true;
+  }
+
+  /* ---------- session / dual-login handling ---------- */
+  // The "Dual Login Detected" dialog offers a "Login Here" button that takes
+  // over the existing session and continues authenticating in this tab.
+  function handleDualLogin() {
+    const btn = [...document.querySelectorAll("button, a")].filter(isVisible)
+      .find((x) => /^login\s*here$/i.test((x.textContent || "").trim()));
+    if (!btn || btn.disabled || btn.getAttribute("aria-disabled") === "true") return false;
+    realClick(btn);
+    return true;
+  }
+  function isSessionExpired() {
+    return /sessionExpire/i.test(location.href) || /sessionExpire/i.test(location.hash) ||
+           /session has expired/i.test(document.body.innerText || "");
+  }
+  // The "Session has Expired" screen shows a "Login" link back to the login page.
+  function clickSessionExpiryLogin() {
+    const link = [...document.querySelectorAll("a, button")].filter(isVisible)
+      .find((x) => /^login$/i.test((x.textContent || "").trim()));
+    if (!link) return false;
+    realClick(link);
     return true;
   }
 

@@ -353,7 +353,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       )}
 
       {tab === "Matters" && (
-        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name}/>
+        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name} notify={notify}/>
       )}
 
       {tab === "Hearings" && (
@@ -599,18 +599,33 @@ function PortalCard({ a, onAddLogin }) {
 /* Consolidated, proceeding-wise view: each matter (proceeding) expands to its
    notices/orders (recent first) and hearings. Manual matters (no proceeding)
    still show as a simple non-expanding row. */
-function MattersView({ matters, notices, hearings, assesseeName }) {
+function MattersView({ matters, notices, hearings, assesseeName, notify }) {
   const [openId, setOpenId] = React.useState(null);
+  const [parsingId, setParsingId] = React.useState("");
 
   const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));
   const hearingsFor = (m) => byDateDesc(hearings.filter((h) => m.proceedingReqId && h.proceedingReqId === m.proceedingReqId));
-  // Latest activity per matter, for ordering proceedings recent-first.
+  // Latest activity per matter, for ordering proceedings newest-first.
   const lastActivity = (m) => {
     const ns = noticesFor(m); const hs = hearingsFor(m);
     return [ns[0]?.date, hs[0]?.date, m.portalSyncedAt, m.createdAt].filter(Boolean).sort().slice(-1)[0] || "";
   };
-  const ordered = [...matters].sort((x, y) => (lastActivity(y)).localeCompare(lastActivity(x)));
+  const ordered = [...matters].sort((x, y) => lastActivity(y).localeCompare(lastActivity(x)));
+
+  const parse = async (n) => {
+    setParsingId(n.id);
+    try {
+      await httpsCallable(functions, "summarizePortalNotice")({ noticeId: n.id });
+      // The summary lands on the notice doc → appears via the store's live data.
+    } catch (e) {
+      console.error("summarize failed", e);
+      notify && notify("AI parse failed — " + (e?.message?.slice(0, 100) || "error"), "alert");
+    } finally {
+      setParsingId("");
+    }
+  };
+  const isOrderDoc = (n) => Boolean(n.isOrder) || /\border\b/i.test(n.subject || "");
 
   if (matters.length === 0) {
     return (
@@ -620,11 +635,12 @@ function MattersView({ matters, notices, hearings, assesseeName }) {
     );
   }
 
-  const GRID = "20px 96px minmax(0,1fr) 84px 78px 110px";
+  // chevron | type | proceeding (natural width) | AY | section (no-wrap) | status | right spacer
+  const GRID = "18px 92px minmax(190px, max-content) 78px 132px 92px 1fr";
   return (
     <div className="col" style={{gap: 10}}>
-      <div style={{display: "grid", gridTemplateColumns: GRID, gap: 12, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
-        <span/><span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span style={{textAlign: "right"}}>Status</span>
+      <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+        <span/><span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span>
       </div>
       {ordered.map((m) => {
         const ns = noticesFor(m);
@@ -636,7 +652,7 @@ function MattersView({ matters, notices, hearings, assesseeName }) {
         return (
           <div key={m.id} className="card" style={{padding: 0, overflow: "hidden"}}>
             <div
-              style={{display: "grid", gridTemplateColumns: GRID, gap: 12, alignItems: "center", padding: "13px 18px", cursor: isPortal ? "pointer" : "default"}}
+              style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "13px 18px", cursor: isPortal ? "pointer" : "default"}}
               onClick={isPortal ? () => setOpenId(open ? null : m.id) : undefined}
             >
               <span>{isPortal ? <Icon name={open ? "chevron-down" : "chevron-right"} size={16}/> : null}</span>
@@ -646,8 +662,8 @@ function MattersView({ matters, notices, hearings, assesseeName }) {
                 {isPortal && <span className="muted" style={{fontSize: 11}}>{docCount} notice{docCount === 1 ? "" : "s"}/orders{hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}</span>}
               </span>
               <span>{m.ay || "—"}</span>
-              <span>{section ? <span className="pill pill-muted">u/s {section}</span> : <span className="muted">—</span>}</span>
-              <span style={{textAlign: "right"}}><StatusPill status={m.status}/></span>
+              <span style={{whiteSpace: "nowrap"}}>{section ? <span className="pill pill-muted">u/s {section}</span> : <span className="muted">—</span>}</span>
+              <span><StatusPill status={m.status}/></span>
             </div>
 
             {open && isPortal && (
@@ -672,23 +688,47 @@ function MattersView({ matters, notices, hearings, assesseeName }) {
                   ? <div className="muted" style={{fontSize: 12.5, padding: "4px 0"}}>No notices/orders synced for this proceeding.</div>
                   : (
                     <div className="col" style={{gap: 8}}>
-                      {ns.map((n) => (
-                        <div key={n.id} className="center" style={{gap: 10, padding: "9px 11px", background: "white", borderRadius: 10, border: "1px solid var(--p-line-2)", alignItems: "flex-start"}}>
-                          <div style={{width: 30, height: 38, borderRadius: 5, background: "var(--p-pink)", display: "grid", placeItems: "center", color: "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
-                          <div style={{flex: 1, minWidth: 0}}>
-                            <div className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</div>
-                            <div className="muted" style={{fontSize: 11}}>
-                              {[n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
+                      {ns.map((n) => {
+                        const order = isOrderDoc(n);
+                        return (
+                          <div key={n.id} style={{padding: "9px 11px", background: "white", borderRadius: 10, border: "1px solid var(--p-line-2)"}}>
+                            <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
+                              <div style={{width: 30, height: 38, borderRadius: 5, background: order ? "var(--p-amber)" : "var(--p-pink)", display: "grid", placeItems: "center", color: order ? "#B07512" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
+                              <div style={{flex: 1, minWidth: 0}}>
+                                <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
+                                  <span className={`pill ${order ? "pill-warning" : "pill-muted"}`} style={{fontSize: 10}}>{order ? "Order" : "Notice"}</span>
+                                  <span className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
+                                </div>
+                                <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                                  {[n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
+                                </div>
+                              </div>
+                              {n.storagePath && (
+                                <button className="btn btn-ghost btn-xs" title="Summarise this PDF with AI" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); parse(n); }}>
+                                  <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Parsing…" : (n.aiSummary ? "Re-parse" : "Parse with AI")}
+                                </button>
+                              )}
+                              {n.storagePath && (
+                                <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
+                                  <Icon name="doc" size={12}/>PDF
+                                </button>
+                              )}
                             </div>
+                            {n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
+                              <div style={{marginTop: 8, padding: "8px 10px", background: "var(--p-card-tint)", borderRadius: 8, fontSize: 12}}>
+                                <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: (n.aiSummary.items || []).length ? 5 : 0}}>
+                                  <Icon name="sparkle" size={11}/><span className="strong">{n.aiSummary.summary}</span>
+                                </div>
+                                {(n.aiSummary.items || []).length > 0 && (
+                                  <ul style={{margin: 0, paddingLeft: 18}}>
+                                    {n.aiSummary.items.map((it, i) => <li key={i} style={{marginTop: 2}}>{it}</li>)}
+                                  </ul>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <StatusPill status={n.status}/>
-                          {n.storagePath && (
-                            <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
-                              <Icon name="doc" size={12}/>PDF
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
               </div>

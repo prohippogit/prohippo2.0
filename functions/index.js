@@ -137,6 +137,43 @@ async function callGemini(model, apiKey, files) {
   }
 }
 
+// Short, type-aware summary of a portal notice/order for a tax practitioner.
+const SUMMARY_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    isOrder: { type: "BOOLEAN" },
+    summary: { type: "STRING" },
+    items: { type: "ARRAY", items: { type: "STRING" } },
+  },
+  required: ["summary"],
+};
+function summaryPrompt(authority) {
+  return `You are a chartered accountant reading ONE Indian Income-tax document (a notice or an ORDER). Write a VERY SHORT, factual summary for a busy practitioner. The operative conclusion is usually on the LAST page(s) — read those carefully.
+
+The proceeding type is "${authority || "Unknown"}". Follow the matching rule:
+- Scrutiny / assessment order (u/s 143(3)/147 etc.): list EACH addition or disallowance made, with the amount and the section if stated. e.g. "Addition ₹12,50,000 u/s 68 — unexplained cash credit".
+- Penalty order (271/270A series): state the section the penalty is levied under and the penalty amount.
+- CIT(A) / appeal order (u/s 250): state what was HELD — appeal allowed / dismissed / partly allowed — and the key grounds decided, from the concluding paragraphs.
+- If the document is only a NOTICE (not an order), state in one line what it asks for and the due date if any.
+
+Rules: Be terse — a few short points. Put each addition/disallowance/held-point as one entry in "items". Put a one-line overall gist in "summary". Set "isOrder" true if this is a final/appellate/penalty order, false for a notice. NEVER invent figures or sections — omit anything not clearly printed.`;
+}
+async function callGeminiSummary(model, apiKey, files, authority) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: summaryPrompt(authority) }] }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: SUMMARY_SCHEMA, temperature: 0 },
+  };
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+  try { return JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
+}
+
 /* ---------- deterministic validation & normalisation ---------- */
 
 function normDate(v) {
@@ -603,3 +640,44 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
 
   return { ok: true, noticeId, added, hearingAdded };
 });
+
+// On-demand: summarise one portal notice/order's PDF with Gemini and store the
+// short, type-aware summary back on the notice. Called from the Matters view.
+const STORAGE_BUCKET = "prohippo2.firebasestorage.app";
+exports.summarizePortalNotice = onCall(
+  { region: "us-central1", secrets: [geminiApiKey], timeoutSeconds: 120, memory: "512MiB", maxInstances: 5 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+    const { noticeId } = request.data || {};
+    if (!noticeId) throw new HttpsError("invalid-argument", "noticeId is required.");
+
+    const ref = db.doc(`users/${uid}/notices/${noticeId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Notice not found.");
+    const n = snap.data();
+    if (!n.storagePath) throw new HttpsError("failed-precondition", "This notice has no PDF to parse.");
+
+    // Pull the PDF from Storage (admin bypasses rules) and hand it to Gemini.
+    let buf;
+    try {
+      [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(n.storagePath).download();
+    } catch (e) {
+      throw new HttpsError("not-found", "Couldn't read the PDF from Storage: " + (e.message || e));
+    }
+    if (buf.length > MAX_TOTAL_BYTES) {
+      throw new HttpsError("invalid-argument", "PDF is too large to summarise (over 9 MB).");
+    }
+    const files = [{ mimeType: "application/pdf", data: buf.toString("base64") }];
+
+    const out = await callGeminiSummary(PRIMARY_MODEL, geminiApiKey.value(), files, n.authority);
+    const aiSummary = {
+      summary: typeof out.summary === "string" ? out.summary.trim() : "",
+      items: Array.isArray(out.items) ? out.items.filter((x) => typeof x === "string" && x.trim()).slice(0, 12) : [],
+      isOrder: Boolean(out.isOrder),
+      at: new Date().toISOString(),
+    };
+    await ref.set({ aiSummary, isOrder: aiSummary.isOrder }, { merge: true });
+    return { ok: true, aiSummary };
+  }
+);

@@ -38,6 +38,15 @@
   const store = [];
   let seq = 0;
 
+  // The session token ("sn" header) and PAN, learned from the dashboard's own
+  // authenticated API calls. These let us call the e-Proceedings API directly,
+  // without navigating the UI. The token stays in this page-world script.
+  let lastAuth = null;   // { headers } from a captured call carrying an "sn" header
+  let sessionPan = null; // PAN seen in a captured request payload
+  const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/i;
+  // e-Proceedings list endpoint + payload, from observed portal traffic.
+  const PROCEEDINGS_PATH = "/iec/returnservicesapi/auth/getEntity";
+
   const isPortalApi = (url) => {
     try {
       const u = new URL(url, ORIGIN);
@@ -79,6 +88,24 @@
     post("capture", {
       entry: { id: entry.id, url: entry.url, method: entry.method, looksLikeProceedings: looks, at: entry.at },
     });
+
+    // Learn the session token + PAN so we can hit the e-Proceedings API
+    // directly. The "sn" token is PER-SERVICE, so we must reuse the one that
+    // belongs to the e-Proceedings service (formName FO-041_PCDNG) — replaying
+    // another service's token against getEntity fails. The dashboard's
+    // proceeding/metadata call (fired on load to show pending-action counts)
+    // carries exactly this token. Keep the token here; tell the content script
+    // only that auth is ready (+ the non-secret PAN).
+    const hasSn = Object.keys(reqHeaders || {}).some((k) => k.toLowerCase() === "sn");
+    let isProc = /proceeding\/metadata/i.test(url);
+    let body = null;
+    if (reqBody != null) { try { body = typeof reqBody === "string" ? JSON.parse(reqBody) : reqBody; } catch { /* not json */ } }
+    if (body) {
+      if (typeof body.pan === "string" && PAN_RE.test(body.pan)) sessionPan = body.pan.toUpperCase();
+      if (body.serviceName === "eProceedingsPaginatedService" || (body.header && body.header.formName === "FO-041_PCDNG")) isProc = true;
+    }
+    if (hasSn && isProc) lastAuth = { headers: reqHeaders };
+    if (lastAuth || sessionPan) post("auth", { hasSn: !!lastAuth, pan: sessionPan });
   }
 
   function post(kind, extra) {
@@ -166,6 +193,46 @@
     } catch (err) {
       post("fetchResult", { id, result: { ok: false, error: String(err && err.message || err), ms: Math.round(performance.now() - t0) } });
     }
+  });
+
+  /* ---------- approach (a): call the e-Proceedings API directly ----------
+   * Uses the session token captured above to POST the paginated proceedings
+   * request. Same-origin + credentials, so cookies + the "sn" header authorise
+   * it just like the portal's own call. No UI navigation required.
+   */
+  async function fetchProceedings(opts) {
+    if (!lastAuth) return { ok: false, error: "no session token captured yet" };
+    const pan = String(opts.pan || "").toUpperCase();
+    if (!PAN_RE.test(pan)) return { ok: false, error: "no valid PAN" };
+    const payload = {
+      serviceName: "eProceedingsPaginatedService",
+      pan,
+      prcdngStatusFlag: opts.statusFlag || "FYA", // FYA = For your Action, FYI = For your Information
+      prcdngTypeFlag: "self",
+      pageConfig: { pageSize: opts.pageSize || 100, pageNo: opts.pageNo || 1, searchTerm: "", sortBy: "createdDt", sortAsc: false, filters: {} },
+      header: { formName: "FO-041_PCDNG" },
+    };
+    const headers = replayHeaders(lastAuth.headers);
+    headers["Content-Type"] = "application/json";
+    if (!Object.keys(headers).some((k) => k.toLowerCase() === "accept")) headers["Accept"] = "application/json";
+    const t0 = performance.now();
+    try {
+      const resp = await origFetch.call(window, ORIGIN + PROCEEDINGS_PATH, { method: "POST", credentials: "include", headers, body: JSON.stringify(payload) });
+      const ms = Math.round(performance.now() - t0);
+      const text = await resp.text();
+      let json = null; try { json = JSON.parse(text); } catch { /* not json */ }
+      return { ok: resp.ok, status: resp.status, ms, json, textSample: json ? null : (text || "").slice(0, SAMPLE_LEN) };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message || err), ms: Math.round(performance.now() - t0) };
+    }
+  }
+
+  window.addEventListener("message", async (e) => {
+    if (e.source !== window) return;
+    const d = e.data;
+    if (!d || d.__prohippoNet !== true || d.kind !== "proceedings") return;
+    const result = await fetchProceedings(d);
+    post("fetchResult", { id: d.id, result });
   });
 
   /* ---------- helpers ---------- */

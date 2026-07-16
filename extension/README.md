@@ -54,24 +54,40 @@ also best-effort and may need the same one-line calibration.
   watches the JSON API calls the portal makes to itself, then replays the
   e-Proceedings call directly (see below).
 
-## Approach (a): fetch via the portal's JSON API (prototype)
+## Approach (a): fetch via the portal's JSON API
 
 Instead of scraping the rendered e-Proceedings screen (slow + fragile), we call
-the portal's **own** data API and get structured JSON in one shot. We can't
-hard-code the API URL (it can change and may need an in-memory auth token), so
-`portal-net.js` discovers it automatically:
+the portal's **own** data API and get structured JSON in one shot.
 
-1. It installs before the portal's app boots and quietly records the API calls
-   the portal makes — including the e-Proceedings list call, with its auth
-   headers. (Auth headers never leave that page-world script.)
-2. On a **sync**, `portal-login.js` opens e-Proceedings once (which triggers the
-   portal's own API call), then asks `portal-net.js` to **replay** that call and
-   **times it**. If the JSON maps to proceedings, that's the result — no
-   scraping. Otherwise it falls back to the old screen-scrape automatically.
+The e-Proceedings list comes from:
+
+```
+POST /iec/returnservicesapi/auth/getEntity
+{ "serviceName":"eProceedingsPaginatedService", "pan":"…",
+  "prcdngStatusFlag":"FYA"|"FYI", "prcdngTypeFlag":"self",
+  "pageConfig":{ "pageSize":100, "pageNo":1, … }, "header":{ "formName":"FO-041_PCDNG" } }
+```
+
+authenticated by an `sn` session-token header. `sn` is **per-service**, so we
+reuse the one that belongs to the e-Proceedings service — the dashboard's
+`proceeding/metadata` call carries it (fired on load for the pending-action
+counts) and it also authorises `getEntity`.
+
+How the pieces work:
+
+1. `portal-net.js` installs before the portal's app boots (page's MAIN world)
+   and records the portal's own API calls. From the e-Proceedings-service calls
+   it learns the `sn` token and the PAN. The token never leaves that page-world
+   script — only a "ready" flag and the non-secret PAN are shared.
+2. On a **sync**, `portal-login.js` logs in, waits for that token, then calls
+   `getEntity` **directly** for `FYA` (For your Action) + `FYI` (For your
+   Information) — no menu navigation — maps the `eProceedingPaginatedRequests[]`
+   rows, and **times it**. If anything fails it falls back to opening
+   e-Proceedings and replaying/scraping.
 
 ### How to test it and read the per-PAN number
 
-1. Reload the extension at `chrome://extensions` (it must show **v0.10.0**).
+1. Reload the extension at `chrome://extensions` (it must show **v0.11.0**).
 2. Open DevTools → **Console** on the portal tab before/while syncing.
 3. Run a sync for one assessee. Watch the purple badge and the console:
    - **Fast path worked:** badge shows `API sync ✓ N proceedings in XXX ms`, and

@@ -31,6 +31,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           portalPassword: creds.portalPassword,
           assesseeId: creds.assesseeId || null,
           mode: creds.mode || "open", // "open" | "sync"
+          knownDins: Array.isArray(creds.knownDins) ? creds.knownDins : [],
           appTabId: appTabId != null ? appTabId : null,
           createdAt: Date.now(),
         },
@@ -67,6 +68,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
       });
     });
+    return true;
+  }
+
+  // Portal content script asks to close its own tab after a sync completes.
+  if (type === "CLOSE_TAB") {
+    const tabId = sender.tab && sender.tab.id;
+    if (tabId != null) setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 200);
+    sendResponse({ ok: true });
     return true;
   }
 

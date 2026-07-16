@@ -447,7 +447,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
 
 /* Income-tax portal card — open e-Proceedings already logged in (Phase 1). */
 function PortalCard({ a, onAddLogin }) {
-  const { notify } = useData();
+  const { data: appData, notify } = useData();
   const [hasExt, setHasExt] = React.useState(null); // null = checking
   const [busy, setBusy] = React.useState(false);
   // Last sync's method + timing (approach "a" readout). null until a sync runs.
@@ -470,7 +470,12 @@ function PortalCard({ a, onAddLogin }) {
     setBusy(true);
     try {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode });
+      // Incremental sync: tell the extension which notice DINs we already have so
+      // it skips re-downloading their PDFs (only NEW documents are fetched).
+      const knownDins = mode === "sync"
+        ? [...new Set((appData.notices || []).filter((n) => n.pan === a.pan && n.din).map((n) => n.din))]
+        : [];
+      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, knownDins });
       notify(mode === "sync" ? "Syncing from the portal — watch the new tab…" : "Opening the portal — logging you in…");
     } catch (e) {
       console.error(e);
@@ -615,37 +620,34 @@ function MattersView({ matters, notices, hearings, assesseeName }) {
     );
   }
 
+  const GRID = "20px 96px minmax(0,1fr) 84px 78px 110px";
   return (
-    <div className="col" style={{gap: 12}}>
+    <div className="col" style={{gap: 10}}>
+      <div style={{display: "grid", gridTemplateColumns: GRID, gap: 12, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+        <span/><span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span style={{textAlign: "right"}}>Status</span>
+      </div>
       {ordered.map((m) => {
         const ns = noticesFor(m);
         const hs = hearingsFor(m);
         const isPortal = Boolean(m.proceedingReqId);
         const open = openId === m.id;
         const docCount = ns.length;
+        const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
         return (
           <div key={m.id} className="card" style={{padding: 0, overflow: "hidden"}}>
             <div
-              className="between"
-              style={{padding: "14px 18px", cursor: isPortal ? "pointer" : "default", alignItems: "center"}}
+              style={{display: "grid", gridTemplateColumns: GRID, gap: 12, alignItems: "center", padding: "13px 18px", cursor: isPortal ? "pointer" : "default"}}
               onClick={isPortal ? () => setOpenId(open ? null : m.id) : undefined}
             >
-              <div className="center" style={{gap: 12, minWidth: 0}}>
-                {isPortal && <Icon name={open ? "chevron-down" : "chevron-right"} size={16}/>}
-                <div style={{minWidth: 0}}>
-                  <div className="center" style={{gap: 8}}>
-                    <span className="pill pill-primary">{m.type || "Matter"}</span>
-                    <span className="strong" style={{fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{m.ref || m.proceedingName || "Matter"}</span>
-                  </div>
-                  <div className="muted" style={{fontSize: 11.5, marginTop: 3}}>
-                    {[m.ay ? `AY ${m.ay}` : "", m.section ? `u/s ${m.section}` : "", isPortal ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders` : (m.ref || "")].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
-              </div>
-              <div className="center" style={{gap: 8}}>
-                {hs.length > 0 && <span className="pill pill-muted"><Icon name="calendar" size={11}/> {hs.length}</span>}
-                <StatusPill status={m.status}/>
-              </div>
+              <span>{isPortal ? <Icon name={open ? "chevron-down" : "chevron-right"} size={16}/> : null}</span>
+              <span><span className="pill pill-primary">{m.type || "Matter"}</span></span>
+              <span style={{minWidth: 0}}>
+                <span className="strong" style={{fontSize: 13, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{m.ref || m.proceedingName || "Matter"}</span>
+                {isPortal && <span className="muted" style={{fontSize: 11}}>{docCount} notice{docCount === 1 ? "" : "s"}/orders{hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}</span>}
+              </span>
+              <span>{m.ay || "—"}</span>
+              <span>{section ? <span className="pill pill-muted">u/s {section}</span> : <span className="muted">—</span>}</span>
+              <span style={{textAlign: "right"}}><StatusPill status={m.status}/></span>
             </div>
 
             {open && isPortal && (

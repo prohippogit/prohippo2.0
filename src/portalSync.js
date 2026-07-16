@@ -51,9 +51,10 @@ export async function detectExtension() {
   }
 }
 
-/** Ask the extension to open the portal and auto-login (mode "open" or "sync"). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open" }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode }, 8000);
+/** Ask the extension to open the portal and auto-login (mode "open" or "sync").
+ *  knownDins lets a sync skip re-downloading PDFs it already has. */
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", knownDins = [] }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, knownDins }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

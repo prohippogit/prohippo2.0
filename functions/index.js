@@ -454,13 +454,19 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
         source: "portal",
         portalSyncedAt: new Date().toISOString(),
       };
+      // "For your Information" = completed/informational → Closed; "For your
+      // Action" = still needs action → Active.
+      const portalStatus = /information/i.test(p.tab || "") ? "Closed" : "Active";
       if (!mSnap.exists) {
-        await mRef.set({ ...base, section: "", bench: "", status: "Active", priority: "medium", staff: a.staff || "", createdAt: new Date().toISOString() }, { merge: true });
+        await mRef.set({ ...base, section: "", bench: "", status: portalStatus, priority: "medium", staff: a.staff || "", createdAt: new Date().toISOString() }, { merge: true });
         mattersAdded++;
       } else {
         // Refresh portal-owned fields only; never overwrite user-set status etc.
         const patch = { proceedingReqId: prId, proceedingName: base.proceedingName, noticeCount: base.noticeCount, source: cur.source || "portal", portalSyncedAt: base.portalSyncedAt };
         for (const k of ["type", "assessee", "pan", "ay", "ref"]) if (!cur[k]) patch[k] = base[k];
+        // Track the portal tab only while the status is still an auto value
+        // (don't clobber a manually chosen status like "Decided").
+        if (cur.status === "Active" || cur.status === "Closed" || !cur.status) patch.status = portalStatus;
         await mRef.set(patch, { merge: true });
       }
     }

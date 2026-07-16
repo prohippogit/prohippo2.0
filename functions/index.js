@@ -475,5 +475,13 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
     },
     { merge: true }
   );
+  // Keep a running count on the assessee doc (a top-level field the app reads
+  // without a deep subcollection query), incremented only for newly-seen notices.
+  if (!snap.exists) {
+    await db.doc(`users/${uid}/assessees/${assesseeId}`).set(
+      { portalNoticeCount: admin.firestore.FieldValue.increment(1), portalNoticeSyncedAt: new Date().toISOString() },
+      { merge: true }
+    );
+  }
   return { ok: true, id, added: !snap.exists, pdfAdded: Boolean(storagePath) && !hadPdf };
 });

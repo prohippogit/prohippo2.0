@@ -1,6 +1,6 @@
 /* ProHippo service worker — app-shell caching for PWA/offline support.
    Bump CACHE_VERSION to invalidate old caches on deploy. */
-const CACHE_VERSION = "prohippo-v1";
+const CACHE_VERSION = "prohippo-v2";
 const PRECACHE = [
   "/",
   "/manifest.webmanifest",

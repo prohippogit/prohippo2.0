@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v13";
+  const BUILD = "v14";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -344,18 +344,30 @@
     realClick(target);
     return true;
   }
+  const onEProceedings = () => /eProceedings/i.test(location.href);
   async function goToEProceedings() {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      // Open the menu so the item is in the DOM, then click it.
+    if (onEProceedings()) return true;
+
+    // Primary: navigate via the Angular hash route — the same URL the menu
+    // click produces (#/dashboard/eProceedings). This is deterministic and
+    // avoids the fragile dropdown click. It loads the e-Proceedings module,
+    // which fires the portal's own proceedings API (handing us the token).
+    try { location.hash = "#/dashboard/eProceedings"; } catch { /* noop */ }
+    await waitFor(() => onEProceedings() || isSessionExpired(), 5000);
+    if (onEProceedings()) { await sleep(900); return true; }
+    if (isSessionExpired()) { log("hash nav bounced to sessionExpire"); return false; }
+
+    // Fallback: open the Pending Actions menu and click the E-Proceedings item.
+    for (let attempt = 0; attempt < 3; attempt++) {
       openPendingActionsMenu();
-      await waitFor(() => !!findEProceedingsLink() || !!findEProceedingsItem(), 6000);
+      await waitFor(() => !!findEProceedingsLink() || !!findEProceedingsItem(), 5000);
       if (clickEProceedingsItem()) {
-        await sleep(1800);
-        if (/eProceedings/i.test(location.href)) return true;
+        await sleep(1600);
+        if (onEProceedings()) return true;
       }
-      await sleep(700);
+      await sleep(600);
     }
-    return /eProceedings/i.test(location.href);
+    return onEProceedings();
   }
   // Parse the proceedings list from the page text (labels are stable).
   function scrapeList(tab) {

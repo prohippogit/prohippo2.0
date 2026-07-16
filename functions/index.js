@@ -403,8 +403,15 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
     throw new HttpsError("invalid-argument", "assesseeId and proceedings[] are required.");
   }
 
+  // Resolve the assessee so matters link by name + PAN (how the app joins).
+  const aSnap = await db.doc(`users/${uid}/assessees/${assesseeId}`).get();
+  const a = aSnap.exists ? aSnap.data() : {};
+  const assesseeName = a.name || "";
+  const assesseePan = (a.pan || "").toUpperCase();
+
   const col = db.collection(`users/${uid}/assessees/${assesseeId}/portalProceedings`);
-  let added = 0, updated = 0;
+  const mattersCol = db.collection(`users/${uid}/matters`);
+  let added = 0, updated = 0, mattersAdded = 0;
   for (const p of proceedings) {
     const key = [p.name, p.ay, p.fy, p.pan, p.statusDate].map((x) => (x || "")).join("|");
     const id = crypto.createHash("sha1").update(key).digest("hex").slice(0, 24);
@@ -426,12 +433,43 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
       },
       { merge: true }
     );
+
+    // Each proceeding is a Matter (case file). Dedup by proceedingReqId; a
+    // conservative merge keeps the practitioner's own edits (status, priority…).
+    const prId = String(p.proceedingReqId || "");
+    if (prId) {
+      const mId = "pcdng_" + crypto.createHash("sha1").update(prId).digest("hex").slice(0, 20);
+      const mRef = mattersCol.doc(mId);
+      const mSnap = await mRef.get();
+      const cur = mSnap.exists ? mSnap.data() : {};
+      const base = {
+        type: deriveAuthority(p.name, ""),
+        assessee: assesseeName || p.assessee || "",
+        pan: assesseePan || (p.pan || "").toUpperCase(),
+        ay: formatAy(p.ay),
+        ref: p.name || "",
+        proceedingReqId: prId,
+        proceedingName: p.name || "",
+        noticeCount: typeof p.viewNoticeCount === "number" ? p.viewNoticeCount : (typeof p.noticeCount === "number" ? p.noticeCount : null),
+        source: "portal",
+        portalSyncedAt: new Date().toISOString(),
+      };
+      if (!mSnap.exists) {
+        await mRef.set({ ...base, section: "", bench: "", status: "Active", priority: "medium", staff: a.staff || "", createdAt: new Date().toISOString() }, { merge: true });
+        mattersAdded++;
+      } else {
+        // Refresh portal-owned fields only; never overwrite user-set status etc.
+        const patch = { proceedingReqId: prId, proceedingName: base.proceedingName, noticeCount: base.noticeCount, source: cur.source || "portal", portalSyncedAt: base.portalSyncedAt };
+        for (const k of ["type", "assessee", "pan", "ay", "ref"]) if (!cur[k]) patch[k] = base[k];
+        await mRef.set(patch, { merge: true });
+      }
+    }
   }
   await db.doc(`users/${uid}/assessees/${assesseeId}`).set(
     { portalLastSyncedAt: new Date().toISOString(), portalProceedingCount: proceedings.length },
     { merge: true }
   );
-  return { ok: true, added, updated, total: proceedings.length };
+  return { ok: true, added, updated, mattersAdded, total: proceedings.length };
 });
 
 // --- helpers for mapping portal notice data into the app's own entities ---
@@ -550,7 +588,8 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
       await hRef.set({
         assessee: assesseeName, pan, ay, authority, bench: "", section: notice.section || "",
         date: dueDate, time: "11:00", mode: "e-Proceeding", status: "Upcoming",
-        ita: "", staff: a.staff || "", din, source: "portal", createdAt: new Date().toISOString(),
+        ita: "", staff: a.staff || "", din, proceedingReqId: notice.proceedingReqId || "",
+        source: "portal", createdAt: new Date().toISOString(),
       }, { merge: true });
       hearingAdded = true;
     }

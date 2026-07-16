@@ -4,9 +4,20 @@ import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstan
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
-import { ref as storageRef, uploadString } from 'firebase/storage';
+import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
+
+// Open a Storage-hosted notice/order PDF in a new tab.
+async function openStoragePdf(storagePath) {
+  if (!storagePath) return;
+  try {
+    const url = await getDownloadURL(storageRef(storage, storagePath));
+    window.open(url, "_blank", "noopener");
+  } catch (e) {
+    console.error("open pdf", e);
+  }
+}
 
 export { AssesseeModal };
 
@@ -342,24 +353,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       )}
 
       {tab === "Matters" && (
-        <div className="card" style={{padding: 0}}>
-          <table className="tbl">
-            <thead><tr><th>Type</th><th>AY</th><th>Section</th><th>Reference</th><th>Bench / Officer</th><th>Status</th></tr></thead>
-            <tbody>
-              {matters.map(m => (
-                <tr key={m.id}>
-                  <td><span className="pill pill-primary">{m.type}</span></td>
-                  <td>{m.ay}</td>
-                  <td>{m.section ? <span className="pill pill-muted">u/s {m.section}</span> : <span className="muted">—</span>}</td>
-                  <td className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>{m.ref || "—"}</td>
-                  <td className="semi">{m.bench || "—"}</td>
-                  <td><StatusPill status={m.status}/></td>
-                </tr>
-              ))}
-              {matters.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No matters for {a.name} yet.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name}/>
       )}
 
       {tab === "Hearings" && (
@@ -593,6 +587,113 @@ function PortalCard({ a, onAddLogin }) {
           {syncInfo && <SyncTiming info={syncInfo}/>}
         </div>
       )}
+    </div>
+  );
+}
+
+/* Consolidated, proceeding-wise view: each matter (proceeding) expands to its
+   notices/orders (recent first) and hearings. Manual matters (no proceeding)
+   still show as a simple non-expanding row. */
+function MattersView({ matters, notices, hearings, assesseeName }) {
+  const [openId, setOpenId] = React.useState(null);
+
+  const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
+  const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));
+  const hearingsFor = (m) => byDateDesc(hearings.filter((h) => m.proceedingReqId && h.proceedingReqId === m.proceedingReqId));
+  // Latest activity per matter, for ordering proceedings recent-first.
+  const lastActivity = (m) => {
+    const ns = noticesFor(m); const hs = hearingsFor(m);
+    return [ns[0]?.date, hs[0]?.date, m.portalSyncedAt, m.createdAt].filter(Boolean).sort().slice(-1)[0] || "";
+  };
+  const ordered = [...matters].sort((x, y) => (lastActivity(y)).localeCompare(lastActivity(x)));
+
+  if (matters.length === 0) {
+    return (
+      <div className="card" style={{padding: 0}}>
+        <EmptyState icon="scale" title={`No proceedings for ${assesseeName} yet`} sub="Run a portal sync from the Overview tab to pull the assessee's e-Proceedings, or add a matter manually."/>
+      </div>
+    );
+  }
+
+  return (
+    <div className="col" style={{gap: 12}}>
+      {ordered.map((m) => {
+        const ns = noticesFor(m);
+        const hs = hearingsFor(m);
+        const isPortal = Boolean(m.proceedingReqId);
+        const open = openId === m.id;
+        const docCount = ns.length;
+        return (
+          <div key={m.id} className="card" style={{padding: 0, overflow: "hidden"}}>
+            <div
+              className="between"
+              style={{padding: "14px 18px", cursor: isPortal ? "pointer" : "default", alignItems: "center"}}
+              onClick={isPortal ? () => setOpenId(open ? null : m.id) : undefined}
+            >
+              <div className="center" style={{gap: 12, minWidth: 0}}>
+                {isPortal && <Icon name={open ? "chevron-down" : "chevron-right"} size={16}/>}
+                <div style={{minWidth: 0}}>
+                  <div className="center" style={{gap: 8}}>
+                    <span className="pill pill-primary">{m.type || "Matter"}</span>
+                    <span className="strong" style={{fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{m.ref || m.proceedingName || "Matter"}</span>
+                  </div>
+                  <div className="muted" style={{fontSize: 11.5, marginTop: 3}}>
+                    {[m.ay ? `AY ${m.ay}` : "", m.section ? `u/s ${m.section}` : "", isPortal ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders` : (m.ref || "")].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              </div>
+              <div className="center" style={{gap: 8}}>
+                {hs.length > 0 && <span className="pill pill-muted"><Icon name="calendar" size={11}/> {hs.length}</span>}
+                <StatusPill status={m.status}/>
+              </div>
+            </div>
+
+            {open && isPortal && (
+              <div style={{borderTop: "1px solid var(--p-line-2)", background: "var(--p-card-tint)", padding: "12px 18px"}}>
+                {hs.length > 0 && (
+                  <div style={{marginBottom: ns.length ? 14 : 0}}>
+                    <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 6}}>Hearings</div>
+                    <div className="col" style={{gap: 6}}>
+                      {hs.map((h) => (
+                        <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5}}>
+                          <Icon name="calendar" size={13}/>
+                          <span className="strong">{fmtDateLong(h.date)}</span>
+                          <span className="muted">{h.time} · {h.mode}</span>
+                          <StatusPill status={h.date < todayISO() ? "Completed" : h.status}/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 6}}>Notices &amp; orders</div>
+                {ns.length === 0
+                  ? <div className="muted" style={{fontSize: 12.5, padding: "4px 0"}}>No notices/orders synced for this proceeding.</div>
+                  : (
+                    <div className="col" style={{gap: 8}}>
+                      {ns.map((n) => (
+                        <div key={n.id} className="center" style={{gap: 10, padding: "9px 11px", background: "white", borderRadius: 10, border: "1px solid var(--p-line-2)", alignItems: "flex-start"}}>
+                          <div style={{width: 30, height: 38, borderRadius: 5, background: "var(--p-pink)", display: "grid", placeItems: "center", color: "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
+                          <div style={{flex: 1, minWidth: 0}}>
+                            <div className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</div>
+                            <div className="muted" style={{fontSize: 11}}>
+                              {[n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                          <StatusPill status={n.status}/>
+                          {n.storagePath && (
+                            <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
+                              <Icon name="doc" size={12}/>PDF
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

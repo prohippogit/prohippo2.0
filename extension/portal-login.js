@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v15";
+  const BUILD = "v16";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -75,8 +75,30 @@
       window.postMessage({ __prohippoNet: true, kind: "fetch", id, capId }, window.location.origin);
       setTimeout(() => { window.removeEventListener("message", onMsg); resolve({ ok: false, error: "timeout" }); }, timeoutMs);
     });
-    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings };
+    // Generic direct API call / document download via the MAIN-world probe.
+    const send = (msg, timeoutMs = 30000) => new Promise((resolve) => {
+      const id = "nx-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+      const onMsg = (e) => {
+        if (e.source !== window) return;
+        const d = e.data;
+        if (!d || d.__prohippoNet !== true || d.kind !== "fetchResult" || d.id !== id) return;
+        window.removeEventListener("message", onMsg);
+        resolve(d.result || { ok: false, error: "empty result" });
+      };
+      window.addEventListener("message", onMsg);
+      window.postMessage(Object.assign({ __prohippoNet: true, id }, msg), window.location.origin);
+      setTimeout(() => { window.removeEventListener("message", onMsg); resolve({ ok: false, error: "timeout" }); }, timeoutMs);
+    });
+    const apiCall = (opts) => send(Object.assign({ kind: "apicall" }, opts));
+    const getDoc = (opts) => send(Object.assign({ kind: "getdoc" }, opts), 45000);
+
+    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings, apiCall, getDoc };
   })();
+
+  // Portal API endpoints + form, mirrored from portal-net.js.
+  const GET_ENTITY_PATH = "/iec/returnservicesapi/auth/getEntity";
+  const SAVE_ENTITY_PATH = "/iec/returnservicesapi/auth/saveEntity";
+  const FORM = { formName: "FO-041_PCDNG" };
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
     if (chrome.runtime.lastError || !resp || !resp.ok || !resp.creds) return; // not our tab
@@ -467,7 +489,9 @@
   }
 
   // Map one API proceeding object → the row shape the app/Cloud Function expect.
+  // Also keeps proceedingReqId + viewNoticeCount for the notices fetch.
   function mapRow(o, tab) {
+    const noticeCount = typeof o.viewNoticeCount === "number" ? o.viewNoticeCount : (Number(o.viewNoticeCount) || null);
     return {
       tab,
       name: o.proceedingName || "",
@@ -477,8 +501,71 @@
       fy: o.financialYr || "",
       act: o.proceedingType || "",
       statusDate: o.issuedOn || o.servedOn || "",
-      noticeCount: typeof o.viewNoticeCount === "number" ? o.viewNoticeCount : (Number(o.viewNoticeCount) || null),
+      noticeCount,
+      proceedingReqId: o.proceedingReqId || "",
+      viewNoticeCount: noticeCount,
     };
+  }
+
+  // Phase 2b: pull each proceeding's notices/orders + their PDFs and stream them
+  // to the app (one message per document so large PDFs don't blow the message).
+  // Chain per proceeding: eProceedingDetailsService (list) → noticeletterpdf
+  // (satDocId) → GET /document/{satDocId} (PDF bytes). Auth is the session
+  // cookie; "sn" is just the serviceName.
+  const MAX_PDF_BYTES = 25 * 1024 * 1024; // skip storing absurdly large files
+  async function syncNotices(creds, badge, pan, rows) {
+    const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
+    if (!targets.length) { log("notices: none to fetch"); return; }
+    let docCount = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const r = targets[i];
+      badge.set("Notices " + (i + 1) + "/" + targets.length + " — " + (r.name || "proceeding").slice(0, 28) + "…");
+      const det = await NET.apiCall({
+        path: GET_ENTITY_PATH, serviceName: "eProceedingDetailsService",
+        payload: { serviceName: "eProceedingDetailsService", proceedingReqId: r.proceedingReqId, pan, header: FORM },
+      });
+      const items = Array.isArray(det.json) ? det.json : [];
+      log("notices: proceeding", r.proceedingReqId, "→", items.length, "items");
+      for (const it of items) {
+        const headerSeqNo = it.headerSeqNo;
+        let pdf = null;
+        if (headerSeqNo) {
+          const doc = await NET.apiCall({
+            path: SAVE_ENTITY_PATH, serviceName: "noticeletterpdf",
+            payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
+          });
+          const satDocId = doc.json && doc.json.satDocId;
+          if (satDocId) {
+            const got = await NET.getDoc({ docId: String(satDocId) });
+            if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) pdf = got;
+            else if (got && got.bytes > MAX_PDF_BYTES) log("notices: skipping oversized pdf", got.bytes);
+          }
+        }
+        const notice = {
+          proceedingReqId: r.proceedingReqId,
+          proceedingName: r.name || it.proceedingName || "",
+          din: it.documentIdentificationNumber || "",
+          section: it.noticeSection || "",
+          description: it.description || "",
+          issuedOn: it.issuedOn || "",
+          servedOn: it.servedOn || "",
+          responseDueDate: it.responseDueDate || "",
+          docRefId: it.documentReferenceId || "",
+          ay: it.ay || r.ay || "",
+          pan: it.pan || pan,
+          proceedingStatus: it.proceedingStatus || "",
+          filename: (pdf && pdf.filename) || "",
+          contentType: (pdf && pdf.contentType) || "application/pdf",
+          contentBase64: (pdf && pdf.base64) || null,
+          bytes: (pdf && pdf.bytes) || 0,
+        };
+        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
+        docCount++;
+        await sleep(150); // gentle pacing between documents
+      }
+    }
+    log("notices: streamed " + docCount + " document(s)");
+    badge.set("Synced proceedings + " + docCount + " notice document(s) ✓");
   }
 
   // Approach (a), the real thing: after login, call the e-Proceedings API
@@ -510,6 +597,9 @@
     log("DIRECT API OK — " + rows.length + " proceedings in " + ms + " ms");
     badge.set("API sync ✓ " + rows.length + " proceedings in " + ms + " ms");
     chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "proceedings", via: "api", ms, endpoint: "/auth/getEntity · eProceedingsPaginatedService", proceedings: rows } }, () => {});
+    // Then pull each proceeding's notices/orders + PDFs.
+    try { await syncNotices(creds, badge, pan, rows); }
+    catch (e) { log("notices error", e); }
     setTimeout(() => badge.remove(), 10000);
     return true;
   }

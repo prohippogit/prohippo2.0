@@ -66,7 +66,23 @@ best-effort. If the on-page ProHippo badge says it couldn't fill the form,
 report what you see and the selectors in `extension/portal-login.js` will be
 tuned once. This is normal for portal automation.
 
-## What's next (Phase 2)
+## Phase 2 — e-Proceedings + notice/order PDFs (implemented)
 
-Reading e-Proceedings and pulling notice/reply PDFs into ProHippo (with
-dedupe-by-DIN) — that phase adds Firebase Storage and a sync function.
+The extension now, after login, calls the portal's JSON API directly to pull the
+e-Proceedings list, then for each proceeding pulls its notices/orders and
+downloads each PDF. PDFs are uploaded to **Firebase Storage** under
+`users/{uid}/assessees/{id}/notices/…` and their metadata (DIN, section, dates,
+Storage path) is recorded via the `ingestPortalNotice` Cloud Function
+(deduped by DIN).
+
+Two extra one-time deploy steps for this phase:
+
+1. **Enable Firebase Storage** for the project (Firebase console → Build →
+   Storage → Get started), if it isn't already.
+2. **Deploy the new rules + function:**
+
+   ```
+   firebase deploy --only functions,storage
+   ```
+
+   `storage.rules` restricts every user to their own `users/{uid}/…` files.

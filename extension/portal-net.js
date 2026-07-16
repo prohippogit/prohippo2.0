@@ -44,8 +44,10 @@
   let lastAuth = null;   // { headers } from a captured call carrying an "sn" header
   let sessionPan = null; // PAN seen in a captured request payload
   const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/i;
-  // e-Proceedings list endpoint + payload, from observed portal traffic.
-  const PROCEEDINGS_PATH = "/iec/returnservicesapi/auth/getEntity";
+  // Portal API endpoints, from observed traffic.
+  const GET_ENTITY_PATH = "/iec/returnservicesapi/auth/getEntity";
+  const DOC_BASE = "/iec/document/";
+  const FORM = { formName: "FO-041_PCDNG" };
 
   const isPortalApi = (url) => {
     try {
@@ -195,29 +197,22 @@
     }
   });
 
-  /* ---------- approach (a): call the e-Proceedings API directly ----------
-   * Uses the session token captured above to POST the paginated proceedings
-   * request. Same-origin + credentials, so cookies + the "sn" header authorise
-   * it just like the portal's own call. No UI navigation required.
+  /* ---------- approach (a): call the portal API directly ----------
+   * KEY INSIGHT: the portal's "sn" header is not a secret token — it is simply
+   * the serviceName echoed verbatim (char-for-char). The real authorisation is
+   * the session cookie. So we can call any service directly with
+   * `sn: <serviceName>` + credentials, with no UI navigation or token capture.
    */
-  async function fetchProceedings(opts) {
-    if (!lastAuth) return { ok: false, error: "no session token captured yet" };
-    const pan = String(opts.pan || "").toUpperCase();
-    if (!PAN_RE.test(pan)) return { ok: false, error: "no valid PAN" };
-    const payload = {
-      serviceName: "eProceedingsPaginatedService",
-      pan,
-      prcdngStatusFlag: opts.statusFlag || "FYA", // FYA = For your Action, FYI = For your Information
-      prcdngTypeFlag: "self",
-      pageConfig: { pageSize: opts.pageSize || 100, pageNo: opts.pageNo || 1, searchTerm: "", sortBy: "createdDt", sortAsc: false, filters: {} },
-      header: { formName: "FO-041_PCDNG" },
-    };
-    const headers = replayHeaders(lastAuth.headers);
-    headers["Content-Type"] = "application/json";
-    if (!Object.keys(headers).some((k) => k.toLowerCase() === "accept")) headers["Accept"] = "application/json";
+  async function apiCall(opts) {
+    const { path, serviceName, method, payload } = opts;
+    const headers = { "Content-Type": "application/json", "Accept": "application/json" };
+    if (serviceName) headers["sn"] = serviceName; // == serviceName, by design
     const t0 = performance.now();
     try {
-      const resp = await origFetch.call(window, ORIGIN + PROCEEDINGS_PATH, { method: "POST", credentials: "include", headers, body: JSON.stringify(payload) });
+      const resp = await origFetch.call(window, ORIGIN + (path || GET_ENTITY_PATH), {
+        method: method || "POST", credentials: "include", headers,
+        body: payload != null ? JSON.stringify(payload) : undefined,
+      });
       const ms = Math.round(performance.now() - t0);
       const text = await resp.text();
       let json = null; try { json = JSON.parse(text); } catch { /* not json */ }
@@ -227,11 +222,50 @@
     }
   }
 
+  // Download a document (notice/order PDF) by its id → base64 + filename.
+  async function getDoc(opts) {
+    const t0 = performance.now();
+    try {
+      const resp = await origFetch.call(window, ORIGIN + DOC_BASE + encodeURIComponent(opts.docId), { method: "GET", credentials: "include" });
+      const ms = Math.round(performance.now() - t0);
+      if (!resp.ok) return { ok: false, status: resp.status, ms };
+      const cd = resp.headers.get("content-disposition") || "";
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+      const filename = m ? decodeURIComponent(m[1]).replace(/\.gz$/i, "") : (opts.docId + ".pdf");
+      const buf = await resp.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let bin = ""; const CH = 0x8000;
+      for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+      return { ok: true, status: resp.status, ms, base64: btoa(bin), filename, contentType: resp.headers.get("content-type") || "application/pdf", bytes: bytes.length };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message || err), ms: Math.round(performance.now() - t0) };
+    }
+  }
+
+  // Convenience: the paginated e-Proceedings list for one status flag.
+  function fetchProceedings(opts) {
+    const pan = String(opts.pan || "").toUpperCase();
+    if (!PAN_RE.test(pan)) return Promise.resolve({ ok: false, error: "no valid PAN" });
+    return apiCall({
+      path: GET_ENTITY_PATH, serviceName: "eProceedingsPaginatedService",
+      payload: {
+        serviceName: "eProceedingsPaginatedService", pan,
+        prcdngStatusFlag: opts.statusFlag || "FYA", prcdngTypeFlag: "self",
+        pageConfig: { pageSize: opts.pageSize || 100, pageNo: opts.pageNo || 1, searchTerm: "", sortBy: "createdDt", sortAsc: false, filters: {} },
+        header: FORM,
+      },
+    });
+  }
+
   window.addEventListener("message", async (e) => {
     if (e.source !== window) return;
     const d = e.data;
-    if (!d || d.__prohippoNet !== true || d.kind !== "proceedings") return;
-    const result = await fetchProceedings(d);
+    if (!d || d.__prohippoNet !== true) return;
+    let result;
+    if (d.kind === "proceedings") result = await fetchProceedings(d);
+    else if (d.kind === "apicall") result = await apiCall(d);
+    else if (d.kind === "getdoc") result = await getDoc(d);
+    else return;
     post("fetchResult", { id: d.id, result });
   });
 

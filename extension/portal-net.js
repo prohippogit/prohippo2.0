@@ -41,9 +41,14 @@
   const isPortalApi = (url) => {
     try {
       const u = new URL(url, ORIGIN);
-      // Portal API calls go to the eportal/incometax host, not to static assets.
-      return /incometax\.gov\.in$/i.test(u.hostname) &&
-             !/\.(js|css|png|jpg|jpeg|svg|woff2?|ttf|ico|map)(\?|$)/i.test(u.pathname);
+      // Same-origin only: the real e-Proceedings API is served from the app's
+      // own origin (eportal.*). This deliberately skips static.incometax.gov.in
+      // — its i18n translation JSON contains UI label strings like "Proceeding
+      // Name", so it was being mis-detected as the proceedings list, and
+      // replaying that cross-origin with credentials trips a CORS failure.
+      if (u.origin !== ORIGIN) return false;
+      if (/\/(assets|i18n|static)\//i.test(u.pathname)) return false;
+      return !/\.(js|css|png|jpg|jpeg|svg|woff2?|ttf|ico|map|json)(\?|$)/i.test(u.pathname);
     } catch { return false; }
   };
 

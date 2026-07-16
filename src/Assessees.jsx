@@ -7,6 +7,7 @@ import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { functions, storage, auth, db } from './firebase';
+import { useAuth } from './auth';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 
 export { AssesseeModal };
@@ -460,6 +461,8 @@ function PortalCard({ a, onAddLogin }) {
   const [busy, setBusy] = React.useState(false);
   // Last sync's method + timing (approach "a" readout). null until a sync runs.
   const [syncInfo, setSyncInfo] = React.useState(null);
+  // Counters for the streamed notice documents (used to surface failures).
+  const noticeStats = React.useRef({ ok: 0, fail: 0, lastNotify: 0 });
 
   const check = React.useCallback(() => {
     setHasExt(null);
@@ -507,8 +510,17 @@ function PortalCard({ a, onAddLogin }) {
           const meta = { ...n };
           delete meta.contentBase64;
           await httpsCallable(functions, "ingestPortalNotice")({ assesseeId: a.id, notice: meta, storagePath, filename: n.filename });
+          noticeStats.current.ok++;
         } catch (e) {
           console.error("Notice ingest failed", e);
+          noticeStats.current.fail++;
+          // Surface the real error (e.g. function not deployed, permission) —
+          // throttled so 39 failures don't spam 39 toasts.
+          const now = Date.now();
+          if (now - noticeStats.current.lastNotify > 1500) {
+            noticeStats.current.lastNotify = now;
+            notify("Couldn't save a portal notice — " + (e?.code || e?.message || "error") + " (check Storage/functions are deployed)", "alert");
+          }
         }
         return;
       }
@@ -579,6 +591,7 @@ function PortalCard({ a, onAddLogin }) {
           <div className="muted" style={{fontSize: 11.5}}>
             Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"}
             {typeof a.portalProceedingCount === "number" ? ` · ${a.portalProceedingCount} proceedings` : ""}
+            {typeof a.portalNoticeCount === "number" ? ` · ${a.portalNoticeCount} notices` : ""}
           </div>
           {syncInfo && <SyncTiming info={syncInfo}/>}
         </div>
@@ -589,11 +602,12 @@ function PortalCard({ a, onAddLogin }) {
 
 /* Notices & orders pulled from the e-filing portal (with their PDFs in Storage). */
 function PortalNotices({ a }) {
+  const { user } = useAuth();
+  const uid = user?.uid;
   const [notices, setNotices] = React.useState(null); // null = loading
   const [opening, setOpening] = React.useState("");
 
   React.useEffect(() => {
-    const uid = auth.currentUser?.uid;
     if (!uid) return undefined;
     const col = collection(db, "users", uid, "assessees", a.id, "portalNotices");
     const unsub = onSnapshot(
@@ -606,7 +620,7 @@ function PortalNotices({ a }) {
       (e) => { console.error("portalNotices read", e); setNotices([]); }
     );
     return unsub;
-  }, [a.id]);
+  }, [uid, a.id]);
 
   const openPdf = async (n) => {
     if (!n.storagePath) return;

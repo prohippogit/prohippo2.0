@@ -16,8 +16,17 @@ export default defineConfig([
     },
   },
   {
+    // Browser-extension scripts run in the extension/content-script world:
+    // browser globals plus the WebExtension `chrome.*` API.
+    files: ['extension/**/*.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.webextensions },
+    },
+  },
+  {
     files: ['**/*.{js,jsx}'],
-    ignores: ['functions/**'],
+    ignores: ['functions/**', 'extension/**'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,

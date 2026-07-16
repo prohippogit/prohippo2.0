@@ -11,8 +11,44 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v8";
+  const BUILD = "v9";
   const INTERVAL_MS = 1000;
+
+  /* ---------- approach (a): talk to the MAIN-world network probe ----------
+   * portal-net.js watches the calls the portal makes to itself and can replay
+   * the e-Proceedings data call directly. Here we (1) collect the sanitized
+   * capture descriptors it broadcasts, and (2) ask it to replay + time a call.
+   */
+  const NET = (() => {
+    const caps = [];
+    if (typeof window !== "undefined") {
+      window.addEventListener("message", (e) => {
+        if (e.source !== window) return;
+        const d = e.data;
+        if (d && d.__prohippoNet === true && d.kind === "capture" && d.entry) caps.push(d.entry);
+      });
+    }
+    // The most recent capture that looks like the proceedings list, if any.
+    const bestProceedingId = () => {
+      const hits = caps.filter((c) => c.looksLikeProceedings).sort((a, b) => b.at - a.at);
+      return hits[0] ? hits[0].id : null;
+    };
+    // Ask the probe to replay a captured call; resolves with { ok, ms, json, ... }.
+    const apiFetch = (capId, timeoutMs = 20000) => new Promise((resolve) => {
+      const id = "af-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+      const onMsg = (e) => {
+        if (e.source !== window) return;
+        const d = e.data;
+        if (!d || d.__prohippoNet !== true || d.kind !== "fetchResult" || d.id !== id) return;
+        window.removeEventListener("message", onMsg);
+        resolve(d.result || { ok: false, error: "empty result" });
+      };
+      window.addEventListener("message", onMsg);
+      window.postMessage({ __prohippoNet: true, kind: "fetch", id, capId }, window.location.origin);
+      setTimeout(() => { window.removeEventListener("message", onMsg); resolve({ ok: false, error: "timeout" }); }, timeoutMs);
+    });
+    return { caps, bestProceedingId, apiFetch };
+  })();
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
     if (chrome.runtime.lastError || !resp || !resp.ok || !resp.creds) return; // not our tab
@@ -182,7 +218,7 @@
     return new Promise((resolve) => {
       const start = Date.now();
       const t = setInterval(() => {
-        let ok = false; try { ok = pred(); } catch { ok = false; }
+        let ok; try { ok = pred(); } catch { ok = false; }
         if (ok) { clearInterval(t); resolve(true); }
         else if (Date.now() - start > timeout) { clearInterval(t); resolve(false); }
       }, 500);
@@ -247,9 +283,99 @@
     }
     return out;
   }
+  /* ---------- approach (a): map the API JSON → proceedings rows ----------
+   * We don't hard-code the portal's field names (they can change and we can't
+   * see them from here). Instead we walk the JSON, find the array of objects
+   * that best looks like a proceedings list, and fuzzy-map each object's keys.
+   */
+  function collectArrays(node, out, depth) {
+    if (!node || depth > 6) return;
+    if (Array.isArray(node)) {
+      if (node.length && typeof node[0] === "object" && node[0] && !Array.isArray(node[0])) out.push(node);
+      for (const it of node) collectArrays(it, out, depth + 1);
+      return;
+    }
+    if (typeof node === "object") for (const k of Object.keys(node)) collectArrays(node[k], out, depth + 1);
+  }
+  const KEY_HINTS = /proceed|assess|notice|order|financial|applicableact|pan|\bay\b|assessee|din|requestid/i;
+  function scoreArray(arr) {
+    const obj = arr[0] || {};
+    let s = 0;
+    for (const k of Object.keys(obj)) if (KEY_HINTS.test(k)) s++;
+    return s;
+  }
+  // Pull a value by trying several fuzzy key patterns against an object.
+  function pick(obj, patterns) {
+    const keys = Object.keys(obj);
+    for (const p of patterns) {
+      const k = keys.find((x) => p.test(x));
+      if (k != null && obj[k] != null && obj[k] !== "") return obj[k];
+    }
+    return "";
+  }
+  function mapProceedingsJson(json) {
+    const arrays = [];
+    collectArrays(json, arrays, 0);
+    if (!arrays.length) return null;
+    arrays.sort((a, b) => scoreArray(b) - scoreArray(a) || b.length - a.length);
+    const best = arrays[0];
+    if (scoreArray(best) < 2) return null; // not confidently a proceedings list
+    return best.map((o) => ({
+      tab: "api",
+      name: String(pick(o, [/proceedingname/i, /proceeding/i, /subject/i]) || "").trim(),
+      ay: String(pick(o, [/assessmentyear/i, /^ay$/i, /asstyear/i]) || "").trim(),
+      pan: String(pick(o, [/^pan$/i, /pannumber/i, /pan/i]) || "").trim(),
+      assessee: String(pick(o, [/assesseename/i, /nameofassessee/i, /assessee/i, /taxpayername/i]) || "").trim(),
+      fy: String(pick(o, [/financialyear/i, /^fy$/i]) || "").trim(),
+      act: String(pick(o, [/applicableact/i, /^act$/i]) || "").trim(),
+      statusDate: String(pick(o, [/statusdate/i, /noticedate/i, /date/i]) || "").trim(),
+      noticeCount: Number(pick(o, [/noticecount/i, /noofnotice/i, /count/i])) || null,
+      din: String(pick(o, [/^din$/i, /documentid/i, /din/i]) || "").trim(),
+    })).filter((p) => p.name || p.pan || p.din);
+  }
+
+  // Approach (a) fast path: replay the portal's own proceedings API + time it.
+  // Returns { proceedings, ms, status, endpoint } or null if not available yet.
+  async function tryApiFetch(badge) {
+    const capId = NET.bestProceedingId();
+    if (!capId) { log("api: no proceedings call captured yet"); return null; }
+    badge.set("Fetching via portal API…");
+    const res = await NET.apiFetch(capId);
+    log("api replay result", res && { ok: res.ok, status: res.status, ms: res.ms });
+    if (!res || !res.ok) return null;
+    if (!res.json) { log("api: response was not JSON; sample:", res.textSample); return { proceedings: null, ms: res.ms, status: res.status, endpoint: res.url, unmapped: true }; }
+    const rows = mapProceedingsJson(res.json);
+    if (!rows || !rows.length) { log("api: JSON captured but shape not recognised — sample keys:", Object.keys(res.json || {})); return { proceedings: null, ms: res.ms, status: res.status, endpoint: res.url, unmapped: true, json: res.json }; }
+    return { proceedings: rows, ms: res.ms, status: res.status, endpoint: res.url };
+  }
+
   async function beginSync(creds, badge) {
     badge.set("Opening e-Proceedings…");
     await goToEProceedings();
+
+    // --- Approach (a): try the JSON API first, and TIME it. Navigating to
+    // e-Proceedings above makes the portal call its own API, which the
+    // MAIN-world probe captured; here we replay that call directly. ---
+    await sleep(1200); // give the portal's own API call a moment to land + be captured
+    try {
+      const api = await tryApiFetch(badge);
+      if (api && api.proceedings && api.proceedings.length) {
+        log("API fast path OK — " + api.proceedings.length + " rows in " + api.ms + "ms via " + api.endpoint);
+        badge.set("API sync ✓ " + api.proceedings.length + " proceedings in " + api.ms + " ms");
+        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "proceedings", via: "api", ms: api.ms, endpoint: api.endpoint, proceedings: api.proceedings } }, () => {});
+        setTimeout(() => badge.remove(), 10000);
+        return;
+      }
+      if (api && api.unmapped) {
+        // We reached the API and got a JSON/response back fast, but its shape
+        // needs a one-time calibration. Report the timing + a sample so the
+        // mapping can be finalised, then fall through to scraping for now.
+        badge.set("API reached in " + api.ms + " ms (mapping needs calibration) — scraping meanwhile…");
+        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "api-probe", via: "api", ms: api.ms, status: api.status, endpoint: api.endpoint, sample: api.json || null } }, () => {});
+        log("=== PROHIPPO API PROBE ===", "endpoint:", api.endpoint, "ms:", api.ms, "json:", api.json);
+      }
+    } catch (e) { log("api path error", e); }
+
     let onList = await waitFor(() => /eProceedings/i.test(location.href) && !/viewNotices/i.test(location.href) && /Proceeding Name/i.test(document.body.innerText), 45000);
     if (!onList) {
       badge.set("Open Pending Actions → e-Proceedings; sync continues automatically…", true);

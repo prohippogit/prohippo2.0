@@ -434,9 +434,51 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
   return { ok: true, added, updated, total: proceedings.length };
 });
 
-// Record one portal notice/order (metadata + the Storage path of its PDF, which
-// the app uploads client-side). Deduped by DIN when present, else by a hash of
-// the identifying fields. The PDF bytes never pass through this function.
+// --- helpers for mapping portal notice data into the app's own entities ---
+
+// Portal dates are epoch-millis (numbers/numeric strings); also tolerate ISO and
+// "DD-MMM-YYYY". Returns "YYYY-MM-DD" or "".
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+function parsePortalDate(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number" || /^\d{10,}$/.test(String(v))) {
+    const d = new Date(Number(v));
+    return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(s);
+  if (m && MONTHS[m[2].toLowerCase()] != null) {
+    const d = new Date(Date.UTC(Number(m[3]), MONTHS[m[2].toLowerCase()], Number(m[1])));
+    return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+  }
+  return "";
+}
+
+// The portal gives the AY start year ("2013", "0"). The app uses "2013-14".
+function formatAy(v) {
+  const s = String(v || "").trim();
+  const m = /^(\d{4})$/.exec(s);
+  if (!m || s === "0") return /^\d{4}-\d{2}$/.test(s) ? s : "";
+  const y = Number(m[1]);
+  return `${y}-${String((y + 1) % 100).padStart(2, "0")}`;
+}
+
+// Map proceeding name + section to the app's authority buckets.
+function deriveAuthority(proceedingName, section) {
+  const n = (proceedingName || "").toLowerCase();
+  const sec = String(section || "");
+  if (/penalty/.test(n)) return "Penalty";
+  if (/itat|tribunal/.test(n)) return "ITAT";
+  if (/appeal/.test(n) || sec === "250") return "CIT(A)";
+  if (/143|142|147|148|scrutiny|assessment/.test(n + " " + sec)) return "Scrutiny";
+  return "Other";
+}
+
+// Record one portal notice/order as a real app notice (deduped by DIN), attach
+// its Storage PDF, and — when its response is due in the future — create a
+// hearing/calendar entry. The PDF bytes never pass through this function.
 exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
@@ -445,43 +487,74 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
     throw new HttpsError("invalid-argument", "assesseeId and notice are required.");
   }
 
-  const din = (notice.din || "").toString().trim();
-  const keySource = din || [notice.proceedingReqId, notice.docRefId, notice.issuedOn].map((x) => x || "").join("|");
-  const id = din
-    ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20)
-    : crypto.createHash("sha1").update(keySource).digest("hex").slice(0, 24);
+  // Resolve the assessee so the notice links by name + PAN (how the app joins).
+  const aSnap = await db.doc(`users/${uid}/assessees/${assesseeId}`).get();
+  const a = aSnap.exists ? aSnap.data() : {};
+  const assesseeName = a.name || notice.assessee || "";
+  const pan = (a.pan || notice.pan || "").toUpperCase();
 
-  const ref = db.doc(`users/${uid}/assessees/${assesseeId}/portalNotices/${id}`);
-  const snap = await ref.get();
-  const hadPdf = snap.exists && snap.get("storagePath");
-  await ref.set(
-    {
-      din,
-      proceedingReqId: notice.proceedingReqId || "",
-      proceedingName: notice.proceedingName || "",
-      section: notice.section || "",
-      description: notice.description || "",
-      issuedOn: notice.issuedOn || "",
-      servedOn: notice.servedOn || "",
-      responseDueDate: notice.responseDueDate || "",
-      docRefId: notice.docRefId || "",
-      ay: notice.ay || "",
-      pan: notice.pan || "",
-      proceedingStatus: notice.proceedingStatus || "",
-      filename: filename || notice.filename || "",
-      storagePath: storagePath || (snap.exists ? snap.get("storagePath") : "") || "",
-      bytes: typeof notice.bytes === "number" ? notice.bytes : 0,
-      syncedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
-  // Keep a running count on the assessee doc (a top-level field the app reads
-  // without a deep subcollection query), incremented only for newly-seen notices.
-  if (!snap.exists) {
+  const din = (notice.din || "").toString().trim();
+  const date = parsePortalDate(notice.issuedOn) || parsePortalDate(notice.servedOn);
+  const dueDate = parsePortalDate(notice.responseDueDate);
+  const ay = formatAy(notice.ay);
+  const authority = deriveAuthority(notice.proceedingName, notice.section);
+  const fileName = filename || notice.filename || "";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const noticesCol = db.collection(`users/${uid}/notices`);
+
+  // Dedup by DIN against ALL notices (portal-created or hand-entered).
+  let existing = null;
+  if (din) {
+    const q = await noticesCol.where("din", "==", din).limit(1).get();
+    if (!q.empty) existing = q.docs[0];
+  }
+
+  let noticeId;
+  let added;
+  if (existing) {
+    // Conservative merge: attach the PDF + portal refs, fill only empty fields,
+    // never overwrite the practitioner's own edits (status, authority, …).
+    const cur = existing.data();
+    const patch = { source: cur.source || "portal", din, proceedingReqId: notice.proceedingReqId || "", portalSyncedAt: new Date().toISOString() };
+    if (storagePath) { patch.storagePath = storagePath; if (!cur.fileName) patch.fileName = fileName; }
+    const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate };
+    for (const k of Object.keys(fill)) if (!cur[k] && fill[k]) patch[k] = fill[k];
+    await existing.ref.set(patch, { merge: true });
+    noticeId = existing.id;
+    added = false;
+  } else {
+    noticeId = din ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20) : noticesCol.doc().id;
+    await noticesCol.doc(noticeId).set({
+      assessee: assesseeName, pan, ay, authority, section: notice.section || "",
+      din, date, subject: notice.description || "", status: "Awaiting review",
+      mode: "e-Proceeding", bench: "", ita: "", hearingDate: "", hearingTime: "",
+      documents: [], responseDueDate: dueDate,
+      source: "portal", proceedingReqId: notice.proceedingReqId || "",
+      storagePath: storagePath || "", fileName,
+      createdAt: new Date().toISOString(), portalSyncedAt: new Date().toISOString(),
+    }, { merge: true });
+    added = true;
     await db.doc(`users/${uid}/assessees/${assesseeId}`).set(
       { portalNoticeCount: admin.firestore.FieldValue.increment(1), portalNoticeSyncedAt: new Date().toISOString() },
       { merge: true }
     );
   }
-  return { ok: true, id, added: !snap.exists, pdfAdded: Boolean(storagePath) && !hadPdf };
+
+  // Future response-due date → a hearing/calendar entry (deduped, once).
+  let hearingAdded = false;
+  if (dueDate && dueDate >= today) {
+    const hId = "portal_" + crypto.createHash("sha1").update([pan, ay, authority, dueDate].join("|")).digest("hex").slice(0, 20);
+    const hRef = db.doc(`users/${uid}/hearings/${hId}`);
+    if (!(await hRef.get()).exists) {
+      await hRef.set({
+        assessee: assesseeName, pan, ay, authority, bench: "", section: notice.section || "",
+        date: dueDate, time: "11:00", mode: "e-Proceeding", status: "Upcoming",
+        ita: "", staff: a.staff || "", din, source: "portal", createdAt: new Date().toISOString(),
+      }, { merge: true });
+      hearingAdded = true;
+    }
+  }
+
+  return { ok: true, noticeId, added, hearingAdded };
 });

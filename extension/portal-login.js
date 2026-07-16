@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v16";
+  const BUILD = "v17";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -514,9 +514,10 @@
   // cookie; "sn" is just the serviceName.
   const MAX_PDF_BYTES = 25 * 1024 * 1024; // skip storing absurdly large files
   async function syncNotices(creds, badge, pan, rows) {
+    const known = new Set((creds.knownDins || []).map((d) => String(d)));
     const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
     if (!targets.length) { log("notices: none to fetch"); return; }
-    let docCount = 0;
+    let docCount = 0, skipped = 0;
     for (let i = 0; i < targets.length; i++) {
       const r = targets[i];
       badge.set("Notices " + (i + 1) + "/" + targets.length + " — " + (r.name || "proceeding").slice(0, 28) + "…");
@@ -527,6 +528,10 @@
       const items = Array.isArray(det.json) ? det.json : [];
       log("notices: proceeding", r.proceedingReqId, "→", items.length, "items");
       for (const it of items) {
+        // Incremental: a document we already hold (matched by DIN) is skipped —
+        // no PDF re-download, no re-send. Only NEW documents are fetched.
+        const din0 = it.documentIdentificationNumber || "";
+        if (din0 && known.has(String(din0))) { skipped++; continue; }
         const headerSeqNo = it.headerSeqNo;
         let pdf = null;
         if (headerSeqNo) {
@@ -564,8 +569,24 @@
         await sleep(150); // gentle pacing between documents
       }
     }
-    log("notices: streamed " + docCount + " document(s)");
-    badge.set("Synced proceedings + " + docCount + " notice document(s) ✓");
+    log("notices: streamed " + docCount + " new document(s), skipped " + skipped + " already-synced");
+    badge.set("Synced " + docCount + " new document(s)" + (skipped ? " · " + skipped + " already on file" : "") + " ✓");
+  }
+
+  /* ---------- log out + close the tab once a sync is done ---------- */
+  function requestCloseTab() { try { chrome.runtime.sendMessage({ type: "CLOSE_TAB" }, () => {}); } catch { /* noop */ } }
+  function tryLogout() {
+    const el = [...document.querySelectorAll('a, button, span, [role="menuitem"]')].filter(isVisible)
+      .find((x) => /^log\s?out$/i.test((x.textContent || "").trim()));
+    if (el) { realClick(el); return true; }
+    return false;
+  }
+  async function logoutAndClose(badge) {
+    badge.set("Sync complete — logging out…");
+    await sleep(3500); // let the result be visible first
+    try { tryLogout(); } catch { /* noop */ }
+    await sleep(1200);
+    requestCloseTab();
   }
 
   // Approach (a), the real thing: after login, call the e-Proceedings API
@@ -600,7 +621,8 @@
     // Then pull each proceeding's notices/orders + PDFs.
     try { await syncNotices(creds, badge, pan, rows); }
     catch (e) { log("notices error", e); }
-    setTimeout(() => badge.remove(), 10000);
+    // Done — log out and close the portal tab so no session is left open.
+    await logoutAndClose(badge);
     return true;
   }
 

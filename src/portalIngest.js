@@ -49,7 +49,7 @@ export async function ingestPortalSyncMessage(payload) {
         storagePath = `users/${uid}/assessees/${payload.assesseeId}/responses/${safe}.pdf`;
         await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", { contentType: at.contentType || "application/pdf" });
       }
-      attachments.push({ storagePath, filename: at.filename || "attachment.pdf" });
+      attachments.push({ storagePath, filename: at.filename || "attachment.pdf", label: at.label || "" });
     }
     const res = await httpsCallable(functions, "ingestPortalResponse")({
       assesseeId: payload.assesseeId, noticeKey: r.noticeKey,

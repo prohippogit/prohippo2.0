@@ -888,8 +888,8 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                                       {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
                                         <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 6}}>
                                           {rsp.attachments.filter((at) => at.storagePath).map((at, ai) => (
-                                            <button key={ai} className="btn btn-ghost btn-xs" title={at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
-                                              <Icon name="doc" size={11}/>{(at.filename || "PDF").slice(0, 26)}
+                                            <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                                              <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 26)}
                                             </button>
                                           ))}
                                         </div>

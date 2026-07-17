@@ -719,7 +719,7 @@ exports.ingestPortalResponse = onCall({ region: "us-central1", maxInstances: 10 
     submittedOn: (response.submittedOn || "").toString(),
     respType: (response.respType || "").toString(),
     attachments: Array.isArray(response.attachments)
-      ? response.attachments.map((a) => ({ storagePath: a.storagePath || "", filename: a.filename || "attachment.pdf" }))
+      ? response.attachments.map((a) => ({ storagePath: a.storagePath || "", filename: a.filename || "attachment.pdf", label: (a.label || "").toString() }))
       : [],
   });
   await ref.set({ responses, hasResponse: true }, { merge: true });

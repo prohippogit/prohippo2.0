@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v21";
+  const BUILD = "v22";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -530,11 +530,16 @@
       if (!rr || (!rr.remarks && atts.length === 0)) continue;
       const attachments = [];
       for (const at of atts) {
-        const adocId = at.satDocId || at.docId || at.documentId || at.attachmentId || at.refId;
+        const adocId = at.docId || at.satDocId || at.documentId || at.attachmentId || at.refId;
         let apdf = null;
         if (adocId) { const g = await NET.getDoc({ docId: String(adocId) }); if (g && g.ok && g.bytes && g.bytes <= MAX_PDF_BYTES) apdf = g; }
+        // Portal fields (confirmed from itbaResponseService): attachmentName =
+        // human filename, categorieName = a label like "Written submission".
+        const base = at.attachmentName || at.docNam || at.fileName || (adocId ? adocId + ".pdf" : "attachment.pdf");
+        const filename = /\.[a-z0-9]{2,5}$/i.test(base) ? base : base + ".pdf";
         attachments.push({
-          filename: (apdf && apdf.filename) || at.docNam || at.fileName || (adocId ? adocId + ".pdf" : "attachment.pdf"),
+          filename: (apdf && apdf.filename && /\.[a-z0-9]{2,5}$/i.test(apdf.filename)) ? apdf.filename : filename,
+          label: at.categorieName || "",
           contentType: (apdf && apdf.contentType) || "application/pdf",
           contentBase64: apdf ? apdf.base64 : null,
         });
@@ -613,7 +618,10 @@
         await sleep(150); // gentle pacing between documents
 
         // Responses the assessee filed against THIS notice (remarks + PDFs).
-        if (headerSeqNo && notice.din && (it.lastResponseSubmittedOn || it.respId || it.isSubmitted || it.respStatus)) {
+        // itbaResponseService safely returns an empty respRemrkAttLst when
+        // nothing was filed, so we always ask rather than guess from flags
+        // that the portal populates inconsistently.
+        if (headerSeqNo && notice.din) {
           try { await syncResponses(creds, pan, notice.din, String(headerSeqNo)); }
           catch (e) { log("responses error", e); }
         }

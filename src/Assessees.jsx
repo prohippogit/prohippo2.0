@@ -22,6 +22,50 @@ async function openStoragePdf(storagePath) {
 
 export { AssesseeModal };
 
+// The portal sends submittedOn as epoch millis; render it as a readable date.
+function fmtSubmitted(v) {
+  const n = Number(v);
+  if (!v || Number.isNaN(n)) return String(v || "");
+  try { return new Date(n).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
+  catch { return String(v); }
+}
+
+// Responses the assessee filed against a notice — remarks text + downloadable
+// attachment PDFs. Shared by the Matters view and the per-assessee Notices tab
+// so the two never drift apart.
+function ResponsesBlock({ responses, plain }) {
+  const list = responses || [];
+  if (list.length === 0) return null;
+  return (
+    <div style={{marginTop: plain ? 0 : 8, borderTop: plain ? "none" : "1px dashed var(--p-line)", paddingTop: plain ? 0 : 8}}>
+      <div className="muted" style={{fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 5}}>
+        Response{list.length > 1 ? "s" : ""} filed
+      </div>
+      <div className="col" style={{gap: 8}}>
+        {list.map((rsp, ri) => (
+          <div key={ri} style={{padding: "8px 10px", background: "var(--p-mint)", borderRadius: 8, fontSize: 12}}>
+            <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: rsp.remarks ? 4 : 0}}>
+              <Icon name="check" size={11}/>
+              <span className="strong">{rsp.respType || "Response"}</span>
+              {rsp.submittedOn && <span className="muted">· {fmtSubmitted(rsp.submittedOn)}</span>}
+            </div>
+            {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
+            {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
+              <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 6}}>
+                {rsp.attachments.filter((at) => at.storagePath).map((at, ci) => (
+                  <button key={ci} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                    <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 26)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const PAGE_SIZE = 25;
 
 // Small readout of how the last portal sync was fetched + how long it took.
@@ -469,14 +513,31 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
             <thead><tr><th>DIN</th><th>AY</th><th>Section</th><th>Authority</th><th>Date</th><th>Status</th></tr></thead>
             <tbody>
               {notices.map(n => (
-                <tr key={n.id}>
-                  <td className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>{n.din || "—"}</td>
-                  <td>{n.ay}</td>
-                  <td>{n.section ? <span className="pill pill-muted">u/s {n.section}</span> : "—"}</td>
-                  <td>{n.authority}</td>
-                  <td className="muted">{n.date ? fmtDateLong(n.date) : "—"}</td>
-                  <td><StatusPill status={n.status}/></td>
-                </tr>
+                <React.Fragment key={n.id}>
+                  <tr style={(n.responses || []).length > 0 ? {borderBottom: "none"} : undefined}>
+                    <td className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>
+                      <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
+                        <span>{n.din || "—"}</span>
+                        {n.storagePath && (
+                          <button className="btn btn-ghost btn-xs" title="Open notice / order PDF" onClick={() => openStoragePdf(n.storagePath)}>
+                            <Icon name="doc" size={11}/>PDF
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td>{n.ay}</td>
+                    <td>{n.section ? <span className="pill pill-muted">u/s {n.section}</span> : "—"}</td>
+                    <td>{n.authority}</td>
+                    <td className="muted">{n.date ? fmtDateLong(n.date) : "—"}</td>
+                    <td><StatusPill status={n.status}/></td>
+                  </tr>
+                  {(n.responses || []).length > 0 && (
+                    <tr>
+                      <td></td>
+                      <td colSpan="5" style={{paddingTop: 0}}><ResponsesBlock responses={n.responses} plain/></td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
               {notices.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No notices for {a.name} yet.</td></tr>}
             </tbody>
@@ -871,34 +932,7 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                                 )}
                               </div>
                             )}
-                            {(n.responses || []).length > 0 && (
-                              <div style={{marginTop: 8, borderTop: "1px dashed var(--p-line)", paddingTop: 8}}>
-                                <div className="muted" style={{fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 5}}>
-                                  Response{n.responses.length > 1 ? "s" : ""} filed
-                                </div>
-                                <div className="col" style={{gap: 8}}>
-                                  {n.responses.map((rsp, ri) => (
-                                    <div key={ri} style={{padding: "8px 10px", background: "var(--p-mint)", borderRadius: 8, fontSize: 12}}>
-                                      <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: rsp.remarks ? 4 : 0}}>
-                                        <Icon name="check" size={11}/>
-                                        <span className="strong">{rsp.respType || "Response"}</span>
-                                        {rsp.submittedOn && <span className="muted">· {rsp.submittedOn}</span>}
-                                      </div>
-                                      {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
-                                      {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
-                                        <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 6}}>
-                                          {rsp.attachments.filter((at) => at.storagePath).map((at, ai) => (
-                                            <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
-                                              <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 26)}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                            <ResponsesBlock responses={n.responses}/>
                           </div>
                         );
                       })}

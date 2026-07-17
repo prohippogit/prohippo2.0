@@ -7,6 +7,7 @@ import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
+import { ingestPortalSyncMessage } from './portalIngest';
 
 // Open a Storage-hosted notice/order PDF in a new tab.
 async function openStoragePdf(storagePath) {
@@ -45,14 +46,65 @@ function SyncTiming({ info }) {
 }
 
 export function Assessees({ onOpen, initialSearch = "" }) {
-  const { data } = useData();
+  const { data, notify } = useData();
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState(initialSearch);
   const [page, setPage] = React.useState(1);
   const [showAdd, setShowAdd] = React.useState(false);
+  const [selected, setSelected] = React.useState(() => new Set());
+  const [bulk, setBulk] = React.useState(null); // { done, total, current } while a bulk sync runs
+  const doneResolver = React.useRef(null);
+  const running = React.useRef(false); // true only while a bulk sync is in progress
 
   React.useEffect(() => { setSearch(initialSearch); }, [initialSearch]);
   React.useEffect(() => { setPage(1); }, [tab, search]);
+
+  // While a bulk sync runs, ingest each streamed message and advance the queue
+  // when an assessee signals it's done.
+  React.useEffect(() => {
+    const off = onSyncData(async (payload) => {
+      if (!payload || !running.current) return; // only while a bulk sync runs
+      if (payload.kind === "sync-done") { const r = doneResolver.current; if (r) r(payload.assesseeId); return; }
+      try { await ingestPortalSyncMessage(payload); } catch (e) { console.error("bulk ingest", e); }
+    });
+    return off;
+  }, []);
+
+  const toggle = (id) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const syncableOnPage = () => pageRows.filter((a) => a.portalCredSet).map((a) => a.id);
+  const allPageSelected = () => { const ids = syncableOnPage(); return ids.length > 0 && ids.every((id) => selected.has(id)); };
+  const toggleAllPage = () => setSelected((s) => {
+    const ids = syncableOnPage(); const n = new Set(s);
+    if (ids.every((id) => n.has(id))) ids.forEach((id) => n.delete(id)); else ids.forEach((id) => n.add(id));
+    return n;
+  });
+
+  const runBulkSync = async () => {
+    const targets = data.assessees.filter((a) => selected.has(a.id) && a.portalCredSet);
+    if (!targets.length) { notify("Select assessees that have a saved portal login.", "alert"); return; }
+    if (!(await detectExtension())) { notify("Install the ProHippo Sync extension to sync from the portal.", "alert"); return; }
+    running.current = true;
+    for (let i = 0; i < targets.length; i++) {
+      const a = targets[i];
+      setBulk({ done: i, total: targets.length, current: a.name });
+      try {
+        const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
+        const knownDins = [...new Set((data.notices || []).filter((n) => n.pan === a.pan && n.din).map((n) => n.din))];
+        const done = new Promise((resolve) => { doneResolver.current = resolve; });
+        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins });
+        await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
+        doneResolver.current = null;
+        await new Promise((r) => setTimeout(r, 1500)); // small gap between logins
+      } catch (e) {
+        console.error("bulk sync", a.name, e);
+        notify(`Couldn't sync ${a.name}${e?.message ? " — " + e.message.slice(0, 80) : ""}`, "alert");
+      }
+    }
+    running.current = false;
+    setBulk(null);
+    setSelected(new Set());
+    notify(`Bulk sync complete — ${targets.length} assessee${targets.length > 1 ? "s" : ""}`);
+  };
 
   const matchesTab = (a) => {
     if (tab === "All") return true;
@@ -112,10 +164,34 @@ export function Assessees({ onOpen, initialSearch = "" }) {
         </div>
       ) : (
         <>
+          {(selected.size > 0 || bulk) && (
+            <div className="card" style={{marginBottom: 12, padding: "12px 16px", background: "var(--p-card-tint)", border: "1px solid var(--p-primary-3)"}}>
+              <div className="between" style={{alignItems: "center", flexWrap: "wrap", gap: 10}}>
+                <div className="center" style={{gap: 10}}>
+                  <Icon name="sparkle" size={15}/>
+                  <span className="strong" style={{fontSize: 13.5}}>
+                    {bulk
+                      ? `Syncing ${bulk.done + 1} of ${bulk.total}${bulk.current ? ` — ${bulk.current}` : ""}…`
+                      : `${selected.size} selected`}
+                  </span>
+                </div>
+                <div className="center" style={{gap: 8}}>
+                  {!bulk && <button className="btn btn-ghost btn-sm" onClick={() => setSelected(new Set())}>Clear</button>}
+                  <button className="btn btn-primary btn-sm" disabled={Boolean(bulk)} onClick={runBulkSync}>
+                    <Icon name="sparkle" size={13}/>{bulk ? "Syncing…" : `Sync ${selected.size} from portal`}
+                  </button>
+                </div>
+              </div>
+              {!bulk && <div className="muted" style={{fontSize: 11.5, marginTop: 6}}>Only assessees with a saved portal login can be synced. Each opens, syncs and closes in turn.</div>}
+            </div>
+          )}
           <div className="card" style={{padding: 0, overflow: "hidden"}}>
             <table className="tbl">
               <thead>
                 <tr>
+                  <th style={{width: 34}}>
+                    <input type="checkbox" checked={allPageSelected()} onChange={toggleAllPage} title="Select all on this page with a portal login"/>
+                  </th>
                   <th>Assessee</th>
                   <th>PAN</th>
                   <th>Status</th>
@@ -133,6 +209,11 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                   const nextHearing = s.hearings[0];
                   return (
                     <tr key={a.id} onClick={() => onOpen(a)} style={{cursor: "pointer"}}>
+                      <td onClick={(e) => e.stopPropagation()} style={{textAlign: "center"}}>
+                        {a.portalCredSet
+                          ? <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} title="Select for portal sync"/>
+                          : <span className="muted" title="No portal login saved" style={{fontSize: 11}}>—</span>}
+                      </td>
                       <td>
                         <div className="center" style={{gap: 10}}>
                           <Avatar name={a.name} color={a.color} size="sm"/>
@@ -177,7 +258,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                   );
                 })}
                 {pageRows.length === 0 && (
-                  <tr><td colSpan="9" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No assessees match this filter.</td></tr>
+                  <tr><td colSpan="10" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No assessees match this filter.</td></tr>
                 )}
               </tbody>
             </table>
@@ -210,6 +291,8 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
   const [tab, setTab] = React.useState("Overview");
   const [showEdit, setShowEdit] = React.useState(false);
   const [showMatter, setShowMatter] = React.useState(false);
+  const [closedProceedings, setClosedProceedings] = React.useState([]); // popup after a sync
+  const [focusReqId, setFocusReqId] = React.useState(null); // proceeding to expand in Matters
   const a = assessee;
   const s = assesseeStats(data, a);
   const hearings = upcomingHearings(data).filter(h => h.pan === a.pan);
@@ -324,7 +407,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
           </div>
 
           <div className="col" style={{gap: 18}}>
-            <PortalCard a={a} onAddLogin={() => setShowEdit(true)}/>
+            <PortalCard a={a} onAddLogin={() => setShowEdit(true)} onClosedProceedings={(list) => setClosedProceedings(list)}/>
             <div className="card">
               <div className="card-title mb-3">Particulars</div>
               <KV label="PAN" value={a.pan} mono/>
@@ -353,7 +436,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       )}
 
       {tab === "Matters" && (
-        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name} notify={notify}/>
+        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name} notify={notify} focusReqId={focusReqId}/>
       )}
 
       {tab === "Hearings" && (
@@ -441,12 +524,52 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
 
       {showEdit && <AssesseeModal initial={a} onClose={() => setShowEdit(false)}/>}
       {showMatter && <MatterModal initial={{ assessee: a.name, pan: a.pan, staff: a.staff }} onClose={() => setShowMatter(false)}/>}
+      {closedProceedings.length > 0 && (
+        <ClosedProceedingsModal
+          items={closedProceedings}
+          onClose={() => setClosedProceedings([])}
+          onOpen={(reqId) => { setClosedProceedings([]); setTab("Matters"); setFocusReqId(reqId); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* Popup shown when a sync moves one or more proceedings to Closed. */
+function ClosedProceedingsModal({ items, onClose, onOpen }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{maxWidth: 460, padding: "22px 26px"}} onClick={(e) => e.stopPropagation()}>
+        <div className="center" style={{gap: 12, alignItems: "flex-start", marginBottom: 6}}>
+          <div style={{width: 40, height: 40, borderRadius: 12, background: "var(--p-mint)", color: "#1B8C5C", display: "grid", placeItems: "center", flexShrink: 0}}>
+            <Icon name="check" size={20}/>
+          </div>
+          <div>
+            <div style={{fontSize: 17, fontWeight: 800}}>{items.length === 1 ? "A proceeding is now closed" : `${items.length} proceedings are now closed`}</div>
+            <div className="card-sub" style={{marginTop: 2}}>Moved from “For your Action” to completed. An order may be available.</div>
+          </div>
+        </div>
+        <div className="col" style={{gap: 8, marginTop: 12, maxHeight: 300, overflowY: "auto"}}>
+          {items.map((it) => (
+            <div key={it.proceedingReqId} className="between" style={{padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, alignItems: "center"}}>
+              <div style={{minWidth: 0}}>
+                <div className="strong" style={{fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{it.proceedingName || "Proceeding"}</div>
+                <div className="muted" style={{fontSize: 11.5}}>{[it.type, it.ay ? `AY ${it.ay}` : ""].filter(Boolean).join(" · ")}</div>
+              </div>
+              <button className="btn btn-primary btn-sm" onClick={() => onOpen(it.proceedingReqId)}><Icon name="arrow-right" size={13}/>View order</button>
+            </div>
+          ))}
+        </div>
+        <div className="row" style={{marginTop: 16, justifyContent: "flex-end"}}>
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* Income-tax portal card — open e-Proceedings already logged in (Phase 1). */
-function PortalCard({ a, onAddLogin }) {
+function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   const { data: appData, notify } = useData();
   const [hasExt, setHasExt] = React.useState(null); // null = checking
   const [busy, setBusy] = React.useState(false);
@@ -544,13 +667,14 @@ function PortalCard({ a, onAddLogin }) {
           proceedings: payload.proceedings || [],
         });
         notify(`Synced ${data.total} proceedings (${data.added} new)`);
+        if (Array.isArray(data.closed) && data.closed.length && onClosedProceedings) onClosedProceedings(data.closed);
       } catch (e) {
         console.error(e);
         notify("Sync received but couldn't be saved.", "alert");
       }
     });
     return off;
-  }, [a.id, notify]);
+  }, [a.id, notify, onClosedProceedings]);
 
   return (
     <div className="card">
@@ -599,9 +723,17 @@ function PortalCard({ a, onAddLogin }) {
 /* Consolidated, proceeding-wise view: each matter (proceeding) expands to its
    notices/orders (recent first) and hearings. Manual matters (no proceeding)
    still show as a simple non-expanding row. */
-function MattersView({ matters, notices, hearings, assesseeName, notify }) {
+function MattersView({ matters, notices, hearings, assesseeName, notify, focusReqId }) {
   const [openId, setOpenId] = React.useState(null);
   const [parsingId, setParsingId] = React.useState("");
+
+  // When asked to focus a proceeding (e.g. from the "closed" popup), open it.
+  React.useEffect(() => {
+    if (!focusReqId) return;
+    const m = matters.find((mm) => mm.proceedingReqId === focusReqId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (m) setOpenId(m.id);
+  }, [focusReqId, matters]);
 
   const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));

@@ -74,7 +74,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Portal content script asks to close its own tab after a sync completes.
   if (type === "CLOSE_TAB") {
     const tabId = sender.tab && sender.tab.id;
-    if (tabId != null) setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 200);
+    if (tabId != null) setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 600);
     sendResponse({ ok: true });
     return true;
   }

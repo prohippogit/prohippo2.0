@@ -305,7 +305,23 @@ export const totalOutstanding = (data) => data.invoices.reduce((s, i) => s + inv
 export const overdueAmount = (data) =>
   data.invoices.filter((i) => invoiceStatus(i) === "Overdue").reduce((s, i) => s + invoiceOutstanding(i), 0);
 
-export const awaitingNotices = (data) => data.notices.filter((n) => n.status === "Awaiting review");
+// Notices worth surfacing for review on the dashboard. A freshly added
+// assessee pulls in years of history, so we do NOT show every unreviewed
+// notice — only those that are actually actionable now: issued within the
+// last 10 days, OR carrying a hearing / response-due date still in the future.
+// Notices the user has ticked "read" drop off regardless.
+export const awaitingNotices = (data) => {
+  const today = todayISO();
+  const tenDaysAgo = toISO(new Date(Date.now() - 10 * 86400000));
+  return data.notices.filter((n) => {
+    if (n.read) return false;
+    if (n.status && n.status !== "Awaiting review") return false;
+    const recent = n.date && n.date >= tenDaysAgo && n.date <= today;
+    const due = n.responseDueDate || n.hearingDate || "";
+    const future = due && due >= today;
+    return recent || future;
+  });
+};
 
 export function downloadCSV(filename, headers, rows) {
   const esc = (v) => {

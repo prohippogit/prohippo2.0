@@ -3,7 +3,7 @@ import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import { Assessees, AssesseeProfile } from './Assessees';
 import Hearings from './Hearings';
-import Notices, { NoticeReview } from './Notices';
+import { NoticeReview } from './Notices';
 import { Matters, Invoices, Communications, AiParser, Reports, SettingsPage } from './Other';
 import { Icon } from './shared';
 import { DataProvider, useData } from './store';
@@ -66,7 +66,6 @@ function Shell() {
       case "dashboard": content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>; break;
       case "assessees": content = <Assessees onOpen={(a) => setOpenAssesseeId(a.id)} initialSearch={assesseeQuery}/>; break;
       case "matters": content = <Matters/>; break;
-      case "notices": content = <Notices onOpenNotice={openReview}/>; break;
       case "hearings": content = <Hearings/>; break;
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;

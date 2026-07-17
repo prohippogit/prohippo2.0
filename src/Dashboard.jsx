@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, Avatar, fmtINR, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, fmtINR, fmtLakhs, fmtDate, daysFromNow } from './shared';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 
@@ -82,33 +82,13 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
         <Stat label="Outstanding fees" value={fmtLakhs(outstanding)} delta={overdue ? `${fmtLakhs(overdue)} overdue` : "Nothing overdue"} deltaKind={overdue ? "down" : "up"} icon="wallet" iconBg="var(--p-amber)" iconColor="#B07512"
           glow="rgba(255, 193, 84, 0.32)" goLabel="Invoices" onClick={() => onNav("invoices")}/>
         <Stat label="Notices this month" value={noticesThisMonth.length} delta={awaiting.length ? `${awaiting.length} awaiting review` : "All reviewed"} deltaKind="neutral" icon="doc" iconBg="var(--p-mint)" iconColor="#1B8C5C"
-          glow="rgba(74, 222, 164, 0.30)" goLabel="Notices" onClick={() => onNav("notices")}/>
+          glow="rgba(74, 222, 164, 0.30)"/>
       </div>
 
       <div className="grid-main">
         <div className="col" style={{gap: 18}}>
           {awaiting.length > 0 && (
-            <div className="card" style={{padding: 0, overflow: "hidden", border: "none", background: "linear-gradient(120deg, #2B2270 0%, #5146C6 55%, #8E7CFF 100%)", color: "white", position: "relative"}}>
-              <div style={{position: "absolute", right: -40, top: -40, width: 200, height: 200, borderRadius: "50%", background: "rgba(255,180,220,0.25)", filter: "blur(20px)"}}/>
-              <div style={{padding: "24px 26px", position: "relative"}}>
-                <div className="center" style={{gap: 8}}>
-                  <Icon name="sparkle" size={16}/>
-                  <span style={{fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.85}}>Notices · Awaiting review</span>
-                </div>
-                <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 8, lineHeight: 1.25}}>
-                  {awaiting.length} notice{awaiting.length !== 1 ? "s" : ""} to review.<br/>
-                  <span style={{opacity: 0.85}}>Verify the details before saving.</span>
-                </div>
-                <div className="row" style={{marginTop: 16, gap: 10, alignItems: "center"}}>
-                  <button className="btn" style={{background: "white", color: "var(--p-primary-2)"}} onClick={() => onOpenNotice(awaiting[0])}>
-                    Review first notice <Icon name="arrow-right" size={14}/>
-                  </button>
-                  <button className="btn btn-ghost" style={{color: "white"}} onClick={() => onNav("notices")}>
-                    See all notices
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AwaitingNoticesCard awaiting={awaiting} onOpenNotice={onOpenNotice}/>
           )}
 
           <div className="card">
@@ -160,6 +140,102 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
           <AuthorityMixCard matters={activeMatters}/>
           <ChecklistCard/>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// A small square checkbox matching the checklist style.
+function Check({ checked, onChange }) {
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onChange(); }}
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(); } }}
+      style={{width: 18, height: 18, borderRadius: 6, border: "2px solid var(--p-line)", display: "grid", placeItems: "center", cursor: "pointer", background: checked ? "var(--p-primary)" : "white", borderColor: checked ? "var(--p-primary)" : "var(--p-line)", flexShrink: 0}}
+    >
+      {checked && <Icon name="check" size={12} stroke={3}/>}
+    </div>
+  );
+}
+
+// Dashboard card: the notices worth acting on now (recent, or with an upcoming
+// hearing). Each can be ticked read individually or in bulk.
+function AwaitingNoticesCard({ awaiting, onOpenNotice }) {
+  const { updateNotice, notify } = useData();
+  const [selected, setSelected] = React.useState(() => new Set());
+  const [busy, setBusy] = React.useState(false);
+  const today = todayISO();
+
+  const rows = React.useMemo(
+    () => [...awaiting].sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    [awaiting]
+  );
+
+  const toggle = (id) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allSelected = rows.length > 0 && rows.every((n) => selected.has(n.id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((n) => n.id)));
+
+  const markRead = async (ids) => {
+    if (!ids.length || busy) return;
+    setBusy(true);
+    for (const id of ids) await updateNotice(id, { read: true });
+    setBusy(false);
+    setSelected(new Set());
+    notify(ids.length > 1 ? `${ids.length} notices marked as read` : "Marked as read");
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <div className="card-title">Notices · Awaiting review</div>
+          <div className="card-sub">{rows.length} recent or with an upcoming hearing · tick to mark as read</div>
+        </div>
+        {selected.size > 0 && (
+          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => markRead([...selected])}>
+            <Icon name="check" size={14}/>Mark {selected.size} as read
+          </button>
+        )}
+      </div>
+
+      <div className="center" style={{gap: 10, padding: "2px 2px 12px", justifyContent: "flex-start"}}>
+        <Check checked={allSelected} onChange={toggleAll}/>
+        <span className="muted" style={{fontSize: 12}}>Select all</span>
+      </div>
+
+      <div className="col" style={{gap: 8, maxHeight: 430, overflowY: "auto"}}>
+        {rows.map((n) => {
+          const due = n.responseDueDate || n.hearingDate || "";
+          const hasFutureHearing = due && due >= today;
+          const isSel = selected.has(n.id);
+          return (
+            <div key={n.id} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderRadius: 11, background: isSel ? "var(--p-lavender-2)" : "transparent"}}>
+              <Check checked={isSel} onChange={() => toggle(n.id)}/>
+              <div style={{flex: 1, minWidth: 0, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open to review">
+                <div className="between" style={{gap: 8}}>
+                  <span className="strong" style={{fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.assessee || "—"}</span>
+                  <div className="center" style={{gap: 6, flexShrink: 0}}>
+                    {n.section && <span className="pill pill-muted">u/s {n.section}</span>}
+                    {hasFutureHearing && <span className="pill pill-pink"><Icon name="calendar" size={10}/>{fmtDate(due)}</span>}
+                  </div>
+                </div>
+                <div className="muted" style={{fontSize: 11.5, marginTop: 3}}>
+                  AY {n.ay || "—"}{n.din ? ` · DIN …${String(n.din).slice(-6)}` : ""}{n.date ? ` · ${fmtDate(n.date)}` : ""}
+                </div>
+              </div>
+              <button className="btn btn-ghost btn-xs" disabled={busy} title="Mark as read" onClick={() => markRead([n.id])}>
+                <Icon name="check" size={12}/>Read
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,12 +1,11 @@
 import { Icon } from './shared';
-import { useData, awaitingNotices } from './store';
+import { useData } from './store';
 import { useAuth } from './auth';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
   { id: "assessees", label: "Assessees", icon: "users" },
   { id: "matters", label: "Matters", icon: "scale" },
-  { id: "notices", label: "Notices", icon: "doc" },
   { id: "hearings", label: "Hearings", icon: "calendar" },
   { id: "invoices", label: "Invoices", icon: "invoice" },
   { id: "communications", label: "Communications", icon: "chat" },
@@ -23,7 +22,6 @@ export default function Sidebar({ active, onNav, open }) {
   const { user, signOutUser } = useAuth();
   const badges = {
     assessees: data.assessees.length || null,
-    notices: awaitingNotices(data).length || null,
   };
 
   return (

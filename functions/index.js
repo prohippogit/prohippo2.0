@@ -579,6 +579,9 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
   const pan = (a.pan || notice.pan || "").toUpperCase();
 
   const din = (notice.din || "").toString().trim();
+  // Orders (closure orders) have no DIN — dedup them by a stable docKey instead.
+  const docKey = (notice.docKey || "").toString().trim();
+  const isOrder = Boolean(notice.isOrder);
   const date = parsePortalDate(notice.issuedOn) || parsePortalDate(notice.servedOn);
   const dueDate = parsePortalDate(notice.responseDueDate);
   const ay = formatAy(notice.ay);
@@ -588,10 +591,13 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
 
   const noticesCol = db.collection(`users/${uid}/notices`);
 
-  // Dedup by DIN against ALL notices (portal-created or hand-entered).
+  // Dedup by DIN (notices) or docKey (orders) against ALL notices.
   let existing = null;
   if (din) {
     const q = await noticesCol.where("din", "==", din).limit(1).get();
+    if (!q.empty) existing = q.docs[0];
+  } else if (docKey) {
+    const q = await noticesCol.where("docKey", "==", docKey).limit(1).get();
     if (!q.empty) existing = q.docs[0];
   }
 
@@ -601,7 +607,7 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
     // Conservative merge: attach the PDF + portal refs, fill only empty fields,
     // never overwrite the practitioner's own edits (status, authority, …).
     const cur = existing.data();
-    const patch = { source: cur.source || "portal", din, proceedingReqId: notice.proceedingReqId || "", portalSyncedAt: new Date().toISOString() };
+    const patch = { source: cur.source || "portal", din, docKey, isOrder, proceedingReqId: notice.proceedingReqId || "", portalSyncedAt: new Date().toISOString() };
     if (storagePath) { patch.storagePath = storagePath; if (!cur.fileName) patch.fileName = fileName; }
     const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate };
     for (const k of Object.keys(fill)) if (!cur[k] && fill[k]) patch[k] = fill[k];
@@ -609,10 +615,12 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
     noticeId = existing.id;
     added = false;
   } else {
-    noticeId = din ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20) : noticesCol.doc().id;
+    noticeId = din ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20)
+      : docKey ? "doc_" + crypto.createHash("sha1").update(docKey).digest("hex").slice(0, 20)
+        : noticesCol.doc().id;
     await noticesCol.doc(noticeId).set({
       assessee: assesseeName, pan, ay, authority, section: notice.section || "",
-      din, date, subject: notice.description || "", status: "Awaiting review",
+      din, docKey, isOrder, date, subject: notice.description || "", status: "Awaiting review",
       mode: "e-Proceeding", bench: "", ita: "", hearingDate: "", hearingTime: "",
       documents: [], responseDueDate: dueDate,
       source: "portal", proceedingReqId: notice.proceedingReqId || "",

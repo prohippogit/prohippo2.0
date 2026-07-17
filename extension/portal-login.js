@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v17";
+  const BUILD = "v18";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -158,7 +158,10 @@
           navigated = true;
           clearInterval(timer);
           if (creds.mode === "sync") {
-            beginSync(creds, badge).catch((e) => { log("sync error", e); badge.set("Sync failed — " + (e.message || e), true); });
+            beginSync(creds, badge)
+              .catch((e) => { log("sync error", e); badge.set("Sync failed — " + (e.message || e), true); })
+              // Always tell the app this assessee is done, so a bulk queue advances.
+              .finally(() => { try { chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "sync-done" } }, () => {}); } catch { /* noop */ } });
           } else {
             finish(true, "Logged in ✓ — you're in the portal.");
           }

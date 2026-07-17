@@ -449,6 +449,7 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
   const col = db.collection(`users/${uid}/assessees/${assesseeId}/portalProceedings`);
   const mattersCol = db.collection(`users/${uid}/matters`);
   let added = 0, updated = 0, mattersAdded = 0;
+  const closed = []; // proceedings that flipped Active → Closed this sync
   for (const p of proceedings) {
     const key = [p.name, p.ay, p.fy, p.pan, p.statusDate].map((x) => (x || "")).join("|");
     const id = crypto.createHash("sha1").update(key).digest("hex").slice(0, 24);
@@ -505,6 +506,9 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
         // (don't clobber a manually chosen status like "Decided").
         if (cur.status === "Active" || cur.status === "Closed" || !cur.status) patch.status = portalStatus;
         await mRef.set(patch, { merge: true });
+        if (cur.status === "Active" && portalStatus === "Closed") {
+          closed.push({ proceedingReqId: prId, proceedingName: p.name || "", ay: formatAy(p.ay), type: base.type });
+        }
       }
     }
   }
@@ -512,7 +516,7 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
     { portalLastSyncedAt: new Date().toISOString(), portalProceedingCount: proceedings.length },
     { merge: true }
   );
-  return { ok: true, added, updated, mattersAdded, total: proceedings.length };
+  return { ok: true, added, updated, mattersAdded, closed, total: proceedings.length };
 });
 
 // --- helpers for mapping portal notice data into the app's own entities ---

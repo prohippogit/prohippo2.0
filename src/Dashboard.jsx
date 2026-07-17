@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, Avatar, fmtINR, fmtLakhs, fmtDate, daysFromNow } from './shared';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
@@ -226,7 +227,7 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
     notify(ids.length > 1 ? `${ids.length} notices marked as read` : "Marked as read");
   };
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" style={{maxWidth: 640, padding: "22px 24px"}} onClick={(e) => e.stopPropagation()}>
         <div className="between" style={{alignItems: "flex-start", gap: 12, marginBottom: 12}}>
@@ -277,7 +278,8 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
           })}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

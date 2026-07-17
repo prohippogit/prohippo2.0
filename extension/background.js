@@ -20,7 +20,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     const appTabId = sender.tab && sender.tab.id; // the ProHippo app tab
-    chrome.tabs.create({ url: LOGIN_URL, active: true }, async (tab) => {
+    // Bulk sync opens the portal tab in the background (active:false) so it
+    // doesn't steal focus; a single manual sync opens it in front.
+    chrome.tabs.create({ url: LOGIN_URL, active: !creds.background }, async (tab) => {
       if (!tab || tab.id == null) {
         sendResponse({ ok: false, error: "Could not open a portal tab." });
         return;

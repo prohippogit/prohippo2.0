@@ -91,7 +91,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
         const knownDins = [...new Set((data.notices || []).filter((n) => n.pan === a.pan && n.din).map((n) => n.din))];
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
-        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins });
+        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
         doneResolver.current = null;
         await new Promise((r) => setTimeout(r, 1500)); // small gap between logins
@@ -174,6 +174,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                       ? `Syncing ${bulk.done + 1} of ${bulk.total}${bulk.current ? ` — ${bulk.current}` : ""}…`
                       : `${selected.size} selected`}
                   </span>
+                  {bulk && <span className="muted" style={{fontSize: 11.5}}>· running in the background, keep working</span>}
                 </div>
                 <div className="center" style={{gap: 8}}>
                   {!bulk && <button className="btn btn-ghost btn-sm" onClick={() => setSelected(new Set())}>Clear</button>}

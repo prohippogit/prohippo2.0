@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v22";
+  const BUILD = "v23";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -577,52 +577,59 @@
       const items = Array.isArray(det.json) ? det.json : [];
       log("notices: proceeding", r.proceedingReqId, "→", items.length, "items");
       for (const it of items) {
-        // Incremental: a document we already hold (matched by DIN) is skipped —
-        // no PDF re-download, no re-send. Only NEW documents are fetched.
         const din0 = it.documentIdentificationNumber || "";
-        if (din0 && known.has(String(din0))) { skipped++; continue; }
         const headerSeqNo = it.headerSeqNo;
-        let pdf = null;
-        if (headerSeqNo) {
-          const doc = await NET.apiCall({
-            path: SAVE_ENTITY_PATH, serviceName: "noticeletterpdf",
-            payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
-          });
-          const satDocId = doc.json && doc.json.satDocId;
-          if (satDocId) {
-            const got = await NET.getDoc({ docId: String(satDocId) });
-            if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) pdf = got;
-            else if (got && got.bytes > MAX_PDF_BYTES) log("notices: skipping oversized pdf", got.bytes);
+        // Incremental: a notice PDF we already hold (matched by DIN) is not
+        // re-downloaded or re-sent. But we STILL check for responses filed
+        // against it below — those can be filed AFTER the notice first synced,
+        // so skipping known notices entirely would never pick them up.
+        const isKnown = din0 && known.has(String(din0));
+        if (!isKnown) {
+          let pdf = null;
+          if (headerSeqNo) {
+            const doc = await NET.apiCall({
+              path: SAVE_ENTITY_PATH, serviceName: "noticeletterpdf",
+              payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
+            });
+            const satDocId = doc.json && doc.json.satDocId;
+            if (satDocId) {
+              const got = await NET.getDoc({ docId: String(satDocId) });
+              if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) pdf = got;
+              else if (got && got.bytes > MAX_PDF_BYTES) log("notices: skipping oversized pdf", got.bytes);
+            }
           }
+          const notice = {
+            proceedingReqId: r.proceedingReqId,
+            proceedingName: r.name || it.proceedingName || "",
+            din: it.documentIdentificationNumber || "",
+            section: it.noticeSection || "",
+            description: it.description || "",
+            issuedOn: it.issuedOn || "",
+            servedOn: it.servedOn || "",
+            responseDueDate: it.responseDueDate || "",
+            docRefId: it.documentReferenceId || "",
+            ay: it.ay || r.ay || "",
+            pan: it.pan || pan,
+            proceedingStatus: it.proceedingStatus || "",
+            filename: (pdf && pdf.filename) || "",
+            contentType: (pdf && pdf.contentType) || "application/pdf",
+            contentBase64: (pdf && pdf.base64) || null,
+            bytes: (pdf && pdf.bytes) || 0,
+          };
+          chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
+          docCount++;
+          await sleep(150); // gentle pacing between documents
+        } else {
+          skipped++;
         }
-        const notice = {
-          proceedingReqId: r.proceedingReqId,
-          proceedingName: r.name || it.proceedingName || "",
-          din: it.documentIdentificationNumber || "",
-          section: it.noticeSection || "",
-          description: it.description || "",
-          issuedOn: it.issuedOn || "",
-          servedOn: it.servedOn || "",
-          responseDueDate: it.responseDueDate || "",
-          docRefId: it.documentReferenceId || "",
-          ay: it.ay || r.ay || "",
-          pan: it.pan || pan,
-          proceedingStatus: it.proceedingStatus || "",
-          filename: (pdf && pdf.filename) || "",
-          contentType: (pdf && pdf.contentType) || "application/pdf",
-          contentBase64: (pdf && pdf.base64) || null,
-          bytes: (pdf && pdf.bytes) || 0,
-        };
-        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
-        docCount++;
-        await sleep(150); // gentle pacing between documents
 
-        // Responses the assessee filed against THIS notice (remarks + PDFs).
-        // itbaResponseService safely returns an empty respRemrkAttLst when
-        // nothing was filed, so we always ask rather than guess from flags
-        // that the portal populates inconsistently.
-        if (headerSeqNo && notice.din) {
-          try { await syncResponses(creds, pan, notice.din, String(headerSeqNo)); }
+        // Responses the assessee filed against THIS notice (remarks + PDFs) —
+        // fetched for BOTH new and already-known notices. itbaResponseService
+        // returns an empty respRemrkAttLst when nothing was filed (skipped by
+        // the loop), and the ingest dedups responses by id, so re-asking on a
+        // later sync is safe and picks up newly filed responses.
+        if (headerSeqNo && din0) {
+          try { await syncResponses(creds, pan, din0, String(headerSeqNo)); }
           catch (e) { log("responses error", e); }
         }
       }

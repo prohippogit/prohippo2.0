@@ -89,7 +89,9 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       setBulk({ done: i, total: targets.length, current: a.name });
       try {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-        const knownDins = [...new Set((data.notices || []).filter((n) => n.pan === a.pan && n.din).map((n) => n.din))];
+        const known = new Set();
+        (data.notices || []).forEach((n) => { if (n.pan === a.pan) { if (n.din) known.add(n.din); if (n.docKey) known.add(n.docKey); } });
+        const knownDins = [...known];
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
         await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
@@ -596,9 +598,9 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
       // Incremental sync: tell the extension which notice DINs we already have so
       // it skips re-downloading their PDFs (only NEW documents are fetched).
-      const knownDins = mode === "sync"
-        ? [...new Set((appData.notices || []).filter((n) => n.pan === a.pan && n.din).map((n) => n.din))]
-        : [];
+      const known = new Set();
+      if (mode === "sync") (appData.notices || []).forEach((n) => { if (n.pan === a.pan) { if (n.din) known.add(n.din); if (n.docKey) known.add(n.docKey); } });
+      const knownDins = [...known];
       await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, knownDins });
       notify(mode === "sync" ? "Syncing from the portal — watch the new tab…" : "Opening the portal — logging you in…");
     } catch (e) {
@@ -739,10 +741,13 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
   const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));
   const hearingsFor = (m) => byDateDesc(hearings.filter((h) => m.proceedingReqId && h.proceedingReqId === m.proceedingReqId));
-  // Latest activity per matter, for ordering proceedings newest-first.
+  // Newest-first: order by the latest notice/order or hearing date in the
+  // proceeding (NOT the sync timestamp — that's the same for every matter and
+  // would flatten the order). Fall back to createdAt only when it has no dates.
   const lastActivity = (m) => {
     const ns = noticesFor(m); const hs = hearingsFor(m);
-    return [ns[0]?.date, hs[0]?.date, m.portalSyncedAt, m.createdAt].filter(Boolean).sort().slice(-1)[0] || "";
+    const dated = [ns[0]?.date, hs[0]?.date].filter(Boolean).sort();
+    return dated.length ? dated[dated.length - 1] : ("0000-" + (m.createdAt || m.portalSyncedAt || ""));
   };
   const ordered = [...matters].sort((x, y) => lastActivity(y).localeCompare(lastActivity(x)));
 

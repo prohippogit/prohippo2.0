@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v19";
+  const BUILD = "v20";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -516,6 +516,11 @@
   // (satDocId) → GET /document/{satDocId} (PDF bytes). Auth is the session
   // cookie; "sn" is just the serviceName.
   const MAX_PDF_BYTES = 25 * 1024 * 1024; // skip storing absurdly large files
+  // Portal order filenames end in a DDMMYYYY date, e.g. "…_15012022.pdf".
+  function dateFromFilename(name) {
+    const m = /(\d{2})(\d{2})(\d{4})\.pdf$/i.exec(String(name || ""));
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+  }
   async function syncNotices(creds, badge, pan, rows) {
     const known = new Set((creds.knownDins || []).map((d) => String(d)));
     const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
@@ -570,6 +575,38 @@
         chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
         docCount++;
         await sleep(150); // gentle pacing between documents
+      }
+
+      // Closure / final orders live behind a separate service (the portal's
+      // "Download Closure Order" button), not the notice list. Pull them too.
+      const clo = await NET.apiCall({
+        path: GET_ENTITY_PATH, serviceName: "downloadClosureOrder",
+        payload: { serviceName: "downloadClosureOrder", procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
+      });
+      const orders = (clo.json && Array.isArray(clo.json.satDocDetlList)) ? clo.json.satDocDetlList : [];
+      for (const od of orders) {
+        const satDocId = od.satDocId;
+        if (!satDocId) continue;
+        const docKey = "sat:" + satDocId;
+        if (known.has(docKey)) { skipped++; continue; }
+        const got = await NET.getDoc({ docId: String(satDocId) });
+        const pdf = (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) ? got : null;
+        const notice = {
+          proceedingReqId: r.proceedingReqId,
+          proceedingName: r.name || "",
+          din: "", docKey, isOrder: true,
+          section: r.section || "",
+          description: od.docNam || "Order",
+          issuedOn: dateFromFilename(od.docNam) || "",
+          ay: r.ay || "", pan,
+          filename: (pdf && pdf.filename) || od.docNam || "",
+          contentType: (pdf && pdf.contentType) || "application/pdf",
+          contentBase64: (pdf && pdf.base64) || null,
+          bytes: (pdf && pdf.bytes) || 0,
+        };
+        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
+        docCount++;
+        await sleep(150);
       }
     }
     log("notices: streamed " + docCount + " new document(s), skipped " + skipped + " already-synced");

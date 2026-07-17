@@ -36,5 +36,27 @@ export async function ingestPortalSyncMessage(payload) {
     return { kind: "proceedings", data: res.data };
   }
 
+  // A response filed against a notice: upload its attachment PDFs, then record
+  // the remarks + attachment paths on the matching notice.
+  if (payload.kind === "response") {
+    const r = payload.response || {};
+    const uid = auth.currentUser?.uid;
+    const attachments = [];
+    for (const at of (r.attachments || [])) {
+      let storagePath = null;
+      if (at.contentBase64) {
+        const safe = `${(r.responseId || Date.now())}-${Math.random().toString(36).slice(2, 8)}`.replace(/[^A-Za-z0-9_-]/g, "");
+        storagePath = `users/${uid}/assessees/${payload.assesseeId}/responses/${safe}.pdf`;
+        await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", { contentType: at.contentType || "application/pdf" });
+      }
+      attachments.push({ storagePath, filename: at.filename || "attachment.pdf" });
+    }
+    const res = await httpsCallable(functions, "ingestPortalResponse")({
+      assesseeId: payload.assesseeId, noticeKey: r.noticeKey,
+      response: { responseId: r.responseId, remarks: r.remarks, submittedOn: r.submittedOn, respType: r.respType, attachments },
+    });
+    return { kind: "response", data: res.data };
+  }
+
   return { kind: payload.kind };
 }

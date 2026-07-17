@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v20";
+  const BUILD = "v21";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -516,6 +516,42 @@
   // (satDocId) → GET /document/{satDocId} (PDF bytes). Auth is the session
   // cookie; "sn" is just the serviceName.
   const MAX_PDF_BYTES = 25 * 1024 * 1024; // skip storing absurdly large files
+
+  // Fetch the responses filed against one notice (remarks + attachment PDFs),
+  // and stream each to the app to attach to that notice.
+  async function syncResponses(creds, pan, din, headerSeqNo) {
+    const resp = await NET.apiCall({
+      path: GET_ENTITY_PATH, serviceName: "itbaResponseService",
+      payload: { serviceName: "itbaResponseService", headerSeqNo, pan, header: FORM },
+    });
+    const list = (resp.json && Array.isArray(resp.json.respRemrkAttLst)) ? resp.json.respRemrkAttLst : [];
+    for (const rr of list) {
+      const atts = Array.isArray(rr.attachmentLst) ? rr.attachmentLst : [];
+      if (!rr || (!rr.remarks && atts.length === 0)) continue;
+      const attachments = [];
+      for (const at of atts) {
+        const adocId = at.satDocId || at.docId || at.documentId || at.attachmentId || at.refId;
+        let apdf = null;
+        if (adocId) { const g = await NET.getDoc({ docId: String(adocId) }); if (g && g.ok && g.bytes && g.bytes <= MAX_PDF_BYTES) apdf = g; }
+        attachments.push({
+          filename: (apdf && apdf.filename) || at.docNam || at.fileName || (adocId ? adocId + ".pdf" : "attachment.pdf"),
+          contentType: (apdf && apdf.contentType) || "application/pdf",
+          contentBase64: apdf ? apdf.base64 : null,
+        });
+      }
+      const response = {
+        noticeKey: din,
+        responseId: String(rr.responseId || rr.remarksHash || rr.submittedOn || (rr.remarks || "").slice(0, 24)),
+        remarks: rr.remarks || "",
+        submittedOn: rr.submittedOn || "",
+        respType: rr.respType || "",
+        attachments,
+      };
+      chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "response", response } }, () => {});
+      await sleep(150);
+    }
+  }
+
   // Portal order filenames end in a DDMMYYYY date, e.g. "…_15012022.pdf".
   function dateFromFilename(name) {
     const m = /(\d{2})(\d{2})(\d{4})\.pdf$/i.exec(String(name || ""));
@@ -575,6 +611,12 @@
         chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
         docCount++;
         await sleep(150); // gentle pacing between documents
+
+        // Responses the assessee filed against THIS notice (remarks + PDFs).
+        if (headerSeqNo && notice.din && (it.lastResponseSubmittedOn || it.respId || it.isSubmitted || it.respStatus)) {
+          try { await syncResponses(creds, pan, notice.din, String(headerSeqNo)); }
+          catch (e) { log("responses error", e); }
+        }
       }
 
       // Closure / final orders live behind a separate service (the portal's

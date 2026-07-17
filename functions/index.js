@@ -693,3 +693,35 @@ exports.summarizePortalNotice = onCall(
     return { ok: true, aiSummary };
   }
 );
+
+// Record a response the assessee filed against a notice (remarks text + the
+// Storage paths of its attachment PDFs, uploaded client-side). Appended to the
+// matching notice's responses[], deduped by responseId.
+exports.ingestPortalResponse = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { noticeKey, response } = request.data || {};
+  if (!noticeKey || !response || typeof response !== "object") {
+    throw new HttpsError("invalid-argument", "noticeKey and response are required.");
+  }
+  const q = await db.collection(`users/${uid}/notices`).where("din", "==", noticeKey).limit(1).get();
+  if (q.empty) return { ok: false, reason: "notice-not-found" };
+
+  const ref = q.docs[0].ref;
+  const cur = q.docs[0].data();
+  const responses = Array.isArray(cur.responses) ? cur.responses.slice() : [];
+  const rid = String(response.responseId || "");
+  if (rid && responses.some((r) => String(r.responseId) === rid)) return { ok: true, dup: true };
+
+  responses.push({
+    responseId: rid,
+    remarks: (response.remarks || "").toString(),
+    submittedOn: (response.submittedOn || "").toString(),
+    respType: (response.respType || "").toString(),
+    attachments: Array.isArray(response.attachments)
+      ? response.attachments.map((a) => ({ storagePath: a.storagePath || "", filename: a.filename || "attachment.pdf" }))
+      : [],
+  });
+  await ref.set({ responses, hasResponse: true }, { merge: true });
+  return { ok: true, count: responses.length };
+});

@@ -647,6 +647,13 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
         return;
       }
 
+      // A response filed against a notice (remarks + attachment PDFs).
+      if (payload.kind === "response") {
+        try { await ingestPortalSyncMessage(payload); }
+        catch (e) { console.error("response ingest failed", e); }
+        return;
+      }
+
       // Approach (a) probe: the API was reached fast but its JSON shape still
       // needs a one-time mapping calibration. No data to save — just show the
       // timing so the speed is visible while scraping fills in the data.
@@ -862,6 +869,34 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                                     {n.aiSummary.items.map((it, i) => <li key={i} style={{marginTop: 2}}>{it}</li>)}
                                   </ul>
                                 )}
+                              </div>
+                            )}
+                            {(n.responses || []).length > 0 && (
+                              <div style={{marginTop: 8, borderTop: "1px dashed var(--p-line)", paddingTop: 8}}>
+                                <div className="muted" style={{fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 5}}>
+                                  Response{n.responses.length > 1 ? "s" : ""} filed
+                                </div>
+                                <div className="col" style={{gap: 8}}>
+                                  {n.responses.map((rsp, ri) => (
+                                    <div key={ri} style={{padding: "8px 10px", background: "var(--p-mint)", borderRadius: 8, fontSize: 12}}>
+                                      <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: rsp.remarks ? 4 : 0}}>
+                                        <Icon name="check" size={11}/>
+                                        <span className="strong">{rsp.respType || "Response"}</span>
+                                        {rsp.submittedOn && <span className="muted">· {rsp.submittedOn}</span>}
+                                      </div>
+                                      {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
+                                      {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
+                                        <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 6}}>
+                                          {rsp.attachments.filter((at) => at.storagePath).map((at, ai) => (
+                                            <button key={ai} className="btn btn-ghost btn-xs" title={at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                                              <Icon name="doc" size={11}/>{(at.filename || "PDF").slice(0, 26)}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>

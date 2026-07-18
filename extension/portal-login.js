@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v24";
+  const BUILD = "v25";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -763,8 +763,39 @@
       };
     } else { log("master: jurisdiction empty", jd && jd.status); }
 
+    // The taxpayer's own primary email + mobile live on the full-profile
+    // service. Field names vary (priEmailId / primEmailId / priMobileNum / …),
+    // so pull them by shape: an "@" value under an email-ish key, a digit run
+    // under a mobile-ish key, preferring the primary (pri*/prim*) one.
+    const up = await NET.apiCall({
+      path: SERVICES_SAVE_PATH, serviceName: "userProfileService",
+      payload: { serviceName: "userProfileService", userId: pan },
+    });
+    if (up && up.json && !(up.json.errors && up.json.errors.length)) {
+      const c = pickContact(up.json);
+      if (c.email) master.email = c.email;
+      if (c.mobile) master.mobile = c.mobile;
+    } else { log("master: user profile empty", up && up.status); }
+
     chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "master", master } }, () => {});
     badge.set("Master data fetched ✓");
+  }
+
+  // Extract the taxpayer's primary email + mobile from a profile JSON without
+  // hard-coding field names: match by key hint + value shape, prefer primary.
+  function pickContact(j) {
+    const emails = [], mobiles = [];
+    const rank = (k) => /^pri(m)?/i.test(k) ? 0 : /prim/i.test(k) ? 1 : 2;
+    for (const k of Object.keys(j || {})) {
+      const v = j[k];
+      if (typeof v !== "string" && typeof v !== "number") continue;
+      const s = String(v).trim();
+      if (/e[-]?mail/i.test(k) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)) emails.push([k, s]);
+      if (/mob|phone|cell/i.test(k)) { const digits = s.replace(/\D/g, ""); if (digits.length >= 10 && digits.length <= 13) mobiles.push([k, s.replace(/\s+/g, "")]); }
+    }
+    emails.sort((a, b) => rank(a[0]) - rank(b[0]));
+    mobiles.sort((a, b) => rank(a[0]) - rank(b[0]));
+    return { email: emails[0] ? emails[0][1] : "", mobile: mobiles[0] ? mobiles[0][1] : "" };
   }
 
   async function beginMasterSync(creds, badge) {

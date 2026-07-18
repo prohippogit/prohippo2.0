@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v25";
+  const BUILD = "v26";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -513,6 +513,10 @@
       noticeCount,
       proceedingReqId: o.proceedingReqId || "",
       viewNoticeCount: noticeCount,
+      // "C" = closed; proceedingClosureOrder is the closure sequence no. — its
+      // presence means a "Download Closure Order" set exists for this proceeding.
+      proceedingStatus: o.proceedingStatus || "",
+      closureSeqNo: (o.proceedingClosureOrder != null ? String(o.proceedingClosureOrder) : ""),
     };
   }
 
@@ -639,39 +643,58 @@
           catch (e) { log("responses error", e); }
         }
       }
-
-      // Closure / final orders live behind a separate service (the portal's
-      // "Download Closure Order" button), not the notice list. Pull them too.
-      const clo = await NET.apiCall({
-        path: GET_ENTITY_PATH, serviceName: "downloadClosureOrder",
-        payload: { serviceName: "downloadClosureOrder", procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
-      });
-      const orders = (clo.json && Array.isArray(clo.json.satDocDetlList)) ? clo.json.satDocDetlList : [];
-      for (const od of orders) {
-        const satDocId = od.satDocId;
-        if (!satDocId) continue;
-        const docKey = "sat:" + satDocId;
-        if (known.has(docKey)) { skipped++; continue; }
-        const got = await NET.getDoc({ docId: String(satDocId) });
-        const pdf = (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) ? got : null;
-        const notice = {
-          proceedingReqId: r.proceedingReqId,
-          proceedingName: r.name || "",
-          din: "", docKey, isOrder: true,
-          section: r.section || "",
-          description: od.docNam || "Order",
-          issuedOn: dateFromFilename(od.docNam) || "",
-          ay: r.ay || "", pan,
-          filename: (pdf && pdf.filename) || od.docNam || "",
-          contentType: (pdf && pdf.contentType) || "application/pdf",
-          contentBase64: (pdf && pdf.base64) || null,
-          bytes: (pdf && pdf.bytes) || 0,
-        };
-        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
-        docCount++;
-        await sleep(150);
-      }
     }
+
+    // Closure / final orders — a SEPARATE pass over every proceeding that
+    // carries a closureSeqNo (proceedingClosureOrder), i.e. the ones with the
+    // portal's "Download Closure Order" button. Run independently of the notice
+    // pass (not gated by pending-notice counts, and its own try/catch) so a hit
+    // or miss here can never depend on the notices loop. Closed (FYI)
+    // proceedings live here — this is where their orders come from.
+    // Ask for every proceeding, not only the ones the list flags with a
+    // closureSeqNo — the portal shows a "Download Closure Order" button on some
+    // proceedings the list doesn't flag (e.g. still-Open ones with an order),
+    // and the service simply returns an empty list where there's nothing.
+    const withOrders = rows.filter((r) => r.proceedingReqId);
+    log("orders: checking " + withOrders.length + " proceeding(s) for closure orders");
+    for (const r of withOrders) {
+      badge.set("Orders — " + (r.name || "proceeding").slice(0, 28) + "…");
+      try {
+        const clo = await NET.apiCall({
+          path: GET_ENTITY_PATH, serviceName: "downloadClosureOrder",
+          payload: { serviceName: "downloadClosureOrder", procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
+        });
+        let docs = (clo.json && Array.isArray(clo.json.satDocDetlList)) ? clo.json.satDocDetlList.slice() : [];
+        // Fallback: some responses carry a single doc at the top level.
+        if (!docs.length && clo.json && clo.json.satDocId) docs = [{ satDocId: clo.json.satDocId, docNam: clo.json.docNam }];
+        log("orders: proceeding", r.proceedingReqId, "→", docs.length, "doc(s)", "status", clo && clo.status);
+        for (const od of docs) {
+          const satDocId = od.satDocId;
+          if (!satDocId) continue;
+          const docKey = "sat:" + satDocId;
+          if (known.has(docKey)) { skipped++; continue; }
+          const got = await NET.getDoc({ docId: String(satDocId) });
+          const pdf = (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) ? got : null;
+          const notice = {
+            proceedingReqId: r.proceedingReqId,
+            proceedingName: r.name || "",
+            din: "", docKey, isOrder: true,
+            section: r.section || "",
+            description: od.docNam || "Order",
+            issuedOn: dateFromFilename(od.docNam) || "",
+            ay: r.ay || "", pan,
+            filename: (pdf && pdf.filename) || od.docNam || "",
+            contentType: (pdf && pdf.contentType) || "application/pdf",
+            contentBase64: (pdf && pdf.base64) || null,
+            bytes: (pdf && pdf.bytes) || 0,
+          };
+          chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
+          docCount++;
+          await sleep(150);
+        }
+      } catch (e) { log("orders: error for", r.proceedingReqId, e); }
+    }
+
     log("notices: streamed " + docCount + " new document(s), skipped " + skipped + " already-synced");
     badge.set("Synced " + docCount + " new document(s)" + (skipped ? " · " + skipped + " already on file" : "") + " ✓");
   }

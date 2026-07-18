@@ -328,7 +328,12 @@ export function Assessees({ onOpen, initialSearch = "" }) {
         </>
       )}
 
-      {showAdd && <AssesseeModal onClose={() => setShowAdd(false)}/>}
+      {showAdd && (
+        <AssesseeModal
+          onClose={() => setShowAdd(false)}
+          onSaved={(saved, opts) => { if (opts?.fullSync && saved) onOpen(saved); }}
+        />
+      )}
     </div>
   );
 }

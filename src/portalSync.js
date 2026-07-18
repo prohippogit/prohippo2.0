@@ -54,8 +54,8 @@ export async function detectExtension() {
 /** Ask the extension to open the portal and auto-login (mode "open" or "sync").
  *  knownDins lets a sync skip re-downloading PDFs it already has.
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", knownDins = [], background = false }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, knownDins, background }, 8000);
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", knownDins = [], background = false, clientRef = null }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, knownDins, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

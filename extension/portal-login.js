@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v23";
+  const BUILD = "v24";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -98,6 +98,8 @@
   // Portal API endpoints + form, mirrored from portal-net.js.
   const GET_ENTITY_PATH = "/iec/returnservicesapi/auth/getEntity";
   const SAVE_ENTITY_PATH = "/iec/returnservicesapi/auth/saveEntity";
+  // Profile / master-data services live under a different base path.
+  const SERVICES_SAVE_PATH = "/iec/servicesapi/auth/saveEntity";
   const FORM = { formName: "FO-041_PCDNG" };
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
@@ -162,6 +164,10 @@
               .catch((e) => { log("sync error", e); badge.set("Sync failed — " + (e.message || e), true); })
               // Always tell the app this assessee is done, so a bulk queue advances.
               .finally(() => { try { chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "sync-done" } }, () => {}); } catch { /* noop */ } });
+          } else if (creds.mode === "master") {
+            beginMasterSync(creds, badge)
+              .catch((e) => { log("master sync error", e); badge.set("Master fetch failed — " + (e.message || e), true); })
+              .finally(() => { try { chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "master-done", clientRef: creds.clientRef || null } }, () => {}); } catch { /* noop */ } });
           } else {
             finish(true, "Logged in ✓ — you're in the portal.");
           }
@@ -721,6 +727,59 @@
     // Done — log out and close the portal tab so no session is left open.
     await logoutAndClose(badge);
     return true;
+  }
+
+  // Master data: the taxpayer's own profile (name, DOB, address) + jurisdiction
+  // / Assessing Officer. Both are plain cookie-authenticated services (sn ==
+  // serviceName), so no token capture or UI navigation is needed. We send the
+  // raw fields back; the app formats the name/address and resolves the state.
+  async function syncMaster(creds, badge, pan) {
+    badge.set("Fetching master data…");
+    const master = { clientRef: creds.clientRef || null, pan };
+
+    const pd = await NET.apiCall({
+      path: SERVICES_SAVE_PATH, serviceName: "myPanDetailsService",
+      payload: { serviceName: "myPanDetailsService", contactPan: pan, userId: pan },
+    });
+    if (pd && pd.json && !(pd.json.errors && pd.json.errors.length)) {
+      const j = pd.json;
+      master.firstNm = j.firstNm || ""; master.midNm = j.midNm || ""; master.surname = j.surname || "";
+      master.dobEpoch = j.dob || null; master.incorporateDate = j.incorporateDate || "";
+      master.addrLines = [j.commnLine1, j.commnLine2, j.commnLine3, j.commnLine4, j.commnLine5].map((x) => x || "");
+      master.stateCode = (j.commnState != null ? String(j.commnState) : "");
+      master.pin = (j.commnPin != null ? String(j.commnPin) : "");
+      master.sex = j.sex || "";
+    } else { log("master: pan details empty", pd && pd.status); }
+
+    const jd = await NET.apiCall({
+      path: SERVICES_SAVE_PATH, serviceName: "jurisdictionDetailsService",
+      payload: { serviceName: "jurisdictionDetailsService", loggedInUserId: pan },
+    });
+    if (jd && jd.json && !(jd.json.errors && jd.json.errors.length)) {
+      const j = jd.json;
+      master.jurisdiction = {
+        ward: j.aoPplrName || "", aoEmail: j.aoEmailId || "", building: j.aoBldgDesc || "",
+        area: j.areaDesc || "", areaCd: j.areaCd || "", range: j.rangeCd || "", aoNo: j.aoNo || "", aoType: j.aoType || "",
+      };
+    } else { log("master: jurisdiction empty", jd && jd.status); }
+
+    chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "master", master } }, () => {});
+    badge.set("Master data fetched ✓");
+  }
+
+  async function beginMasterSync(creds, badge) {
+    // Keep the portal's logout guard dismissed while we work.
+    const logoutGuard = setInterval(dismissLogoutDialog, 350);
+    setTimeout(() => clearInterval(logoutGuard), 20000);
+    await sleep(1500); // let the dashboard land + set the session cookie
+    const pan = (NET.pan() || creds.portalUserId || "").toString().toUpperCase().trim();
+    if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      try { await syncMaster(creds, badge, pan); }
+      catch (e) { log("master error", e); badge.set("Master fetch failed — fill details manually.", true); }
+    } else {
+      badge.set("Couldn't read the PAN — fill details manually.", true);
+    }
+    await logoutAndClose(badge);
   }
 
   async function beginSync(creds, badge) {

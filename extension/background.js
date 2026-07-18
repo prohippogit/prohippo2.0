@@ -32,7 +32,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           portalUserId: creds.portalUserId,
           portalPassword: creds.portalPassword,
           assesseeId: creds.assesseeId || null,
-          mode: creds.mode || "open", // "open" | "sync"
+          mode: creds.mode || "open", // "open" | "sync" | "master"
+          clientRef: creds.clientRef || null, // correlate a master fetch to a not-yet-saved assessee
           knownDins: Array.isArray(creds.knownDins) ? creds.knownDins : [],
           appTabId: appTabId != null ? appTabId : null,
           createdAt: Date.now(),

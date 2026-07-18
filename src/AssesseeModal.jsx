@@ -86,6 +86,8 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
       if (name) { next.name = name; filled.name = true; }
       if (dob) { next.dob = dob; filled.dob = true; }
       if (address) { next.address = address; filled.address = true; }
+      if (m.email) { next.email = m.email; filled.email = true; }
+      if (m.mobile) { next.mobile = m.mobile; filled.mobile = true; }
       if (m.jurisdiction && (m.jurisdiction.ward || m.jurisdiction.aoEmail)) { next.jurisdiction = m.jurisdiction; filled.jurisdiction = true; }
       const ent = entityFromPan(next.pan); if (ent) next.status = ent;
       return next;
@@ -232,7 +234,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
           </button>
         </div>
         <div className="muted" style={{fontSize: 11, marginTop: 8}}>
-          Fetches name, date of birth, address and jurisdiction / Assessing Officer. Contact number &amp; email aren't in the portal profile yet — add those manually.
+          Fetches name, date of birth, address, mobile, email and jurisdiction / Assessing Officer. Anything the portal doesn't return, just fill in manually.
         </div>
       </div>
 
@@ -242,8 +244,8 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         <FormField label={lbl(dobLabel, "dob")}><TextInput value={form.dob} onChange={set("dob")} type="date"/></FormField>
         <FormField label="Group"><TextInput value={form.group} onChange={set("group")} placeholder="e.g. Shah Group"/></FormField>
         <FormField label="Assigned staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Staff name"/></FormField>
-        <FormField label="Mobile"><TextInput value={form.mobile} onChange={set("mobile")} placeholder="+91 …"/></FormField>
-        <FormField label="Email"><TextInput value={form.email} onChange={set("email")} type="email" placeholder="name@example.com"/></FormField>
+        <FormField label={lbl("Mobile", "mobile")}><TextInput value={form.mobile} onChange={set("mobile")} placeholder="+91 …"/></FormField>
+        <FormField label={lbl("Email", "email")}><TextInput value={form.email} onChange={set("email")} type="email" placeholder="name@example.com"/></FormField>
         <FormField label={lbl("Address", "address")} full><TextInput value={form.address} onChange={set("address")} placeholder="Address"/></FormField>
       </div>
 

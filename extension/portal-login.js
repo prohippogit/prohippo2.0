@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v30";
+  const BUILD = "v31";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -703,6 +703,27 @@
     badge.set("Synced " + docCount + " new document(s)" + (skipped ? " · " + skipped + " already on file" : "") + " ✓");
   }
 
+  // Deep-merge live data onto a full-shape template so no field/sub-field the
+  // pdfweb renderer reads is ever undefined. Objects merge key-wise; arrays
+  // merge element-wise against the shape's element template AND keep the
+  // shape's length (padding, e.g. attachmentDocument's 20 slots).
+  function deepMergeShape(shape, data) {
+    if (Array.isArray(shape)) {
+      const el = shape.length ? shape[0] : {};
+      const src = Array.isArray(data) ? data : [];
+      const out = src.map((x) => deepMergeShape(el, x));
+      for (let i = out.length; i < shape.length; i++) out.push(deepMergeShape(el, {}));
+      return out;
+    }
+    if (shape && typeof shape === "object") {
+      const out = {};
+      for (const k of Object.keys(shape)) out[k] = deepMergeShape(shape[k], data ? data[k] : undefined);
+      if (data && typeof data === "object") for (const k of Object.keys(data)) if (!(k in out)) out[k] = data[k];
+      return out;
+    }
+    return (data !== undefined && data !== null) ? data : shape;
+  }
+
   // Form 35 gives AY as the start year (selectyear) → "2015-16".
   function ayFromForm(d) {
     const y = Number(d.selectyear || d.assessmentYear || 0);
@@ -770,7 +791,7 @@
       // we start from a full empty-by-type template, overlay the filed-form
       // data + the entity block + ack number, and send the static list/child.
       try {
-        const f35data = F35T ? { ...F35T.defaults, ...d, ...entFields, arn: ackNum } : { ...d, ...entFields, arn: ackNum };
+        const f35data = F35T ? deepMergeShape(F35T.shape, { ...d, ...entFields, arn: ackNum }) : { ...d, ...entFields, arn: ackNum };
         const dscJson = { evc: "", verMode: "", submitDate: ackDt, fullName: entName, verPan: pan, verDate: ackDt };
         const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: {
           formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online",

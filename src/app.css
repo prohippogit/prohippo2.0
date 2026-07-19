@@ -232,6 +232,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
 }
 .avatar.lg { width: 44px; height: 44px; border-radius: 14px; font-size: 15px; }
 .avatar.sm { width: 28px; height: 28px; border-radius: 9px; font-size: 11px; }
+.avatar.round { border-radius: 50%; }
 
 /* Buttons */
 .btn {

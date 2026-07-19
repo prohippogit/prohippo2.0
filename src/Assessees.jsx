@@ -308,7 +308,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                           : <span className="muted" title="No portal login saved" style={{fontSize: 11}}>—</span>}
                       </span>
                       <div className="center" style={{gap: 10, minWidth: 0, justifyContent: "flex-start"}}>
-                        <Avatar name={a.name} color={a.color} size="sm"/>
+                        <Avatar name={a.name} color={a.color} round/>
                         <div style={{minWidth: 0}}>
                           <div className="strong" style={{fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.name}</div>
                           <div className="muted" style={{fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.group || a.email || "—"}</div>
@@ -336,7 +336,6 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                         </span>
                       </span>
                       <span onClick={(e) => e.stopPropagation()} className="center" style={{gap: 2, justifyContent: "flex-end"}}>
-                        <button className="icon-btn" style={{width: 30, height: 30, borderRadius: 8}} title="Open" onClick={() => onOpen(a)}><Icon name="arrow-right" size={15}/></button>
                         <button className="icon-btn" style={{width: 30, height: 30, borderRadius: 8}} title="Edit" onClick={() => setEditAssessee(a)}><Icon name="edit" size={15}/></button>
                       </span>
                     </div>
@@ -416,7 +415,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)", border: "1px solid var(--p-line)"}}>
         <div className="between" style={{alignItems: "flex-start"}}>
           <div className="center" style={{gap: 16}}>
-            <Avatar name={a.name} color={a.color} size="lg"/>
+            <Avatar name={a.name} color={a.color} size="lg" round/>
             <div>
               <div className="center" style={{gap: 8}}>
                 <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>{a.name}</div>
@@ -503,6 +502,18 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
               <KV label="Email" value={a.email || "—"}/>
               <KV label="Address" value={a.address || "—"}/>
               <KV label="Assigned staff" value={a.staff || "—"}/>
+              {a.jurisdiction && (a.jurisdiction.ward || a.jurisdiction.aoEmail || a.jurisdiction.building) && (() => {
+                const j = a.jurisdiction;
+                const aoAddr = [j.building, j.area].filter(Boolean).join(", ");
+                return (
+                  <>
+                    <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 14, marginBottom: 2}}>Jurisdictional AO</div>
+                    {j.ward && <KV label="AO / Ward" value={j.ward}/>}
+                    {j.aoEmail && <KV label="AO email" value={<a href={`mailto:${j.aoEmail}`} style={{color: "var(--p-primary)", wordBreak: "break-all"}}>{j.aoEmail}</a>}/>}
+                    {aoAddr && <KV label="AO address" value={aoAddr}/>}
+                  </>
+                );
+              })()}
             </div>
             <div className="card">
               <div className="card-title mb-3">Ledger snapshot · FY {fy}</div>

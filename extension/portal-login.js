@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v33";
+  const BUILD = "v34";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -91,7 +91,7 @@
     });
     const apiCall = (opts) => send(Object.assign({ kind: "apicall" }, opts));
     const getDoc = (opts) => send(Object.assign({ kind: "getdoc" }, opts), 45000);
-    const postDoc = (opts) => send(Object.assign({ kind: "postdoc" }, opts), 45000);
+    const postDoc = (opts) => send(Object.assign({ kind: "postdoc" }, opts), opts.timeoutMs || 45000);
 
     return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings, apiCall, getDoc, postDoc };
   })();
@@ -815,15 +815,16 @@
         };
         let rendered = null;
         for (let attempt = 0; attempt < 3; attempt++) {
-          rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: body });
+          rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: body, timeoutMs: 60000 });
           if (rendered && rendered.ok) break;
-          if (!(rendered && rendered.status >= 500)) break; // only retry gateway/5xx
-          await sleep(1500);
+          const st = rendered && rendered.status;
+          if (st && st < 500) break;          // a 4xx won't fix itself; stop
+          await sleep(1500);                  // 5xx or timeout/no-status → retry
         }
         if (rendered && rendered.ok && rendered.bytes && rendered.bytes <= MAX_PDF_BYTES) {
           attachments.push({ filename: "Form 35 - " + ackNum + ".pdf", label: "Form 35 (filed)", contentType: rendered.contentType || "application/pdf", contentBase64: rendered.base64 });
         } else {
-          formPdfError = "HTTP " + (rendered && rendered.status || "?") + (rendered && rendered.notPdf ? " (not a PDF)" : "") + (F35T ? "" : " · template missing") + (rendered && rendered.text ? " · " + rendered.text.replace(/\s+/g, " ").slice(0, 160) : "");
+          formPdfError = "HTTP " + (rendered && rendered.status || "?") + (rendered && rendered.notPdf ? " (not a PDF)" : "") + (F35T ? "" : " · template missing") + (rendered && rendered.error ? " · " + String(rendered.error).slice(0, 90) : "") + (rendered && rendered.bytes ? " · " + rendered.bytes + " bytes" : "") + (rendered && rendered.text ? " · " + rendered.text.replace(/\s+/g, " ").slice(0, 120) : "");
           log("appeals: F35 pdf failed", formPdfError);
         }
       } catch (e) { formPdfError = "error: " + (e && e.message || e); log("appeals: F35 pdf error", e); }

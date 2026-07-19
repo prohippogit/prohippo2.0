@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v32";
+  const BUILD = "v33";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -724,6 +724,15 @@
     return (data !== undefined && data !== null) ? data : shape;
   }
 
+  // "23-Nov-2024" → "23/11/2024 12:00:00 PM" (the format the pdfweb renderer
+  // parses for the verification block; a wrong format crashes it → 502).
+  function itfTs(s) {
+    const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(s || ""));
+    if (!m) return "";
+    const mo = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" }[m[2]];
+    return mo ? `${m[1].padStart(2, "0")}/${mo}/${m[3]} 12:00:00 PM` : "";
+  }
+
   // Form 35 gives AY as the start year (selectyear) → "2015-16".
   function ayFromForm(d) {
     const y = Number(d.selectyear || d.assessmentYear || 0);
@@ -763,7 +772,7 @@
         entityAddrLine1Txt: [j.commnLine1, j.commnLine2].map(ln).filter(Boolean).join(", "),
         entityPostofficeDesc: [j.commnLine3, j.commnLine4].map(ln).filter(Boolean).join(", "),
         entityLocalityDesc: ln(j.commnLine5),
-        entityPinCd: j.commnPin != null ? String(j.commnPin) : "",
+        entityPinCd: (j.commnPin != null && j.commnPin !== "") ? Number(j.commnPin) : "",
         entityTaxPayerCatgCd: ({ P: "IND", C: "COM", H: "HUF", F: "FIR", A: "AOP", B: "BOI", T: "TRU" }[(pan[3] || "").toUpperCase()]) || "IND",
         entityTaxPayerCatgDesc: entType,
       };
@@ -792,12 +801,25 @@
       // data + the entity block + ack number, and send the static list/child.
       let formPdfError = "";
       try {
-        const f35data = F35T ? deepMergeShape(F35T.shape, { ...d, ...entFields, arn: ackNum }) : { ...d, ...entFields, arn: ackNum };
-        const dscJson = { evc: "", verMode: "", submitDate: ackDt, fullName: entName, verPan: pan, verDate: ackDt };
-        const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: {
+        // The filed-form data (invoke) is authoritative and already carries the
+        // entity block; entFields are only a FALLBACK for fields it lacks, so
+        // invoke MUST win the merge (…entFields then …d). Overwriting invoke's
+        // correctly-typed values — e.g. numeric entityPinCd — crashed the
+        // renderer (502).
+        const f35data = F35T ? deepMergeShape(F35T.shape, { ...entFields, ...d, arn: ackNum }) : { ...entFields, ...d, arn: ackNum };
+        const ts = itfTs(ackDt);
+        const dscJson = { evc: "", verMode: "OTP", submitDate: ts, fullName: entName, verPan: pan, verDate: ts };
+        const body = {
           formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online",
           data: f35data, list: F35T ? F35T.list : {}, dscJson, childData: F35T ? F35T.childData : {},
-        } });
+        };
+        let rendered = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: body });
+          if (rendered && rendered.ok) break;
+          if (!(rendered && rendered.status >= 500)) break; // only retry gateway/5xx
+          await sleep(1500);
+        }
         if (rendered && rendered.ok && rendered.bytes && rendered.bytes <= MAX_PDF_BYTES) {
           attachments.push({ filename: "Form 35 - " + ackNum + ".pdf", label: "Form 35 (filed)", contentType: rendered.contentType || "application/pdf", contentBase64: rendered.base64 });
         } else {

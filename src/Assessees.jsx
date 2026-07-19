@@ -341,7 +341,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                           : <span className="muted" title="No portal login saved" style={{fontSize: 11}}>—</span>}
                       </span>
                       <div className="center" style={{gap: 10, minWidth: 0, justifyContent: "flex-start"}}>
-                        <Avatar name={a.name} color={a.color} round/>
+                        <Avatar name={a.name} color={a.color} round soft/>
                         <div style={{minWidth: 0}}>
                           <div className="strong" style={{fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.name}</div>
                           <div className="muted" style={{fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.group || a.email || "—"}</div>
@@ -443,7 +443,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)", border: "1px solid var(--p-line)"}}>
         <div className="between" style={{alignItems: "flex-start"}}>
           <div className="center" style={{gap: 16}}>
-            <Avatar name={a.name} color={a.color} size="lg" round/>
+            <Avatar name={a.name} color={a.color} size="lg" round soft/>
             <div>
               <div className="center" style={{gap: 8}}>
                 <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>{a.name}</div>

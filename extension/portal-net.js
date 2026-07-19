@@ -254,12 +254,12 @@
         body: opts.payload != null ? JSON.stringify(opts.payload) : undefined,
       });
       const ms = Math.round(performance.now() - t0);
-      if (!resp.ok) return { ok: false, status: resp.status, ms };
+      if (!resp.ok) { let t = ""; try { t = await resp.text(); } catch { /* noop */ } return { ok: false, status: resp.status, ms, text: (t || "").slice(0, 300) }; }
       const ct = resp.headers.get("content-type") || "";
       const buf = await resp.arrayBuffer();
       const bytes = new Uint8Array(buf);
       // An error usually comes back as JSON, not a PDF — surface it as such.
-      if (/json|text/i.test(ct)) { let json = null; try { json = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* noop */ } return { ok: false, status: resp.status, ms, json, notPdf: true }; }
+      if (/json|text/i.test(ct)) { const txt = new TextDecoder().decode(bytes); let json = null; try { json = JSON.parse(txt); } catch { /* noop */ } return { ok: false, status: resp.status, ms, json, notPdf: true, text: (txt || "").slice(0, 300) }; }
       let bin = ""; const CH = 0x8000;
       for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
       return { ok: true, status: resp.status, ms, base64: btoa(bin), contentType: ct || "application/pdf", bytes: bytes.length };

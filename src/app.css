@@ -566,6 +566,11 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .bar:hover { filter: brightness(1.05); }
 .bar-label { position: absolute; bottom: -22px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--p-text-3); font-weight: 600; }
 
+/* Assessees list rows */
+.ass-row { transition: background 0.12s ease; }
+.ass-row:hover { background: var(--p-card-tint); }
+.ass-row:last-child { border-bottom: none !important; }
+
 /* Modal */
 .modal-backdrop {
   position: fixed; inset: 0;

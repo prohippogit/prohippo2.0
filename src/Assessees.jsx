@@ -89,12 +89,49 @@ function SyncTiming({ info }) {
   );
 }
 
+// Column layout for the Assessees list (checkbox · name · PAN · entity ·
+// contact · proceedings · assigned · status · actions).
+const ASS_GRID = "30px minmax(170px, 1.6fr) 120px 110px minmax(170px, 1.4fr) 95px 120px 95px 80px";
+
+// Colour for an entity-type pill.
+function entityPill(status) {
+  const map = {
+    Individual: { bg: "var(--p-lavender-2)", c: "var(--p-primary-2)" },
+    Company: { bg: "#E3ECFF", c: "#2B5FD0" },
+    Firm: { bg: "var(--p-mint)", c: "#1B8C5C" },
+    LLP: { bg: "#EDE4FF", c: "#7A4FD0" },
+    HUF: { bg: "var(--p-amber)", c: "#B07512" },
+    Trust: { bg: "var(--p-pink)", c: "#C13388" },
+    "AOP/BOI": { bg: "#FFE7D6", c: "#B5651D" },
+  };
+  return map[status] || { bg: "var(--p-card-tint)", c: "var(--p-text-2)" };
+}
+
+// A KPI tile for the top of the Assessees page.
+function StatTile({ icon, iconBg, iconColor, label, value, sub }) {
+  return (
+    <div className="card" style={{ padding: "16px 18px" }}>
+      <div className="between" style={{ alignItems: "flex-start", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{label}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, letterSpacing: "-0.02em" }}>{value}</div>
+          {sub && <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{sub}</div>}
+        </div>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: iconBg, color: iconColor, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <Icon name={icon} size={20} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Assessees({ onOpen, initialSearch = "" }) {
   const { data, notify } = useData();
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState(initialSearch);
   const [page, setPage] = React.useState(1);
   const [showAdd, setShowAdd] = React.useState(false);
+  const [editAssessee, setEditAssessee] = React.useState(null);
   const [selected, setSelected] = React.useState(() => new Set());
   const [bulk, setBulk] = React.useState(null); // { done, total, current } while a bulk sync runs
   const doneResolver = React.useRef(null);
@@ -165,25 +202,43 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const thisMonth = todayISO().slice(0, 7);
-  const addedThisMonth = data.assessees.filter(a => (a.createdAt || "").startsWith(thisMonth)).length;
-
   const tabCount = (t) => data.assessees.filter(a => (t === "All" ? true : t === "Firm/LLP" ? a.status === "Firm" || a.status === "LLP" : a.status === t)).length;
+
+  // KPI tiles.
+  const activeMattersAll = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
+  const activePans = new Set(activeMattersAll.map(m => (m.pan || "").toUpperCase()).filter(Boolean));
+  const isActive = (a) => activePans.has((a.pan || "").toUpperCase());
+  const activeCount = data.assessees.filter(isActive).length;
+  const pct = data.assessees.length ? Math.round((activeCount / data.assessees.length) * 100) : 0;
+  const recentlyAdded = data.assessees.filter(a => a.createdAt && daysFromNow(a.createdAt.slice(0, 10)) >= -30).length;
 
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Assessees</div>
-          <div className="page-sub">{data.assessees.length} active{addedThisMonth ? ` · ${addedThisMonth} added this month` : ""}</div>
+          <div className="page-sub">Manage assessee records and related proceedings</div>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Add assessee</button>
+          <div className="search" style={{width: 300}}>
+            <Icon name="search" size={15}/>
+            <input placeholder="Search by name, PAN, email or mobile…" value={search} onChange={e => setSearch(e.target.value)}/>
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Add Assessee</button>
         </div>
       </div>
 
-      <div className="row" style={{justifyContent: "space-between", marginBottom: 16, alignItems: "center", flexWrap: "wrap", gap: 12}}>
-        <div className="tabs">
+      {data.assessees.length > 0 && (
+        <div className="grid-stats" style={{marginBottom: 18}}>
+          <StatTile icon="users" iconBg="var(--p-lavender-2)" iconColor="var(--p-primary-2)" label="Total assessees" value={data.assessees.length} sub="All records"/>
+          <StatTile icon="check" iconBg="var(--p-mint)" iconColor="#1B8C5C" label="Active assessees" value={activeCount} sub={`${pct}% of total`}/>
+          <StatTile icon="clock" iconBg="var(--p-amber)" iconColor="#B07512" label="Pending proceedings" value={activeMattersAll.length} sub="Requires attention"/>
+          <StatTile icon="calendar" iconBg="var(--p-pink)" iconColor="#C13388" label="Recently added" value={recentlyAdded} sub="In last 30 days"/>
+        </div>
+      )}
+
+      {data.assessees.length > 0 && (
+        <div className="tabs" style={{marginBottom: 14}}>
           {["All", "Individual", "Company", "Firm/LLP", "HUF", "Trust"].map(t => (
             <div key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
               {t}
@@ -191,13 +246,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
             </div>
           ))}
         </div>
-        <div className="center" style={{gap: 8}}>
-          <div className="search" style={{width: 260}}>
-            <Icon name="search" size={15}/>
-            <input placeholder="Name, PAN, group, mobile…" value={search} onChange={e => setSearch(e.target.value)}/>
-          </div>
-        </div>
-      </div>
+      )}
 
       {data.assessees.length === 0 ? (
         <div className="card">
@@ -233,82 +282,71 @@ export function Assessees({ onOpen, initialSearch = "" }) {
             </div>
           )}
           <div className="card" style={{padding: 0, overflow: "hidden"}}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th style={{width: 34}}>
-                    <input type="checkbox" checked={allPageSelected()} onChange={toggleAllPage} title="Select all on this page with a portal login"/>
-                  </th>
-                  <th>Assessee</th>
-                  <th>PAN</th>
-                  <th>Status</th>
-                  <th>Group</th>
-                  <th>Active matters</th>
-                  <th>Outstanding</th>
-                  <th>Next hearing</th>
-                  <th>Staff</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
+            <div style={{overflowX: "auto"}}>
+              <div style={{minWidth: 990}}>
+                <div style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+                  <span><input type="checkbox" checked={allPageSelected()} onChange={toggleAllPage} title="Select all on this page with a portal login"/></span>
+                  <span>Assessee</span>
+                  <span>PAN</span>
+                  <span>Entity type</span>
+                  <span>Contact</span>
+                  <span>Proceedings</span>
+                  <span>Assigned to</span>
+                  <span>Status</span>
+                  <span style={{textAlign: "right"}}>Actions</span>
+                </div>
                 {pageRows.map(a => {
                   const s = assesseeStats(data, a);
-                  const nextHearing = s.hearings[0];
+                  const ep = entityPill(a.status);
+                  const active = isActive(a);
                   return (
-                    <tr key={a.id} onClick={() => onOpen(a)} style={{cursor: "pointer"}}>
-                      <td onClick={(e) => e.stopPropagation()} style={{textAlign: "center"}}>
+                    <div key={a.id} className="ass-row" onClick={() => onOpen(a)}
+                      style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", cursor: "pointer"}}>
+                      <span onClick={(e) => e.stopPropagation()}>
                         {a.portalCredSet
                           ? <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} title="Select for portal sync"/>
                           : <span className="muted" title="No portal login saved" style={{fontSize: 11}}>—</span>}
-                      </td>
-                      <td>
-                        <div className="center" style={{gap: 10}}>
-                          <Avatar name={a.name} color={a.color} size="sm"/>
-                          <div>
-                            <div className="strong">{a.name}</div>
-                            <div className="muted">{a.mobile || a.email || "—"}</div>
-                          </div>
+                      </span>
+                      <div className="center" style={{gap: 10, minWidth: 0, justifyContent: "flex-start"}}>
+                        <Avatar name={a.name} color={a.color} size="sm"/>
+                        <div style={{minWidth: 0}}>
+                          <div className="strong" style={{fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.name}</div>
+                          <div className="muted" style={{fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.group || a.email || "—"}</div>
                         </div>
-                      </td>
-                      <td className="strong" style={{fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5}}>{a.pan}</td>
-                      <td><span className="pill pill-muted">{a.status}</span></td>
-                      <td className="semi">{a.group || "—"}</td>
-                      <td>
-                        <div className="center" style={{gap: 6}}>
-                          <span className="strong">{s.matters}</span>
-                          {s.hearings.length > 0 && <span className="pill pill-pink" style={{fontSize: 10, padding: "2px 6px"}}>{s.hearings.length} hearing{s.hearings.length > 1 ? "s" : ""}</span>}
-                        </div>
-                      </td>
-                      <td>
-                        {s.outstanding === 0
-                          ? <span className="pill pill-success">Clear</span>
-                          : <span className="strong" style={{color: s.outstanding > 100000 ? "#B8463A" : "var(--p-text)"}}>{fmtINR(s.outstanding)}</span>}
-                      </td>
-                      <td>
-                        {nextHearing
-                          ? <div>
-                              <div className="strong" style={{fontSize: 12.5}}>{fmtDate(nextHearing.date)}</div>
-                              <div className="muted">{nextHearing.authority}</div>
-                            </div>
-                          : <span className="muted">—</span>}
-                      </td>
-                      <td>
+                      </div>
+                      <span className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12}}>{a.pan}</span>
+                      <span><span className="pill" style={{background: ep.bg, color: ep.c, fontWeight: 700}}>{a.status}</span></span>
+                      <div style={{minWidth: 0, fontSize: 12}}>
+                        {a.mobile && <div className="center" style={{gap: 6, justifyContent: "flex-start"}}><Icon name="phone" size={12} className="muted"/><span>{a.mobile}</span></div>}
+                        {a.email && <div className="center" style={{gap: 6, justifyContent: "flex-start", marginTop: 2, minWidth: 0}}><Icon name="mail" size={12} className="muted"/><span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.email}</span></div>}
+                        {!a.mobile && !a.email && <span className="muted">—</span>}
+                      </div>
+                      <span>
+                        <span className="pill pill-muted" style={{fontSize: 11}} title={`${s.matters} active matter${s.matters === 1 ? "" : "s"}`}>{s.matters}</span>
+                      </span>
+                      <span>
                         {a.staff
-                          ? <div className="center" style={{gap: 6}}>
-                              <Avatar name={a.staff} color="mint" size="sm"/>
-                              <span style={{fontSize: 12}}>{a.staff.split(" ")[0]}</span>
-                            </div>
+                          ? <span className="center" style={{gap: 6, justifyContent: "flex-start"}}><Avatar name={a.staff} color="mint" size="sm"/><span style={{fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.staff.split(" ")[0]}</span></span>
                           : <span className="muted">—</span>}
-                      </td>
-                      <td><Icon name="chevron-right" size={16} className="muted"/></td>
-                    </tr>
+                      </span>
+                      <span>
+                        <span className="center" style={{gap: 6, justifyContent: "flex-start"}}>
+                          <span style={{width: 7, height: 7, borderRadius: "50%", background: active ? "var(--p-success)" : "#E0A43B", flexShrink: 0}}/>
+                          <span style={{fontSize: 12}}>{active ? "Active" : "Pending"}</span>
+                        </span>
+                      </span>
+                      <span onClick={(e) => e.stopPropagation()} className="center" style={{gap: 2, justifyContent: "flex-end"}}>
+                        <button className="icon-btn" style={{width: 30, height: 30, borderRadius: 8}} title="Open" onClick={() => onOpen(a)}><Icon name="arrow-right" size={15}/></button>
+                        <button className="icon-btn" style={{width: 30, height: 30, borderRadius: 8}} title="Edit" onClick={() => setEditAssessee(a)}><Icon name="edit" size={15}/></button>
+                      </span>
+                    </div>
                   );
                 })}
                 {pageRows.length === 0 && (
-                  <tr><td colSpan="10" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No assessees match this filter.</td></tr>
+                  <div style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No assessees match this filter.</div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
 
           <div className="between" style={{marginTop: 14}}>
@@ -328,12 +366,8 @@ export function Assessees({ onOpen, initialSearch = "" }) {
         </>
       )}
 
-      {showAdd && (
-        <AssesseeModal
-          onClose={() => setShowAdd(false)}
-          onSaved={(saved, opts) => { if (opts?.fullSync && saved) onOpen(saved); }}
-        />
-      )}
+      {showAdd && <AssesseeModal onClose={() => setShowAdd(false)}/>}
+      {editAssessee && <AssesseeModal initial={editAssessee} onClose={() => setEditAssessee(null)}/>}
     </div>
   );
 }

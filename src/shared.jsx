@@ -103,7 +103,7 @@ export const StatusPill = ({ status }) => {
   return <span className={`pill pill-${map[status] || "muted"}`}><span className="pill-dot" style={{background: "currentColor"}}/>{status}</span>;
 };
 
-export const Avatar = ({ name, color, size = "", round = false }) => {
+export const Avatar = ({ name, color, size = "", round = false, soft = false }) => {
   const initials = name.split(" ").filter(p => p[0] && /[A-Z]/i.test(p[0])).slice(0, 2).map(p => p[0]).join("").toUpperCase() || "?";
   const grads = {
     violet: "linear-gradient(135deg, #8E7CFF, #4F46BE)",
@@ -114,16 +114,32 @@ export const Avatar = ({ name, color, size = "", round = false }) => {
     teal: "linear-gradient(135deg, #7FE3E0, #1AA6A0)",
     coral: "linear-gradient(135deg, #FFAE8F, #E5603E)",
   };
+  // Soft style: pale tinted circle with a darker same-hue initial.
+  const softs = {
+    blue: { bg: "#E8EEFC", fg: "#2F62D9" },
+    green: { bg: "#E4F5EB", fg: "#1F9D5B" },
+    violet: { bg: "#ECE8FB", fg: "#6D4FD0" },
+    orange: { bg: "#FCEDDF", fg: "#D97528" },
+    teal: { bg: "#E1F4F1", fg: "#12968C" },
+    pink: { bg: "#FCE7F0", fg: "#C13B7D" },
+    amber: { bg: "#FAEFD6", fg: "#AE7414" },
+  };
+  const pool = soft ? softs : grads;
   // When no colour is supplied, derive a stable one from the name so the
   // list shows varied circles instead of a wall of identical avatars.
-  const palette = ["violet", "blue", "mint", "amber", "coral", "pink", "teal"];
+  const palette = Object.keys(pool);
   let key = color;
-  if (!key || !grads[key]) {
+  if (!key || !pool[key]) {
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
     key = palette[h % palette.length];
   }
-  return <div className={`avatar ${size}${round ? " round" : ""}`} style={{background: grads[key] || grads.violet}}>{initials}</div>;
+  const cls = `avatar ${size}${round ? " round" : ""}${soft ? " soft" : ""}`;
+  if (soft) {
+    const s = softs[key] || softs.violet;
+    return <div className={cls} style={{background: s.bg, color: s.fg}}>{initials}</div>;
+  }
+  return <div className={cls} style={{background: grads[key] || grads.violet}}>{initials}</div>;
 };
 
 export function Modal({ title, sub, onClose, children, footer, width = 560 }) {

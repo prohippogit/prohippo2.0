@@ -782,6 +782,7 @@ exports.ingestPortalAppealForm = onCall({ region: "us-central1", maxInstances: 1
     dateOrder, dateFiling: parsePortalDate(appeal.dateFiling) || "",
     authorityOrder: appeal.authorityOrder || "",
     amountAssessed: appeal.amountAssessed || "", disputedDemand: appeal.disputedDemand || "",
+    formPdfError: (appeal.formPdfError || "").toString().slice(0, 240),
     attachments: atts,
   };
   const docKey = "f35:" + ackNum;

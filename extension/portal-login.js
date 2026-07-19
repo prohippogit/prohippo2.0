@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v31";
+  const BUILD = "v32";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -790,6 +790,7 @@
       // fields + the dropdown `list` + `childData`; a missing field throws, so
       // we start from a full empty-by-type template, overlay the filed-form
       // data + the entity block + ack number, and send the static list/child.
+      let formPdfError = "";
       try {
         const f35data = F35T ? deepMergeShape(F35T.shape, { ...d, ...entFields, arn: ackNum }) : { ...d, ...entFields, arn: ackNum };
         const dscJson = { evc: "", verMode: "", submitDate: ackDt, fullName: entName, verPan: pan, verDate: ackDt };
@@ -799,8 +800,11 @@
         } });
         if (rendered && rendered.ok && rendered.bytes && rendered.bytes <= MAX_PDF_BYTES) {
           attachments.push({ filename: "Form 35 - " + ackNum + ".pdf", label: "Form 35 (filed)", contentType: rendered.contentType || "application/pdf", contentBase64: rendered.base64 });
-        } else { log("appeals: F35 pdf failed", rendered && rendered.status, rendered && rendered.notPdf); }
-      } catch (e) { log("appeals: F35 pdf error", e); }
+        } else {
+          formPdfError = "HTTP " + (rendered && rendered.status || "?") + (rendered && rendered.notPdf ? " (not a PDF)" : "") + (F35T ? "" : " · template missing") + (rendered && rendered.text ? " · " + rendered.text.replace(/\s+/g, " ").slice(0, 160) : "");
+          log("appeals: F35 pdf failed", formPdfError);
+        }
+      } catch (e) { formPdfError = "error: " + (e && e.message || e); log("appeals: F35 pdf error", e); }
 
       // The acknowledgement (ARN) receipt.
       try {
@@ -847,6 +851,7 @@
         authorityOrder: d.authorityOrder || "",
         amountAssessed: d.amountAssessed || "",
         disputedDemand: d.disputedDemandAmount || "",
+        formPdfError,
         attachments,
       };
       log("appeals: F35 ack", ackNum, "AY", appeal.ay, "orderDate", appeal.dateOrder, "atts", attachments.length);

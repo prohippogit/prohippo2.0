@@ -951,6 +951,9 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                                 ))}
                               </div>
                             )}
+                            {appeal && ap.formPdfError && !apAtts.some((at) => /form 35/i.test(at.label || at.filename || "")) && (
+                              <div className="muted" style={{marginTop: 6, fontSize: 10.5, color: "var(--p-danger)"}}>Form 35 PDF couldn't be fetched — {ap.formPdfError}</div>
+                            )}
                             {!appeal && n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
                               <div style={{marginTop: 8, padding: "8px 10px", background: "var(--p-card-tint)", borderRadius: 8, fontSize: 12}}>
                                 <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: (n.aiSummary.items || []).length ? 5 : 0}}>

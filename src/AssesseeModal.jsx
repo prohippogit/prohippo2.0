@@ -68,7 +68,6 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
   const [fetching, setFetching] = React.useState(false);
   const [fromPortal, setFromPortal] = React.useState({}); // { field: true } for the "from portal" tag
   const clientRef = React.useRef(null);   // correlates the fetch to this (unsaved) form
-  const fullSyncArmed = React.useRef(false); // "Fetch all data" → also sync e-Proceedings after save
   const savingRef = React.useRef(false);  // hard guard against a double-tap creating two docs
 
   // PAN edit → uppercase + auto-pick the entity type (until the user overrides it).
@@ -113,13 +112,12 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
     return off;
   }, [applyMaster]);
 
-  const fetchMaster = async (fullSync) => {
+  const fetchMaster = async () => {
     if (fetching) return;
     if (!PAN_RE.test(pan)) { notify("Enter a valid PAN first.", "alert"); return; }
     if (!portalPassword.trim()) { notify("Enter the portal password to fetch.", "alert"); return; }
     const ref = "cr-" + Date.now() + "-" + Math.random().toString(36).slice(2);
     clientRef.current = ref;
-    fullSyncArmed.current = Boolean(fullSync);
     setFetching(true);
     try {
       const ok = await detectExtension();
@@ -161,23 +159,12 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
           console.error("savePortalCredential failed", e);
           notify("Assessee saved, but the portal login couldn't be stored.", "alert");
         }
-      } else if (portalPassword.trim() && !portalConsent && !fullSyncArmed.current) {
+      } else if (portalPassword.trim() && !portalConsent) {
         notify("Tick the consent box to store the portal password.", "alert");
       }
 
-      // "Fetch all data" → kick the e-Proceedings sync now with the entered
-      // password; opening the assessee's profile (below) lets its portal card
-      // ingest the streamed notices/orders.
-      const doFullSync = fullSyncArmed.current && portalPassword.trim();
-      if (doFullSync) {
-        try {
-          await openPortalLogin({ portalUserId: (portalUserId.trim() || pan), portalPassword: portalPassword.trim(), assesseeId, mode: "sync", knownDins: [] });
-          notify("Fetching e-Proceedings — watch the portal tab…");
-        } catch (e) { console.error("full sync start failed", e); }
-      } else {
-        notify(initial?.id ? `${rec.name} updated` : `${rec.name} added`);
-      }
-      onSaved?.(saved, { fullSync: doFullSync });
+      notify(initial?.id ? `${rec.name} updated` : `${rec.name} added`);
+      onSaved?.(saved);
       onClose();
     } finally {
       setBusy(false);
@@ -234,11 +221,8 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
           </FormField>
         </div>
         <div className="row" style={{gap: 8, flexWrap: "wrap"}}>
-          <button className="btn btn-primary btn-sm" disabled={fetching} onClick={() => fetchMaster(false)}>
-            <Icon name="download" size={13}/>{fetching ? "Fetching…" : "Fetch master data only"}
-          </button>
-          <button className="btn btn-secondary btn-sm" disabled={fetching} onClick={() => fetchMaster(true)}>
-            <Icon name="sparkle" size={13}/>Fetch all data (incl. e-Proceedings)
+          <button className="btn btn-primary btn-sm" disabled={fetching} onClick={fetchMaster}>
+            <Icon name="download" size={13}/>{fetching ? "Fetching…" : "Fetch master data"}
           </button>
         </div>
         <div className="muted" style={{fontSize: 11, marginTop: 8}}>

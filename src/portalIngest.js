@@ -62,5 +62,28 @@ export async function ingestPortalSyncMessage(payload) {
     return { kind: "response", data: res.data };
   }
 
+  // A CIT(A) appeal filed as Form 35: upload its PDFs, then record it against
+  // the matching First Appeal proceeding.
+  if (payload.kind === "appealForm") {
+    const ap = payload.appeal || {};
+    const uid = auth.currentUser?.uid;
+    const attachments = [];
+    let ai = 0;
+    for (const at of (ap.attachments || [])) {
+      let storagePath = null;
+      if (at.contentBase64) {
+        const safe = `${(ap.ackNum || "f35")}-${ai}`.replace(/[^A-Za-z0-9_-]/g, "");
+        storagePath = `users/${uid}/assessees/${payload.assesseeId}/appeals/${safe}.pdf`;
+        await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", { contentType: at.contentType || "application/pdf" });
+      }
+      attachments.push({ storagePath, filename: at.filename || "appeal.pdf", label: at.label || "" });
+      ai++;
+    }
+    const meta = { ...ap };
+    delete meta.attachments;
+    const res = await httpsCallable(functions, "ingestPortalAppealForm")({ assesseeId: payload.assesseeId, appeal: meta, attachments });
+    return { kind: "appealForm", data: res.data };
+  }
+
   return { kind: payload.kind };
 }

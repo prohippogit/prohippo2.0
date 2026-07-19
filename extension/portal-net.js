@@ -242,6 +242,32 @@
     }
   }
 
+  // POST a JSON body to a service that streams back a binary (PDF), e.g.
+  // pdfweb/pdf which renders a filed form. Returns base64 like getDoc.
+  async function postDoc(opts) {
+    const t0 = performance.now();
+    try {
+      const headers = { "Content-Type": "application/json", "Accept": "application/pdf" };
+      if (opts.serviceName) headers["sn"] = opts.serviceName;
+      const resp = await origFetch.call(window, ORIGIN + opts.path, {
+        method: "POST", credentials: "include", headers,
+        body: opts.payload != null ? JSON.stringify(opts.payload) : undefined,
+      });
+      const ms = Math.round(performance.now() - t0);
+      if (!resp.ok) return { ok: false, status: resp.status, ms };
+      const ct = resp.headers.get("content-type") || "";
+      const buf = await resp.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      // An error usually comes back as JSON, not a PDF — surface it as such.
+      if (/json|text/i.test(ct)) { let json = null; try { json = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* noop */ } return { ok: false, status: resp.status, ms, json, notPdf: true }; }
+      let bin = ""; const CH = 0x8000;
+      for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+      return { ok: true, status: resp.status, ms, base64: btoa(bin), contentType: ct || "application/pdf", bytes: bytes.length };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message || err), ms: Math.round(performance.now() - t0) };
+    }
+  }
+
   // Convenience: the paginated e-Proceedings list for one status flag.
   function fetchProceedings(opts) {
     const pan = String(opts.pan || "").toUpperCase();
@@ -265,6 +291,7 @@
     if (d.kind === "proceedings") result = await fetchProceedings(d);
     else if (d.kind === "apicall") result = await apiCall(d);
     else if (d.kind === "getdoc") result = await getDoc(d);
+    else if (d.kind === "postdoc") result = await postDoc(d);
     else return;
     post("fetchResult", { id: d.id, result });
   });

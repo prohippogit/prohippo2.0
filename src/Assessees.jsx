@@ -720,6 +720,13 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
         return;
       }
 
+      // A CIT(A) appeal filed as Form 35 (metadata + PDFs).
+      if (payload.kind === "appealForm") {
+        try { await ingestPortalSyncMessage(payload); }
+        catch (e) { console.error("appeal ingest failed", e); }
+        return;
+      }
+
       // Approach (a) probe: the API was reached fast but its JSON shape still
       // needs a one-time mapping calibration. No data to save — just show the
       // timing so the speed is visible while scraping fills in the data.
@@ -901,31 +908,50 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                     <div className="col" style={{gap: 8}}>
                       {ns.map((n) => {
                         const order = isOrderDoc(n);
+                        const appeal = Boolean(n.isAppealForm);
+                        const ap = n.appeal || {};
+                        const apAtts = appeal ? (ap.attachments || []).filter((x) => x.storagePath) : [];
                         return (
                           <div key={n.id} style={{padding: "9px 11px", background: "white", borderRadius: 10, border: "1px solid var(--p-line-2)"}}>
                             <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
-                              <div style={{width: 30, height: 38, borderRadius: 5, background: order ? "var(--p-amber)" : "var(--p-pink)", display: "grid", placeItems: "center", color: order ? "#B07512" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
+                              <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : order ? "var(--p-amber)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : order ? "#B07512" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
                               <div style={{flex: 1, minWidth: 0}}>
                                 <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
-                                  <span className={`pill ${order ? "pill-warning" : "pill-muted"}`} style={{fontSize: 10}}>{order ? "Order" : "Notice"}</span>
+                                  <span className={`pill ${appeal ? "pill-primary" : order ? "pill-warning" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : order ? "Order" : "Notice"}</span>
                                   <span className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
                                 </div>
                                 <div className="muted" style={{fontSize: 11, marginTop: 2}}>
-                                  {[n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
+                                  {appeal
+                                    ? [ap.dateFiling ? `Filed ${fmtDateLong(ap.dateFiling)}` : "", ap.ackNum ? `Ack ${ap.ackNum}` : "", ap.dateOrder ? `vs order ${fmtDateLong(ap.dateOrder)}` : "", ap.orderSection ? `u/s ${ap.orderSection}` : "", ap.appealSection ? `appeal u/s ${ap.appealSection}` : ""].filter(Boolean).join(" · ")
+                                    : [n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
                                 </div>
+                                {appeal && (ap.amountAssessed || ap.disputedDemand) ? (
+                                  <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                                    {[ap.amountAssessed ? `Assessed ${fmtINR(ap.amountAssessed)}` : "", ap.disputedDemand ? `Disputed ${fmtINR(ap.disputedDemand)}` : ""].filter(Boolean).join(" · ")}
+                                  </div>
+                                ) : null}
                               </div>
-                              {n.storagePath && (
+                              {!appeal && n.storagePath && (
                                 <button className="btn btn-ghost btn-xs" title="Summarise this PDF with AI" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); parse(n); }}>
                                   <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Parsing…" : (n.aiSummary ? "Re-parse" : "Parse with AI")}
                                 </button>
                               )}
-                              {n.storagePath && (
+                              {!appeal && n.storagePath && (
                                 <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
                                   <Icon name="doc" size={12}/>PDF
                                 </button>
                               )}
                             </div>
-                            {n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
+                            {appeal && apAtts.length > 0 && (
+                              <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 8}}>
+                                {apAtts.map((at, ai) => (
+                                  <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                                    <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 28)}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {!appeal && n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
                               <div style={{marginTop: 8, padding: "8px 10px", background: "var(--p-card-tint)", borderRadius: 8, fontSize: 12}}>
                                 <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: (n.aiSummary.items || []).length ? 5 : 0}}>
                                   <Icon name="sparkle" size={11}/><span className="strong">{n.aiSummary.summary}</span>

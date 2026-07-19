@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v26";
+  const BUILD = "v27";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -91,8 +91,9 @@
     });
     const apiCall = (opts) => send(Object.assign({ kind: "apicall" }, opts));
     const getDoc = (opts) => send(Object.assign({ kind: "getdoc" }, opts), 45000);
+    const postDoc = (opts) => send(Object.assign({ kind: "postdoc" }, opts), 45000);
 
-    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings, apiCall, getDoc };
+    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings, apiCall, getDoc, postDoc };
   })();
 
   // Portal API endpoints + form, mirrored from portal-net.js.
@@ -100,6 +101,9 @@
   const SAVE_ENTITY_PATH = "/iec/returnservicesapi/auth/saveEntity";
   // Profile / master-data services live under a different base path.
   const SERVICES_SAVE_PATH = "/iec/servicesapi/auth/saveEntity";
+  const SERVICES_GET_PATH = "/iec/servicesapi/auth/getEntity";
+  const ITF_INVOKE_PATH = "/iec/itfweb/auth/invoke"; // filed-form data
+  const PDFWEB_PATH = "/iec/pdfweb/pdf";             // renders a filed form to PDF
   const FORM = { formName: "FO-041_PCDNG" };
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
@@ -699,6 +703,93 @@
     badge.set("Synced " + docCount + " new document(s)" + (skipped ? " · " + skipped + " already on file" : "") + " ✓");
   }
 
+  // Form 35 gives AY as the start year (selectyear) → "2015-16".
+  function ayFromForm(d) {
+    const y = Number(d.selectyear || d.assessmentYear || 0);
+    if (!y || y < 1900) return "";
+    return y + "-" + String((y + 1) % 100).padStart(2, "0");
+  }
+
+  // CIT(A) appeals filed as Form 35 (from "View Filed Forms"): pull the filed
+  // form's structured data + PDFs and stream each so the app can attach it to
+  // the matching First Appeal proceeding (matched by AY + order date/section).
+  async function syncAppealForms(creds, badge, pan) {
+    badge.set("Fetching filed appeals (Form 35)…");
+    let forms;
+    try {
+      const list = await NET.apiCall({
+        path: SERVICES_SAVE_PATH, serviceName: "viewFiledForms",
+        payload: { serviceName: "viewFiledForms", entityNum: pan, formTypeCd: "F35", currentPage: "0", pageSize: "50", filterParameterDetails: [] },
+      });
+      forms = (list.json && Array.isArray(list.json.forms)) ? list.json.forms : [];
+    } catch (e) { log("appeals: list error", e); return; }
+    log("appeals: " + forms.length + " Form 35 filing(s)");
+
+    for (const f of forms) {
+      const ackNum = f.ackNum || f.ackNo || "";
+      if (!ackNum) continue;
+
+      // Full filed-form data (AY, order DIN/date/section, amounts, filing date).
+      let d = {};
+      try {
+        const inv = await NET.apiCall({
+          path: ITF_INVOKE_PATH, serviceName: "viewFiledFormService",
+          payload: { metadata: { sn: "viewFiledFormService", formName: "F35", submitedBy: "", loggedInUserId: pan }, data: { ackNum } },
+        });
+        d = (inv.json && inv.json.data) ? inv.json.data : {};
+      } catch (e) { log("appeals: invoke error", e); }
+
+      const attachments = [];
+      // The rendered Form 35 itself (best-effort — needs the full form data).
+      try {
+        const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: { formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online", data: d } });
+        if (rendered && rendered.ok && rendered.bytes && rendered.bytes <= MAX_PDF_BYTES) {
+          attachments.push({ filename: "Form 35 - " + ackNum + ".pdf", label: "Form 35 (filed)", contentType: rendered.contentType || "application/pdf", contentBase64: rendered.base64 });
+        } else { log("appeals: pdfweb not a pdf", rendered && rendered.status, rendered && rendered.notPdf); }
+      } catch (e) { log("appeals: pdfweb error", e); }
+
+      // Uploaded attachments (Grounds of Appeal, etc.). Skip the order/demand
+      // copies — those are already pulled with the assessment proceeding.
+      try {
+        const att = await NET.apiCall({
+          path: SERVICES_GET_PATH, serviceName: "attachmentDetails",
+          payload: { entityNum: pan, serviceName: "attachmentDetails", ackNum },
+        });
+        const docs = Array.isArray(att.json) ? att.json : ((att.json && Array.isArray(att.json.attachmentList)) ? att.json.attachmentList : []);
+        for (const doc of docs) {
+          const id = doc.satDocId || doc.docId;
+          const nm = doc.docName || doc.docNam || "";
+          if (!id) continue;
+          if (/order\s*u\/?s|demand notice|computation sheet/i.test(nm)) continue;
+          const got = await NET.getDoc({ docId: String(id) });
+          if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) {
+            attachments.push({ filename: nm || (id + ".pdf"), label: "Grounds / attachment", contentType: got.contentType || "application/pdf", contentBase64: got.base64 });
+          }
+          await sleep(120);
+        }
+      } catch (e) { log("appeals: attachments error", e); }
+
+      const appeal = {
+        formCd: "F35", formName: "Form 35",
+        ackNum,
+        ackDt: (Array.isArray(f.ackDt) ? f.ackDt[0] : f.ackDt) || (Array.isArray(f.ackDate) ? f.ackDate[0] : f.ackDate) || "",
+        ay: ayFromForm(d),
+        orderDin: d.din || d.orderNum || "",
+        orderSection: d.sectionSubsectionForItf || "",
+        appealSection: d.sectionSubsectionAppeal || "",
+        dateOrder: d.dateOrder || "",
+        dateFiling: d.dateFiling || "",
+        authorityOrder: d.authorityOrder || "",
+        amountAssessed: d.amountAssessed || "",
+        disputedDemand: d.disputedDemandAmount || "",
+        attachments,
+      };
+      log("appeals: F35 ack", ackNum, "AY", appeal.ay, "orderDate", appeal.dateOrder, "atts", attachments.length);
+      chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "appealForm", appeal } }, () => {});
+      await sleep(150);
+    }
+  }
+
   /* ---------- log out + close the tab once a sync is done ---------- */
   function requestCloseTab() { try { chrome.runtime.sendMessage({ type: "CLOSE_TAB" }, () => {}); } catch { /* noop */ } }
   function tryLogout() {
@@ -747,6 +838,9 @@
     // Then pull each proceeding's notices/orders + PDFs.
     try { await syncNotices(creds, badge, pan, rows); }
     catch (e) { log("notices error", e); }
+    // CIT(A) appeals filed as Form 35 (from "View Filed Forms").
+    try { await syncAppealForms(creds, badge, pan); }
+    catch (e) { log("appeals error", e); }
     // Done — log out and close the portal tab so no session is left open.
     await logoutAndClose(badge);
     return true;

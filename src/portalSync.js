@@ -33,7 +33,7 @@ function request(type, payload, timeoutMs = 4000) {
     };
     const timer = setTimeout(() => {
       window.removeEventListener("message", onMsg);
-      reject(new Error("The ProHippo Sync extension did not respond."));
+      reject(new Error("The ProHippo Sync extension didn't respond. If you just updated it, reload it at chrome://extensions and refresh this page."));
     }, timeoutMs);
     window.addEventListener("message", onMsg);
     window.postMessage({ [TAG]: true, dir: "to-ext", id, type, payload }, window.location.origin);

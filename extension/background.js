@@ -22,12 +22,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const appTabId = sender.tab && sender.tab.id; // the ProHippo app tab
     // Bulk sync opens the portal tab in the background (active:false) so it
     // doesn't steal focus; a single manual sync opens it in front.
-    chrome.tabs.create({ url: LOGIN_URL, active: !creds.background }, async (tab) => {
-      if (!tab || tab.id == null) {
-        sendResponse({ ok: false, error: "Could not open a portal tab." });
+    chrome.tabs.create({ url: LOGIN_URL, active: !creds.background }, (tab) => {
+      if (chrome.runtime.lastError || !tab || tab.id == null) {
+        sendResponse({ ok: false, error: (chrome.runtime.lastError && chrome.runtime.lastError.message) || "Could not open a portal tab." });
         return;
       }
-      await chrome.storage.session.set({
+      // Store the creds (the portal tab won't ask for them until it has loaded,
+      // ~1s away). Don't await before replying — an MV3 worker can be torn down
+      // during an await, which would drop the response and hang the app.
+      chrome.storage.session.set({
         ["creds_" + tab.id]: {
           portalUserId: creds.portalUserId,
           portalPassword: creds.portalPassword,

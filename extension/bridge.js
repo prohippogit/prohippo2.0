@@ -19,11 +19,13 @@
     window.postMessage({ [TAG]: true, dir: "from-ext", ...msg }, window.location.origin);
   }
 
-  // Announce presence as soon as the page exists, and again on load, so the
-  // app can detect the extension whichever fires first.
-  const announce = () => toPage({ type: "READY", version: VERSION });
+  // Announce presence as soon as the page exists, and again on load / when the
+  // page is shown (bfcache), so the app can detect the extension whichever
+  // fires first — and re-detect after a navigation.
+  const announce = () => { try { toPage({ type: "READY", version: VERSION }); } catch { /* noop */ } };
   announce();
   window.addEventListener("DOMContentLoaded", announce);
+  window.addEventListener("pageshow", announce);
 
   // Pushes from the background worker (e.g. scraped sync data) → to the page.
   chrome.runtime.onMessage.addListener((message) => {
@@ -47,12 +49,20 @@
     }
 
     // Forward everything else to the background worker and relay its reply.
-    chrome.runtime.sendMessage({ type, payload }, (response) => {
-      if (chrome.runtime.lastError) {
-        toPage({ id, type: type + "_RESULT", payload: { ok: false, error: chrome.runtime.lastError.message } });
-        return;
-      }
-      toPage({ id, type: type + "_RESULT", payload: response });
-    });
+    // If the extension was reloaded/updated while this page kept running an old
+    // content script, chrome.runtime.sendMessage throws "Extension context
+    // invalidated" — catch it and tell the app so it can prompt a refresh
+    // instead of the app hanging until it times out.
+    try {
+      chrome.runtime.sendMessage({ type, payload }, (response) => {
+        if (chrome.runtime.lastError) {
+          toPage({ id, type: type + "_RESULT", payload: { ok: false, error: chrome.runtime.lastError.message || "Extension unavailable — reload ProHippo Sync and refresh this page." } });
+          return;
+        }
+        toPage({ id, type: type + "_RESULT", payload: response });
+      });
+    } catch {
+      toPage({ id, type: type + "_RESULT", payload: { ok: false, error: "ProHippo Sync was updated — please refresh this page and try again." } });
+    }
   });
 })();

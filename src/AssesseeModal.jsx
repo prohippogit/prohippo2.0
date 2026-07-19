@@ -46,13 +46,18 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
     ...initial,
   });
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
-  const pan = form.pan.trim();
-  const duplicate = PAN_RE.test(pan) && data.assessees.some(a => a.pan === pan && a.id !== initial?.id);
+  const pan = form.pan.trim().toUpperCase();
+  // Flag a duplicate only when ANOTHER saved assessee already has this exact
+  // PAN (normalised both sides). Never against the one being edited.
+  const dupAssessee = PAN_RE.test(pan)
+    ? data.assessees.find((a) => (a.pan || "").trim().toUpperCase() === pan && a.id !== initial?.id)
+    : null;
+  const duplicate = Boolean(dupAssessee);
   const valid = form.name.trim() && PAN_RE.test(pan) && !duplicate;
 
   // Income-tax portal login (optional). Stored encrypted via a Cloud Function;
   // the password is never kept in the app's own data.
-  const [portalUserId, setPortalUserId] = React.useState(initial?.portalUserId || "");
+  const [portalUserId] = React.useState(initial?.portalUserId || ""); // usually the PAN; kept for editing an existing login
   const [portalPassword, setPortalPassword] = React.useState("");
   const [portalConsent, setPortalConsent] = React.useState(false);
   const [credSet, setCredSet] = React.useState(Boolean(initial?.portalCredSet));
@@ -64,6 +69,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
   const [fromPortal, setFromPortal] = React.useState({}); // { field: true } for the "from portal" tag
   const clientRef = React.useRef(null);   // correlates the fetch to this (unsaved) form
   const fullSyncArmed = React.useRef(false); // "Fetch all data" → also sync e-Proceedings after save
+  const savingRef = React.useRef(false);  // hard guard against a double-tap creating two docs
 
   // PAN edit → uppercase + auto-pick the entity type (until the user overrides it).
   const onPan = (v) => setForm(f => {
@@ -127,7 +133,8 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
   };
 
   const save = async () => {
-    if (!valid || busy) return;
+    if (!valid || busy || savingRef.current) return;
+    savingRef.current = true;
     const rec = { ...form, name: form.name.trim(), pan };
     let assesseeId = initial?.id;
     let saved;
@@ -174,6 +181,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
       onClose();
     } finally {
       setBusy(false);
+      savingRef.current = false;
     }
   };
 
@@ -219,7 +227,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         <div className="form-grid" style={{marginBottom: 10}}>
           <FormField label="PAN" required>
             <TextInput value={form.pan} onChange={onPan} placeholder="ABCPS1234F" mono/>
-            {duplicate && <div style={{fontSize: 11.5, color: "var(--p-danger)", marginTop: 4}}>An assessee with this PAN already exists.</div>}
+            {duplicate && <div style={{fontSize: 11.5, color: "var(--p-danger)", marginTop: 4}}>Already added as “{dupAssessee.name || dupAssessee.pan}”.</div>}
           </FormField>
           <FormField label="Portal password">
             <TextInput value={portalPassword} onChange={setPortalPassword} type="password" placeholder="••••••••"/>
@@ -236,6 +244,20 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         <div className="muted" style={{fontSize: 11, marginTop: 8}}>
           Fetches name, date of birth, address, mobile, email and jurisdiction / Assessing Officer. Anything the portal doesn't return, just fill in manually.
         </div>
+
+        {credSet && (
+          <div className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-mint)", borderRadius: 11, marginTop: 12}}>
+            <Icon name="check" size={14}/>
+            <div style={{flex: 1, fontSize: 12.5}}>Portal login is saved{initial?.portalUserId ? ` for ${initial.portalUserId}` : ""}. Enter a new password above to replace it.</div>
+            <button className="btn btn-ghost btn-xs" onClick={removePortalLogin}><Icon name="trash" size={12}/>Remove</button>
+          </div>
+        )}
+        {portalPassword.trim() && (
+          <label className="center" style={{gap: 8, marginTop: 12, fontSize: 11.5, cursor: "pointer", alignItems: "flex-start"}}>
+            <input type="checkbox" checked={portalConsent} onChange={e => setPortalConsent(e.target.checked)} style={{marginTop: 2}}/>
+            <span className="muted">I confirm the assessee has authorised storing their income-tax portal login for compliance work, and that ProHippo will store it encrypted. (Needed only to save the login for future one-click syncs.)</span>
+          </label>
+        )}
       </div>
 
       <div className="form-grid">
@@ -261,36 +283,6 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         </div>
       )}
 
-      <div style={{marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--p-line)"}}>
-        <div className="center" style={{gap: 8, marginBottom: 4}}>
-          <Icon name="link" size={14}/>
-          <div style={{fontWeight: 700, fontSize: 13.5}}>Income-tax portal login <span className="muted" style={{fontWeight: 500}}>· optional</span></div>
-        </div>
-        <div className="muted" style={{fontSize: 11.5, marginBottom: 12}}>
-          Lets ProHippo open the e-filing portal already logged in for this assessee. The password is stored encrypted and is never shown again.
-        </div>
-        {credSet ? (
-          <div className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-mint)", borderRadius: 11, marginBottom: 12}}>
-            <Icon name="check" size={14}/>
-            <div style={{flex: 1, fontSize: 12.5}}>Portal login is saved{initial?.portalUserId ? ` for ${initial.portalUserId}` : ""}. Enter a new password above/below to replace it.</div>
-            <button className="btn btn-ghost btn-xs" onClick={removePortalLogin}><Icon name="trash" size={12}/>Remove</button>
-          </div>
-        ) : null}
-        <div className="form-grid">
-          <FormField label="Portal user ID (usually PAN)">
-            <TextInput value={portalUserId} onChange={setPortalUserId} placeholder={pan || "PAN / user ID"} mono/>
-          </FormField>
-          <FormField label={credSet ? "New portal password" : "Portal password"}>
-            <TextInput value={portalPassword} onChange={setPortalPassword} type="password" placeholder="••••••••"/>
-          </FormField>
-        </div>
-        {portalPassword.trim() && (
-          <label className="center" style={{gap: 8, marginTop: 10, fontSize: 12, cursor: "pointer", alignItems: "flex-start"}}>
-            <input type="checkbox" checked={portalConsent} onChange={e => setPortalConsent(e.target.checked)} style={{marginTop: 2}}/>
-            <span className="muted">I confirm the assessee has authorised storing their income-tax portal login for compliance work, and I understand it will be stored encrypted by ProHippo.</span>
-          </label>
-        )}
-      </div>
     </Modal>
   );
 }

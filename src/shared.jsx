@@ -103,15 +103,27 @@ export const StatusPill = ({ status }) => {
   return <span className={`pill pill-${map[status] || "muted"}`}><span className="pill-dot" style={{background: "currentColor"}}/>{status}</span>;
 };
 
-export const Avatar = ({ name, color = "violet", size = "" }) => {
+export const Avatar = ({ name, color, size = "", round = false }) => {
   const initials = name.split(" ").filter(p => p[0] && /[A-Z]/i.test(p[0])).slice(0, 2).map(p => p[0]).join("").toUpperCase() || "?";
   const grads = {
     violet: "linear-gradient(135deg, #8E7CFF, #4F46BE)",
     pink: "linear-gradient(135deg, #FFB3D9, #C13388)",
     amber: "linear-gradient(135deg, #FFD17A, #F39C12)",
     mint: "linear-gradient(135deg, #8EE7BC, #20B978)",
+    blue: "linear-gradient(135deg, #7FB3FF, #2B5FD0)",
+    teal: "linear-gradient(135deg, #7FE3E0, #1AA6A0)",
+    coral: "linear-gradient(135deg, #FFAE8F, #E5603E)",
   };
-  return <div className={`avatar ${size}`} style={{background: grads[color] || grads.violet}}>{initials}</div>;
+  // When no colour is supplied, derive a stable one from the name so the
+  // list shows varied circles instead of a wall of identical avatars.
+  const palette = ["violet", "blue", "mint", "amber", "coral", "pink", "teal"];
+  let key = color;
+  if (!key || !grads[key]) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    key = palette[h % palette.length];
+  }
+  return <div className={`avatar ${size}${round ? " round" : ""}`} style={{background: grads[key] || grads.violet}}>{initials}</div>;
 };
 
 export function Modal({ title, sub, onClose, children, footer, width = 560 }) {

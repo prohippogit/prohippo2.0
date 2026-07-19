@@ -725,3 +725,83 @@ exports.ingestPortalResponse = onCall({ region: "us-central1", maxInstances: 10 
   await ref.set({ responses, hasResponse: true }, { merge: true });
   return { ok: true, count: responses.length };
 });
+
+// A CIT(A) appeal filed as Form 35 (from the portal's "View Filed Forms").
+// Match it to the assessee's First Appeal proceeding by AY (+ corroborate with
+// the appealed order's date/DIN/section) and store it as a document under that
+// proceeding, so it shows in the Matters dropdown alongside notices/orders.
+exports.ingestPortalAppealForm = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId, appeal, attachments } = request.data || {};
+  if (!assesseeId || !appeal || typeof appeal !== "object") {
+    throw new HttpsError("invalid-argument", "assesseeId and appeal are required.");
+  }
+  const ackNum = String(appeal.ackNum || "");
+  if (!ackNum) return { ok: false, reason: "no-ack" };
+
+  const aSnap = await db.doc(`users/${uid}/assessees/${assesseeId}`).get();
+  const a = aSnap.exists ? aSnap.data() : {};
+  const assesseeName = a.name || "";
+  const pan = (a.pan || "").toUpperCase();
+  const ay = formatAy(appeal.ay) || String(appeal.ay || "");
+  const dateOrder = parsePortalDate(appeal.dateOrder) || "";
+  const orderSection = String(appeal.orderSection || "");
+
+  // Find the matching First Appeal / CIT(A) proceeding for this PAN. Prefer an
+  // AY match; when several appeals share an AY, corroborate with the appealed
+  // order's date or section (both come from the Form 35). Fall back to the sole
+  // appeal proceeding if there's exactly one.
+  const mSnap = await db.collection(`users/${uid}/matters`).where("pan", "==", pan).get();
+  const appeals = mSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((m) => m.proceedingReqId && (m.type === "CIT(A)" || /appeal/i.test(`${m.proceedingName || ""} ${m.ref || ""}`)));
+  const ayMatches = appeals.filter((m) => m.ay && ay && m.ay === ay);
+  let pool = ayMatches.length ? ayMatches : appeals;
+  let target = null;
+  if (pool.length === 1) target = pool[0];
+  else if (pool.length > 1) {
+    // Disambiguate by an order/notice in the proceeding sharing the order date
+    // or section that Form 35 appeals against.
+    for (const m of pool) {
+      const ns = await db.collection(`users/${uid}/notices`).where("proceedingReqId", "==", m.proceedingReqId).get();
+      const hit = ns.docs.map((x) => x.data()).some((n) =>
+        (dateOrder && (n.date === dateOrder)) || (orderSection && String(n.section || "") === orderSection));
+      if (hit) { target = m; break; }
+    }
+    if (!target) target = pool[0];
+  }
+  const proceedingReqId = target ? target.proceedingReqId : "";
+
+  const atts = Array.isArray(attachments)
+    ? attachments.map((x) => ({ storagePath: x.storagePath || "", filename: x.filename || "appeal.pdf", label: (x.label || "").toString() }))
+    : [];
+  const primary = atts.find((x) => x.storagePath) || null;
+  const appealMeta = {
+    ackNum, ackDt: appeal.ackDt || "", ay,
+    orderDin: appeal.orderDin || "", orderSection, appealSection: String(appeal.appealSection || ""),
+    dateOrder, dateFiling: parsePortalDate(appeal.dateFiling) || "",
+    authorityOrder: appeal.authorityOrder || "",
+    amountAssessed: appeal.amountAssessed || "", disputedDemand: appeal.disputedDemand || "",
+    attachments: atts,
+  };
+  const docKey = "f35:" + ackNum;
+  const noticesCol = db.collection(`users/${uid}/notices`);
+  const dup = await noticesCol.where("docKey", "==", docKey).limit(1).get();
+  const base = {
+    assessee: assesseeName, pan, ay,
+    din: "", docKey, isOrder: false, isAppealForm: true, proceedingReqId,
+    section: String(appeal.appealSection || "246A"), authority: "CIT(A)",
+    subject: `Form 35 — Appeal to CIT(A)${ay ? ` (AY ${ay})` : ""}`,
+    date: appealMeta.dateFiling || appealMeta.ackDt || "",
+    storagePath: primary ? primary.storagePath : "", fileName: primary ? primary.filename : "",
+    appeal: appealMeta, source: "portal", status: "Filed", read: true,
+    portalSyncedAt: new Date().toISOString(),
+  };
+  if (!dup.empty) {
+    await dup.docs[0].ref.set(base, { merge: true });
+    return { ok: true, updated: true, linked: Boolean(proceedingReqId) };
+  }
+  const id = "f35_" + crypto.createHash("sha1").update(docKey).digest("hex").slice(0, 20);
+  await noticesCol.doc(id).set({ ...base, createdAt: new Date().toISOString() }, { merge: true });
+  return { ok: true, added: true, linked: Boolean(proceedingReqId) };
+});

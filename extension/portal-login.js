@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v28";
+  const BUILD = "v29";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -724,6 +724,17 @@
       forms = (list.json && Array.isArray(list.json.forms)) ? list.json.forms : [];
     } catch (e) { log("appeals: list error", e); return; }
     log("appeals: " + forms.length + " Form 35 filing(s)");
+    if (!forms.length) return;
+
+    // Taxpayer name + address for the acknowledgement (ARN) PDF — one call.
+    let entName = "", entAddr = "";
+    try {
+      const pd = await NET.apiCall({ path: SERVICES_SAVE_PATH, serviceName: "myPanDetailsService", payload: { serviceName: "myPanDetailsService", contactPan: pan, userId: pan } });
+      const j = (pd && pd.json) || {};
+      entName = [j.firstNm, j.midNm, j.surname].map((x) => (x || "").trim()).filter(Boolean).join(" ");
+      entAddr = [j.commnLine1, j.commnLine2, j.commnLine3, j.commnLine4, j.commnLine5].map((x) => (x || "").trim()).filter(Boolean).join(", ");
+    } catch (e) { log("appeals: pan details error", e); }
+    const entType = ({ P: "Individual", C: "Company", H: "HUF", F: "Firm", A: "AOP/BOI", B: "AOP/BOI", T: "Trust" }[(pan[3] || "").toUpperCase()]) || "Individual";
 
     for (const f of forms) {
       const ackNum = f.ackNum || f.ackNo || "";
@@ -740,13 +751,28 @@
       } catch (e) { log("appeals: invoke error", e); }
 
       const attachments = [];
-      // The rendered Form 35 itself (best-effort — needs the full form data).
+      const ackDt = (Array.isArray(f.ackDt) ? f.ackDt[0] : f.ackDt) || (Array.isArray(f.ackDate) ? f.ackDate[0] : f.ackDate) || "";
+      // The rendered Form 35 itself. The data call returns every populated
+      // field; pdfweb also needs the ack number + the (otherwise-empty)
+      // list/dscJson/childData wrappers — omitting them was why it failed.
       try {
-        const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: { formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online", data: d } });
+        const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: { formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online", data: { ...d, arn: ackNum }, list: {}, dscJson: null, childData: {} } });
         if (rendered && rendered.ok && rendered.bytes && rendered.bytes <= MAX_PDF_BYTES) {
           attachments.push({ filename: "Form 35 - " + ackNum + ".pdf", label: "Form 35 (filed)", contentType: rendered.contentType || "application/pdf", contentBase64: rendered.base64 });
-        } else { log("appeals: pdfweb not a pdf", rendered && rendered.status, rendered && rendered.notPdf); }
-      } catch (e) { log("appeals: pdfweb error", e); }
+        } else { log("appeals: F35 pdf failed", rendered && rendered.status, rendered && rendered.notPdf); }
+      } catch (e) { log("appeals: F35 pdf error", e); }
+
+      // The acknowledgement (ARN) receipt.
+      try {
+        const ackPdf = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "arn", payload: { formStatus: "", udinNum: null, formName: "arn", submitMode: "Online", data: {
+          dateOfEfiling: ackDt, arn: ackNum, name: entName, nameSignatory: entName, entityNum: pan, address: entAddr,
+          formNo: "Form 35", formdescription: f.formName || "Appeal to the Commissioner (Appeals)",
+          assessmentYear: ayFromForm(d), filingType: "Original", entityType: entType, verifiedBy: pan, refYearType: "A.Y.",
+        } } });
+        if (ackPdf && ackPdf.ok && ackPdf.bytes && ackPdf.bytes <= MAX_PDF_BYTES) {
+          attachments.push({ filename: "Acknowledgement - " + ackNum + ".pdf", label: "Acknowledgement (ARN)", contentType: ackPdf.contentType || "application/pdf", contentBase64: ackPdf.base64 });
+        } else { log("appeals: ARN pdf failed", ackPdf && ackPdf.status, ackPdf && ackPdf.notPdf); }
+      } catch (e) { log("appeals: ARN pdf error", e); }
 
       // Uploaded attachments (Grounds of Appeal, etc.). Skip the order/demand
       // copies — those are already pulled with the assessment proceeding.
@@ -771,8 +797,7 @@
 
       const appeal = {
         formCd: "F35", formName: "Form 35",
-        ackNum,
-        ackDt: (Array.isArray(f.ackDt) ? f.ackDt[0] : f.ackDt) || (Array.isArray(f.ackDate) ? f.ackDate[0] : f.ackDate) || "",
+        ackNum, ackDt,
         ay: ayFromForm(d),
         orderDin: d.din || d.orderNum || "",
         orderSection: d.sectionSubsectionForItf || "",

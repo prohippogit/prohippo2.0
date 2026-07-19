@@ -107,24 +107,6 @@ function entityPill(status) {
   return map[status] || { bg: "var(--p-card-tint)", c: "var(--p-text-2)" };
 }
 
-// A KPI tile for the top of the Assessees page.
-function StatTile({ icon, iconBg, iconColor, label, value, sub }) {
-  return (
-    <div className="card" style={{ padding: "16px 18px" }}>
-      <div className="between" style={{ alignItems: "flex-start", gap: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{label}</div>
-          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, letterSpacing: "-0.02em" }}>{value}</div>
-          {sub && <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{sub}</div>}
-        </div>
-        <div style={{ width: 40, height: 40, borderRadius: 12, background: iconBg, color: iconColor, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <Icon name={icon} size={20} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function Assessees({ onOpen, initialSearch = "" }) {
   const { data, notify } = useData();
   const [tab, setTab] = React.useState("All");
@@ -219,11 +201,6 @@ export function Assessees({ onOpen, initialSearch = "" }) {
 
   const tabCount = (t) => data.assessees.filter(a => (t === "All" ? true : t === "Firm/LLP" ? a.status === "Firm" || a.status === "LLP" : a.status === t)).length;
 
-  // KPI tiles.
-  const activeCount = data.assessees.filter(isActive).length;
-  const pct = data.assessees.length ? Math.round((activeCount / data.assessees.length) * 100) : 0;
-  const recentlyAdded = data.assessees.filter(a => a.createdAt && daysFromNow(a.createdAt.slice(0, 10)) >= -30).length;
-
   return (
     <div className="animate-in">
       <div className="topbar">
@@ -239,15 +216,6 @@ export function Assessees({ onOpen, initialSearch = "" }) {
           <button className="btn btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Add Assessee</button>
         </div>
       </div>
-
-      {data.assessees.length > 0 && (
-        <div className="grid-stats" style={{marginBottom: 18}}>
-          <StatTile icon="users" iconBg="var(--p-lavender-2)" iconColor="var(--p-primary-2)" label="Total assessees" value={data.assessees.length} sub="All records"/>
-          <StatTile icon="check" iconBg="var(--p-mint)" iconColor="#1B8C5C" label="Active assessees" value={activeCount} sub={`${pct}% of total`}/>
-          <StatTile icon="clock" iconBg="var(--p-amber)" iconColor="#B07512" label="Pending proceedings" value={activeMattersAll.length} sub="Requires attention"/>
-          <StatTile icon="calendar" iconBg="var(--p-pink)" iconColor="#C13388" label="Recently added" value={recentlyAdded} sub="In last 30 days"/>
-        </div>
-      )}
 
       {data.assessees.length > 0 && (
         <div className="tabs" style={{marginBottom: 14}}>

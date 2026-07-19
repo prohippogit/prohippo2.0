@@ -91,7 +91,7 @@ function SyncTiming({ info }) {
 
 // Column layout for the Assessees list (checkbox · name · PAN · entity ·
 // contact · proceedings · assigned · status · actions).
-const ASS_GRID = "30px minmax(170px, 1.6fr) 120px 110px minmax(170px, 1.4fr) 95px 120px 95px 80px";
+const ASS_GRID = "30px minmax(220px, 2fr) 130px 120px 110px 150px 110px 80px";
 
 // Colour for an entity-type pill.
 function entityPill(status) {
@@ -129,6 +129,8 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   const { data, notify } = useData();
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState(initialSearch);
+  const [sortBy, setSortBy] = React.useState("recent");
+  const [statusFilter, setStatusFilter] = React.useState("all");
   const [page, setPage] = React.useState(1);
   const [showAdd, setShowAdd] = React.useState(false);
   const [editAssessee, setEditAssessee] = React.useState(null);
@@ -138,7 +140,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   const running = React.useRef(false); // true only while a bulk sync is in progress
 
   React.useEffect(() => { setSearch(initialSearch); }, [initialSearch]);
-  React.useEffect(() => { setPage(1); }, [tab, search]);
+  React.useEffect(() => { setPage(1); }, [tab, search, sortBy, statusFilter]);
 
   // While a bulk sync runs, ingest each streamed message and advance the queue
   // when an assessee signals it's done.
@@ -189,6 +191,12 @@ export function Assessees({ onOpen, initialSearch = "" }) {
     notify(`Bulk sync complete — ${targets.length} assessee${targets.length > 1 ? "s" : ""}`);
   };
 
+  // Active = has an open matter. Computed up-front so the KPI tiles and the
+  // Status filter share one definition.
+  const activeMattersAll = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
+  const activePans = new Set(activeMattersAll.map(m => (m.pan || "").toUpperCase()).filter(Boolean));
+  const isActive = (a) => activePans.has((a.pan || "").toUpperCase());
+
   const matchesTab = (a) => {
     if (tab === "All") return true;
     if (tab === "Firm/LLP") return a.status === "Firm" || a.status === "LLP";
@@ -197,17 +205,21 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   const q = search.toLowerCase();
   const filtered = data.assessees.filter(a =>
     matchesTab(a) &&
+    (statusFilter === "all" || (statusFilter === "active" ? isActive(a) : !isActive(a))) &&
     (!q || a.name.toLowerCase().includes(q) || a.pan.toLowerCase().includes(q) || (a.group || "").toLowerCase().includes(q) || (a.mobile || "").includes(q))
   );
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "name") return (a.name || "").localeCompare(b.name || "");
+    if (sortBy === "pan") return (a.pan || "").localeCompare(b.pan || "");
+    if (sortBy === "proceedings") return assesseeStats(data, b).matters - assesseeStats(data, a).matters;
+    return (b.createdAt || "").localeCompare(a.createdAt || ""); // recent (default)
+  });
+  const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const tabCount = (t) => data.assessees.filter(a => (t === "All" ? true : t === "Firm/LLP" ? a.status === "Firm" || a.status === "LLP" : a.status === t)).length;
 
   // KPI tiles.
-  const activeMattersAll = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
-  const activePans = new Set(activeMattersAll.map(m => (m.pan || "").toUpperCase()).filter(Boolean));
-  const isActive = (a) => activePans.has((a.pan || "").toUpperCase());
   const activeCount = data.assessees.filter(isActive).length;
   const pct = data.assessees.length ? Math.round((activeCount / data.assessees.length) * 100) : 0;
   const recentlyAdded = data.assessees.filter(a => a.createdAt && daysFromNow(a.createdAt.slice(0, 10)) >= -30).length;
@@ -281,15 +293,36 @@ export function Assessees({ onOpen, initialSearch = "" }) {
               {!bulk && <div className="muted" style={{fontSize: 11.5, marginTop: 6}}>Only assessees with a saved portal login can be synced. Each opens, syncs and closes in turn.</div>}
             </div>
           )}
+          <div className="between" style={{marginBottom: 12, flexWrap: "wrap", gap: 10, alignItems: "center"}}>
+            <div className="muted" style={{fontSize: 12.5}}>{sorted.length} assessee{sorted.length === 1 ? "" : "s"}{statusFilter !== "all" ? ` · ${statusFilter}` : ""}</div>
+            <div className="center" style={{gap: 10, flexWrap: "wrap"}}>
+              <label className="center" style={{gap: 6, fontSize: 12.5}}>
+                <span className="muted center" style={{gap: 5}}><Icon name="filter" size={13}/>Status</span>
+                <select className="ph-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </label>
+              <label className="center" style={{gap: 6, fontSize: 12.5}}>
+                <span className="muted">Sort by</span>
+                <select className="ph-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+                  <option value="recent">Recently added</option>
+                  <option value="name">Name (A–Z)</option>
+                  <option value="proceedings">Most proceedings</option>
+                  <option value="pan">PAN</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <div className="card" style={{padding: 0, overflow: "hidden"}}>
             <div style={{overflowX: "auto"}}>
-              <div style={{minWidth: 990}}>
+              <div style={{minWidth: 820}}>
                 <div style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
                   <span><input type="checkbox" checked={allPageSelected()} onChange={toggleAllPage} title="Select all on this page with a portal login"/></span>
                   <span>Assessee</span>
                   <span>PAN</span>
                   <span>Entity type</span>
-                  <span>Contact</span>
                   <span>Proceedings</span>
                   <span>Assigned to</span>
                   <span>Status</span>
@@ -316,11 +349,6 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                       </div>
                       <span className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12}}>{a.pan}</span>
                       <span><span className="pill" style={{background: ep.bg, color: ep.c, fontWeight: 700}}>{a.status}</span></span>
-                      <div style={{minWidth: 0, fontSize: 12}}>
-                        {a.mobile && <div className="center" style={{gap: 6, justifyContent: "flex-start"}}><Icon name="phone" size={12} className="muted"/><span>{a.mobile}</span></div>}
-                        {a.email && <div className="center" style={{gap: 6, justifyContent: "flex-start", marginTop: 2, minWidth: 0}}><Icon name="mail" size={12} className="muted"/><span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.email}</span></div>}
-                        {!a.mobile && !a.email && <span className="muted">—</span>}
-                      </div>
                       <span>
                         <span className="pill pill-muted" style={{fontSize: 11}} title={`${s.matters} active matter${s.matters === 1 ? "" : "s"}`}>{s.matters}</span>
                       </span>

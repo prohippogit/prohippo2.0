@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v29";
+  const BUILD = "v30";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -726,15 +726,28 @@
     log("appeals: " + forms.length + " Form 35 filing(s)");
     if (!forms.length) return;
 
-    // Taxpayer name + address for the acknowledgement (ARN) PDF — one call.
-    let entName = "", entAddr = "";
+    // Taxpayer name + address (for the ARN receipt and the Form 35's entity
+    // block) — one profile call.
+    const entType = ({ P: "Individual", C: "Company", H: "HUF", F: "Firm", A: "AOP/BOI", B: "AOP/BOI", T: "Trust" }[(pan[3] || "").toUpperCase()]) || "Individual";
+    let entName = "", entAddr = "", entFields = {};
     try {
       const pd = await NET.apiCall({ path: SERVICES_SAVE_PATH, serviceName: "myPanDetailsService", payload: { serviceName: "myPanDetailsService", contactPan: pan, userId: pan } });
       const j = (pd && pd.json) || {};
-      entName = [j.firstNm, j.midNm, j.surname].map((x) => (x || "").trim()).filter(Boolean).join(" ");
-      entAddr = [j.commnLine1, j.commnLine2, j.commnLine3, j.commnLine4, j.commnLine5].map((x) => (x || "").trim()).filter(Boolean).join(", ");
+      const ln = (x) => (x || "").toString().trim();
+      entName = [j.firstNm, j.midNm, j.surname].map(ln).filter(Boolean).join(" ");
+      entAddr = [j.commnLine1, j.commnLine2, j.commnLine3, j.commnLine4, j.commnLine5].map(ln).filter(Boolean).join(", ");
+      entFields = {
+        entityNumber: pan,
+        entityFirstName: ln(j.firstNm), entityMidName: ln(j.midNm), entityLastName: ln(j.surname),
+        entityAddrLine1Txt: [j.commnLine1, j.commnLine2].map(ln).filter(Boolean).join(", "),
+        entityPostofficeDesc: [j.commnLine3, j.commnLine4].map(ln).filter(Boolean).join(", "),
+        entityLocalityDesc: ln(j.commnLine5),
+        entityPinCd: j.commnPin != null ? String(j.commnPin) : "",
+        entityTaxPayerCatgCd: ({ P: "IND", C: "COM", H: "HUF", F: "FIR", A: "AOP", B: "BOI", T: "TRU" }[(pan[3] || "").toUpperCase()]) || "IND",
+        entityTaxPayerCatgDesc: entType,
+      };
     } catch (e) { log("appeals: pan details error", e); }
-    const entType = ({ P: "Individual", C: "Company", H: "HUF", F: "Firm", A: "AOP/BOI", B: "AOP/BOI", T: "Trust" }[(pan[3] || "").toUpperCase()]) || "Individual";
+    const F35T = (typeof window !== "undefined" && window.__PH_F35) || null;
 
     for (const f of forms) {
       const ackNum = f.ackNum || f.ackNo || "";
@@ -752,11 +765,17 @@
 
       const attachments = [];
       const ackDt = (Array.isArray(f.ackDt) ? f.ackDt[0] : f.ackDt) || (Array.isArray(f.ackDate) ? f.ackDate[0] : f.ackDate) || "";
-      // The rendered Form 35 itself. The data call returns every populated
-      // field; pdfweb also needs the ack number + the (otherwise-empty)
-      // list/dscJson/childData wrappers — omitting them was why it failed.
+      // The rendered Form 35 itself ("Download Form"). The renderer reads many
+      // fields + the dropdown `list` + `childData`; a missing field throws, so
+      // we start from a full empty-by-type template, overlay the filed-form
+      // data + the entity block + ack number, and send the static list/child.
       try {
-        const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: { formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online", data: { ...d, arn: ackNum }, list: {}, dscJson: null, childData: {} } });
+        const f35data = F35T ? { ...F35T.defaults, ...d, ...entFields, arn: ackNum } : { ...d, ...entFields, arn: ackNum };
+        const dscJson = { evc: "", verMode: "", submitDate: ackDt, fullName: entName, verPan: pan, verDate: ackDt };
+        const rendered = await NET.postDoc({ path: PDFWEB_PATH, serviceName: "F35", payload: {
+          formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online",
+          data: f35data, list: F35T ? F35T.list : {}, dscJson, childData: F35T ? F35T.childData : {},
+        } });
         if (rendered && rendered.ok && rendered.bytes && rendered.bytes <= MAX_PDF_BYTES) {
           attachments.push({ filename: "Form 35 - " + ackNum + ".pdf", label: "Form 35 (filed)", contentType: rendered.contentType || "application/pdf", contentBase64: rendered.base64 });
         } else { log("appeals: F35 pdf failed", rendered && rendered.status, rendered && rendered.notPdf); }

@@ -40,6 +40,13 @@ export const hippoLines = {
     "Grabbing PDFs faster than the AO can issue them.",
     "{current} down, {remaining} to go. Keep the chai warm.",
   ],
+  // Used while downloading when the portal never told us a total (rare scrape
+  // fallback) — these avoid the {total}/{remaining} tokens so we stay honest.
+  downloadingNoTotal: [
+    "Grabbing PDFs faster than the AO can issue them.",
+    "Fetched {current} so far… still counting.",
+    "Another one in the bag — {current} and rising.",
+  ],
   processing: [
     "Stacking everything neatly by AY and section…",
     "Filing your notices so you don't have to.",
@@ -92,8 +99,10 @@ const downloadingContextual = [
  * @returns {string}
  */
 export function contextualKey(props) {
+  const totalFlag = Number(props?.totalPdfs) > 0 ? "T" : "-";
   return downloadingContextual
     .map((c) => (c.applies(props) ? c.id : "-"))
+    .concat(totalFlag)
     .join("|");
 }
 
@@ -111,14 +120,19 @@ export function contextualKey(props) {
 export function resolveLines(phase, props) {
   if (phase !== "downloading") return hippoLines[phase] || [];
 
+  // Pick the base pool: count-based lines when we know the total, otherwise the
+  // total-agnostic ones so we never say "3 of 0".
+  const totalKnown = Number(props?.totalPdfs) > 0;
+  const base = totalKnown ? hippoLines.downloading : hippoLines.downloadingNoTotal;
+
   const applicable = downloadingContextual
     .filter((c) => c.applies(props))
     .map((c) => c.line);
 
-  if (applicable.length === 0) return hippoLines.downloading;
+  if (applicable.length === 0) return base;
   // Contextual lines weighted 2× to be "preferred" without fully crowding out
-  // the generic count-based lines.
-  return [...applicable, ...applicable, ...hippoLines.downloading];
+  // the base lines.
+  return [...applicable, ...applicable, ...base];
 }
 
 /**

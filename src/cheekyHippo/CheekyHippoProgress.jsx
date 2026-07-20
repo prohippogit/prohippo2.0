@@ -307,6 +307,17 @@ export default function CheekyHippoProgress({
         </div>
       )}
 
+      {/* Downloading with no known total (scrape fallback): honest running count,
+          no fake denominator or percentage. */}
+      {phase === "downloading" && !isDeterminate && (
+        <div className="chp-meta">
+          <span>
+            <span className="chp-count">{displayCount}</span>{" "}
+            {displayCount === 1 ? "notice" : "notices"} fetched
+          </span>
+        </div>
+      )}
+
       {/* Error: copy is already in `line`; always pair it with Retry. */}
       {isError && (
         <div className="chp-actions">

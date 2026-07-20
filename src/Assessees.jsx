@@ -324,7 +324,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                       <div className="center" style={{gap: 10, minWidth: 0, justifyContent: "flex-start"}}>
                         <Avatar name={a.name} color={a.color} round soft/>
                         <div style={{minWidth: 0}}>
-                          <div className="strong" style={{fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.name}</div>
+                          <div className="strong" style={{fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{titleCase(a.name)}</div>
                           <div className="muted" style={{fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{a.group || a.email || "—"}</div>
                         </div>
                       </div>
@@ -403,13 +403,13 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
   const waLink = a.mobile ? `https://wa.me/${a.mobile.replace(/\D/g, "")}` : null;
 
   const doDelete = async () => {
-    if (!window.confirm(`Delete ${a.name}? Their matters, hearings, notices, invoices and messages will also be removed. This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${titleCase(a.name)}? Their matters, hearings, notices, invoices and messages will also be removed. This cannot be undone.`)) return;
     onBack();
     const removed = await removeAssessee(a);
     if (removed !== null) {
       notify(removed > 0
-        ? `${a.name} deleted along with ${removed} linked record${removed > 1 ? "s" : ""}`
-        : `${a.name} deleted`);
+        ? `${titleCase(a.name)} deleted along with ${removed} linked record${removed > 1 ? "s" : ""}`
+        : `${titleCase(a.name)} deleted`);
     }
   };
 
@@ -543,7 +543,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       )}
 
       {tab === "Matters" && (
-        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name} notify={notify} focusReqId={focusReqId} openMatterId={initialMatterId}/>
+        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={titleCase(a.name)} notify={notify} focusReqId={focusReqId} openMatterId={initialMatterId}/>
       )}
 
       {tab === "Hearings" && (
@@ -561,7 +561,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                   <td><StatusPill status={h.date < todayISO() ? "Completed" : h.status}/></td>
                 </tr>
               ))}
-              {allHearings.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings for {a.name} yet.</td></tr>}
+              {allHearings.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings for {titleCase(a.name)} yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -599,7 +599,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                   )}
                 </React.Fragment>
               ))}
-              {notices.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No notices for {a.name} yet.</td></tr>}
+              {notices.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No notices for {titleCase(a.name)} yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -629,7 +629,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
 
       {tab === "Communications" && (
         <div className="card" style={{padding: 0}}>
-          {comms.length === 0 && <EmptyState icon="chat" title="No messages logged" sub={`Messages sent to ${a.name} will appear here.`}/>}
+          {comms.length === 0 && <EmptyState icon="chat" title="No messages logged" sub={`Messages sent to ${titleCase(a.name)} will appear here.`}/>}
           <div className="col">
             {comms.map(c => (
               <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12}}>
@@ -1252,7 +1252,7 @@ function MiniStat({ label, value, icon, accent = "default" }) {
       </div>
       <div style={{minWidth: 0}}>
         <div style={{fontSize: 11, color: "var(--p-text-3)", fontWeight: 600}}>{label}</div>
-        <div style={{fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em"}}>{value}</div>
+        <div style={{fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em", color: "var(--p-text)"}}>{value}</div>
       </div>
     </div>
   );

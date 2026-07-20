@@ -2,7 +2,7 @@
 import React from 'react';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { storage } from './firebase';
-import { Icon, StatusPill, EmptyState, fmtDateLong, daysFromNow } from './shared';
+import { Icon, StatusPill, EmptyState, titleCase, fmtDateLong, daysFromNow } from './shared';
 import { useData, awaitingNotices, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
 
@@ -116,7 +116,7 @@ export default function Notices({ onOpenNotice }) {
                     </div>
                   </td>
                   <td>
-                    <div className="strong">{n.assessee}</div>
+                    <div className="strong">{titleCase(n.assessee)}</div>
                     <div className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>{n.pan}</div>
                   </td>
                   <td>{n.ay}</td>
@@ -328,7 +328,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
               <div style={{fontWeight: 800, fontSize: 15}}>This notice is already recorded</div>
               <div className="card-sub" style={{marginTop: 3}}>
                 A notice with DIN <b style={{fontFamily: "ui-monospace, monospace"}}>{edited.din}</b> already exists
-                for <b>{dupNotice.assessee}</b> — {dupNotice.authority}{dupNotice.ay ? ` · AY ${dupNotice.ay}` : ""}
+                for <b>{titleCase(dupNotice.assessee)}</b> — {dupNotice.authority}{dupNotice.ay ? ` · AY ${dupNotice.ay}` : ""}
                 {dupNotice.date ? ` · ${fmtDateLong(dupNotice.date)}` : ""}.
               </div>
               <div className="center" style={{gap: 8, marginTop: 12, flexWrap: "wrap", justifyContent: "flex-start"}}>
@@ -356,7 +356,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
               <Icon name="doc" size={22}/>
             </div>
             <div>
-              <div style={{fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em"}}>{isNew ? "Record a notice" : `Notice — ${edited.assessee}`}</div>
+              <div style={{fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em"}}>{isNew ? "Record a notice" : `Notice — ${titleCase(edited.assessee)}`}</div>
               <div className="card-sub" style={{marginTop: 4}}>
                 {notice?.aiParsed
                   ? <>Fields marked <b style={{color: "var(--p-primary)"}}>AI</b> were read from the PDF — verify each against the original notice before saving.</>
@@ -406,7 +406,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
               <label>Assessee *</label>
               <select value={linked ? linked.name : ""} onChange={e => pickAssessee(e.target.value)}>
                 <option value="">{data.assessees.length ? "Select assessee…" : "No assessees yet"}</option>
-                {data.assessees.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                {data.assessees.map(a => <option key={a.id} value={a.name}>{titleCase(a.name)}</option>)}
               </select>
             </div>
             <Field label="PAN" value={edited.pan} onChange={setPan} mono ai={aiFilled.has("pan")}/>

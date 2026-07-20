@@ -1,6 +1,6 @@
 /* ProHippo — Hearings calendar + list */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, titleCase, fmtDateLong, daysFromNow } from './shared';
 import { useData, downloadCSV, toISO, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 
@@ -59,7 +59,7 @@ export function HearingModal({ initial, onClose }) {
       )}
       <div className="form-grid">
         <FormField label="Assessee" required full>
-          <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
+          <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => ({ value: a.name, label: titleCase(a.name) }))} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
         <FormField label="PAN"><TextInput value={linked ? linked.pan : form.pan} onChange={(v) => set("pan")(v.toUpperCase())} placeholder="ABCPS1234F" mono/></FormField>
         <FormField label="Assessment year" required><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
@@ -133,7 +133,7 @@ function WeekView({ hearings, onOpenHearing }) {
                   return (
                     <div key={h.id} className={onOpenHearing ? "hearing-clickable" : undefined} onClick={onOpenHearing ? () => onOpenHearing(h) : undefined} style={{background: c.bg, borderRadius: 10, padding: "8px 10px", borderLeft: `3px solid ${c.bar}`, cursor: onOpenHearing ? "pointer" : "default"}} title={onOpenHearing ? "Open proceeding" : undefined}>
                       <div style={{fontSize: 10, fontWeight: 700, color: c.fg, marginBottom: 2}}>{h.time}</div>
-                      <div style={{fontSize: 11.5, fontWeight: 700, lineHeight: 1.25, marginBottom: 2}}>{h.assessee}</div>
+                      <div style={{fontSize: 11.5, fontWeight: 700, lineHeight: 1.25, marginBottom: 2}}>{titleCase(h.assessee)}</div>
                       <div style={{fontSize: 10, color: "var(--p-text-3)"}}>{h.authority} · AY {h.ay}</div>
                       {h.mode === "Video Conference" && <div className="center" style={{gap: 4, fontSize: 9, color: "#2766C7", marginTop: 2}}><Icon name="video" size={10}/>VC</div>}
                     </div>
@@ -236,7 +236,7 @@ function CalendarView({ hearings, onOpenHearing }) {
                   <div style={{fontSize: 9, color: "var(--p-text-3)", fontWeight: 700, textTransform: "uppercase"}}>{h.mode === "Video Conference" ? "VC" : h.mode === "e-Proceeding" ? "e-Proc" : "Phys"}</div>
                 </div>
                 <div style={{flex: 1, minWidth: 0}}>
-                  <div style={{fontWeight: 700, fontSize: 13}}>{h.assessee}</div>
+                  <div style={{fontWeight: 700, fontSize: 13}}>{titleCase(h.assessee)}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{h.authority} · {h.bench}</div>
                 </div>
               </div>
@@ -281,7 +281,7 @@ function ListView({ hearings, onEdit, onOpenHearing }) {
                 <div className="muted">{h.time}</div>
               </td>
               <td>
-                <div className="strong">{h.assessee}</div>
+                <div className="strong">{titleCase(h.assessee)}</div>
                 <div className="muted" style={{fontFamily: "ui-monospace, monospace"}}>{h.pan}</div>
               </td>
               <td><span className="pill pill-primary">{h.authority}</span></td>
@@ -342,7 +342,7 @@ function GroupedView({ hearings, groupBy, onOpenHearing }) {
                   </div>
                   <div style={{flex: 1}}>
                     <div className="between">
-                      <div style={{fontWeight: 700}}>{h.assessee}</div>
+                      <div style={{fontWeight: 700}}>{titleCase(h.assessee)}</div>
                       <div className="muted" style={{fontSize: 12}}><Icon name="clock" size={11}/> {h.time} · {h.mode}</div>
                     </div>
                     <div className="muted" style={{fontSize: 12, marginTop: 2}}>{h.bench} · AY {h.ay} {h.section && `· u/s ${h.section}`}</div>

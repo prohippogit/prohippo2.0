@@ -8,6 +8,7 @@ import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storag
 import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 import { ingestPortalSyncMessage } from './portalIngest';
+import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 import CheekyHippoProgress from './cheekyHippo/CheekyHippoProgress.jsx';
 
 // Rough bucket for a streamed notice so the hippo can drop smarter copy
@@ -981,7 +982,6 @@ const TYPE_ACCENT = {
   Penalty: { bar: "#EE5A5A", tint: "var(--p-coral)", fg: "#B8463A" },
 };
 const accentFor = (t) => TYPE_ACCENT[t] || { bar: "var(--p-primary-3)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" };
-const isOrderDoc = (n) => Boolean(n.isOrder) || /\border\b/i.test(n.subject || "");
 
 /* Consolidated, proceeding-wise view: each matter (proceeding) is a distinct,
    clearly-separated card. Clicking one opens a full, scrollable pop-up card
@@ -1149,17 +1149,19 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             : (
               <div className="col" style={{gap: 10}}>
                 {ns.map((n) => {
-                  const order = isOrderDoc(n);
                   const appeal = Boolean(n.isAppealForm);
+                  const dt = n.isOrder ? orderDocType(n) : null;
+                  const appealable = isAppealableOrder(n);
+                  const enclosure = dt === "demandNotice" || dt === "computationSheet";
                   const ap = n.appeal || {};
                   const apAtts = appeal ? (ap.attachments || []).filter((x) => x.storagePath) : [];
                   return (
                     <div key={n.id} style={{padding: "11px 13px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line)"}}>
                       <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
-                        <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : order ? "var(--p-amber)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : order ? "#B07512" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
+                        <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : appealable ? "var(--p-amber)" : enclosure ? "var(--p-card-tint)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : appealable ? "#B07512" : enclosure ? "var(--p-text-3)" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
                         <div style={{flex: 1, minWidth: 0}}>
                           <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
-                            <span className={`pill ${appeal ? "pill-primary" : order ? "pill-warning" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : order ? "Order" : "Notice"}</span>
+                            <span className={`pill ${appeal ? "pill-primary" : appealable ? "pill-warning" : enclosure ? "pill-info" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : dt ? DOC_TYPE_LABEL[dt] : "Notice"}</span>
                             <span className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
                           </div>
                           <div className="muted" style={{fontSize: 11, marginTop: 2}}>
@@ -1167,6 +1169,11 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                               ? [ap.dateFiling ? `Filed ${fmtDateLong(ap.dateFiling)}` : "", ap.ackNum ? `Ack ${ap.ackNum}` : "", ap.dateOrder ? `vs order ${fmtDateLong(ap.dateOrder)}` : "", ap.orderSection ? `u/s ${ap.orderSection}` : "", ap.appealSection ? `appeal u/s ${ap.appealSection}` : ""].filter(Boolean).join(" · ")
                               : [n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
                           </div>
+                          {!appeal && (n.assessedIncome != null || (n.parsed && n.parsed.disputedDemand)) ? (
+                            <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                              {[n.assessedIncome != null ? `Assessed ${fmtINR(n.assessedIncome)}` : "", n.parsed && n.parsed.disputedDemand ? `Demand ${fmtINR(n.parsed.disputedDemand)}` : ""].filter(Boolean).join(" · ")}
+                            </div>
+                          ) : null}
                           {appeal && (ap.amountAssessed || ap.disputedDemand) ? (
                             <div className="muted" style={{fontSize: 11, marginTop: 2}}>
                               {[ap.amountAssessed ? `Assessed ${fmtINR(ap.amountAssessed)}` : "", ap.disputedDemand ? `Disputed ${fmtINR(ap.disputedDemand)}` : ""].filter(Boolean).join(" · ")}

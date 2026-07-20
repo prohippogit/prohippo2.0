@@ -33,6 +33,56 @@ const endOfMonthPlus = (iso, months) => {
 // here (e.g. an ITAT order → High Court, out of scope) are not surfaced.
 export const APPEAL_ROUTE = { Scrutiny: "CIT(A)", Penalty: "CIT(A)", "CIT(A)": "ITAT" };
 
+/* ---------------- document classification ----------------
+ * The portal's "Download Closure Order" returns the real order BUNDLED with its
+ * enclosures — the computation sheet and the notice of demand u/s 156. Every
+ * item arrives with isOrder = true, so the appealable order must be told apart
+ * from its enclosures. Only the order itself (assessment / penalty / appellate)
+ * attracts an appeal; the demand notice and computation sheet do NOT.
+ *
+ * A docType parsed from the PDF (n.docType, set by the backend on read) always
+ * wins; otherwise it's inferred from the document's own name + section. */
+const DEMAND_RE = /notice of demand|demand notice|\bu\/?s\s*156\b|\bitns\b/i;
+const COMPUTATION_RE = /comput|tax\s*calculation|calculation sheet|\bitns[\s-]*\d/i;
+const PENALTY_RE = /penalt|\b27(0a|1)\b/i;
+const APPEAL_ORDER_RE = /appellate order|order\s*u\/?s\s*250|\b250\b|order of (the )?cit\s*\(a\)|nfac.*order/i;
+const ASSESSMENT_RE = /assessment order|order\s*u\/?s\s*1(4[3479]|53)|\b14[3479]\b|\b144\b/i;
+
+const nameOf = (n) => `${n.description || n.subject || ""} ${n.fileName || n.filename || ""}`;
+
+// One of: assessmentOrder | penaltyOrder | appealOrder | demandNotice |
+// computationSheet | order (generic) | other.
+export function orderDocType(n) {
+  const parsed = n.docType || (n.parsed && n.parsed.docType) || (n.aiSummary && n.aiSummary.docType);
+  if (parsed) return parsed;
+  const t = nameOf(n);
+  const sec = String(n.section || "");
+  if (DEMAND_RE.test(t)) return "demandNotice";
+  if (COMPUTATION_RE.test(t)) return "computationSheet";
+  if (n.authority === "CIT(A)" || sec === "250" || APPEAL_ORDER_RE.test(t)) return "appealOrder";
+  if (n.authority === "Penalty" || PENALTY_RE.test(t)) return "penaltyOrder";
+  if (n.authority === "Scrutiny" || ASSESSMENT_RE.test(t)) return "assessmentOrder";
+  return n.isOrder ? "order" : "other";
+}
+
+const APPEALABLE_DOCTYPES = new Set(["assessmentOrder", "penaltyOrder", "appealOrder", "order"]);
+
+// The document is an order that can actually be appealed — i.e. not a demand
+// notice or computation sheet that merely travelled bundled with it.
+export function isAppealableOrder(n) {
+  return Boolean(n.isOrder) && APPEALABLE_DOCTYPES.has(orderDocType(n));
+}
+
+export const DOC_TYPE_LABEL = {
+  assessmentOrder: "Assessment order",
+  penaltyOrder: "Penalty order",
+  appealOrder: "CIT(A) order",
+  demandNotice: "Demand notice",
+  computationSheet: "Computation sheet",
+  order: "Order",
+  other: "Notice",
+};
+
 export const ayStartYear = (ay) => { const m = /^(\d{4})/.exec(String(ay || "")); return m ? +m[1] : null; };
 
 // AY 2026-27 and earlier appeals stay under the 1961 Act (old forms); AY
@@ -74,14 +124,14 @@ export function isAppealed(notice, allNotices, matters) {
   const sameParty = (r) => (r.pan || "").toUpperCase() === pan && r.ay === ay;
   const route = APPEAL_ROUTE[notice.authority];
   if (route === "CIT(A)") {
-    // A first appeal is filed if a matching Form 35 exists, or a CIT(A) order
-    // has already been passed for this PAN + AY (the first appeal is done).
+    // A first appeal is filed if a matching Form 35 exists, or a CIT(A)
+    // appellate order has already been passed for this PAN + AY (appeal done).
     return allNotices.some((n) => n.isAppealForm && form35Matches(notice, n))
-      || allNotices.some((n) => n.isOrder && n.authority === "CIT(A)" && sameParty(n));
+      || allNotices.some((n) => sameParty(n) && orderDocType(n) === "appealOrder");
   }
   if (route === "ITAT") {
     return (matters || []).some((m) => m.type === "ITAT" && sameParty(m))
-      || allNotices.some((n) => sameParty(n) && n.isOrder && n.authority === "ITAT");
+      || allNotices.some((n) => sameParty(n) && n.isOrder && n.authority === "ITAT" && isAppealableOrder(n));
   }
   return false;
 }
@@ -143,7 +193,7 @@ export function appealableOrders(data, opts = {}) {
   const notices = data.notices || [];
   const matters = data.matters || [];
   return notices
-    .filter((n) => n.isOrder && APPEAL_ROUTE[n.authority] && !isAppealed(n, notices, matters) && withinWindow(n.date, withinDays))
+    .filter((n) => isAppealableOrder(n) && APPEAL_ROUTE[n.authority] && !isAppealed(n, notices, matters) && withinWindow(n.date, withinDays))
     .map((n) => ({ notice: n, ...appealFor(n) }))
     .filter((x) => x.route)
     .sort((a, b) => (a.daysLeft == null ? 1e9 : a.daysLeft) - (b.daysLeft == null ? 1e9 : b.daysLeft));
@@ -169,17 +219,18 @@ export function checklistFor(x, allNotices) {
   const ay = n.ay || "";
   const hasOrderPdf = Boolean(n.storagePath);
   const items = [];
+  const sameParty = (m) => (m.pan || "").toUpperCase() === pan && m.ay === ay;
   if (x.route === "CIT(A)") {
     items.push({ key: "order", label: "Certified copy of the order appealed against", auto: hasOrderPdf });
-    items.push({ key: "demand", label: "Notice of demand u/s 156" });
+    const demand = (allNotices || []).some((m) => sameParty(m) && orderDocType(m) === "demandNotice");
+    items.push({ key: "demand", label: "Notice of demand u/s 156", auto: demand });
     items.push({ key: "gof", label: "Grounds of Appeal & Statement of Facts" });
     items.push({ key: "challan", label: "Appeal fee challan (Major Head 0021)" });
     items.push({ key: "dsc", label: "Digital Signature Certificate (DSC) — valid" });
     if (x.reg.newAct) items.push({ key: "predeposit", label: "Proof of pre-deposit of tax on returned income" });
   } else {
     items.push({ key: "citorder", label: "Certified copy of CIT(A) / NFAC order u/s 250", auto: hasOrderPdf });
-    const asmt = (allNotices || []).some((m) => m.isOrder && m.authority === "Scrutiny"
-      && (m.pan || "").toUpperCase() === pan && m.ay === ay && m.storagePath);
+    const asmt = (allNotices || []).some((m) => sameParty(m) && orderDocType(m) === "assessmentOrder" && m.storagePath);
     items.push({ key: "asmt", label: "Copy of the underlying assessment order", auto: asmt });
     items.push({ key: "gof", label: "Grounds of Appeal & Statement of Facts" });
     items.push({ key: "challan", label: "Tribunal fee challan" });

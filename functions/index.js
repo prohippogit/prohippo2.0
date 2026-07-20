@@ -137,26 +137,60 @@ async function callGemini(model, apiKey, files) {
   }
 }
 
-// Short, type-aware summary of a portal notice/order for a tax practitioner.
+// Short, type-aware summary of a portal notice/order for a tax practitioner,
+// PLUS a classification of WHICH document this actually is. The portal bundles
+// the real order with its computation sheet and notice of demand u/s 156 — only
+// the order itself is appealable, so the document type must be read from the PDF.
+const DOC_TYPE_ENUM = ["assessmentOrder", "penaltyOrder", "appealOrder", "demandNotice", "computationSheet", "notice", "other"];
 const SUMMARY_SCHEMA = {
   type: "OBJECT",
   properties: {
     isOrder: { type: "BOOLEAN" },
+    docType: { type: "STRING", enum: DOC_TYPE_ENUM, nullable: true },
     summary: { type: "STRING" },
     items: { type: "ARRAY", items: { type: "STRING" } },
+    orderDate: { type: "STRING", nullable: true },
+    orderSection: { type: "STRING", nullable: true },
+    orderDin: { type: "STRING", nullable: true },
+    assessedIncome: { type: "NUMBER", nullable: true },
+    disputedDemand: { type: "NUMBER", nullable: true },
   },
   required: ["summary"],
 };
 function summaryPrompt(authority) {
-  return `You are a chartered accountant reading ONE Indian Income-tax document (a notice or an ORDER). Write a VERY SHORT, factual summary for a busy practitioner. The operative conclusion is usually on the LAST page(s) — read those carefully.
+  return `You are a chartered accountant reading ONE Indian Income-tax document (a notice, an ORDER, or an enclosure that came bundled with an order). Write a VERY SHORT, factual summary for a busy practitioner, and classify exactly WHICH document this is. The operative conclusion is usually on the LAST page(s) — read those carefully.
 
-The proceeding type is "${authority || "Unknown"}". Follow the matching rule:
-- Scrutiny / assessment order (u/s 143(3)/147 etc.): list EACH addition or disallowance made, with the amount and the section if stated. e.g. "Addition ₹12,50,000 u/s 68 — unexplained cash credit".
-- Penalty order (271/270A series): state the section the penalty is levied under and the penalty amount.
-- CIT(A) / appeal order (u/s 250): state what was HELD — appeal allowed / dismissed / partly allowed — and the key grounds decided, from the concluding paragraphs.
-- If the document is only a NOTICE (not an order), state in one line what it asks for and the due date if any.
+FIRST classify the document into "docType" — this is critical, because appeals are filed only against the order itself, never against its enclosures:
+- "assessmentOrder": an assessment order u/s 143(3)/147/144/153A etc.
+- "penaltyOrder": a penalty order (271/270A series).
+- "appealOrder": an order of the CIT(A)/JCIT(A)/NFAC u/s 250 (a first-appeal order).
+- "demandNotice": a Notice of Demand u/s 156 (the tax/interest/penalty payable slip). NOT an order.
+- "computationSheet": a computation of income / tax calculation / ITNS worksheet that accompanies an order. NOT an order.
+- "notice": any other notice (not an order).
+- "other": anything else.
 
-Rules: Be terse — a few short points. Put each addition/disallowance/held-point as one entry in "items". Put a one-line overall gist in "summary". Set "isOrder" true if this is a final/appellate/penalty order, false for a notice. NEVER invent figures or sections — omit anything not clearly printed.`;
+The proceeding type is "${authority || "Unknown"}". Then summarise per the matching rule:
+- assessmentOrder: list EACH addition or disallowance, with the amount and section if stated, e.g. "Addition ₹12,50,000 u/s 68 — unexplained cash credit". Put the total assessed income in "assessedIncome" if printed.
+- penaltyOrder: state the section the penalty is levied under and the amount.
+- appealOrder: state what was HELD — appeal allowed / dismissed / partly allowed — and the key grounds decided, from the concluding paragraphs.
+- demandNotice / computationSheet / notice: one line on what it states or asks for.
+
+Also extract, when clearly printed: "orderDate" (date the order was passed, YYYY-MM-DD), "orderSection" (the section the order is passed under, e.g. "143(3)", "250", "271(1)(c)"), "orderDin" (the DIN), and "disputedDemand" (the demand amount on a demand notice).
+
+Rules: Be terse — a few short points. Put each addition/disallowance/held-point as one entry in "items". Put a one-line overall gist in "summary". Set "isOrder" true ONLY for assessmentOrder/penaltyOrder/appealOrder; false for demandNotice/computationSheet/notice/other. NEVER invent figures, dates or sections — return null / omit anything not clearly printed.`;
+}
+
+// Deterministic first-pass classification from the document's own name/section,
+// used at ingest before (or instead of) an AI read.
+function classifyDocType(name, section, authority) {
+  const t = String(name || "");
+  const sec = String(section || "");
+  if (/notice of demand|demand notice|u\/?s\s*156|\bitns\b/i.test(t)) return "demandNotice";
+  if (/comput|tax\s*calculation|calculation sheet/i.test(t)) return "computationSheet";
+  if (authority === "CIT(A)" || sec === "250" || /appellate order|order\s*u\/?s\s*250|\b250\b|nfac.*order/i.test(t)) return "appealOrder";
+  if (authority === "Penalty" || /penalt|\b27(0a|1)\b/i.test(t)) return "penaltyOrder";
+  if (authority === "Scrutiny" || /assessment order|order\s*u\/?s\s*1(4[3479]|53)|\b14[3479]\b|\b144\b/i.test(t)) return "assessmentOrder";
+  return "order";
 }
 async function callGeminiSummary(model, apiKey, files, authority) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -608,6 +642,7 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
     // never overwrite the practitioner's own edits (status, authority, …).
     const cur = existing.data();
     const patch = { source: cur.source || "portal", din, docKey, isOrder, proceedingReqId: notice.proceedingReqId || "", portalSyncedAt: new Date().toISOString() };
+    if (isOrder && !cur.docType) patch.docType = classifyDocType(notice.description || fileName, notice.section, authority);
     if (storagePath) { patch.storagePath = storagePath; if (!cur.fileName) patch.fileName = fileName; }
     const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate };
     for (const k of Object.keys(fill)) if (!cur[k] && fill[k]) patch[k] = fill[k];
@@ -620,7 +655,8 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
         : noticesCol.doc().id;
     await noticesCol.doc(noticeId).set({
       assessee: assesseeName, pan, ay, authority, section: notice.section || "",
-      din, docKey, isOrder, date, subject: notice.description || "", status: "Awaiting review",
+      din, docKey, isOrder, docType: isOrder ? classifyDocType(notice.description || fileName, notice.section, authority) : "",
+      date, subject: notice.description || "", status: "Awaiting review",
       mode: "e-Proceeding", bench: "", ita: "", hearingDate: "", hearingTime: "",
       documents: [], responseDueDate: dueDate,
       source: "portal", proceedingReqId: notice.proceedingReqId || "",
@@ -683,14 +719,30 @@ exports.summarizePortalNotice = onCall(
     const files = [{ mimeType: "application/pdf", data: buf.toString("base64") }];
 
     const out = await callGeminiSummary(PRIMARY_MODEL, geminiApiKey.value(), files, n.authority);
+    const docType = DOC_TYPE_ENUM.includes(out.docType) ? out.docType : undefined;
     const aiSummary = {
       summary: typeof out.summary === "string" ? out.summary.trim() : "",
       items: Array.isArray(out.items) ? out.items.filter((x) => typeof x === "string" && x.trim()).slice(0, 12) : [],
       isOrder: Boolean(out.isOrder),
+      docType: docType || null,
       at: new Date().toISOString(),
     };
-    await ref.set({ aiSummary, isOrder: aiSummary.isOrder }, { merge: true });
-    return { ok: true, aiSummary };
+    // Persist the parsed order metadata so appeal-matching and the fee use the
+    // ORDER's own details (not the demand notice's), and the fee auto-fills.
+    const parsed = {
+      orderDate: normDate(out.orderDate) || "",
+      orderSection: str(out.orderSection),
+      orderDin: str(out.orderDin),
+      disputedDemand: typeof out.disputedDemand === "number" && out.disputedDemand > 0 ? out.disputedDemand : null,
+    };
+    const patch = { aiSummary, isOrder: aiSummary.isOrder, parsed };
+    // The AI read of the document type wins over the name-based guess.
+    if (docType) patch.docType = docType === "notice" ? "" : docType;
+    if (typeof out.assessedIncome === "number" && out.assessedIncome > 0 && n.assessedIncome == null) {
+      patch.assessedIncome = out.assessedIncome;
+    }
+    await ref.set(patch, { merge: true });
+    return { ok: true, aiSummary, docType: patch.docType, parsed };
   }
 );
 

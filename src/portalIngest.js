@@ -28,6 +28,16 @@ export async function ingestPortalSyncMessage(payload) {
     const meta = { ...n };
     delete meta.contentBase64;
     const res = await httpsCallable(functions, "ingestPortalNotice")({ assesseeId: payload.assesseeId, notice: meta, storagePath, filename: n.filename });
+    // Parse order PDFs on fetch, so the real document type (order vs demand
+    // notice vs computation sheet) and the order's own metadata are known right
+    // away — this drives the appeal detection and the Form 35 match. Best-effort.
+    if (meta.isOrder && storagePath && res.data && res.data.noticeId) {
+      try {
+        await httpsCallable(functions, "summarizePortalNotice")({ noticeId: res.data.noticeId });
+      } catch (e) {
+        console.warn("auto-parse of order PDF failed", e?.message || e);
+      }
+    }
     return { kind: "notice", data: res.data };
   }
 

@@ -1,12 +1,14 @@
 import { Icon } from './shared';
 import { useData } from './store';
 import { useAuth } from './auth';
+import { appealableOrders } from './appeals';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
   { id: "assessees", label: "Assessees", icon: "users" },
   { id: "matters", label: "Matters", icon: "scale" },
   { id: "hearings", label: "Hearings", icon: "calendar" },
+  { id: "appeals", label: "Appeals", icon: "gavel" },
   { id: "invoices", label: "Invoices", icon: "invoice" },
   { id: "communications", label: "Communications", icon: "chat" },
   { id: "ai", label: "AI Parser", icon: "sparkle" },
@@ -22,6 +24,7 @@ export default function Sidebar({ active, onNav, open }) {
   const { user, signOutUser } = useAuth();
   const badges = {
     assessees: data.assessees.length || null,
+    appeals: appealableOrders(data).length || null,
   };
 
   return (

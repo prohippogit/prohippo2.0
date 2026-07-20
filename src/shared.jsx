@@ -16,6 +16,7 @@ export const Icon = ({ name, size = 18, stroke = 1.6, className = "" }) => {
     case "group": return <svg {...common}><path d="M16 4l4 4-4 4"/><path d="M8 20l-4-4 4-4"/><path d="M4 16h16M20 8H4"/></svg>;
     case "folder": return <svg {...common}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>;
     case "scale": return <svg {...common}><path d="M12 3v18M5 8l-2 6c0 1.7 1.3 3 3 3s3-1.3 3-3l-2-6M19 8l-2 6c0 1.7 1.3 3 3 3s3-1.3 3-3l-2-6"/><path d="M5 8h14"/></svg>;
+    case "gavel": return <svg {...common}><path d="M9.5 4.5l6 6M13 8l-7.5 7.5a2.1 2.1 0 0 0 3 3L16 11M7 2.5l6 6M17.5 7l-3.5 3.5"/><path d="M4 21h9"/></svg>;
     case "bell": return <svg {...common}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>;
     case "calendar": return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>;
     case "list": return <svg {...common}><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>;

@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v34";
+  const BUILD = "v35";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -534,6 +534,7 @@
   // Fetch the responses filed against one notice (remarks + attachment PDFs),
   // and stream each to the app to attach to that notice.
   async function syncResponses(creds, pan, din, headerSeqNo) {
+    const knownResp = new Set((creds.knownResponseIds || []).map((x) => String(x)));
     const resp = await NET.apiCall({
       path: GET_ENTITY_PATH, serviceName: "itbaResponseService",
       payload: { serviceName: "itbaResponseService", headerSeqNo, pan, header: FORM },
@@ -542,6 +543,9 @@
     for (const rr of list) {
       const atts = Array.isArray(rr.attachmentLst) ? rr.attachmentLst : [];
       if (!rr || (!rr.remarks && atts.length === 0)) continue;
+      // A reply already on file needs no work — skip its attachment downloads.
+      const responseId = String(rr.responseId || rr.remarksHash || rr.submittedOn || (rr.remarks || "").slice(0, 24));
+      if (knownResp.has(responseId)) continue;
       const attachments = [];
       for (const at of atts) {
         const adocId = at.docId || at.satDocId || at.documentId || at.attachmentId || at.refId;
@@ -560,7 +564,7 @@
       }
       const response = {
         noticeKey: din,
-        responseId: String(rr.responseId || rr.remarksHash || rr.submittedOn || (rr.remarks || "").slice(0, 24)),
+        responseId,
         remarks: rr.remarks || "",
         submittedOn: rr.submittedOn || "",
         respType: rr.respType || "",
@@ -578,11 +582,22 @@
   }
   async function syncNotices(creds, badge, pan, rows) {
     const known = new Set((creds.knownDins || []).map((d) => String(d)));
+    const knownByProc = creds.knownByProc || {};
+    const isClosed = (r) => /information/i.test(r.tab || "") || r.proceedingStatus === "C";
     const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
     if (!targets.length) { log("notices: none to fetch"); return; }
-    let docCount = 0, skipped = 0;
+    let docCount = 0, skipped = 0, skippedProcs = 0;
     for (let i = 0; i < targets.length; i++) {
       const r = targets[i];
+      // Incremental: a CLOSED proceeding whose notices are all on file can never
+      // change — skip its detail call (and every per-notice reply call) entirely.
+      // Active proceedings are still checked (a reply may be new), but the
+      // per-notice/response loop below only downloads what isn't already held.
+      const kp = knownByProc[r.proceedingReqId] || {};
+      if (isClosed(r) && (r.viewNoticeCount || 0) <= (kp.n || 0)) {
+        skipped += (r.viewNoticeCount || 0); skippedProcs++;
+        continue;
+      }
       badge.set("Notices " + (i + 1) + "/" + targets.length + " — " + (r.name || "proceeding").slice(0, 28) + "…");
       const det = await NET.apiCall({
         path: GET_ENTITY_PATH, serviceName: "eProceedingDetailsService",
@@ -662,6 +677,11 @@
     const withOrders = rows.filter((r) => r.proceedingReqId);
     log("orders: checking " + withOrders.length + " proceeding(s) for closure orders");
     for (const r of withOrders) {
+      // A closed proceeding whose order we already hold is final — skip its
+      // closure-order lookup. Active proceedings are still checked (an order may
+      // newly appear), and within any proceeding known docs are skipped by docKey.
+      const kp = knownByProc[r.proceedingReqId] || {};
+      if (isClosed(r) && kp.o) { skipped++; continue; }
       badge.set("Orders — " + (r.name || "proceeding").slice(0, 28) + "…");
       try {
         const clo = await NET.apiCall({
@@ -699,7 +719,7 @@
       } catch (e) { log("orders: error for", r.proceedingReqId, e); }
     }
 
-    log("notices: streamed " + docCount + " new document(s), skipped " + skipped + " already-synced");
+    log("notices: streamed " + docCount + " new document(s), skipped " + skipped + " already-synced (" + skippedProcs + " unchanged proceeding(s) skipped without a detail call)");
     badge.set("Synced " + docCount + " new document(s)" + (skipped ? " · " + skipped + " already on file" : "") + " ✓");
   }
 
@@ -778,10 +798,14 @@
       };
     } catch (e) { log("appeals: pan details error", e); }
     const F35T = (typeof window !== "undefined" && window.__PH_F35) || null;
+    const knownForms = new Set((creds.knownDins || []).map((d) => String(d)));
 
     for (const f of forms) {
       const ackNum = f.ackNum || f.ackNo || "";
       if (!ackNum) continue;
+      // Already-filed Form 35 on file (deduped by "f35:<ackNum>") — the rendered
+      // form + ARN + attachments are expensive, so skip it entirely.
+      if (knownForms.has("f35:" + ackNum)) { log("appeals: skip already-filed", ackNum); continue; }
 
       // Full filed-form data (AY, order DIN/date/section, amounts, filing date).
       let d = {};

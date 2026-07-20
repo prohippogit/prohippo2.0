@@ -9,6 +9,35 @@ import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 import { ingestPortalSyncMessage } from './portalIngest';
 import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
+
+// Build the incremental-sync hints from what's already on file for one PAN, so
+// a re-sync only fetches what's genuinely new instead of re-downloading it all:
+//   - knownDins:        DINs + docKeys already held → skip re-downloading PDFs
+//   - knownByProc:      per-proceeding { n: notice count, o: has an order } →
+//                       the extension skips whole proceedings whose counts are
+//                       unchanged (a closed proceeding never changes)
+//   - knownResponseIds: replies already recorded → skip re-downloading them
+function buildSyncKnowns(notices, pan) {
+  const knownDins = new Set();
+  const knownResponseIds = new Set();
+  const procNotices = {};        // proceedingReqId -> Set<DIN>
+  const procHasOrder = new Set();
+  (notices || []).forEach((n) => {
+    if (n.pan !== pan) return;
+    if (n.din) knownDins.add(n.din);
+    if (n.docKey) knownDins.add(n.docKey);
+    const pid = n.proceedingReqId;
+    if (pid) {
+      if (n.isOrder) procHasOrder.add(pid);
+      if (n.din) (procNotices[pid] || (procNotices[pid] = new Set())).add(String(n.din));
+    }
+    (n.responses || []).forEach((r) => { if (r && r.responseId != null) knownResponseIds.add(String(r.responseId)); });
+  });
+  const knownByProc = {};
+  Object.keys(procNotices).forEach((pid) => { knownByProc[pid] = { n: procNotices[pid].size }; });
+  procHasOrder.forEach((pid) => { (knownByProc[pid] || (knownByProc[pid] = { n: 0 })).o = true; });
+  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds] };
+}
 import CheekyHippoProgress from './cheekyHippo/CheekyHippoProgress.jsx';
 
 // Rough bucket for a streamed notice so the hippo can drop smarter copy
@@ -168,11 +197,9 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       setBulk({ done: i, total: targets.length, current: a.name });
       try {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-        const known = new Set();
-        (data.notices || []).forEach((n) => { if (n.pan === a.pan) { if (n.din) known.add(n.din); if (n.docKey) known.add(n.docKey); } });
-        const knownDins = [...known];
+        const { knownDins, knownByProc, knownResponseIds } = buildSyncKnowns(data.notices, a.pan);
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
-        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins, background: true });
+        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins, knownByProc, knownResponseIds, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
         doneResolver.current = null;
         await new Promise((r) => setTimeout(r, 1500)); // small gap between logins
@@ -760,12 +787,12 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
     }
     try {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-      // Incremental sync: tell the extension which notice DINs we already have so
-      // it skips re-downloading their PDFs (only NEW documents are fetched).
-      const known = new Set();
-      if (mode === "sync") (appData.notices || []).forEach((n) => { if (n.pan === a.pan) { if (n.din) known.add(n.din); if (n.docKey) known.add(n.docKey); } });
-      const knownDins = [...known];
-      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, knownDins });
+      // Incremental sync: tell the extension what's already on file so it only
+      // fetches genuinely new data (see buildSyncKnowns). Empty for "open" mode.
+      const { knownDins, knownByProc, knownResponseIds } = mode === "sync"
+        ? buildSyncKnowns(appData.notices, a.pan)
+        : { knownDins: [], knownByProc: {}, knownResponseIds: [] };
+      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, knownDins, knownByProc, knownResponseIds });
       notify(mode === "sync" ? "Syncing from the portal — watch the new tab…" : "Opening the portal — logging you in…");
     } catch (e) {
       console.error(e);

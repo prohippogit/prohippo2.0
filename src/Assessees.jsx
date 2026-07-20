@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, titleCase, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO } from './store';
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
@@ -418,20 +418,21 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       <div className="center" style={{gap: 8, marginBottom: 16, fontSize: 13}}>
         <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrow-left" size={14}/>Back</button>
         <span className="muted">Assessees / </span>
-        <span style={{fontWeight: 600}}>{a.name}</span>
+        <span style={{fontWeight: 600}}>{titleCase(a.name)}</span>
       </div>
 
-      <div className="card" style={{background: "#FCE7B8", border: "1px solid #EFCE86", boxShadow: "0 10px 30px -12px rgba(176, 117, 18, 0.26), 0 2px 8px rgba(176, 117, 18, 0.07)"}}>
-        <div className="between" style={{alignItems: "flex-start"}}>
+      <div className="card" style={{position: "relative", overflow: "hidden", border: "none", background: "linear-gradient(120deg, #2B2270 0%, #5146C6 55%, #8E7CFF 100%)", color: "white", boxShadow: "0 18px 42px -20px rgba(43, 34, 112, 0.6)"}}>
+        <div style={{position: "absolute", right: -50, top: -50, width: 240, height: 240, borderRadius: "50%", background: "rgba(255,180,220,0.22)", filter: "blur(24px)", pointerEvents: "none"}}/>
+        <div className="between" style={{alignItems: "flex-start", position: "relative"}}>
           <div className="center" style={{gap: 16}}>
             <Avatar name={a.name} color={a.color} size="lg" round soft/>
             <div>
               <div className="center" style={{gap: 8}}>
-                <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>{a.name}</div>
-                <span className="pill" style={{background: "#FFFFFF", color: "#A96D10", fontWeight: 700}}>{a.status}</span>
-                {a.group && <span className="pill pill-primary">{a.group}</span>}
+                <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>{titleCase(a.name)}</div>
+                <span className="pill" style={{background: "rgba(255,255,255,0.18)", color: "white", fontWeight: 700}}>{a.status}</span>
+                {a.group && <span className="pill" style={{background: "rgba(255,255,255,0.18)", color: "white", fontWeight: 700}}>{a.group}</span>}
               </div>
-              <div className="row" style={{gap: 18, marginTop: 8, fontSize: 13, color: "#7A5B22"}}>
+              <div className="row" style={{gap: 18, marginTop: 8, fontSize: 13, color: "rgba(255,255,255,0.82)"}}>
                 <span><b style={{fontFamily: "ui-monospace, monospace"}}>{a.pan}</b></span>
                 {a.mobile && <span><Icon name="phone" size={12}/> {a.mobile}</span>}
                 {a.email && <span><Icon name="mail" size={12}/> {a.email}</span>}
@@ -439,14 +440,14 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
             </div>
           </div>
           <div className="center" style={{gap: 8}}>
-            {waLink && <a className="btn btn-secondary btn-sm" href={waLink} target="_blank" rel="noreferrer"><Icon name="whatsapp" size={14}/>WhatsApp</a>}
-            {a.email && <a className="btn btn-secondary btn-sm" href={`mailto:${a.email}`}><Icon name="mail" size={14}/>Email</a>}
-            <button className="btn btn-primary btn-sm" onClick={() => setShowMatter(true)}><Icon name="plus" size={14}/>New matter</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(true)}><Icon name="edit" size={14}/>Edit</button>
-            <button className="icon-btn" style={{width: 36, height: 36}} onClick={doDelete} title="Delete assessee"><Icon name="trash" size={15}/></button>
+            {waLink && <a className="btn btn-sm" style={{background: "rgba(255,255,255,0.16)", color: "white", border: "1px solid rgba(255,255,255,0.28)"}} href={waLink} target="_blank" rel="noreferrer"><Icon name="whatsapp" size={14}/>WhatsApp</a>}
+            {a.email && <a className="btn btn-sm" style={{background: "rgba(255,255,255,0.16)", color: "white", border: "1px solid rgba(255,255,255,0.28)"}} href={`mailto:${a.email}`}><Icon name="mail" size={14}/>Email</a>}
+            <button className="btn btn-sm" style={{background: "white", color: "var(--p-primary-2)", fontWeight: 700}} onClick={() => setShowMatter(true)}><Icon name="plus" size={14}/>New matter</button>
+            <button className="btn btn-sm" style={{background: "rgba(255,255,255,0.16)", color: "white", border: "1px solid rgba(255,255,255,0.28)"}} onClick={() => setShowEdit(true)}><Icon name="edit" size={14}/>Edit</button>
+            <button className="icon-btn" style={{width: 36, height: 36, color: "white", background: "rgba(255,255,255,0.14)"}} onClick={doDelete} title="Delete assessee"><Icon name="trash" size={15}/></button>
           </div>
         </div>
-        <div className="grid-stats" style={{gap: 12, marginTop: 20}}>
+        <div className="grid-stats" style={{gap: 12, marginTop: 20, position: "relative"}}>
           <MiniStat label="Active matters" value={s.matters} icon="scale"/>
           <MiniStat label="Upcoming hearings" value={hearings.length} icon="calendar" accent="pink"/>
           <MiniStat label="Outstanding" value={s.outstanding ? fmtINR(s.outstanding) : "—"} icon="wallet" accent={s.outstanding > 100000 ? "warn" : "default"}/>

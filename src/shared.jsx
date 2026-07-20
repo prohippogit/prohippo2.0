@@ -60,6 +60,13 @@ export const Icon = ({ name, size = 18, stroke = 1.6, className = "" }) => {
   }
 };
 
+// Portal data often arrives ALL-CAPS (e.g. "MONIKA NAVAL WADHAWA"); show names
+// with only the first letter of each word capitalised. CSS `capitalize` can't do
+// this (it never lowercases the rest), so normalise here. Handles the usual name
+// separators — space, hyphen, apostrophe, dot, slash.
+export const titleCase = (s) =>
+  (s || "").toLowerCase().replace(/(^|[\s\-'./])([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
+
 export const fmtINR = (n) => "₹" + new Intl.NumberFormat("en-IN").format(n);
 export const fmtLakhs = (n) => {
   if (n >= 10000000) return "₹" + (n / 10000000).toFixed(2).replace(/\.?0+$/, "") + "Cr";

@@ -28,6 +28,7 @@ function Shell() {
   const { data, toast } = useData();
   const [route, setRoute] = React.useState("dashboard");
   const [openAssesseeId, setOpenAssesseeId] = React.useState(null);
+  const [profileFocus, setProfileFocus] = React.useState(null); // { tab, matterId } when opened via a matter/hearing click
   const [reviewNotice, setReviewNotice] = React.useState(null); // notice record, or {} for a new one
   const [assesseeQuery, setAssesseeQuery] = React.useState("");
   const [menuOpen, setMenuOpen] = React.useState(false); // mobile drawer
@@ -35,6 +36,7 @@ function Shell() {
   const handleNav = (id) => {
     setRoute(id);
     setOpenAssesseeId(null);
+    setProfileFocus(null);
     setReviewNotice(null);
     setMenuOpen(false);
   };
@@ -45,6 +47,38 @@ function Shell() {
     setAssesseeQuery(q);
     handleNav("assessees");
   };
+
+  // Resolve the assessee a matter/hearing belongs to (by PAN, then name).
+  const assesseeForRecord = (rec) => {
+    const pan = (rec.pan || "").toUpperCase();
+    return data.assessees.find((a) => pan && (a.pan || "").toUpperCase() === pan)
+      || data.assessees.find((a) => a.name && a.name === rec.assessee);
+  };
+
+  // Open the assessee's profile straight to the clicked proceeding's pop-up card.
+  const openMatterInProfile = (matter) => {
+    const a = assesseeForRecord(matter);
+    if (!a) return;
+    setReviewNotice(null);
+    setOpenAssesseeId(a.id);
+    setProfileFocus({ tab: "Matters", matterId: matter.id });
+    setMenuOpen(false);
+  };
+
+  // Open the proceeding a hearing belongs to; fall back to the Hearings tab when
+  // no matching matter exists for it.
+  const openHearingInProfile = (hearing) => {
+    const a = assesseeForRecord(hearing);
+    if (!a) return;
+    const match = data.matters.find((m) => (m.pan || "").toUpperCase() === (hearing.pan || "").toUpperCase()
+      && ((hearing.proceedingReqId && m.proceedingReqId === hearing.proceedingReqId) || m.ay === hearing.ay));
+    setReviewNotice(null);
+    setOpenAssesseeId(a.id);
+    setProfileFocus(match ? { tab: "Matters", matterId: match.id } : { tab: "Hearings" });
+    setMenuOpen(false);
+  };
+
+  const backFromProfile = () => { setOpenAssesseeId(null); setProfileFocus(null); };
 
   const openAssessee = openAssesseeId ? data.assessees.find((a) => a.id === openAssesseeId) : null;
 
@@ -60,13 +94,22 @@ function Shell() {
       />
     );
   } else if (openAssessee) {
-    content = <AssesseeProfile assessee={openAssessee} onBack={() => setOpenAssesseeId(null)} onNav={handleNav}/>;
+    content = (
+      <AssesseeProfile
+        key={openAssessee.id}
+        assessee={openAssessee}
+        onBack={backFromProfile}
+        onNav={handleNav}
+        initialTab={profileFocus?.tab}
+        initialMatterId={profileFocus?.matterId}
+      />
+    );
   } else {
     switch (route) {
       case "dashboard": content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>; break;
-      case "assessees": content = <Assessees onOpen={(a) => setOpenAssesseeId(a.id)} initialSearch={assesseeQuery}/>; break;
-      case "matters": content = <Matters/>; break;
-      case "hearings": content = <Hearings/>; break;
+      case "assessees": content = <Assessees onOpen={(a) => { setProfileFocus(null); setOpenAssesseeId(a.id); }} initialSearch={assesseeQuery}/>; break;
+      case "matters": content = <Matters onOpenMatter={openMatterInProfile}/>; break;
+      case "hearings": content = <Hearings onOpenHearing={openHearingInProfile}/>; break;
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
       case "ai": content = <AiParser onOpenNotice={openReview}/>; break;

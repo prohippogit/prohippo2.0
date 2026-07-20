@@ -506,7 +506,7 @@ export function MatterModal({ initial, onClose }) {
   );
 }
 
-export function Matters() {
+export function Matters({ onOpenMatter }) {
   const { data, removeMatter, notify } = useData();
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState("");
@@ -573,7 +573,7 @@ export function Matters() {
                 const nh = nextHearingFor(m);
                 const days = nh ? daysFromNow(nh.date) : null;
                 return (
-                  <tr key={m.id}>
+                  <tr key={m.id} className={onOpenMatter ? "row-link" : undefined} onClick={onOpenMatter ? () => onOpenMatter(m) : undefined} style={onOpenMatter ? {cursor: "pointer"} : undefined} title={onOpenMatter ? "Open proceeding" : undefined}>
                     <td>
                       <div className="center" style={{gap: 10}}>
                         <span className={`pill pill-${typeColor(m.type)}`}>{m.type}</span>
@@ -597,8 +597,8 @@ export function Matters() {
                     <td>{m.staff ? <Avatar name={m.staff} color="mint" size="sm"/> : <span className="muted">—</span>}</td>
                     <td>
                       <div className="row" style={{gap: 4}}>
-                        <button className="btn btn-ghost btn-xs" title="Edit" onClick={() => setModal(m)}><Icon name="edit" size={12}/></button>
-                        <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this matter?")) { removeMatter(m.id); notify("Matter deleted"); } }}><Icon name="trash" size={12}/></button>
+                        <button className="btn btn-ghost btn-xs" title="Edit" onClick={(e) => { e.stopPropagation(); setModal(m); }}><Icon name="edit" size={12}/></button>
+                        <button className="btn btn-ghost btn-xs" title="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this matter?")) { removeMatter(m.id); notify("Matter deleted"); } }}><Icon name="trash" size={12}/></button>
                       </div>
                     </td>
                   </tr>

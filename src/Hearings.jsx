@@ -89,7 +89,7 @@ function startOfWeek(d) {
   return x;
 }
 
-function WeekView({ hearings }) {
+function WeekView({ hearings, onOpenHearing }) {
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
@@ -131,7 +131,7 @@ function WeekView({ hearings }) {
                 {dayHearings.map(h => {
                   const c = colorFor(h);
                   return (
-                    <div key={h.id} style={{background: c.bg, borderRadius: 10, padding: "8px 10px", borderLeft: `3px solid ${c.bar}`}}>
+                    <div key={h.id} className={onOpenHearing ? "hearing-clickable" : undefined} onClick={onOpenHearing ? () => onOpenHearing(h) : undefined} style={{background: c.bg, borderRadius: 10, padding: "8px 10px", borderLeft: `3px solid ${c.bar}`, cursor: onOpenHearing ? "pointer" : "default"}} title={onOpenHearing ? "Open proceeding" : undefined}>
                       <div style={{fontSize: 10, fontWeight: 700, color: c.fg, marginBottom: 2}}>{h.time}</div>
                       <div style={{fontSize: 11.5, fontWeight: 700, lineHeight: 1.25, marginBottom: 2}}>{h.assessee}</div>
                       <div style={{fontSize: 10, color: "var(--p-text-3)"}}>{h.authority} · AY {h.ay}</div>
@@ -149,7 +149,7 @@ function WeekView({ hearings }) {
   );
 }
 
-function CalendarView({ hearings }) {
+function CalendarView({ hearings, onOpenHearing }) {
   const now = new Date();
   const [month, setMonth] = React.useState(new Date(now.getFullYear(), now.getMonth(), 1));
   const [selected, setSelected] = React.useState(todayISO());
@@ -230,7 +230,7 @@ function CalendarView({ hearings }) {
           {selectedHearings.length === 0 && <div className="muted" style={{padding: "20px 0", textAlign: "center", fontSize: 13}}>No hearings on this date.</div>}
           <div className="col" style={{gap: 10}}>
             {selectedHearings.map(h => (
-              <div key={h.id} className="hearing-card" style={{padding: 12}}>
+              <div key={h.id} className={`hearing-card${onOpenHearing ? " hearing-clickable" : ""}`} onClick={onOpenHearing ? () => onOpenHearing(h) : undefined} style={{padding: 12, cursor: onOpenHearing ? "pointer" : "default"}} title={onOpenHearing ? "Open proceeding" : undefined}>
                 <div style={{width: 52, textAlign: "center"}}>
                   <div style={{fontSize: 14, fontWeight: 800, color: "var(--p-primary-2)"}}>{h.time}</div>
                   <div style={{fontSize: 9, color: "var(--p-text-3)", fontWeight: 700, textTransform: "uppercase"}}>{h.mode === "Video Conference" ? "VC" : h.mode === "e-Proceeding" ? "e-Proc" : "Phys"}</div>
@@ -267,7 +267,7 @@ function Legend({ color, label }) {
   );
 }
 
-function ListView({ hearings, onEdit }) {
+function ListView({ hearings, onEdit, onOpenHearing }) {
   const { updateHearing, removeHearing, notify } = useData();
   return (
     <div className="card" style={{padding: 0}}>
@@ -275,7 +275,7 @@ function ListView({ hearings, onEdit }) {
         <thead><tr><th>Date / Time</th><th>Assessee</th><th>Authority</th><th>Bench / Officer</th><th>AY</th><th>Mode</th><th>Staff</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {hearings.map(h => (
-            <tr key={h.id}>
+            <tr key={h.id} className={onOpenHearing ? "row-link" : undefined} onClick={onOpenHearing ? () => onOpenHearing(h) : undefined} style={onOpenHearing ? {cursor: "pointer"} : undefined} title={onOpenHearing ? "Open proceeding" : undefined}>
               <td>
                 <div className="strong">{fmtDateLong(h.date)}</div>
                 <div className="muted">{h.time}</div>
@@ -297,11 +297,11 @@ function ListView({ hearings, onEdit }) {
               <td><StatusPill status={h.date < todayISO() && h.status === "Upcoming" ? "Completed" : h.status}/></td>
               <td>
                 <div className="row" style={{gap: 4}}>
-                  <button className="btn btn-ghost btn-xs" title="Edit" onClick={() => onEdit(h)}><Icon name="edit" size={12}/></button>
+                  <button className="btn btn-ghost btn-xs" title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(h); }}><Icon name="edit" size={12}/></button>
                   {h.status !== "Adjourned" && h.date >= todayISO() && (
-                    <button className="btn btn-ghost btn-xs" title="Mark adjourned" onClick={() => { updateHearing(h.id, { status: "Adjourned" }); notify("Hearing marked adjourned"); }}><Icon name="clock" size={12}/></button>
+                    <button className="btn btn-ghost btn-xs" title="Mark adjourned" onClick={(e) => { e.stopPropagation(); updateHearing(h.id, { status: "Adjourned" }); notify("Hearing marked adjourned"); }}><Icon name="clock" size={12}/></button>
                   )}
-                  <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this hearing?")) { removeHearing(h.id); notify("Hearing deleted"); } }}><Icon name="trash" size={12}/></button>
+                  <button className="btn btn-ghost btn-xs" title="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this hearing?")) { removeHearing(h.id); notify("Hearing deleted"); } }}><Icon name="trash" size={12}/></button>
                 </div>
               </td>
             </tr>
@@ -313,7 +313,7 @@ function ListView({ hearings, onEdit }) {
   );
 }
 
-function GroupedView({ hearings, groupBy }) {
+function GroupedView({ hearings, groupBy, onOpenHearing }) {
   const grouped = hearings.reduce((acc, h) => {
     const key = (groupBy === "staff" ? h.staff : h.authority) || "Unassigned";
     acc[key] = acc[key] || [];
@@ -335,7 +335,7 @@ function GroupedView({ hearings, groupBy }) {
             {items.map(h => {
               const d = daysFromNow(h.date);
               return (
-                <div key={h.id} className="hearing-card">
+                <div key={h.id} className={`hearing-card${onOpenHearing ? " hearing-clickable" : ""}`} onClick={onOpenHearing ? () => onOpenHearing(h) : undefined} style={onOpenHearing ? {cursor: "pointer"} : undefined} title={onOpenHearing ? "Open proceeding" : undefined}>
                   <div className={`hearing-date ${d <= 1 ? "urgent" : d <= 4 ? "warning" : ""}`}>
                     <div className="d">{new Date(h.date).getDate()}</div>
                     <div className="m">{new Date(h.date).toLocaleString("en-IN",{month:"short"})}</div>
@@ -360,7 +360,7 @@ function GroupedView({ hearings, groupBy }) {
   );
 }
 
-export default function Hearings() {
+export default function Hearings({ onOpenHearing }) {
   const { data } = useData();
   const [view, setView] = React.useState("Week");
   const [filterAuthority, setFilterAuthority] = React.useState("All");
@@ -404,11 +404,11 @@ export default function Hearings() {
         </div>
       </div>
 
-      {view === "Week" && <WeekView hearings={filtered}/>}
-      {view === "Calendar" && <CalendarView hearings={filtered}/>}
-      {view === "List" && <ListView hearings={[...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))} onEdit={(h) => setModal(h)}/>}
-      {view === "Authority-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="authority"/>}
-      {view === "Staff-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="staff"/>}
+      {view === "Week" && <WeekView hearings={filtered} onOpenHearing={onOpenHearing}/>}
+      {view === "Calendar" && <CalendarView hearings={filtered} onOpenHearing={onOpenHearing}/>}
+      {view === "List" && <ListView hearings={[...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))} onEdit={(h) => setModal(h)} onOpenHearing={onOpenHearing}/>}
+      {view === "Authority-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="authority" onOpenHearing={onOpenHearing}/>}
+      {view === "Staff-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="staff" onOpenHearing={onOpenHearing}/>}
 
       {modal && <HearingModal initial={modal.id ? modal : undefined} onClose={() => setModal(null)}/>}
     </div>

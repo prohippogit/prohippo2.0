@@ -1042,9 +1042,9 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
   const GRID = "96px minmax(170px, 1fr) 70px 128px 96px 104px";
   return (
     <>
-      <div style={{overflowX: "auto"}}>
+      <div className="matters-surface" style={{overflowX: "auto"}}>
         <div className="col" style={{gap: 10, minWidth: 640}}>
-          <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+          <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
             <span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span><span/>
           </div>
           {ordered.map((m) => {
@@ -1111,6 +1111,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
       sub={[m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
       onClose={onClose}
       width={780}
+      className="modal-deep"
       footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
     >
       <div className="col" style={{gap: 16}}>
@@ -1128,7 +1129,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
 
         {hs.length > 0 && (
           <div>
-            <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Hearings</div>
+            <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Hearings</div>
             <div className="col" style={{gap: 8}}>
               {hs.map((h) => (
                 <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5, justifyContent: "flex-start", padding: "9px 11px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px solid var(--p-line-2)", flexWrap: "wrap"}}>
@@ -1143,7 +1144,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
         )}
 
         <div>
-          <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Notices &amp; orders</div>
+          <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Notices &amp; orders</div>
           {ns.length === 0
             ? <div className="muted" style={{fontSize: 12.5, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px dashed var(--p-line)"}}>No notices/orders synced for this proceeding yet.</div>
             : (

@@ -31,14 +31,51 @@ const STYLE = `
 @media (max-width: 540px) { .ap-frow { grid-template-columns: 128px 1fr; } }
 .ap-frow .k { padding: 7px 11px; color: var(--p-text-3); background: var(--p-card-tint); border-right: 1px solid var(--p-line-2); }
 .ap-frow .v { padding: 7px 11px; font-weight: 600; }
+.ap-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.ap-toolbar .search { flex: 1; min-width: 200px; }
+.ap-sort { font-family: inherit; font-size: 12.5px; color: var(--p-text-2); background: var(--p-card); border: 1px solid var(--p-line-2); border-radius: 10px; padding: 8px 10px; }
 `;
+
+const SORTS = {
+  deadline: { label: "Deadline — soonest first", fn: (a, b) => (a.daysLeft == null ? 1e9 : a.daysLeft) - (b.daysLeft == null ? 1e9 : b.daysLeft) },
+  orderNew: { label: "Order date — newest first", fn: (a, b) => (b.notice.date || "").localeCompare(a.notice.date || "") },
+  orderOld: { label: "Order date — oldest first", fn: (a, b) => (a.notice.date || "").localeCompare(b.notice.date || "") },
+  name: { label: "Assessee — A to Z", fn: (a, b) => titleCase(a.notice.assessee || "").localeCompare(titleCase(b.notice.assessee || "")) },
+};
+
+function matchesQuery(o, q) {
+  if (!q) return true;
+  const n = o.notice;
+  return [n.assessee, n.pan, n.ay, n.section, n.subject, o.route]
+    .some((f) => String(f || "").toLowerCase().includes(q));
+}
 
 export default function Appeals({ onOpenNotice }) {
   const { data } = useData();
-  const orders = React.useMemo(() => appealableOrders(data), [data]);
   const [selId, setSelId] = React.useState(null);
+  const [query, setQuery] = React.useState("");
+  const [sortBy, setSortBy] = React.useState("deadline");
+  const [forum, setForum] = React.useState("All");
+  const [showAll, setShowAll] = React.useState(false); // include orders older than 365 days
 
-  const selected = orders.find((o) => o.notice.id === selId) || orders[0] || null;
+  const orders = React.useMemo(
+    () => appealableOrders(data, { withinDays: showAll ? null : 365 }),
+    [data, showAll]
+  );
+  // How many are hidden purely by the 365-day cutoff (offer to reveal them).
+  const totalUnbounded = React.useMemo(() => appealableOrders(data, { withinDays: null }).length, [data]);
+  const hiddenOlder = Math.max(0, totalUnbounded - orders.length);
+
+  const q = query.trim().toLowerCase();
+  const view = React.useMemo(
+    () => orders
+      .filter((o) => forum === "All" || o.route === forum)
+      .filter((o) => matchesQuery(o, q))
+      .sort(SORTS[sortBy].fn),
+    [orders, forum, q, sortBy]
+  );
+
+  const selected = view.find((o) => o.notice.id === selId) || view[0] || null;
 
   const soon = orders.filter((o) => o.daysLeft != null && o.daysLeft >= 0 && o.daysLeft <= 15).length;
   const lapsed = orders.filter((o) => o.daysLeft != null && o.daysLeft < 0).length;
@@ -51,29 +88,67 @@ export default function Appeals({ onOpenNotice }) {
           <div className="page-title">Appeals</div>
           <div className="page-sub">
             {orders.length
-              ? <>{orders.length} appealable order{orders.length !== 1 ? "s" : ""} · <b style={{color: "var(--p-primary-2)"}}>{soon} within 15 days</b>{lapsed ? <> · <b style={{color: "var(--p-danger)"}}>{lapsed} lapsed</b></> : ""}</>
-              : "No appealable orders on file right now."}
+              ? <>{orders.length} appealable order{orders.length !== 1 ? "s" : ""}{showAll ? " (all)" : " in the last 365 days"} · <b style={{color: "var(--p-primary-2)"}}>{soon} within 15 days</b>{lapsed ? <> · <b style={{color: "var(--p-danger)"}}>{lapsed} lapsed</b></> : ""}</>
+              : showAll ? "No appealable orders on file." : "No appealable orders in the last 365 days."}
           </div>
         </div>
       </div>
 
-      {orders.length === 0 ? (
+      <div className="ap-toolbar">
+        <div className="search">
+          <Icon name="search" size={16}/>
+          <input placeholder="Search assessee, PAN, AY, section…" value={query} onChange={(e) => setQuery(e.target.value)}/>
+        </div>
+        <div className="row" style={{gap: 6}}>
+          {["All", "CIT(A)", "ITAT"].map((f) => (
+            <span key={f} className={`fchip ${forum === f ? "active" : ""}`} onClick={() => setForum(f)}>{f}</span>
+          ))}
+        </div>
+        <select className="ap-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value)} title="Sort by">
+          {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+        </select>
+        <span
+          className={`fchip ${showAll ? "active" : ""}`}
+          onClick={() => setShowAll((v) => !v)}
+          title="Include orders older than 365 days"
+        >
+          {showAll ? "Last 365 days" : "Show all dates"}
+        </span>
+      </div>
+
+      {view.length === 0 ? (
         <div className="card">
           <EmptyState
             icon="gavel"
-            title="Nothing awaiting an appeal"
-            sub="When an assessment, penalty or CIT(A) order is on file and not yet appealed, it appears here with its filing deadline, fee, checklist and a pre-filled form worksheet."
+            title={q || forum !== "All" ? "No orders match your filters" : "Nothing awaiting an appeal"}
+            sub={
+              q || forum !== "All"
+                ? "Clear the search or forum filter to see all appealable orders."
+                : hiddenOlder > 0 && !showAll
+                  ? `No orders in the last 365 days. ${hiddenOlder} older order${hiddenOlder !== 1 ? "s are" : " is"} hidden.`
+                  : "When an assessment, penalty or CIT(A) order is on file and not yet appealed, it appears here with its filing deadline, fee, checklist and a pre-filled form worksheet."
+            }
+            action={hiddenOlder > 0 && !showAll && !q && forum === "All"
+              ? <button className="btn btn-secondary" onClick={() => setShowAll(true)}>Show {hiddenOlder} older order{hiddenOlder !== 1 ? "s" : ""}</button>
+              : undefined}
           />
         </div>
       ) : (
         <div className="ap-grid">
           <div className="col" style={{gap: 12}}>
-            <div className="muted" style={{fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "2px 2px"}}>
-              Appealable orders · nearest deadline first
+            <div className="between" style={{padding: "2px 2px"}}>
+              <span className="muted" style={{fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em"}}>
+                {view.length} order{view.length !== 1 ? "s" : ""} · {SORTS[sortBy].label.split(" — ")[0]}
+              </span>
             </div>
-            {orders.map((o) => (
+            {view.map((o) => (
               <OrderCard key={o.notice.id} o={o} selected={selected?.notice.id === o.notice.id} onClick={() => setSelId(o.notice.id)}/>
             ))}
+            {!showAll && hiddenOlder > 0 && (
+              <button className="btn btn-ghost btn-sm" style={{alignSelf: "flex-start"}} onClick={() => setShowAll(true)}>
+                Show {hiddenOlder} older order{hiddenOlder !== 1 ? "s" : ""} (beyond 365 days)
+              </button>
+            )}
           </div>
           {selected && <Workspace key={selected.notice.id} x={selected} allNotices={data.notices} onOpenNotice={onOpenNotice}/>}
         </div>

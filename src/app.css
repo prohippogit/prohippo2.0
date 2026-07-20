@@ -634,9 +634,12 @@ input, select, textarea { font-family: inherit; color: inherit; }
 }
 
 /* Deep-violet proceeding pop-up — a focused "card on a stage". The light
-   notice/hearing tiles inside stay pale, so they read as cards floating on it.
+   notice/hearing tiles inside keep their own dark text (they're pale cards
+   floating on the violet); only the header + section eyebrows, which sit
+   directly on the violet ground, are lightened. Do NOT set a light colour on
+   the whole modal — it would bleed into the tiles and hide their text.
    Applied only when the modal is opened with className="modal-deep". */
-.modal.modal-deep { background: linear-gradient(160deg, #241B54 0%, #4A3FB0 100%); color: #F3F0FF; }
+.modal.modal-deep { background: linear-gradient(160deg, #241B54 0%, #4A3FB0 100%); }
 .modal-deep .modal-head { color: #FFFFFF; }
 .modal-deep .modal-head .muted { color: rgba(255, 255, 255, 0.72); }
 .modal-deep .modal-head .icon-btn { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; }

@@ -1,0 +1,188 @@
+/*
+ * ProHippo — Cheeky Hippo progress styles.
+ *
+ * Reuses the app design tokens (--p-*) from app.css so it matches the house
+ * look. All class names are prefixed `chp-` to stay self-contained and avoid
+ * collisions. Every animation is disabled under prefers-reduced-motion at the
+ * bottom of this file.
+ */
+
+.chp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--p-card, #fff);
+  border: 1px solid var(--p-line, #ece8fb);
+  border-radius: var(--radius, 16px);
+  box-shadow: var(--p-shadow-sm, 0 1px 2px rgba(48, 32, 110, 0.04));
+}
+
+/* Header: mascot + status line */
+.chp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0; /* let the status line truncate instead of overflowing */
+}
+
+.chp-avatar {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--p-lavender-2, #e9e3ff);
+  display: grid;
+  place-items: center;
+  animation: chp-bob 2.6s ease-in-out infinite;
+}
+.chp-avatar--celebrate { animation: chp-hop 0.6s ease; }
+
+.chp-avatar-fallback {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.chp-status {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chp-line {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--p-text, #14132b);
+  /* Never let a long line (or filename) push the card wider — clamp to 2 lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chp-sub {
+  font-size: 11.5px;
+  color: var(--p-text-3, #8a88a6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Progress track + fill */
+.chp-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--p-lavender-2, #e9e3ff);
+  overflow: hidden;
+}
+
+.chp-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--p-primary, #6c5ce7),
+    var(--p-primary-3, #8e7cff)
+  );
+  /* Determinate: smooth ease-out width fill (~300ms per spec). */
+  transition: width 0.3s ease-out;
+}
+
+/* Indeterminate: a sliding sliver that loops — honest, no fake %. */
+.chp-fill--indeterminate {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40%;
+  animation: chp-indeterminate 1.4s ease-in-out infinite;
+}
+
+.chp-fill--done {
+  width: 100%;
+  background: linear-gradient(90deg, var(--p-success, #20b978), #38d68e);
+}
+
+/* Meta row under the bar: count-up + percentage */
+.chp-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--p-text-2, #4a4866);
+}
+.chp-count { font-weight: 700; color: var(--p-text, #14132b); font-variant-numeric: tabular-nums; }
+.chp-pct { font-variant-numeric: tabular-nums; }
+
+/* Error + empty states */
+.chp-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Milestone micro-celebration: a tiny emoji pop over the mascot. */
+.chp-burst {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 18px;
+  pointer-events: none;
+  animation: chp-pop 0.9s ease forwards;
+}
+.chp-head { position: relative; } /* anchor for the burst */
+
+/* Visually-hidden live region for screen readers. */
+.chp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes chp-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes chp-hop {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-6px) scale(1.06); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes chp-indeterminate {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+@keyframes chp-pop {
+  0% { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.6); }
+  30% { opacity: 1; transform: translateX(-50%) translateY(-6px) scale(1.15); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(1); }
+}
+
+/* Respect reduced motion: kill bob/slide/pop, keep instant state changes. */
+@media (prefers-reduced-motion: reduce) {
+  .chp-avatar,
+  .chp-avatar--celebrate,
+  .chp-fill,
+  .chp-fill--indeterminate,
+  .chp-burst {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* Give the indeterminate bar a static, visible presence instead of a loop. */
+  .chp-fill--indeterminate {
+    position: relative;
+    width: 100%;
+    opacity: 0.5;
+  }
+}

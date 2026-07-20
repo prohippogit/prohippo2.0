@@ -421,17 +421,17 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
         <span style={{fontWeight: 600}}>{a.name}</span>
       </div>
 
-      <div className="card" style={{background: "linear-gradient(120deg, #F8F6FF 0%, #FFEDF5 100%)", border: "1px solid var(--p-line)"}}>
+      <div className="card" style={{background: "linear-gradient(125deg, #FFF7EA 0%, #FFEAC6 55%, #FBDFAE 100%)", border: "1px solid #F1D290", boxShadow: "0 10px 30px -12px rgba(176, 117, 18, 0.28), 0 2px 8px rgba(176, 117, 18, 0.08)"}}>
         <div className="between" style={{alignItems: "flex-start"}}>
           <div className="center" style={{gap: 16}}>
             <Avatar name={a.name} color={a.color} size="lg" round soft/>
             <div>
               <div className="center" style={{gap: 8}}>
                 <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em"}}>{a.name}</div>
-                <span className="pill pill-muted">{a.status}</span>
+                <span className="pill" style={{background: "#FFFFFF", color: "#B07512", fontWeight: 700}}>{a.status}</span>
                 {a.group && <span className="pill pill-primary">{a.group}</span>}
               </div>
-              <div className="row" style={{gap: 18, marginTop: 8, fontSize: 13, color: "var(--p-text-2)"}}>
+              <div className="row" style={{gap: 18, marginTop: 8, fontSize: 13, color: "#7A5B22"}}>
                 <span><b style={{fontFamily: "ui-monospace, monospace"}}>{a.pan}</b></span>
                 {a.mobile && <span><Icon name="phone" size={12}/> {a.mobile}</span>}
                 {a.email && <span><Icon name="mail" size={12}/> {a.email}</span>}

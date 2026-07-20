@@ -8,6 +8,19 @@ import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storag
 import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 import { ingestPortalSyncMessage } from './portalIngest';
+import CheekyHippoProgress from './cheekyHippo/CheekyHippoProgress.jsx';
+
+// Rough bucket for a streamed notice so the hippo can drop smarter copy
+// ("2 reassessment notices…"). Best-effort string matching on the portal's
+// section/description — not authoritative, just flavour for the mascot.
+function classifyNoticeSection(notice) {
+  const hay = `${notice?.section || ''} ${notice?.description || ''} ${notice?.proceedingName || ''}`.toLowerCase();
+  if (/\b148a?\b|reassess|reopen/.test(hay)) return 'reassessment';
+  if (/\b27[01]\b|penalty|penal/.test(hay)) return 'penalty';
+  if (/appeal|\b250\b|form\s*35|cit\s*\(a\)/.test(hay)) return 'appeal';
+  if (/\b14[34]\b|assessment|order/.test(hay) || notice?.isOrder) return 'assessment';
+  return null;
+}
 
 // Open a Storage-hosted notice/order PDF in a new tab.
 async function openStoragePdf(storagePath) {
@@ -688,6 +701,38 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   // Counters for the streamed notice documents (used to surface failures).
   const noticeStats = React.useRef({ ok: 0, fail: 0, lastNotify: 0 });
 
+  // ── Cheeky Hippo fetch progress ──────────────────────────────────────────
+  // The extension streams the sync in the background (login → proceedings list
+  // → one "notice" message per PDF → "sync-done"). We turn that stream into the
+  // presentational props CheekyHippoProgress wants. `fetchPhase === null` means
+  // idle (hippo hidden). Everything else mirrors the live stream.
+  const [fetchState, setFetchState] = React.useState(null); // { phase, totalPdfs, downloadedCount, currentFileName, noticeCounts, errorMessage } | null
+  const downloadedRef = React.useRef(0);          // live count for the sync-done branch
+  const noticeCountsRef = React.useRef({});        // live section tally
+  const watchdogRef = React.useRef(null);          // "no activity" timeout
+  const doneTimerRef = React.useRef(null);         // processing→done beat
+  const hideTimerRef = React.useRef(null);         // auto-hide after a terminal state
+
+  // Auto-dismiss the hippo a few seconds after a terminal (done/empty) state so
+  // the card quietly returns to its normal buttons. Errors stay until Retry.
+  const scheduleHide = React.useCallback(() => {
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setFetchState(null), 6000);
+  }, []);
+
+  // Restart the no-activity watchdog: if the stream goes silent mid-fetch we
+  // flip to the error state (with Retry) instead of spinning forever.
+  const armWatchdog = React.useCallback(() => {
+    clearTimeout(watchdogRef.current);
+    watchdogRef.current = setTimeout(() => {
+      setFetchState((f) => (f && (f.phase === 'authenticating' || f.phase === 'fetchingList' || f.phase === 'downloading' || f.phase === 'processing')
+        ? { ...f, phase: 'error', errorMessage: 'The portal went quiet — the sync may have stalled. Try again.' }
+        : f));
+    }, 150000);
+  }, []);
+
+  React.useEffect(() => () => { clearTimeout(watchdogRef.current); clearTimeout(doneTimerRef.current); clearTimeout(hideTimerRef.current); }, []);
+
   const check = React.useCallback(() => {
     setHasExt(null);
     detectExtension().then(setHasExt);
@@ -701,6 +746,16 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   const launch = async (mode) => {
     if (busy) return;
     setBusy(true);
+    // A fresh sync resets the hippo to Phase A; "open" mode doesn't fetch, so it
+    // never shows the progress card.
+    if (mode === "sync") {
+      clearTimeout(doneTimerRef.current);
+      clearTimeout(hideTimerRef.current);
+      downloadedRef.current = 0;
+      noticeCountsRef.current = {};
+      setFetchState({ phase: 'authenticating', totalPdfs: 0, downloadedCount: 0, currentFileName: '', noticeCounts: null, errorMessage: '' });
+      armWatchdog();
+    }
     try {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
       // Incremental sync: tell the extension which notice DINs we already have so
@@ -713,6 +768,11 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
     } catch (e) {
       console.error(e);
       notify(e?.message?.slice(0, 120) || "Couldn't open the portal.", "alert");
+      // The fetch never got off the ground — show the hippo's error + Retry.
+      if (mode === "sync") {
+        clearTimeout(watchdogRef.current);
+        setFetchState((f) => ({ ...(f || {}), phase: 'error', errorMessage: e?.message?.slice(0, 140) || "Couldn't reach the portal." }));
+      }
     } finally {
       setBusy(false);
     }
@@ -723,6 +783,27 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   React.useEffect(() => {
     const off = onSyncData(async (payload) => {
       if (!payload || payload.assesseeId !== a.id) return;
+
+      // Sync finished (extension sends this from beginSync's .finally). Decide
+      // the hippo's terminal state: nothing new → calm "empty"; otherwise a
+      // brief "processing" beat then "done".
+      if (payload.kind === "sync-done") {
+        clearTimeout(watchdogRef.current);
+        setFetchState((f) => {
+          if (!f || f.phase === 'error') return f;
+          if (downloadedRef.current === 0) {
+            scheduleHide();
+            return { ...f, phase: 'empty' };
+          }
+          clearTimeout(doneTimerRef.current);
+          doneTimerRef.current = setTimeout(() => {
+            setFetchState((g) => (g ? { ...g, phase: 'done', downloadedCount: downloadedRef.current, totalPdfs: downloadedRef.current } : g));
+            scheduleHide();
+          }, 1200);
+          return { ...f, phase: 'processing', currentFileName: '' };
+        });
+        return;
+      }
 
       // A notice/order document streamed from the portal. Upload its PDF (if
       // present) to Storage under the user's own path, then record the metadata.
@@ -751,6 +832,24 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
             notify("Couldn't save a portal notice — " + (e?.code || e?.message || "error") + " (check Storage/functions are deployed)", "alert");
           }
         }
+        // Drive the hippo's determinate phase: one more PDF in hand. This fires
+        // whether or not the ingest above succeeded — a downloaded doc counts.
+        downloadedRef.current += 1;
+        const bucket = classifyNoticeSection(n);
+        if (bucket) noticeCountsRef.current[bucket] = (noticeCountsRef.current[bucket] || 0) + 1;
+        armWatchdog();
+        setFetchState((f) => f && ({
+          ...f,
+          phase: 'downloading',
+          downloadedCount: downloadedRef.current,
+          // If we have a real estimate, keep the count from ever exceeding it
+          // (closure-order docs can overshoot). If we have NO estimate (0), keep
+          // it 0 so the hippo shows an honest indeterminate bar + plain count
+          // rather than a fake "3 of 0".
+          totalPdfs: f.totalPdfs > 0 ? Math.max(f.totalPdfs, downloadedRef.current) : 0,
+          currentFileName: n.filename || '',
+          noticeCounts: { ...noticeCountsRef.current },
+        }));
         return;
       }
 
@@ -773,6 +872,8 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       // timing so the speed is visible while scraping fills in the data.
       if (payload.kind === "api-probe") {
         setSyncInfo({ via: "api", ms: payload.ms, endpoint: payload.endpoint, calibrating: true, at: Date.now() });
+        armWatchdog();
+        setFetchState((f) => (f && f.phase === 'authenticating' ? { ...f, phase: 'fetchingList' } : f));
         return;
       }
 
@@ -785,6 +886,20 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
         calibrating: false,
         at: Date.now(),
       });
+      // The notice list is in: switch the hippo from indeterminate Phase A to a
+      // known target. totalPdfs is an ESTIMATE (sum of the portal's per-
+      // proceeding notice counts); the download branch clamps the live count to
+      // it, and sync-done snaps it to the real number actually fetched.
+      {
+        const rows = payload.proceedings || [];
+        const estTotal = rows.reduce((s, r) => s + (Number(r.viewNoticeCount ?? r.noticeCount) || 0), 0);
+        armWatchdog();
+        setFetchState((f) => (f ? {
+          ...f,
+          phase: f.phase === 'downloading' ? 'downloading' : 'fetchingList',
+          totalPdfs: Math.max(f.totalPdfs || 0, estTotal, downloadedRef.current),
+        } : f));
+      }
       try {
         const { data } = await httpsCallable(functions, "ingestPortalProceedings")({
           assesseeId: a.id,
@@ -798,7 +913,7 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       }
     });
     return off;
-  }, [a.id, notify, onClosedProceedings]);
+  }, [a.id, notify, onClosedProceedings, armWatchdog, scheduleHide]);
 
   return (
     <div className="card">
@@ -832,6 +947,18 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
               <Icon name="link" size={13}/>Open portal
             </button>
           </div>
+          {/* The hippo narrates a live sync (Phase A → B → done/empty/error). */}
+          {fetchState && (
+            <CheekyHippoProgress
+              phase={fetchState.phase}
+              totalPdfs={fetchState.totalPdfs}
+              downloadedCount={fetchState.downloadedCount}
+              noticeCounts={fetchState.noticeCounts}
+              currentFileName={fetchState.currentFileName}
+              errorMessage={fetchState.errorMessage}
+              onRetry={() => launch("sync")}
+            />
+          )}
           <div className="muted" style={{fontSize: 11.5}}>
             Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"}
             {typeof a.portalProceedingCount === "number" ? ` · ${a.portalProceedingCount} proceedings` : ""}

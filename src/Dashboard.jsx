@@ -1,8 +1,9 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, daysFromNow } from './shared';
+import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
+import { appealableOrders } from './appeals';
 
 export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
   const { data, loadSampleData } = useData();
@@ -11,6 +12,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
 
   const hearings = upcomingHearings(data);
   const awaiting = awaitingNotices(data);
+  const appeals = appealableOrders(data);
   const activeMatters = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
   const weekAhead = hearings.filter(h => daysFromNow(h.date) <= 7);
   const next48h = hearings.filter(h => daysFromNow(h.date) <= 2);
@@ -89,6 +91,8 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
 
       <div className="grid-main">
         <div className="col" style={{gap: 18}}>
+          <AppealsReminderCard appeals={appeals} onNav={onNav}/>
+
           {awaiting.length > 0 && (
             <div
               className="card"
@@ -176,6 +180,55 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
           onOpenNotice={(n) => { setShowNotices(false); onOpenNotice(n); }}
         />
       )}
+    </div>
+  );
+}
+
+// App-open reminder: appealable orders with the filing clock running. The most
+// urgent one leads; tap through to the Appeals page. Silent when nothing is due.
+function AppealsReminderCard({ appeals, onNav }) {
+  if (!appeals || appeals.length === 0) return null;
+  const nearest = appeals[0];
+  const soon = appeals.filter((o) => o.daysLeft != null && o.daysLeft >= 0 && o.daysLeft <= 15).length;
+  const lapsed = appeals.filter((o) => o.daysLeft != null && o.daysLeft < 0).length;
+  const urgent = nearest.daysLeft != null && (nearest.daysLeft < 0 || nearest.daysLeft <= 7);
+  const bg = urgent
+    ? "linear-gradient(120deg, #7A1E4B 0%, #B8324F 55%, #E0464A 100%)"
+    : "linear-gradient(120deg, #2B2270 0%, #5146C6 55%, #8E7CFF 100%)";
+  const lead = nearest.daysLeft == null ? "date to confirm"
+    : nearest.daysLeft < 0 ? `${Math.abs(nearest.daysLeft)} days overdue`
+      : `${nearest.daysLeft} day${nearest.daysLeft !== 1 ? "s" : ""} left`;
+
+  return (
+    <div
+      className="card"
+      style={{padding: 0, overflow: "hidden", border: "none", background: bg, color: "white", position: "relative", cursor: "pointer"}}
+      role="button"
+      tabIndex={0}
+      onClick={() => onNav("appeals")}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNav("appeals"); } }}
+      title="Open the Appeals workspace"
+    >
+      <div style={{position: "absolute", right: -40, top: -40, width: 200, height: 200, borderRadius: "50%", background: "rgba(255,255,255,0.18)", filter: "blur(20px)"}}/>
+      <div style={{padding: "24px 26px", position: "relative"}}>
+        <div className="center" style={{gap: 8, justifyContent: "flex-start"}}>
+          <Icon name="gavel" size={16}/>
+          <span style={{fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.85}}>Appeals · Filing deadlines</span>
+        </div>
+        <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 8, lineHeight: 1.25}}>
+          {appeals.length} appeal{appeals.length !== 1 ? "s" : ""} to file.<br/>
+          <span style={{opacity: 0.9}}>
+            {titleCase(nearest.notice.assessee || "—")} — {nearest.route} · <b>{lead}</b>{nearest.deadline ? ` (by ${fmtDateLong(nearest.deadline)})` : ""}.
+          </span>
+        </div>
+        <div className="row" style={{marginTop: 14, gap: 8, alignItems: "center", flexWrap: "wrap"}}>
+          {soon > 0 && <span className="pill" style={{background: "rgba(255,255,255,0.2)", color: "white"}}>{soon} within 15 days</span>}
+          {lapsed > 0 && <span className="pill" style={{background: "rgba(255,255,255,0.28)", color: "white"}}>{lapsed} lapsed</span>}
+          <span className="btn" style={{background: "white", color: "var(--p-primary-2)", marginLeft: "auto"}}>
+            Prepare appeals <Icon name="arrow-right" size={14}/>
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

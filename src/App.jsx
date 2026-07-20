@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import { Assessees, AssesseeProfile } from './Assessees';
 import Hearings from './Hearings';
+import Appeals from './Appeals';
 import { NoticeReview } from './Notices';
 import { Matters, Invoices, Communications, AiParser, Reports, SettingsPage } from './Other';
 import { Icon } from './shared';
@@ -110,6 +111,7 @@ function Shell() {
       case "assessees": content = <Assessees onOpen={(a) => { setProfileFocus(null); setOpenAssesseeId(a.id); }} initialSearch={assesseeQuery}/>; break;
       case "matters": content = <Matters onOpenMatter={openMatterInProfile}/>; break;
       case "hearings": content = <Hearings onOpenHearing={openHearingInProfile}/>; break;
+      case "appeals": content = <Appeals onOpenNotice={openReview}/>; break;
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
       case "ai": content = <AiParser onOpenNotice={openReview}/>; break;

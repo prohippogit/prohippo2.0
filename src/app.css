@@ -580,6 +580,31 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .ass-row:hover { background: var(--p-card-tint); }
 .ass-row:last-child { border-bottom: none !important; }
 
+/* Proceeding rows in the assessee Matters tab — each is its own card that
+   clearly lifts off the page and signals it opens a full pop-up card. */
+.matter-row {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--p-shadow-sm);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  outline: none;
+}
+.matter-row:hover,
+.matter-row:focus-visible {
+  border-color: var(--p-primary-3);
+  box-shadow: var(--p-shadow);
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #FFFFFF 0%, var(--p-card-tint) 100%);
+}
+.matter-row .matter-view { transition: background 0.15s ease, color 0.15s ease; }
+.matter-row:hover .matter-view,
+.matter-row:focus-visible .matter-view { background: var(--p-primary); color: #fff; }
+
+/* Clickable table rows (global Matters / Hearings list) + hearing chips. */
+.row-link:hover { background: var(--p-lavender) !important; }
+.hearing-clickable { transition: filter 0.12s ease, transform 0.12s ease; }
+.hearing-clickable:hover { filter: brightness(0.985); }
+
 /* Modal */
 .modal-backdrop {
   position: fixed; inset: 0;

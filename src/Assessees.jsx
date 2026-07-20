@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO } from './store';
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
@@ -380,9 +380,9 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   );
 }
 
-export function AssesseeProfile({ assessee, onBack, onNav }) {
+export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMatterId }) {
   const { data, removeAssessee, updateAssessee, notify } = useData();
-  const [tab, setTab] = React.useState("Overview");
+  const [tab, setTab] = React.useState(initialTab || "Overview");
   const [showEdit, setShowEdit] = React.useState(false);
   const [showMatter, setShowMatter] = React.useState(false);
   const [closedProceedings, setClosedProceedings] = React.useState([]); // popup after a sync
@@ -542,7 +542,7 @@ export function AssesseeProfile({ assessee, onBack, onNav }) {
       )}
 
       {tab === "Matters" && (
-        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name} notify={notify} focusReqId={focusReqId}/>
+        <MattersView matters={matters} notices={notices} hearings={allHearings} assesseeName={a.name} notify={notify} focusReqId={focusReqId} openMatterId={initialMatterId}/>
       )}
 
       {tab === "Hearings" && (
@@ -971,24 +971,39 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   );
 }
 
-/* Consolidated, proceeding-wise view: each matter (proceeding) expands to its
-   notices/orders (recent first) and hearings. Manual matters (no proceeding)
-   still show as a simple non-expanding row. */
-function MattersView({ matters, notices, hearings, assesseeName, notify, focusReqId }) {
+// Accent colour per proceeding type — used for the row's left stripe and the
+// modal header so scrutiny / appeal / penalty proceedings read apart at a glance.
+const TYPE_ACCENT = {
+  Scrutiny: { bar: "#F39C12", tint: "var(--p-amber)", fg: "#B07512" },
+  "CIT(A)": { bar: "#C13388", tint: "var(--p-pink)", fg: "#C13388" },
+  ITAT: { bar: "var(--p-primary)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
+  Penalty: { bar: "#EE5A5A", tint: "var(--p-coral)", fg: "#B8463A" },
+};
+const accentFor = (t) => TYPE_ACCENT[t] || { bar: "var(--p-primary-3)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" };
+const isOrderDoc = (n) => Boolean(n.isOrder) || /\border\b/i.test(n.subject || "");
+
+/* Consolidated, proceeding-wise view: each matter (proceeding) is a distinct,
+   clearly-separated card. Clicking one opens a full, scrollable pop-up card
+   (ProceedingModal) with its hearings and notices/orders. Manual matters (no
+   proceeding) open the same card — it simply has nothing synced to show yet. */
+function MattersView({ matters, notices, hearings, assesseeName, notify, focusReqId, openMatterId }) {
   const [openId, setOpenId] = React.useState(null);
   const [parsingId, setParsingId] = React.useState("");
-
-  // When asked to focus a proceeding (e.g. from the "closed" popup), open it.
-  React.useEffect(() => {
-    if (!focusReqId) return;
-    const m = matters.find((mm) => mm.proceedingReqId === focusReqId);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (m) setOpenId(m.id);
-  }, [focusReqId, matters]);
 
   const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));
   const hearingsFor = (m) => byDateDesc(hearings.filter((h) => m.proceedingReqId && h.proceedingReqId === m.proceedingReqId));
+
+  // When asked to focus a proceeding — from the "closed" popup (by reqId) or a
+  // click on the global Matters / Hearings page (by matter id) — open its card.
+  React.useEffect(() => {
+    let id = null;
+    if (openMatterId && matters.some((m) => m.id === openMatterId)) id = openMatterId;
+    else if (focusReqId) id = matters.find((mm) => mm.proceedingReqId === focusReqId)?.id || null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (id) setOpenId(id);
+  }, [focusReqId, openMatterId, matters]);
+
   // Newest-first: order by the latest notice/order or hearing date in the
   // proceeding (NOT the sync timestamp — that's the same for every matter and
   // would flatten the order). Fall back to createdAt only when it has no dates.
@@ -1011,7 +1026,6 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
       setParsingId("");
     }
   };
-  const isOrderDoc = (n) => Boolean(n.isOrder) || /\border\b/i.test(n.subject || "");
 
   if (matters.length === 0) {
     return (
@@ -1021,131 +1035,187 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
     );
   }
 
-  // chevron | type | proceeding (natural width) | AY | section (no-wrap) | status | right spacer
-  const GRID = "18px 92px minmax(190px, max-content) 78px 132px 92px 1fr";
-  return (
-    <div className="col" style={{gap: 10}}>
-      <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
-        <span/><span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span>
-      </div>
-      {ordered.map((m) => {
-        const ns = noticesFor(m);
-        const hs = hearingsFor(m);
-        const isPortal = Boolean(m.proceedingReqId);
-        const open = openId === m.id;
-        const docCount = ns.length;
-        const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
-        return (
-          <div key={m.id} className="card" style={{padding: 0, overflow: "hidden"}}>
-            <div
-              style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "13px 18px", cursor: isPortal ? "pointer" : "default"}}
-              onClick={isPortal ? () => setOpenId(open ? null : m.id) : undefined}
-            >
-              <span>{isPortal ? <Icon name={open ? "chevron-down" : "chevron-right"} size={16}/> : null}</span>
-              <span><span className="pill pill-primary">{m.type || "Matter"}</span></span>
-              <span style={{minWidth: 0}}>
-                <span className="strong" style={{fontSize: 13, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{m.ref || m.proceedingName || "Matter"}</span>
-                {isPortal && <span className="muted" style={{fontSize: 11}}>{docCount} notice{docCount === 1 ? "" : "s"}/orders{hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}</span>}
-              </span>
-              <span>{m.ay || "—"}</span>
-              <span style={{whiteSpace: "nowrap"}}>{section ? <span className="pill pill-muted">u/s {section}</span> : <span className="muted">—</span>}</span>
-              <span><StatusPill status={m.status}/></span>
-            </div>
+  const selected = ordered.find((m) => m.id === openId) || null;
 
-            {open && isPortal && (
-              <div style={{borderTop: "1px solid var(--p-line-2)", background: "var(--p-card-tint)", padding: "12px 18px"}}>
-                {hs.length > 0 && (
-                  <div style={{marginBottom: ns.length ? 14 : 0}}>
-                    <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 6}}>Hearings</div>
-                    <div className="col" style={{gap: 6}}>
-                      {hs.map((h) => (
-                        <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5}}>
-                          <Icon name="calendar" size={13}/>
-                          <span className="strong">{fmtDateLong(h.date)}</span>
-                          <span className="muted">{h.time} · {h.mode}</span>
-                          <StatusPill status={h.date < todayISO() ? "Completed" : h.status}/>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 6}}>Notices &amp; orders</div>
-                {ns.length === 0
-                  ? <div className="muted" style={{fontSize: 12.5, padding: "4px 0"}}>No notices/orders synced for this proceeding.</div>
-                  : (
-                    <div className="col" style={{gap: 8}}>
-                      {ns.map((n) => {
-                        const order = isOrderDoc(n);
-                        const appeal = Boolean(n.isAppealForm);
-                        const ap = n.appeal || {};
-                        const apAtts = appeal ? (ap.attachments || []).filter((x) => x.storagePath) : [];
-                        return (
-                          <div key={n.id} style={{padding: "9px 11px", background: "white", borderRadius: 10, border: "1px solid var(--p-line-2)"}}>
-                            <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
-                              <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : order ? "var(--p-amber)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : order ? "#B07512" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
-                              <div style={{flex: 1, minWidth: 0}}>
-                                <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
-                                  <span className={`pill ${appeal ? "pill-primary" : order ? "pill-warning" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : order ? "Order" : "Notice"}</span>
-                                  <span className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
-                                </div>
-                                <div className="muted" style={{fontSize: 11, marginTop: 2}}>
-                                  {appeal
-                                    ? [ap.dateFiling ? `Filed ${fmtDateLong(ap.dateFiling)}` : "", ap.ackNum ? `Ack ${ap.ackNum}` : "", ap.dateOrder ? `vs order ${fmtDateLong(ap.dateOrder)}` : "", ap.orderSection ? `u/s ${ap.orderSection}` : "", ap.appealSection ? `appeal u/s ${ap.appealSection}` : ""].filter(Boolean).join(" · ")
-                                    : [n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
-                                </div>
-                                {appeal && (ap.amountAssessed || ap.disputedDemand) ? (
-                                  <div className="muted" style={{fontSize: 11, marginTop: 2}}>
-                                    {[ap.amountAssessed ? `Assessed ${fmtINR(ap.amountAssessed)}` : "", ap.disputedDemand ? `Disputed ${fmtINR(ap.disputedDemand)}` : ""].filter(Boolean).join(" · ")}
-                                  </div>
-                                ) : null}
-                              </div>
-                              {!appeal && n.storagePath && (
-                                <button className="btn btn-ghost btn-xs" title="Summarise this PDF with AI" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); parse(n); }}>
-                                  <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Parsing…" : (n.aiSummary ? "Re-parse" : "Parse with AI")}
-                                </button>
-                              )}
-                              {!appeal && n.storagePath && (
-                                <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
-                                  <Icon name="doc" size={12}/>PDF
-                                </button>
-                              )}
-                            </div>
-                            {appeal && apAtts.length > 0 && (
-                              <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 8}}>
-                                {apAtts.map((at, ai) => (
-                                  <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
-                                    <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 28)}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            {appeal && ap.formPdfError && !apAtts.some((at) => /form 35/i.test(at.label || at.filename || "")) && (
-                              <div className="muted" style={{marginTop: 6, fontSize: 10.5, color: "var(--p-danger)"}}>Form 35 PDF couldn't be fetched — {ap.formPdfError}</div>
-                            )}
-                            {!appeal && n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
-                              <div style={{marginTop: 8, padding: "8px 10px", background: "var(--p-card-tint)", borderRadius: 8, fontSize: 12}}>
-                                <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: (n.aiSummary.items || []).length ? 5 : 0}}>
-                                  <Icon name="sparkle" size={11}/><span className="strong">{n.aiSummary.summary}</span>
-                                </div>
-                                {(n.aiSummary.items || []).length > 0 && (
-                                  <ul style={{margin: 0, paddingLeft: 18}}>
-                                    {n.aiSummary.items.map((it, i) => <li key={i} style={{marginTop: 2}}>{it}</li>)}
-                                  </ul>
-                                )}
-                              </div>
-                            )}
-                            <ResponsesBlock responses={n.responses}/>
+  // type | proceeding (flex) | AY | section (no-wrap) | status | view chip
+  const GRID = "96px minmax(170px, 1fr) 70px 128px 96px 104px";
+  return (
+    <>
+      <div style={{overflowX: "auto"}}>
+        <div className="col" style={{gap: 10, minWidth: 640}}>
+          <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+            <span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span><span/>
+          </div>
+          {ordered.map((m) => {
+            const ns = noticesFor(m);
+            const hs = hearingsFor(m);
+            const isPortal = Boolean(m.proceedingReqId);
+            const docCount = ns.length;
+            const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
+            const accent = accentFor(m.type);
+            return (
+              <div
+                key={m.id}
+                className="card matter-row"
+                onClick={() => setOpenId(m.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(m.id); } }}
+                style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "14px 18px", cursor: "pointer", borderLeft: `4px solid ${accent.bar}`}}
+              >
+                <span><span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span></span>
+                <span style={{minWidth: 0}}>
+                  <span className="strong" style={{fontSize: 13, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{m.ref || m.proceedingName || "Matter"}</span>
+                  <span className="muted" style={{fontSize: 11}}>
+                    {isPortal
+                      ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders${hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}`
+                      : "Manual matter"}
+                  </span>
+                </span>
+                <span>{m.ay || "—"}</span>
+                <span style={{whiteSpace: "nowrap"}}>{section ? <span className="pill pill-muted">u/s {section}</span> : <span className="muted">—</span>}</span>
+                <span><StatusPill status={m.status}/></span>
+                <span className="matter-view center" style={{gap: 5, justifySelf: "end", padding: "6px 11px", borderRadius: 999, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap"}}>
+                  View <Icon name="arrow-right" size={13}/>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {selected && (
+        <ProceedingModal
+          matter={selected}
+          notices={noticesFor(selected)}
+          hearings={hearingsFor(selected)}
+          parsingId={parsingId}
+          onParse={parse}
+          onClose={() => setOpenId(null)}
+        />
+      )}
+    </>
+  );
+}
+
+/* Full, scrollable pop-up card for a single proceeding — its hearings and every
+   notice / order / appeal filed against it, with the assessee's responses. */
+function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onParse, onClose }) {
+  const accent = accentFor(m.type);
+  const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
+  const docCount = ns.length;
+  return (
+    <Modal
+      title={m.ref || m.proceedingName || "Proceeding"}
+      sub={[m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
+      onClose={onClose}
+      width={780}
+      footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
+    >
+      <div className="col" style={{gap: 16}}>
+        {/* Summary strip — tinted by the proceeding type so it reads apart. */}
+        <div className="between" style={{alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 14px", background: accent.tint, borderRadius: 12, borderLeft: `4px solid ${accent.bar}`}}>
+          <div className="center" style={{gap: 8, flexWrap: "wrap", justifyContent: "flex-start"}}>
+            <span className="pill" style={{background: "white", color: accent.fg, fontWeight: 800}}>{m.type || "Matter"}</span>
+            <StatusPill status={m.status}/>
+            {m.bench && <span className="muted" style={{fontSize: 12}}>{m.bench}</span>}
+          </div>
+          <div className="muted" style={{fontSize: 12, fontWeight: 700}}>
+            {docCount} notice{docCount === 1 ? "" : "s"}/orders{hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}
+          </div>
+        </div>
+
+        {hs.length > 0 && (
+          <div>
+            <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Hearings</div>
+            <div className="col" style={{gap: 8}}>
+              {hs.map((h) => (
+                <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5, justifyContent: "flex-start", padding: "9px 11px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px solid var(--p-line-2)", flexWrap: "wrap"}}>
+                  <Icon name="calendar" size={13}/>
+                  <span className="strong">{fmtDateLong(h.date)}</span>
+                  <span className="muted">{h.time} · {h.mode}</span>
+                  <StatusPill status={h.date < todayISO() ? "Completed" : h.status}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div className="muted" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Notices &amp; orders</div>
+          {ns.length === 0
+            ? <div className="muted" style={{fontSize: 12.5, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px dashed var(--p-line)"}}>No notices/orders synced for this proceeding yet.</div>
+            : (
+              <div className="col" style={{gap: 10}}>
+                {ns.map((n) => {
+                  const order = isOrderDoc(n);
+                  const appeal = Boolean(n.isAppealForm);
+                  const ap = n.appeal || {};
+                  const apAtts = appeal ? (ap.attachments || []).filter((x) => x.storagePath) : [];
+                  return (
+                    <div key={n.id} style={{padding: "11px 13px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line)"}}>
+                      <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
+                        <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : order ? "var(--p-amber)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : order ? "#B07512" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
+                        <div style={{flex: 1, minWidth: 0}}>
+                          <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
+                            <span className={`pill ${appeal ? "pill-primary" : order ? "pill-warning" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : order ? "Order" : "Notice"}</span>
+                            <span className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
                           </div>
-                        );
-                      })}
+                          <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                            {appeal
+                              ? [ap.dateFiling ? `Filed ${fmtDateLong(ap.dateFiling)}` : "", ap.ackNum ? `Ack ${ap.ackNum}` : "", ap.dateOrder ? `vs order ${fmtDateLong(ap.dateOrder)}` : "", ap.orderSection ? `u/s ${ap.orderSection}` : "", ap.appealSection ? `appeal u/s ${ap.appealSection}` : ""].filter(Boolean).join(" · ")
+                              : [n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
+                          </div>
+                          {appeal && (ap.amountAssessed || ap.disputedDemand) ? (
+                            <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                              {[ap.amountAssessed ? `Assessed ${fmtINR(ap.amountAssessed)}` : "", ap.disputedDemand ? `Disputed ${fmtINR(ap.disputedDemand)}` : ""].filter(Boolean).join(" · ")}
+                            </div>
+                          ) : null}
+                        </div>
+                        {!appeal && n.storagePath && (
+                          <button className="btn btn-ghost btn-xs" title="Summarise this PDF with AI" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); onParse(n); }}>
+                            <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Parsing…" : (n.aiSummary ? "Re-parse" : "Parse with AI")}
+                          </button>
+                        )}
+                        {!appeal && n.storagePath && (
+                          <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
+                            <Icon name="doc" size={12}/>PDF
+                          </button>
+                        )}
+                      </div>
+                      {appeal && apAtts.length > 0 && (
+                        <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 8}}>
+                          {apAtts.map((at, ai) => (
+                            <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                              <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 28)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {appeal && ap.formPdfError && !apAtts.some((at) => /form 35/i.test(at.label || at.filename || "")) && (
+                        <div className="muted" style={{marginTop: 6, fontSize: 10.5, color: "var(--p-danger)"}}>Form 35 PDF couldn't be fetched — {ap.formPdfError}</div>
+                      )}
+                      {!appeal && n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
+                        <div style={{marginTop: 8, padding: "8px 10px", background: "white", borderRadius: 8, border: "1px solid var(--p-line-2)", fontSize: 12}}>
+                          <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: (n.aiSummary.items || []).length ? 5 : 0}}>
+                            <Icon name="sparkle" size={11}/><span className="strong">{n.aiSummary.summary}</span>
+                          </div>
+                          {(n.aiSummary.items || []).length > 0 && (
+                            <ul style={{margin: 0, paddingLeft: 18}}>
+                              {n.aiSummary.items.map((it, i) => <li key={i} style={{marginTop: 2}}>{it}</li>)}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                      <ResponsesBlock responses={n.responses}/>
                     </div>
-                  )}
+                  );
+                })}
               </div>
             )}
-          </div>
-        );
-      })}
-    </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

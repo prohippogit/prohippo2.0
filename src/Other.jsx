@@ -1,6 +1,6 @@
 /* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
@@ -43,7 +43,7 @@ export function InvoiceModal({ initial, onClose }) {
   const linked = data.assessees.find(a => a.name === form.assessee);
   const valid = Boolean(linked) && form.date && amount > 0;
 
-  const assesseeOptions = data.assessees.map(a => ({ value: a.name, label: a.name, sub: a.pan }));
+  const assesseeOptions = data.assessees.map(a => ({ value: a.name, label: titleCase(a.name), sub: a.pan }));
   // Ongoing proceedings of the selected assessee feed the service and AY
   // suggestions; both fields still accept free text.
   const proceedings = linked ? data.matters.filter(m => m.pan === linked.pan && !["Closed", "Decided"].includes(m.status)) : [];
@@ -135,7 +135,7 @@ function PaymentModal({ invoice, onClose }) {
   return (
     <Modal
       title="Record payment"
-      sub={`${invoice.number} · ${invoice.assessee} · balance ${fmtINR(balance)}`}
+      sub={`${invoice.number} · ${titleCase(invoice.assessee)} · balance ${fmtINR(balance)}`}
       onClose={onClose}
       width={420}
       footer={<>
@@ -196,7 +196,7 @@ function InvoiceView({ invoice, onClose, onEdit }) {
         </div>
         <div style={{marginTop: 18}}>
           <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>BILLED TO</div>
-          <div style={{fontSize: 15, fontWeight: 800, marginTop: 4}}>{invoice.assessee}</div>
+          <div style={{fontSize: 15, fontWeight: 800, marginTop: 4}}>{titleCase(invoice.assessee)}</div>
           {assessee?.pan && <div style={{fontSize: 12, marginTop: 2, fontFamily: "ui-monospace, monospace"}}>PAN: {assessee.pan}</div>}
           {assessee?.address && <div className="muted" style={{fontSize: 12, marginTop: 2}}>{assessee.address}</div>}
         </div>
@@ -352,7 +352,7 @@ export function Invoices() {
               {topOutstanding.map(inv => (
                 <div key={inv.id} className="between" style={{padding: "10px 12px", background: "white", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
                   <div>
-                    <div style={{fontWeight: 700, fontSize: 13}}>{inv.assessee}</div>
+                    <div style={{fontWeight: 700, fontSize: 13}}>{titleCase(inv.assessee)}</div>
                     <div className="muted" style={{fontSize: 11.5}}>{inv.number}{inv.due ? ` · due ${fmtDateLong(inv.due)}` : ""}</div>
                   </div>
                   <div style={{textAlign: "right"}}>
@@ -394,7 +394,7 @@ export function Invoices() {
               {filtered.map(inv => (
                 <tr key={inv.id} onClick={() => setViewFor(inv)} style={{cursor: "pointer"}}>
                   <td className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12.5}}>{inv.number}</td>
-                  <td className="strong">{inv.assessee}</td>
+                  <td className="strong">{titleCase(inv.assessee)}</td>
                   <td className="semi" style={{maxWidth: 280}}>{inv.service}</td>
                   <td>{inv.ay || "—"}</td>
                   <td className="muted">{fmtDateLong(inv.date)}</td>
@@ -485,7 +485,7 @@ export function MatterModal({ initial, onClose }) {
       )}
       <div className="form-grid">
         <FormField label="Assessee" required full>
-          <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
+          <SelectInput value={linked ? linked.name : ""} onChange={pickAssessee} options={data.assessees.map(a => ({ value: a.name, label: titleCase(a.name) }))} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
         <FormField label="Type"><SelectInput value={form.type} onChange={set("type")} options={MATTER_TYPES}/></FormField>
         <FormField label="Assessment year" required><TextInput value={form.ay} onChange={set("ay")} placeholder="2021-22"/></FormField>
@@ -581,7 +581,7 @@ export function Matters({ onOpenMatter }) {
                       </div>
                       {m.ref && <div className="muted" style={{fontSize: 11, marginTop: 4, fontFamily: "ui-monospace, monospace"}}>{m.ref}</div>}
                     </td>
-                    <td className="strong">{m.assessee}</td>
+                    <td className="strong">{titleCase(m.assessee)}</td>
                     <td>{m.ay}</td>
                     <td>{m.section ? <span className="pill pill-muted">u/s {m.section}</span> : <span className="muted">—</span>}</td>
                     <td className="semi">{m.bench || "—"}</td>
@@ -658,7 +658,7 @@ function MessageModal({ onClose }) {
       <div className="form-grid">
         <FormField label="Channel"><SelectInput value={form.channel} onChange={set("channel")} options={["WhatsApp", "Email"]}/></FormField>
         <FormField label="To" required>
-          <SelectInput value={linked ? linked.name : ""} onChange={set("to")} options={data.assessees.map(a => a.name)} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
+          <SelectInput value={linked ? linked.name : ""} onChange={set("to")} options={data.assessees.map(a => ({ value: a.name, label: titleCase(a.name) }))} placeholder={data.assessees.length ? "Select assessee…" : "No assessees yet"}/>
         </FormField>
         <FormField label="Subject" required full><TextInput value={form.subject} onChange={set("subject")} placeholder="Subject"/></FormField>
         <div className="field" style={{gridColumn: "1 / -1"}}>
@@ -749,7 +749,7 @@ export function Communications() {
                   <div style={{flex: 1, minWidth: 0}}>
                     <div className="between">
                       <div className="center" style={{gap: 8}}>
-                        <div style={{fontWeight: 700, fontSize: 13.5}}>{c.to}</div>
+                        <div style={{fontWeight: 700, fontSize: 13.5}}>{titleCase(c.to)}</div>
                         {c.template && <span className="pill pill-muted" style={{fontSize: 10}}>{c.template}</span>}
                       </div>
                       <div className="muted" style={{fontSize: 11.5}}>{new Date(c.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
@@ -961,7 +961,7 @@ export function AiParser({ onOpenNotice }) {
                     <Icon name="doc" size={14}/>
                   </div>
                   <div>
-                    <div style={{fontWeight: 700, fontSize: 13}}>{n.assessee}</div>
+                    <div style={{fontWeight: 700, fontSize: 13}}>{titleCase(n.assessee)}</div>
                     <div className="muted" style={{fontSize: 11.5}}>{n.section ? `u/s ${n.section} · ` : ""}AY {n.ay} · {n.authority}</div>
                   </div>
                 </div>

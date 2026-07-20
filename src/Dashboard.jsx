@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Icon, Avatar, fmtINR, fmtLakhs, fmtDate, daysFromNow } from './shared';
+import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, daysFromNow } from './shared';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 
@@ -142,7 +142,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
                     </div>
                     <div style={{flex: 1, minWidth: 0}}>
                       <div className="between">
-                        <div style={{fontWeight: 700, fontSize: 14}}>{h.assessee}</div>
+                        <div style={{fontWeight: 700, fontSize: 14}}>{titleCase(h.assessee)}</div>
                         <div className="center" style={{gap: 6}}>
                           <span className="pill pill-primary">{h.authority}</span>
                           {h.mode === "Video Conference" && <span className="pill pill-info"><Icon name="video" size={11}/>VC</span>}
@@ -260,7 +260,7 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
                 <Check checked={isSel} onChange={() => toggle(n.id)}/>
                 <div style={{flex: 1, minWidth: 0, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open to review">
                   <div className="between" style={{gap: 8}}>
-                    <span className="strong" style={{fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.assessee || "—"}</span>
+                    <span className="strong" style={{fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.assessee ? titleCase(n.assessee) : "—"}</span>
                     <div className="center" style={{gap: 6, flexShrink: 0}}>
                       {n.section && <span className="pill pill-muted">u/s {n.section}</span>}
                       {hasFutureHearing && <span className="pill pill-pink"><Icon name="calendar" size={10}/>{fmtDate(due)}</span>}

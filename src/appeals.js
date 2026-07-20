@@ -45,8 +45,28 @@ export function regimeForAy(ay) {
     : { act: "Act 1961", newAct: false, citForm: "Form 35", itatForm: "Form 36" };
 }
 
+// Does a filed Form 35 appeal correspond to this assessment/penalty order?
+// Match the Form 35 metadata the way a practitioner would: assessment year
+// first, then the date of the order appealed against (corroborated, where the
+// form carries it, by the order's DIN or section). A Form 35 for the same
+// PAN + AY that carries no order metadata at all is still treated as a match.
+export function form35Matches(order, form) {
+  if ((form.pan || "").toUpperCase() !== (order.pan || "").toUpperCase()) return false;
+  if ((form.ay || "") !== (order.ay || "")) return false; // 1) assessment year
+  const meta = form.appeal || {};
+  const dateOrder = meta.dateOrder || "";
+  const orderDin = meta.orderDin || "";
+  const orderSection = meta.orderSection || "";
+  if (dateOrder || orderDin || orderSection) {              // 2) date of order (or DIN/section)
+    return (dateOrder && order.date && dateOrder === order.date)
+      || (orderDin && order.din && String(orderDin) === String(order.din))
+      || (orderSection && order.section && String(orderSection) === String(order.section));
+  }
+  return true; // PAN + AY match, no corroborating metadata on the form
+}
+
 // Has this order already been appealed? Manual flag wins; otherwise infer from
-// the presence of a filed appeal form or a later-stage order for the same PAN+AY.
+// a filed Form 35 (metadata-matched) or a later-stage order for the same PAN+AY.
 export function isAppealed(notice, allNotices, matters) {
   if (notice.appealStatus === "filed" || notice.appealStatus === "dismissed") return true;
   const pan = (notice.pan || "").toUpperCase();
@@ -54,7 +74,10 @@ export function isAppealed(notice, allNotices, matters) {
   const sameParty = (r) => (r.pan || "").toUpperCase() === pan && r.ay === ay;
   const route = APPEAL_ROUTE[notice.authority];
   if (route === "CIT(A)") {
-    return allNotices.some((n) => sameParty(n) && (n.isAppealForm || (n.isOrder && n.authority === "CIT(A)")));
+    // A first appeal is filed if a matching Form 35 exists, or a CIT(A) order
+    // has already been passed for this PAN + AY (the first appeal is done).
+    return allNotices.some((n) => n.isAppealForm && form35Matches(notice, n))
+      || allNotices.some((n) => n.isOrder && n.authority === "CIT(A)" && sameParty(n));
   }
   if (route === "ITAT") {
     return (matters || []).some((m) => m.type === "ITAT" && sameParty(m))
@@ -102,12 +125,25 @@ export function appealFor(notice) {
   };
 }
 
+// Orders older than this (by date of order) are hidden by default — an appeal
+// that old is almost always already filed/decided and just clutters the list.
+export const DEFAULT_WINDOW_DAYS = 365;
+
+// Keep undated orders (they carry no date to judge), and any order whose date
+// falls within the window. Pass withinDays = null to keep everything.
+function withinWindow(dateISO, withinDays) {
+  if (!withinDays || !dateISO) return true;
+  return daysUntil(dateISO) >= -withinDays;
+}
+
 // Every appealable order in the practice, nearest deadline first.
-export function appealableOrders(data) {
+// opts.withinDays: date-of-order cutoff (default 365; null = no cutoff).
+export function appealableOrders(data, opts = {}) {
+  const withinDays = opts.withinDays === undefined ? DEFAULT_WINDOW_DAYS : opts.withinDays;
   const notices = data.notices || [];
   const matters = data.matters || [];
   return notices
-    .filter((n) => n.isOrder && APPEAL_ROUTE[n.authority] && !isAppealed(n, notices, matters))
+    .filter((n) => n.isOrder && APPEAL_ROUTE[n.authority] && !isAppealed(n, notices, matters) && withinWindow(n.date, withinDays))
     .map((n) => ({ notice: n, ...appealFor(n) }))
     .filter((x) => x.route)
     .sort((a, b) => (a.daysLeft == null ? 1e9 : a.daysLeft) - (b.daysLeft == null ? 1e9 : b.daysLeft));

@@ -625,6 +625,26 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .modal-body { padding: 0 26px 22px; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 26px; background: var(--p-card-tint); border-radius: 0 0 var(--radius-lg) var(--radius-lg); border-top: 1px solid var(--p-line-2); }
 
+/* Soft-violet surface behind the assessee's Matters cards — the coloured
+   ground lifts the white proceeding cards off the page so each one reads. */
+.matters-surface {
+  background: linear-gradient(160deg, #D9CFFA 0%, #C7BAF6 100%);
+  border-radius: var(--radius-lg);
+  padding: 16px 16px 18px;
+}
+
+/* Deep-violet proceeding pop-up — a focused "card on a stage". The light
+   notice/hearing tiles inside stay pale, so they read as cards floating on it.
+   Applied only when the modal is opened with className="modal-deep". */
+.modal.modal-deep { background: linear-gradient(160deg, #241B54 0%, #4A3FB0 100%); color: #F3F0FF; }
+.modal-deep .modal-head { color: #FFFFFF; }
+.modal-deep .modal-head .muted { color: rgba(255, 255, 255, 0.72); }
+.modal-deep .modal-head .icon-btn { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; }
+.modal-deep .modal-head .icon-btn:hover { background: rgba(255, 255, 255, 0.26); }
+.modal-deep .modal-foot { background: transparent; border-top-color: rgba(255, 255, 255, 0.16); }
+.pm-eyebrow { color: var(--p-text-3); }
+.modal-deep .pm-eyebrow { color: rgba(255, 255, 255, 0.78); }
+
 /* ---------- Responsive layout (PWA / mobile) ---------- */
 
 /* Named grids so pages collapse on small screens (inline grid templates can't) */

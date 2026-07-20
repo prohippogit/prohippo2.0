@@ -150,7 +150,7 @@ export const Avatar = ({ name, color, size = "", round = false, soft = false }) 
   return <div className={cls} style={{background: grads[key] || grads.violet}}>{initials}</div>;
 };
 
-export function Modal({ title, sub, onClose, children, footer, width = 560 }) {
+export function Modal({ title, sub, onClose, children, footer, width = 560, className = "" }) {
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -160,7 +160,7 @@ export function Modal({ title, sub, onClose, children, footer, width = 560 }) {
   // from inside a transformed/animated container (e.g. the landing nav).
   return createPortal(
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal animate-in" style={{maxWidth: width}}>
+      <div className={`modal animate-in ${className}`} style={{maxWidth: width}}>
         <div className="modal-head">
           <div>
             <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>{title}</div>

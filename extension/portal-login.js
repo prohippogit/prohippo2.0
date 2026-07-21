@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v37";
+  const BUILD = "v38";
 
   // Post-sync logout pacing (milliseconds), tunable in one place. Background /
   // bulk syncs run unwatched, so they skip the cosmetic pause and log out fast;

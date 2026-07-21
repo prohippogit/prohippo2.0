@@ -11,7 +11,14 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v36";
+  const BUILD = "v37";
+
+  // Post-sync logout pacing (milliseconds), tunable in one place. Background /
+  // bulk syncs run unwatched, so they skip the cosmetic pause and log out fast;
+  // foreground (single) syncs keep a short visible beat. sync-done is emitted
+  // AFTER logout, so the bulk loop never starts the next login until the
+  // previous session is gone — no cookie collision.
+  const PACE = { bgPreLogout: 250, bgPostLogout: 500, fgPreLogout: 1500, fgPostLogout: 900 };
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -924,11 +931,12 @@
     if (el) { realClick(el); return true; }
     return false;
   }
-  async function logoutAndClose(badge) {
+  async function logoutAndClose(badge, creds) {
+    const bg = Boolean(creds && creds.background);
     badge.set("Sync complete — logging out…");
-    await sleep(3500); // let the result be visible first
+    await sleep(bg ? PACE.bgPreLogout : PACE.fgPreLogout); // was 3500 (cosmetic)
     try { tryLogout(); } catch { /* noop */ }
-    await sleep(1200);
+    await sleep(bg ? PACE.bgPostLogout : PACE.fgPostLogout); // let logout register
     requestCloseTab();
   }
 
@@ -953,7 +961,7 @@
       log("scope=appeals — Form 35 only");
       badge.set("Fetching filed appeals (Form 35)…");
       try { await syncAppealForms(creds, badge, pan); } catch (e) { log("appeals error", e); }
-      await logoutAndClose(badge);
+      await logoutAndClose(badge, creds);
       return true;
     }
 
@@ -991,7 +999,7 @@
 
     if (!rows.length) {
       // Nothing in FYA (and, for a full sync, nothing in FYI either).
-      if (scope === "eproc") { log("eproc: FYA empty — nothing to do, logging out"); await logoutAndClose(badge); return true; }
+      if (scope === "eproc") { log("eproc: FYA empty — nothing to do, logging out"); await logoutAndClose(badge, creds); return true; }
       log("direct api: no rows", { fya: fya && fya.status, err: fya && fya.error }); return false;
     }
 
@@ -1008,7 +1016,7 @@
       catch (e) { log("appeals error", e); }
     }
     // Done — log out and close the portal tab so no session is left open.
-    await logoutAndClose(badge);
+    await logoutAndClose(badge, creds);
     return true;
   }
 
@@ -1093,7 +1101,7 @@
     } else {
       badge.set("Couldn't read the PAN — fill details manually.", true);
     }
-    await logoutAndClose(badge);
+    await logoutAndClose(badge, creds);
   }
 
   async function beginSync(creds, badge) {

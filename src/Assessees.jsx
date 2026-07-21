@@ -44,6 +44,11 @@ function buildSyncKnowns(notices, pan, matters) {
   return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs };
 }
 
+// Pause between assessees in a bulk sync. The extension emits "sync-done" only
+// AFTER it logs the previous assessee out, so by the time we advance the portal
+// session is already gone — this gap is just light breathing room. Tunable.
+const BULK_GAP_MS = 500; // was 1500
+
 // Sync scopes offered on the assessee's Overview card.
 const SYNC_SCOPES = [
   { value: "eproc", label: "e-Proceedings only (fast)", btn: "Sync e-Proceedings" },
@@ -215,7 +220,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
         await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope: "eproc", knownDins, knownByProc, knownResponseIds, knownActiveProcs, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
         doneResolver.current = null;
-        await new Promise((r) => setTimeout(r, 1500)); // small gap between logins
+        await new Promise((r) => setTimeout(r, BULK_GAP_MS)); // small gap between logins
       } catch (e) {
         console.error("bulk sync", a.name, e);
         notify(`Couldn't sync ${a.name}${e?.message ? " — " + e.message.slice(0, 80) : ""}`, "alert");

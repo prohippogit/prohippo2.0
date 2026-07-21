@@ -17,7 +17,9 @@ import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 //                       the extension skips whole proceedings whose counts are
 //                       unchanged (a closed proceeding never changes)
 //   - knownResponseIds: replies already recorded → skip re-downloading them
-function buildSyncKnowns(notices, pan) {
+//   - knownActiveProcs: proceedingReqIds we hold as Active → the extension spots
+//                       which ones left FYA (just closed) to grab their order
+function buildSyncKnowns(notices, pan, matters) {
   const knownDins = new Set();
   const knownResponseIds = new Set();
   const procNotices = {};        // proceedingReqId -> Set<DIN>
@@ -36,8 +38,18 @@ function buildSyncKnowns(notices, pan) {
   const knownByProc = {};
   Object.keys(procNotices).forEach((pid) => { knownByProc[pid] = { n: procNotices[pid].size }; });
   procHasOrder.forEach((pid) => { (knownByProc[pid] || (knownByProc[pid] = { n: 0 })).o = true; });
-  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds] };
+  const knownActiveProcs = (matters || [])
+    .filter((m) => m.pan === pan && m.status === "Active" && m.proceedingReqId)
+    .map((m) => String(m.proceedingReqId));
+  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs };
 }
+
+// Sync scopes offered on the assessee's Overview card.
+const SYNC_SCOPES = [
+  { value: "eproc", label: "e-Proceedings only (fast)", btn: "Sync e-Proceedings" },
+  { value: "all", label: "Full sync — everything", btn: "Full sync" },
+  { value: "appeals", label: "First appeals (Form 35) only", btn: "Sync Form 35" },
+];
 import CheekyHippoProgress from './cheekyHippo/CheekyHippoProgress.jsx';
 
 // Rough bucket for a streamed notice so the hippo can drop smarter copy
@@ -197,9 +209,10 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       setBulk({ done: i, total: targets.length, current: a.name });
       try {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-        const { knownDins, knownByProc, knownResponseIds } = buildSyncKnowns(data.notices, a.pan);
+        // Bulk sync uses the fast e-Proceedings-only scope for every assessee.
+        const { knownDins, knownByProc, knownResponseIds, knownActiveProcs } = buildSyncKnowns(data.notices, a.pan, data.matters);
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
-        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", knownDins, knownByProc, knownResponseIds, background: true });
+        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope: "eproc", knownDins, knownByProc, knownResponseIds, knownActiveProcs, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
         doneResolver.current = null;
         await new Promise((r) => setTimeout(r, 1500)); // small gap between logins
@@ -725,6 +738,9 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   const { data: appData, notify } = useData();
   const [hasExt, setHasExt] = React.useState(null); // null = checking
   const [busy, setBusy] = React.useState(false);
+  // Default scope: first sync (never synced) pulls everything; after that a fast
+  // e-Proceedings-only sync. The user can override from the dropdown.
+  const [scope, setScope] = React.useState(a.portalLastSyncedAt ? "eproc" : "all");
   // Last sync's method + timing (approach "a" readout). null until a sync runs.
   const [syncInfo, setSyncInfo] = React.useState(null);
   // Counters for the streamed notice documents (used to surface failures).
@@ -789,10 +805,10 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
       // Incremental sync: tell the extension what's already on file so it only
       // fetches genuinely new data (see buildSyncKnowns). Empty for "open" mode.
-      const { knownDins, knownByProc, knownResponseIds } = mode === "sync"
-        ? buildSyncKnowns(appData.notices, a.pan)
-        : { knownDins: [], knownByProc: {}, knownResponseIds: [] };
-      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, knownDins, knownByProc, knownResponseIds });
+      const { knownDins, knownByProc, knownResponseIds, knownActiveProcs } = mode === "sync"
+        ? buildSyncKnowns(appData.notices, a.pan, appData.matters)
+        : { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [] };
+      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs });
       notify(mode === "sync" ? "Syncing from the portal — watch the new tab…" : "Opening the portal — logging you in…");
     } catch (e) {
       console.error(e);
@@ -968,13 +984,27 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
         </div>
       ) : (
         <div className="col" style={{gap: 10}}>
-          <div className="row" style={{gap: 8, flexWrap: "wrap"}}>
+          <div className="row" style={{gap: 8, flexWrap: "wrap", alignItems: "center"}}>
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+              disabled={busy}
+              title="Choose what to sync"
+              style={{fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, color: "var(--p-text-2)", background: "white", border: "1px solid var(--p-line-2)", borderRadius: 10, padding: "8px 10px"}}
+            >
+              {SYNC_SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
             <button className="btn btn-primary btn-sm" disabled={busy || hasExt === null} onClick={() => launch("sync")}>
-              <Icon name="sparkle" size={13}/>{busy ? "Working…" : "Update status (sync)"}
+              <Icon name="sparkle" size={13}/>{busy ? "Working…" : (SYNC_SCOPES.find((s) => s.value === scope)?.btn || "Sync")}
             </button>
             <button className="btn btn-secondary btn-sm" disabled={busy || hasExt === null} onClick={() => launch("open")}>
               <Icon name="link" size={13}/>Open portal
             </button>
+          </div>
+          <div className="muted" style={{fontSize: 11}}>
+            {scope === "eproc" && "Fast: checks FYA for new notices/orders only — skips Form 35."}
+            {scope === "all" && "Thorough: FYA + FYI + replies + Form 35. Use for the first sync."}
+            {scope === "appeals" && "Re-pulls filed Form 35 appeals only."}
           </div>
           {/* The hippo narrates a live sync (Phase A → B → done/empty/error). */}
           {fetchState && (

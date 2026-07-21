@@ -4,9 +4,20 @@ import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFr
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 import { appealableOrders } from './appeals';
+import { KeepBoard } from './Tasks';
 
 export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
-  const { data, loadSampleData } = useData();
+  const { data, loadSampleData, addTodo, notify } = useData();
+
+  // Turn a hearing or an appeal deadline into a task card on the board.
+  const addTaskFromHearing = (h) => {
+    addTodo({ type: "note", text: `${titleCase(h.assessee)} — ${h.authority} hearing (${h.bench || "—"})`, due: h.date, assessee: h.assessee, label: "Hearing", color: "violet", done: false });
+    notify("Added to tasks");
+  };
+  const addTaskFromAppeal = (o) => {
+    addTodo({ type: "note", text: `File ${o.route} appeal — ${titleCase(o.notice.assessee || "")} (AY ${o.notice.ay || "—"})`, due: o.deadline || "", assessee: o.notice.assessee || "", label: "Appeal", color: o.urgency === "red" || o.urgency === "lapsed" ? "coral" : "amber", done: false });
+    notify("Added to tasks");
+  };
   const [query, setQuery] = React.useState("");
   const [showNotices, setShowNotices] = React.useState(false);
 
@@ -91,7 +102,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
 
       <div className="grid-main">
         <div className="col" style={{gap: 18}}>
-          <AppealsReminderCard appeals={appeals} onNav={onNav}/>
+          <AppealsReminderCard appeals={appeals} onNav={onNav} onAddTask={addTaskFromAppeal}/>
 
           {awaiting.length > 0 && (
             <div
@@ -156,6 +167,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
                         {h.bench} · AY {h.ay} {h.section && `· u/s ${h.section}`} · <Icon name="clock" size={11}/> {h.time}
                       </div>
                     </div>
+                    <button className="btn btn-ghost btn-xs" title="Add to tasks" onClick={() => addTaskFromHearing(h)}><Icon name="plus" size={12}/></button>
                     <Icon name="chevron-right" size={16} className="muted"/>
                   </div>
                 );
@@ -169,8 +181,11 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
         <div className="col" style={{gap: 18}}>
           <MiniCalendar hearings={data.hearings} onNav={onNav}/>
           <AuthorityMixCard matters={activeMatters}/>
-          <ChecklistCard/>
         </div>
+      </div>
+
+      <div style={{marginTop: 18}}>
+        <KeepBoard onOpenAssessee={onSearch}/>
       </div>
 
       {showNotices && (
@@ -186,7 +201,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
 
 // App-open reminder: appealable orders with the filing clock running. The most
 // urgent one leads; tap through to the Appeals page. Silent when nothing is due.
-function AppealsReminderCard({ appeals, onNav }) {
+function AppealsReminderCard({ appeals, onNav, onAddTask }) {
   if (!appeals || appeals.length === 0) return null;
   const nearest = appeals[0];
   const soon = appeals.filter((o) => o.daysLeft != null && o.daysLeft >= 0 && o.daysLeft <= 15).length;
@@ -224,7 +239,10 @@ function AppealsReminderCard({ appeals, onNav }) {
         <div className="row" style={{marginTop: 14, gap: 8, alignItems: "center", flexWrap: "wrap"}}>
           {soon > 0 && <span className="pill" style={{background: "rgba(255,255,255,0.2)", color: "white"}}>{soon} within 15 days</span>}
           {lapsed > 0 && <span className="pill" style={{background: "rgba(255,255,255,0.28)", color: "white"}}>{lapsed} lapsed</span>}
-          <span className="btn" style={{background: "white", color: "var(--p-primary-2)", marginLeft: "auto"}}>
+          <button className="btn" style={{background: "rgba(255,255,255,0.18)", color: "white", marginLeft: "auto"}} title="Add the nearest deadline to your tasks" onClick={(e) => { e.stopPropagation(); onAddTask && onAddTask(nearest); }}>
+            <Icon name="plus" size={13}/>Add task
+          </button>
+          <span className="btn" style={{background: "white", color: "var(--p-primary-2)"}}>
             Prepare appeals <Icon name="arrow-right" size={14}/>
           </span>
         </div>
@@ -526,47 +544,3 @@ function AuthorityMixCard({ matters }) {
   );
 }
 
-function ChecklistCard() {
-  const { data, addTodo, updateTodo, removeTodo } = useData();
-  const [text, setText] = React.useState("");
-  const left = data.todos.filter(t => !t.done).length;
-
-  const submit = () => {
-    const v = text.trim();
-    if (!v) return;
-    addTodo({ text: v, done: false });
-    setText("");
-  };
-
-  return (
-    <div className="card">
-      <div className="card-head">
-        <div className="card-title">Today's checklist</div>
-        {left > 0 && <span className="pill pill-pink">{left} left</span>}
-      </div>
-      <div className="col" style={{gap: 8}}>
-        {data.todos.map(t => (
-          <div key={t.id} className="center" style={{gap: 10, padding: "10px 12px", borderRadius: 11, background: t.done ? "var(--p-card-tint)" : "transparent", border: "1px solid var(--p-line-2)"}}>
-            <div
-              onClick={() => updateTodo(t.id, { done: !t.done })}
-              style={{width: 18, height: 18, borderRadius: 6, border: "2px solid var(--p-line)", display: "grid", placeItems: "center", cursor: "pointer", background: t.done ? "var(--p-primary)" : "white", borderColor: t.done ? "var(--p-primary)" : "var(--p-line)", flexShrink: 0}}
-            >
-              {t.done && <Icon name="check" size={12} stroke={3}/>}
-            </div>
-            <div style={{flex: 1, fontSize: 13, fontWeight: 500, color: t.done ? "var(--p-text-3)" : "var(--p-text)", textDecoration: t.done ? "line-through" : "none"}}>{t.text}</div>
-            {t.tag && <span className={`pill pill-${t.tagColor || "muted"}`}>{t.tag}</span>}
-            <button className="btn btn-ghost btn-xs" onClick={() => removeTodo(t.id)}><Icon name="x" size={11}/></button>
-          </div>
-        ))}
-        {data.todos.length === 0 && <div className="muted" style={{fontSize: 12.5, textAlign: "center", padding: "6px 0"}}>Nothing on the list.</div>}
-        <div className="center" style={{gap: 8}}>
-          <div className="search" style={{flex: 1}}>
-            <Icon name="plus" size={14}/>
-            <input placeholder="Add a task…" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }}/>
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={submit}>Add</button>
-        </div>
-      </div>
-    </div>
-  );
-}

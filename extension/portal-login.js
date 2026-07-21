@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v38";
+  const BUILD = "v39";
 
   // Post-sync logout pacing (milliseconds), tunable in one place. Background /
   // bulk syncs run unwatched, so they skip the cosmetic pause and log out fast;
@@ -180,7 +180,20 @@
               .catch((e) => { log("master sync error", e); badge.set("Master fetch failed — " + (e.message || e), true); })
               .finally(() => { try { chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "master-done", clientRef: creds.clientRef || null } }, () => {}); } catch { /* noop */ } });
           } else {
-            finish(true, "Logged in ✓ — you're in the portal.");
+            // "Open portal": leave the user logged in on the portal dashboard,
+            // ready to work. After an automated login the SPA can sit on a
+            // half-loaded / intermediate route that just spins; nudge the Angular
+            // router to the Dashboard (hash navigation is safe — it's the same
+            // technique the sync uses to open e-Proceedings), then step aside and
+            // remove the badge so nothing blocks the user.
+            (async () => {
+              try {
+                location.hash = "#/dashboard";
+                await waitFor(() => /dashboard/i.test(location.hash) && !onLoginScreen(), 4000);
+                await sleep(500);
+              } catch (e) { log("open: dashboard nav error", e); }
+              finish(true, "Logged in ✓ — you're on the portal dashboard.");
+            })();
           }
           return;
         }

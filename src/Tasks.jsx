@@ -85,13 +85,19 @@ function TaskCard({ card, assessees, onUpdate, onRemove, onOpenAssessee }) {
         <>
           <input className="kb-title" defaultValue={card.title || ""} placeholder="Title"
             onBlur={(e) => { if ((e.target.value || "") !== (card.title || "")) onUpdate({ title: e.target.value }); }}/>
-          {items.map((it, i) => (
-            <div key={i} className={`kb-item ${it.done ? "done" : ""}`}>
-              <div className="kb-box" onClick={() => setItem(i, { done: !it.done })}>{it.done && <Icon name="check" size={11} stroke={3}/>}</div>
-              <input defaultValue={it.text} onBlur={(e) => { if (e.target.value !== it.text) setItem(i, { text: e.target.value }); }}/>
-              <button className="kb-x" title="Remove" onClick={() => delItem(i)}><Icon name="x" size={11}/></button>
-            </div>
-          ))}
+          {/* Ticked items sink to the bottom (Keep-style). Display-only sort —
+              keep the stored order and each item's original index so editing,
+              toggling and deleting stay correct. sort() is stable, so within
+              each group the original order is preserved. */}
+          {items.map((it, i) => ({ it, i }))
+            .sort((a, b) => (a.it.done === b.it.done ? 0 : a.it.done ? 1 : -1))
+            .map(({ it, i }) => (
+              <div key={i} className={`kb-item ${it.done ? "done" : ""}`}>
+                <div className="kb-box" onClick={() => setItem(i, { done: !it.done })}>{it.done && <Icon name="check" size={11} stroke={3}/>}</div>
+                <input defaultValue={it.text} onBlur={(e) => { if (e.target.value !== it.text) setItem(i, { text: e.target.value }); }}/>
+                <button className="kb-x" title="Remove" onClick={() => delItem(i)}><Icon name="x" size={11}/></button>
+              </div>
+            ))}
           <div className="kb-add">
             <span style={{ display: "grid", placeItems: "center", width: 16 }}><Icon name="plus" size={12}/></span>
             <input placeholder="List item" value={newItem} onChange={(e) => setNewItem(e.target.value)}

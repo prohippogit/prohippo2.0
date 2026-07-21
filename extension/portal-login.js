@@ -11,7 +11,7 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v35";
+  const BUILD = "v36";
   const INTERVAL_MS = 1000;
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
@@ -594,7 +594,12 @@
       // Active proceedings are still checked (a reply may be new), but the
       // per-notice/response loop below only downloads what isn't already held.
       const kp = knownByProc[r.proceedingReqId] || {};
-      if (isClosed(r) && (r.viewNoticeCount || 0) <= (kp.n || 0)) {
+      const countMatches = (r.viewNoticeCount || 0) <= (kp.n || 0);
+      // Skip a proceeding whose notice count is already on file: always for
+      // closed proceedings, and in e-Proceedings-only mode for active ones too
+      // (that mode treats a notice-count change as the only trigger, so an
+      // unchanged FYA proceeding is left untouched — no detail, no reply calls).
+      if (countMatches && (isClosed(r) || creds.scope === "eproc")) {
         skipped += (r.viewNoticeCount || 0); skippedProcs++;
         continue;
       }
@@ -682,6 +687,10 @@
       // newly appear), and within any proceeding known docs are skipped by docKey.
       const kp = knownByProc[r.proceedingReqId] || {};
       if (isClosed(r) && kp.o) { skipped++; continue; }
+      // e-Proceedings-only: don't probe a still-active proceeding for a closure
+      // order unless the list flags one. The just-closed synthetic rows (marked
+      // closed) and flagged proceedings are the only ones worth a call here.
+      if (creds.scope === "eproc" && !isClosed(r) && !r.closureSeqNo) continue;
       badge.set("Orders — " + (r.name || "proceeding").slice(0, 28) + "…");
       try {
         const clo = await NET.apiCall({
@@ -934,30 +943,70 @@
     const pan = (NET.pan() || creds.portalUserId || "").toString().toUpperCase().trim();
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) { log("direct api: no valid PAN", pan); return false; }
 
+    // Sync scope (from the app's dropdown):
+    //   "all"     — FYA + FYI + notices/orders/replies + Form 35 (first sync).
+    //   "eproc"   — FYA only → diff → new notices/orders; no FYI scan, no Form 35.
+    //   "appeals" — filed Form 35s only, nothing else.
+    const scope = creds.scope || "all";
+
+    if (scope === "appeals") {
+      log("scope=appeals — Form 35 only");
+      badge.set("Fetching filed appeals (Form 35)…");
+      try { await syncAppealForms(creds, badge, pan); } catch (e) { log("appeals error", e); }
+      await logoutAndClose(badge);
+      return true;
+    }
+
     const t0 = performance.now();
     const fya = await NET.proceedings({ pan, statusFlag: "FYA", pageSize: 100 });
-    const fyi = await NET.proceedings({ pan, statusFlag: "FYI", pageSize: 100 });
-    const ms = Math.round(performance.now() - t0);
-
     const rows = [];
     const push = (res, tab) => {
       const list = res && res.json && res.json.eProceedingPaginatedRequests;
       if (Array.isArray(list)) for (const o of list) rows.push(mapRow(o, tab));
     };
     push(fya, "For your Action");
-    push(fyi, "For your Information");
+    // A full sync also pulls the FYI (closed) list; e-Proceedings-only skips it.
+    if (scope === "all") {
+      const fyi = await NET.proceedings({ pan, statusFlag: "FYI", pageSize: 100 });
+      push(fyi, "For your Information");
+    }
+    const ms = Math.round(performance.now() - t0);
 
-    if (!rows.length) { log("direct api: no rows", { fya: fya && fya.status, fyi: fyi && fyi.status, err: (fya && fya.error) || (fyi && fyi.error) }); return false; }
+    // e-Proceedings-only closure detection: a proceeding we knew as ACTIVE that
+    // is no longer in FYA has just closed — add a synthetic (closed) row so its
+    // closure order is fetched and its matter flips to Closed, WITHOUT scanning
+    // the whole FYI list.
+    if (scope === "eproc") {
+      const fyaIds = new Set(rows.map((r) => r.proceedingReqId).filter(Boolean));
+      let added = 0;
+      for (const pid of (creds.knownActiveProcs || [])) {
+        const id = String(pid || "");
+        if (id && !fyaIds.has(id)) {
+          rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "" });
+          added++;
+        }
+      }
+      if (added) log("eproc: " + added + " proceeding(s) left FYA (just closed) — will fetch their orders");
+    }
 
-    log("DIRECT API OK — " + rows.length + " proceedings in " + ms + " ms");
+    if (!rows.length) {
+      // Nothing in FYA (and, for a full sync, nothing in FYI either).
+      if (scope === "eproc") { log("eproc: FYA empty — nothing to do, logging out"); await logoutAndClose(badge); return true; }
+      log("direct api: no rows", { fya: fya && fya.status, err: fya && fya.error }); return false;
+    }
+
+    log("DIRECT API OK (" + scope + ") — " + rows.length + " proceedings in " + ms + " ms");
     badge.set("API sync ✓ " + rows.length + " proceedings in " + ms + " ms");
     chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "proceedings", via: "api", ms, endpoint: "/auth/getEntity · eProceedingsPaginatedService", proceedings: rows } }, () => {});
-    // Then pull each proceeding's notices/orders + PDFs.
+    // Then pull each proceeding's notices/orders + PDFs (incremental).
     try { await syncNotices(creds, badge, pan, rows); }
     catch (e) { log("notices error", e); }
-    // CIT(A) appeals filed as Form 35 (from "View Filed Forms").
-    try { await syncAppealForms(creds, badge, pan); }
-    catch (e) { log("appeals error", e); }
+    // CIT(A) appeals filed as Form 35 — only on a full sync; e-Proceedings-only
+    // deliberately skips the (expensive) Form 35 render.
+    if (scope === "all") {
+      try { await syncAppealForms(creds, badge, pan); }
+      catch (e) { log("appeals error", e); }
+    }
     // Done — log out and close the portal tab so no session is left open.
     await logoutAndClose(badge);
     return true;

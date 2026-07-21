@@ -52,13 +52,19 @@ export async function detectExtension() {
 }
 
 /** Ask the extension to open the portal and auto-login (mode "open" or "sync").
+ *  scope selects how much a sync fetches:
+ *   - "all"     — FYA + FYI + notices/orders/replies + Form 35 (first sync)
+ *   - "eproc"   — FYA only, incremental; no FYI scan, no Form 35 (fast re-sync)
+ *   - "appeals" — filed Form 35s only
  *  Incremental-sync hints let a re-sync skip work it's already done:
- *   - knownDins:        PDFs already held (DINs + docKeys) — don't re-download
- *   - knownByProc:      per-proceeding {n,o} counts — skip unchanged proceedings
- *   - knownResponseIds: replies already recorded — don't re-download
+ *   - knownDins:         PDFs already held (DINs + docKeys) — don't re-download
+ *   - knownByProc:       per-proceeding {n,o} counts — skip unchanged proceedings
+ *   - knownResponseIds:  replies already recorded — don't re-download
+ *   - knownActiveProcs:  proceedingReqIds we hold as Active — used in "eproc" to
+ *                        spot ones that left FYA (just closed) and grab the order
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", knownDins = [], knownByProc = {}, knownResponseIds = [], background = false, clientRef = null }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, knownDins, knownByProc, knownResponseIds, background, clientRef }, 8000);
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], knownActiveProcs = [], background = false, clientRef = null }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

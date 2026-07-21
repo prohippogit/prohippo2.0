@@ -36,8 +36,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           portalPassword: creds.portalPassword,
           assesseeId: creds.assesseeId || null,
           mode: creds.mode || "open", // "open" | "sync" | "master"
+          scope: creds.scope || "all", // "all" | "eproc" | "appeals" — what a sync fetches
+          background: Boolean(creds.background), // bulk/unwatched → fast logout pacing
           clientRef: creds.clientRef || null, // correlate a master fetch to a not-yet-saved assessee
+          // Incremental-sync hints — MUST be carried through or the sync falls
+          // back to re-fetching everything (see portalSync.openPortalLogin).
           knownDins: Array.isArray(creds.knownDins) ? creds.knownDins : [],
+          knownByProc: (creds.knownByProc && typeof creds.knownByProc === "object") ? creds.knownByProc : {},
+          knownResponseIds: Array.isArray(creds.knownResponseIds) ? creds.knownResponseIds : [],
+          knownActiveProcs: Array.isArray(creds.knownActiveProcs) ? creds.knownActiveProcs : [],
           appTabId: appTabId != null ? appTabId : null,
           createdAt: Date.now(),
         },

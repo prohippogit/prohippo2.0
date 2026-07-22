@@ -27,7 +27,7 @@ built so the fetch source can later move to ERI/AR by changing only
 
 | Concern                | Source of truth (unchanged contract)                     |
 |------------------------|----------------------------------------------------------|
-| Login + Dual Login     | `extension/portal-login.js` (port into `portalWorker.js`)|
+| Login + Dual Login     | ported → `portalLogin.js` (from `portal-login.js`)       |
 | Portal API capture     | `extension/portal-net.js` → Playwright `route`/`response`|
 | Scoped/incremental diff | scope + knowns model from `portal-login.js`             |
 | Credential decryption  | `getPortalCredential` Cloud Function (in-memory only)    |
@@ -80,13 +80,18 @@ npm run dist:mac     # DMG (needs Apple Developer ID + notarization)
 
 ## Status
 
-Runnable shell. **Working now:** practitioner sign-in, and the PAN pick-list —
-`assessees:list` reads `users/{uid}/assessees` (where `portalCredSet == true`)
-directly from Firestore under the existing security rules, so the board shows
-real PANs and the pool/stagger/progress UI run end-to-end.
+**Working now:**
 
-**Still `TODO(port)`** in `portalWorker.js` — login, API capture, scoped diff,
-PDF download, and ingest. Each step ports already-working logic out of the
-extension (`portal-login.js` / `portal-net.js`) rather than writing anything
-new; until then a run walks each PAN through the pipeline and reports the port
-points it reaches.
+- Practitioner sign-in.
+- PAN pick-list — `assessees:list` reads `users/{uid}/assessees` (where
+  `portalCredSet == true`) directly from Firestore under the existing security
+  rules, so the board shows real PANs.
+- **Login (pass 1)** — `portalLogin.js` drives a real Playwright login through
+  User ID → [secure-access confirm] → Password → Dashboard, handling the
+  Dual Login and session-expiry dialogs, on a randomised poll cadence. On
+  success the PAN's isolated context is sitting on the portal dashboard.
+
+**Still `TODO(port)`** in `portalWorker.js` (pass 2): scoped e-Proceedings
+capture, incremental diff against the knowns, PDF download, and ingest — ports
+of `portal-net.js` and the scope/knowns logic, feeding the existing
+`ingestPortal*` callables via `ingest.js`.

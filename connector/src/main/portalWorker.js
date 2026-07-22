@@ -26,10 +26,10 @@
 //                      AppealForm) — unchanged from the extension's contract.
 "use strict";
 
-const { PORTAL } = require("./config");
-const { jsleep, PACE } = require("./pacing");
 const { withCredential } = require("./credentials");
-// const ingest = require("./ingest"); // wired in step 5
+const { login } = require("./portalLogin");
+// Step 2+ will also use: const { jsleep, PACE } = require("./pacing");
+// and const ingest = require("./ingest");
 
 // Log in the given context to the portal for one PAN, then run the scoped sync.
 // Returns a small summary { proceedings, notices, responses, appeals }.
@@ -39,18 +39,11 @@ async function runPanSync({ context, job, scope, emit }) {
   const summary = { proceedings: 0, notices: 0, responses: 0, appeals: 0 };
 
   await withCredential(job.assesseeId, async (cred) => {
-    // ---- STEP 1: LOGIN (port from portal-login.js) ---------------------------
-    emit("login", "Opening portal login");
-    await page.goto(PORTAL.origin + PORTAL.loginPath, { waitUntil: "domcontentloaded" });
-    await jsleep(...PACE.betweenDocs);
-
-    // TODO(port): drive the login state machine from portal-login.js:
-    //   - fill loginId = cred.portalUserId (usually the PAN), continue
-    //   - fill password = cred.portalPassword, submit
-    //   - if "Dual Login Detected" dialog appears, click "Login Here"
-    //   - wait until the SPA renders the dashboard (PORTAL.dashboardHash)
-    // cred.portalPassword stays in this closure only; never logged or stored.
-    emit("login", `TODO: authenticate ${job.pan} and reach dashboard`, "warn");
+    // ---- STEP 1: LOGIN (ported from portal-login.js) -------------------------
+    // Drives the User ID → [confirm] → Password → Dashboard state machine,
+    // handling Dual Login and session-expiry. cred.portalPassword stays in this
+    // closure only; never logged or stored.
+    await login(page, cred, emit);
 
     // ---- STEP 2/3: CAPTURE + SCOPED DIFF (port from portal-net.js) -----------
     // TODO(port): using job.scope (${scope}) and job.knowns, fetch only new

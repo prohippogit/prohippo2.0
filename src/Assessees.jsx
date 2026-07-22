@@ -98,16 +98,16 @@ function ResponsesBlock({ responses, plain }) {
   if (list.length === 0) return null;
   return (
     <div style={{marginTop: plain ? 0 : 8, borderTop: plain ? "none" : "1px dashed var(--p-line)", paddingTop: plain ? 0 : 8}}>
-      <div className="muted" style={{fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 5}}>
+      <div style={{fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 5, color: "#1A8A53"}}>
         Response{list.length > 1 ? "s" : ""} filed
       </div>
       <div className="col" style={{gap: 8}}>
         {list.map((rsp, ri) => (
-          <div key={ri} style={{padding: "8px 10px", background: "var(--p-mint)", borderRadius: 8, fontSize: 12}}>
-            <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: rsp.remarks ? 4 : 0}}>
-              <Icon name="check" size={11}/>
-              <span className="strong">{rsp.respType || "Response"}</span>
-              {rsp.submittedOn && <span className="muted">· {fmtSubmitted(rsp.submittedOn)}</span>}
+          <div key={ri} style={{padding: "9px 11px", background: "var(--p-mint)", border: "1px solid #CDEED9", borderRadius: 10, fontSize: 12, color: "#3A5A46"}}>
+            <div className="center" style={{gap: 7, justifyContent: "flex-start", marginBottom: rsp.remarks ? 5 : 0}}>
+              <span style={{width: 18, height: 18, borderRadius: "50%", background: "#20B978", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0}}><Icon name="check" size={11} stroke={3}/></span>
+              <span style={{fontWeight: 800, color: "#1A8A53"}}>{rsp.respType || "Response"}</span>
+              {rsp.submittedOn && <span style={{fontWeight: 700, color: "#1A8A53"}}>· {fmtSubmitted(rsp.submittedOn)}</span>}
             </div>
             {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
             {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
@@ -1170,6 +1170,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
   return (
     <Modal
       title={m.ref || m.proceedingName || "Proceeding"}
+      titleStyle={{fontSize: 22}}
       sub={[m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
       onClose={onClose}
       width={780}
@@ -1183,7 +1184,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             <StatusPill status={m.status}/>
             {m.bench && <span className="muted" style={{fontSize: 12}}>{m.bench}</span>}
           </div>
-          <div className="muted" style={{fontSize: 12, fontWeight: 700}}>
+          <div style={{fontSize: 12.5, fontWeight: 700, color: accent.fg}}>
             {docCount} notice{docCount === 1 ? "" : "s"}/orders{hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}
           </div>
         </div>
@@ -1228,7 +1229,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                         <div style={{flex: 1, minWidth: 0}}>
                           <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
                             <span className={`pill ${appeal ? "pill-primary" : appealable ? "pill-warning" : enclosure ? "pill-info" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : dt ? DOC_TYPE_LABEL[dt] : "Notice"}</span>
-                            <span className="strong" style={{fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
+                            <span className="strong" style={{fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
                           </div>
                           <div className="muted" style={{fontSize: 11, marginTop: 2}}>
                             {appeal
@@ -1236,12 +1237,12 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                               : [n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
                           </div>
                           {!appeal && (n.assessedIncome != null || (n.parsed && n.parsed.disputedDemand)) ? (
-                            <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                            <div style={{fontSize: 12, marginTop: 3, fontWeight: 700, color: "#8A6A12"}}>
                               {[n.assessedIncome != null ? `Assessed ${fmtINR(n.assessedIncome)}` : "", n.parsed && n.parsed.disputedDemand ? `Demand ${fmtINR(n.parsed.disputedDemand)}` : ""].filter(Boolean).join(" · ")}
                             </div>
                           ) : null}
                           {appeal && (ap.amountAssessed || ap.disputedDemand) ? (
-                            <div className="muted" style={{fontSize: 11, marginTop: 2}}>
+                            <div style={{fontSize: 12, marginTop: 3, fontWeight: 700, color: "#8A6A12"}}>
                               {[ap.amountAssessed ? `Assessed ${fmtINR(ap.amountAssessed)}` : "", ap.disputedDemand ? `Disputed ${fmtINR(ap.disputedDemand)}` : ""].filter(Boolean).join(" · ")}
                             </div>
                           ) : null}

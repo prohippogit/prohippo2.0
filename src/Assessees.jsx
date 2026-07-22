@@ -1173,7 +1173,6 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
       sub={[m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
       onClose={onClose}
       width={780}
-      className="modal-deep"
       footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
     >
       <div className="col" style={{gap: 16}}>
@@ -1194,8 +1193,8 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Hearings</div>
             <div className="col" style={{gap: 8}}>
               {hs.map((h) => (
-                <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5, justifyContent: "flex-start", padding: "9px 11px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px solid var(--p-line-2)", flexWrap: "wrap"}}>
-                  <Icon name="calendar" size={13}/>
+                <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5, justifyContent: "flex-start", padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
+                  <Icon name="calendar" size={13} className="muted"/>
                   <span className="strong">{fmtDateLong(h.date)}</span>
                   <span className="muted">{h.time} · {h.mode}</span>
                   <StatusPill status={h.date < todayISO() ? "Completed" : h.status}/>
@@ -1218,8 +1217,12 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                   const enclosure = dt === "demandNotice" || dt === "computationSheet";
                   const ap = n.appeal || {};
                   const apAtts = appeal ? (ap.attachments || []).filter((x) => x.storagePath) : [];
+                  // Functional tile colour: order → amber, appeal form → lavender,
+                  // demand/computation enclosure → neutral, plain notice → violet.
+                  const tileBg = appealable ? "#FCF3DE" : appeal ? "#F0EBFB" : enclosure ? "var(--p-card-tint)" : "#F0EBFB";
+                  const tileBd = appealable ? "#F3E6C4" : enclosure ? "var(--p-line-2)" : "#E6DDF7";
                   return (
-                    <div key={n.id} style={{padding: "11px 13px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line)"}}>
+                    <div key={n.id} style={{padding: "11px 13px", background: tileBg, borderRadius: 12, border: `1px solid ${tileBd}`}}>
                       <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
                         <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : appealable ? "var(--p-amber)" : enclosure ? "var(--p-card-tint)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : appealable ? "#B07512" : enclosure ? "var(--p-text-3)" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
                         <div style={{flex: 1, minWidth: 0}}>

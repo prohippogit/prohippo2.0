@@ -11,15 +11,22 @@
  * the portal ("Page Unresponsive"). Timer-only polling avoids that entirely.
  */
 (function () {
-  const BUILD = "v39";
+  const BUILD = "v40";
 
   // Post-sync logout pacing (milliseconds), tunable in one place. Background /
   // bulk syncs run unwatched, so they skip the cosmetic pause and log out fast;
   // foreground (single) syncs keep a short visible beat. sync-done is emitted
   // AFTER logout, so the bulk loop never starts the next login until the
   // previous session is gone — no cookie collision.
-  const PACE = { bgPreLogout: 250, bgPostLogout: 500, fgPreLogout: 1500, fgPostLogout: 900 };
-  const INTERVAL_MS = 1000;
+  // Post-sync logout pacing as [min,max] millisecond ranges — randomised at use
+  // so the cadence never looks robotic. Background/bulk syncs log out fast.
+  const PACE = { bgPreLogout: [180, 360], bgPostLogout: [360, 620], fgPreLogout: [1200, 1800], fgPostLogout: [700, 1100] };
+  // Login poll cadence (ms): base ± jitter. Faster than the old fixed 1000ms
+  // (Tier 2 speed-up) AND randomised so repeated logins aren't a robotic pattern.
+  const POLL = { min: 360, max: 680, firstMin: 800, firstMax: 1400 };
+  // Random integer in [min,max]. Math.random is available in the extension
+  // content script (unlike workflow scripts).
+  const rand = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 
   /* ---------- approach (a): talk to the MAIN-world network probe ----------
    * portal-net.js watches the calls the portal makes to itself and can replay
@@ -131,10 +138,13 @@
     let lastUid = "";
     let lastPwd = "";
     let retriedLogin = false; // allow one auto-retry after a session-expiry bounce
+    let timer = null;
+    let stopped = false;
+    const stopLoop = () => { stopped = true; clearTimeout(timer); };
     log("started");
 
     const finish = (ok, msg) => {
-      clearInterval(timer);
+      stopLoop();
       badge.set(msg || (ok ? "Logged in — opening e-Proceedings…" : "Couldn't finish — please continue manually."), !ok);
       setTimeout(() => badge.remove(), ok ? 4000 : 10000);
     };
@@ -169,7 +179,7 @@
         // a blocked action and prompts logout. Navigate by clicking the menu.
         if (sawPassword && !onLoginScreen() && !isSessionExpired()) {
           navigated = true;
-          clearInterval(timer);
+          stopLoop();
           if (creds.mode === "sync") {
             beginSync(creds, badge)
               .catch((e) => { log("sync error", e); badge.set("Sync failed — " + (e.message || e), true); })
@@ -226,9 +236,15 @@
       }
     };
 
-    // Timer only — NO MutationObserver (that caused the freeze).
-    const timer = setInterval(tick, INTERVAL_MS);
-    setTimeout(tick, 1200); // first attempt after the SPA has a moment to render
+    // Self-rescheduling poll with a jittered cadence: faster than the old fixed
+    // 1s interval (Tier 2) and non-robotic (each gap is randomised). No
+    // MutationObserver — that caused the freeze.
+    const loop = () => {
+      if (stopped) return;
+      tick();
+      if (!stopped) timer = setTimeout(loop, rand(POLL.min, POLL.max));
+    };
+    timer = setTimeout(loop, rand(POLL.firstMin, POLL.firstMax)); // first attempt after the SPA renders
   }
 
   /* ---------- detection ---------- */
@@ -352,6 +368,9 @@
 
   /* ---------- Phase 2 step 1: sync the e-Proceedings list ---------- */
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Jittered sleep — a random pause in [min,max] ms, so inter-request pacing is
+  // never a fixed, robotic value the portal could fingerprint.
+  const jsleep = (min, max) => sleep(rand(min, max));
   function waitFor(pred, timeout) {
     return new Promise((resolve) => {
       const start = Date.now();
@@ -591,7 +610,7 @@
         attachments,
       };
       chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "response", response } }, () => {});
-      await sleep(150);
+      await jsleep(120, 320);
     }
   }
 
@@ -672,7 +691,7 @@
           };
           chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
           docCount++;
-          await sleep(150); // gentle pacing between documents
+          await jsleep(120, 320); // jittered pacing between documents
         } else {
           skipped++;
         }
@@ -743,7 +762,7 @@
           };
           chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
           docCount++;
-          await sleep(150);
+          await jsleep(120, 320);
         }
       } catch (e) { log("orders: error for", r.proceedingReqId, e); }
     }
@@ -932,7 +951,7 @@
       };
       log("appeals: F35 ack", ackNum, "AY", appeal.ay, "orderDate", appeal.dateOrder, "atts", attachments.length);
       chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "appealForm", appeal } }, () => {});
-      await sleep(150);
+      await jsleep(120, 320);
     }
   }
 
@@ -947,9 +966,9 @@
   async function logoutAndClose(badge, creds) {
     const bg = Boolean(creds && creds.background);
     badge.set("Sync complete — logging out…");
-    await sleep(bg ? PACE.bgPreLogout : PACE.fgPreLogout); // was 3500 (cosmetic)
+    await jsleep(...(bg ? PACE.bgPreLogout : PACE.fgPreLogout)); // was 3500 (cosmetic)
     try { tryLogout(); } catch { /* noop */ }
-    await sleep(bg ? PACE.bgPostLogout : PACE.fgPostLogout); // let logout register
+    await jsleep(...(bg ? PACE.bgPostLogout : PACE.fgPostLogout)); // let logout register
     requestCloseTab();
   }
 

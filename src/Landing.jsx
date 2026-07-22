@@ -235,6 +235,16 @@ export default function Landing({ onSignIn }) {
           <span>Income-tax litigation & practice management</span>
           <span>·</span>
           <span>© {new Date().getFullYear()} ProHippo</span>
+          <div style={{ flexBasis: "100%", height: 0 }} />
+          <nav className="foot-legal-row">
+            <a href="/about" className="foot-legal">About</a>
+            <a href="/privacy" className="foot-legal">Privacy Policy</a>
+            <a href="/terms" className="foot-legal">Terms &amp; Conditions</a>
+            <a href="/contact" className="foot-legal">Contact</a>
+            <a href="/data-deletion" className="foot-legal">Data Deletion</a>
+          </nav>
+          <div style={{ flexBasis: "100%", height: 0 }} />
+          <span style={{ fontSize: 11.5 }}>ProHippo is a product operated by MEHTAJI BIZCON LLP (LLPIN AAV-0638), Ahmedabad, India.</span>
         </footer>
       </div>
     </div>

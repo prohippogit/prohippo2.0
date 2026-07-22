@@ -45,11 +45,11 @@ async function runPanSync({ context, job, scope, emit }) {
     await jsleep(...PACE.betweenDocs);
 
     // TODO(port): drive the login state machine from portal-login.js:
-    //   - fill loginId = cred.loginId (PAN), continue
-    //   - fill password = cred.password, submit
+    //   - fill loginId = cred.portalUserId (usually the PAN), continue
+    //   - fill password = cred.portalPassword, submit
     //   - if "Dual Login Detected" dialog appears, click "Login Here"
     //   - wait until the SPA renders the dashboard (PORTAL.dashboardHash)
-    // cred.password stays in this closure only; it is never logged or stored.
+    // cred.portalPassword stays in this closure only; never logged or stored.
     emit("login", `TODO: authenticate ${job.pan} and reach dashboard`, "warn");
 
     // ---- STEP 2/3: CAPTURE + SCOPED DIFF (port from portal-net.js) -----------

@@ -30,23 +30,24 @@ async function loadAssessees() {
   const list = await window.connector.listAssessees();
   JOBS = (list || []).map((a) => ({
     assesseeId: a.id,
-    pan: a.pan,
+    pan: a.pan || a.portalUserId,
     label: a.name || a.pan,
     knowns: a.knowns || {},
   }));
-  if (JOBS.length === 0) {
-    // demo placeholders so the board isn't empty in the scaffold
-    JOBS = [
-      { assesseeId: "demo-1", pan: "ABCDE1234F", label: "Sample Assessee 1", knowns: {} },
-      { assesseeId: "demo-2", pan: "PQRSX6789L", label: "Sample Assessee 2", knowns: {} },
-    ];
-  }
   renderBoard();
 }
 
 function renderBoard() {
   const board = $("board");
   board.innerHTML = "";
+  if (JOBS.length === 0) {
+    board.innerHTML =
+      `<div class="empty">No assessees with a saved portal login yet. ` +
+      `Add portal credentials for an assessee in the ProHippo web app, then reload.</div>`;
+    $("runBtn").disabled = true;
+    return;
+  }
+  $("runBtn").disabled = false;
   for (const j of JOBS) {
     const el = document.createElement("div");
     el.className = "pan";
@@ -58,6 +59,17 @@ function renderBoard() {
     board.appendChild(el);
   }
 }
+
+$("reloadBtn").addEventListener("click", async () => {
+  $("reloadBtn").disabled = true;
+  try {
+    await loadAssessees();
+  } catch (err) {
+    alert(friendly(err));
+  } finally {
+    $("reloadBtn").disabled = false;
+  }
+});
 
 // --- Run sync --------------------------------------------------------------
 $("runBtn").addEventListener("click", async () => {

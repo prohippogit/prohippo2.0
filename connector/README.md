@@ -80,6 +80,13 @@ npm run dist:mac     # DMG (needs Apple Developer ID + notarization)
 
 ## Status
 
-Scaffold. Login, API capture, scoped diff, PDF download, and ingest are marked
-`TODO(port)` in `portalWorker.js` — each step ports already-working logic out of
-the extension rather than writing anything new.
+Runnable shell. **Working now:** practitioner sign-in, and the PAN pick-list —
+`assessees:list` reads `users/{uid}/assessees` (where `portalCredSet == true`)
+directly from Firestore under the existing security rules, so the board shows
+real PANs and the pool/stagger/progress UI run end-to-end.
+
+**Still `TODO(port)`** in `portalWorker.js` — login, API capture, scoped diff,
+PDF download, and ingest. Each step ports already-working logic out of the
+extension (`portal-login.js` / `portal-net.js`) rather than writing anything
+new; until then a run walks each PAN through the pipeline and reports the port
+points it reaches.

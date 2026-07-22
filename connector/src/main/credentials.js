@@ -9,11 +9,12 @@
 
 const { callable } = require("./firebaseClient");
 
-// Returns { loginId, password, ... } for one assessee, held in memory only.
-// The caller MUST NOT log the result or write it anywhere durable.
+// Returns { portalUserId, portalPassword } for one assessee, held in memory
+// only. Shape matches the getPortalCredential Cloud Function exactly. The caller
+// MUST NOT log the result or write it anywhere durable.
 async function getPortalCredential(assesseeId) {
   const cred = await callable("getPortalCredential", { assesseeId });
-  if (!cred || !cred.password) {
+  if (!cred || !cred.portalPassword) {
     throw new Error("No stored portal credential for this assessee.");
   }
   return cred;

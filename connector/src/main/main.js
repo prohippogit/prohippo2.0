@@ -59,11 +59,11 @@ ipcMain.handle("sync:run", async (_e, { jobs, scope, headless }) => {
   return results;
 });
 
-// TODO: list assessees that have a stored portal credential, so the UI can show
-// a pick-list. This should call a small Cloud Function (or read Firestore with
-// the signed-in user's token) rather than embedding any query logic here.
+// List assessees that have a stored portal credential, for the UI pick-list.
+// Reads Firestore with the signed-in user's token (firestore.rules scopes it).
 ipcMain.handle("assessees:list", async () => {
-  return []; // placeholder — wire to backend
+  if (!fb.currentUser()) throw new Error("Sign in first.");
+  return fb.listPortalAssessees();
 });
 
 app.whenReady().then(() => {

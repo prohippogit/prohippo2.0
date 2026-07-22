@@ -52,7 +52,11 @@ async function runPool(jobs, onEvent, opts = {}) {
         emit("start", `Sync started (${scope})`);
         const r = await runPanSync({ context, job, scope, emit });
         results.push({ assesseeId: job.assesseeId, ok: true, ...r });
-        emit("done", "Sync complete", "success");
+        const parts = [];
+        if (r.proceedings) parts.push(`${r.proceedings} proceedings`);
+        if (r.notices) parts.push(`${r.notices} docs`);
+        if (r.responses) parts.push(`${r.responses} replies`);
+        emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success");
       } catch (err) {
         results.push({ assesseeId: job.assesseeId, ok: false, error: String(err && err.message || err) });
         emit("error", String(err && err.message || err), "error");

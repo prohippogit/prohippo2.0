@@ -28,8 +28,7 @@
 
 const { withCredential } = require("./credentials");
 const { login } = require("./portalLogin");
-// Step 2+ will also use: const { jsleep, PACE } = require("./pacing");
-// and const ingest = require("./ingest");
+const { syncPortalData } = require("./portalFetch");
 
 // Log in the given context to the portal for one PAN, then run the scoped sync.
 // Returns a small summary { proceedings, notices, responses, appeals }.
@@ -45,18 +44,10 @@ async function runPanSync({ context, job, scope, emit }) {
     // closure only; never logged or stored.
     await login(page, cred, emit);
 
-    // ---- STEP 2/3: CAPTURE + SCOPED DIFF (port from portal-net.js) -----------
-    // TODO(port): using job.scope (${scope}) and job.knowns, fetch only new
-    // e-Proceedings rows. Prefer context.request against the JSON endpoints with
-    // the live session cookies over UI scraping; fall back to page.on("response")
-    // capture. Space every call with jsleep(...PACE.betweenDocs).
-    emit("fetch", `TODO: scoped fetch (${scope}) with incremental knowns`, "warn");
-
-    // ---- STEP 4/5: DOWNLOAD NEW PDFs + INGEST --------------------------------
-    // TODO(port): for each NEW document, context.request.get(url) -> upload to
-    // Storage -> ingest.ingestPortalNotice(...); ingest proceedings/responses/
-    // appeal forms via ingest.js. Increment `summary` counters as we go.
-    emit("ingest", "TODO: download new PDFs and ingest", "warn");
+    // ---- STEP 2: SCOPED, INCREMENTAL FETCH + INGEST --------------------------
+    // Direct JSON API (session-cookie auth), scope + knowns diff, PDF download,
+    // and ingest — all in portalFetch.js. Updates `summary` counters.
+    Object.assign(summary, await syncPortalData(page, job, scope, emit, summary));
   });
 
   await page.close().catch(() => {});

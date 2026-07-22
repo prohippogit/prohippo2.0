@@ -25,12 +25,14 @@ const {
   where,
   getDocs,
 } = require("firebase/firestore");
+const { getStorage, ref: storageRef, uploadString } = require("firebase/storage");
 const { firebaseConfig, FUNCTIONS_REGION } = require("./config");
 
 let app = null;
 let auth = null;
 let functions = null;
 let firestore = null;
+let storage = null;
 
 function init() {
   if (app) return;
@@ -38,6 +40,7 @@ function init() {
   auth = getAuth(app);
   functions = getFunctions(app, FUNCTIONS_REGION);
   firestore = getFirestore(app);
+  storage = getStorage(app);
 }
 
 async function signIn(email, password) {
@@ -54,6 +57,22 @@ function currentUser() {
   return auth && auth.currentUser
     ? { uid: auth.currentUser.uid, email: auth.currentUser.email }
     : null;
+}
+
+// The signed-in user's uid, or null. Used to build per-user Storage paths, the
+// same convention the web app uses (users/{uid}/assessees/...).
+function uid() {
+  return auth && auth.currentUser ? auth.currentUser.uid : null;
+}
+
+// Upload a base64 payload to Storage, mirroring the web app's
+// uploadString(ref, base64, "base64", { contentType }). Returns the path.
+async function uploadBase64(path, base64, contentType) {
+  init();
+  await uploadString(storageRef(storage, path), base64, "base64", {
+    contentType: contentType || "application/pdf",
+  });
+  return path;
 }
 
 // Thin wrapper around httpsCallable so the rest of the app just calls
@@ -89,6 +108,8 @@ module.exports = {
   signIn,
   signOutUser,
   currentUser,
+  uid,
+  uploadBase64,
   callable,
   listPortalAssessees,
 };

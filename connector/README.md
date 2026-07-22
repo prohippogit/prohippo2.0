@@ -28,10 +28,14 @@ built so the fetch source can later move to ERI/AR by changing only
 | Concern                | Source of truth (unchanged contract)                     |
 |------------------------|----------------------------------------------------------|
 | Login + Dual Login     | ported → `portalLogin.js` (from `portal-login.js`)       |
-| Portal API capture     | `extension/portal-net.js` → Playwright `route`/`response`|
-| Scoped/incremental diff | scope + knowns model from `portal-login.js`             |
+| Portal JSON API        | ported → `portalApi.js` (from `portal-net.js`)           |
+| Scoped/incremental diff | ported → `portalFetch.js` (scope + knowns model)        |
 | Credential decryption  | `getPortalCredential` Cloud Function (in-memory only)    |
-| Ingest                 | `ingestPortal{Proceedings,Notice,Response,AppealForm}`   |
+| Ingest + Storage upload | ported → `ingest.js` (1:1 with `src/portalIngest.js`)   |
+
+The **"sn" header is just the serviceName echoed verbatim** — the real auth is
+the session cookie (per `portal-net.js`). So once a context is logged in, the
+API calls go direct with the page's own `fetch`; no token capture is needed.
 
 ## Layout
 
@@ -88,10 +92,15 @@ npm run dist:mac     # DMG (needs Apple Developer ID + notarization)
   rules, so the board shows real PANs.
 - **Login (pass 1)** — `portalLogin.js` drives a real Playwright login through
   User ID → [secure-access confirm] → Password → Dashboard, handling the
-  Dual Login and session-expiry dialogs, on a randomised poll cadence. On
-  success the PAN's isolated context is sitting on the portal dashboard.
+  Dual Login and session-expiry dialogs, on a randomised poll cadence.
+- **Scoped fetch + ingest (pass 2)** — `portalFetch.js` pulls the e-Proceedings
+  list (FYA, plus FYI for `all`, plus synthetic closed rows for `eproc`),
+  applies the same scope + `knowns` incremental diff as the extension, downloads
+  only NEW notice/order PDFs and filed responses, uploads them to Storage, and
+  records everything through the existing `ingestPortal*` callables (`ingest.js`
+  is a 1:1 port of `src/portalIngest.js`). Order PDFs auto-parse on fetch.
 
-**Still `TODO(port)`** in `portalWorker.js` (pass 2): scoped e-Proceedings
-capture, incremental diff against the knowns, PDF download, and ingest — ports
-of `portal-net.js` and the scope/knowns logic, feeding the existing
-`ingestPortal*` callables via `ingest.js`.
+**Still `TODO(port)`** (pass 3): filed **Form 35 appeals** — the `appeals` scope
+and the Form 35 leg of a full `all` sync. This needs `viewFiledForms` +
+`pdfweb` render (the `deepMergeShape`/template logic in `portal-login.js`);
+until it lands, those two paths log a "coming in pass 3" notice and skip.

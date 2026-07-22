@@ -150,7 +150,7 @@ export const Avatar = ({ name, color, size = "", round = false, soft = false }) 
   return <div className={cls} style={{background: grads[key] || grads.violet}}>{initials}</div>;
 };
 
-export function Modal({ title, sub, onClose, children, footer, width = 560, className = "" }) {
+export function Modal({ title, sub, onClose, children, footer, width = 560, className = "", titleStyle }) {
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -163,7 +163,7 @@ export function Modal({ title, sub, onClose, children, footer, width = 560, clas
       <div className={`modal animate-in ${className}`} style={{maxWidth: width}}>
         <div className="modal-head">
           <div>
-            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em"}}>{title}</div>
+            <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", ...titleStyle}}>{title}</div>
             {sub && <div className="muted" style={{fontSize: 12.5, marginTop: 3}}>{sub}</div>}
           </div>
           <button className="icon-btn" style={{width: 32, height: 32}} onClick={onClose}><Icon name="x" size={15}/></button>

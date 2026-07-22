@@ -275,6 +275,9 @@
 }
 .landing-footer .foot-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; color: var(--p-text); }
 .landing-footer .spacer { flex: 1; }
+.landing-footer .foot-legal-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+.landing-footer .foot-legal { color: var(--p-text-2); text-decoration: none; font-weight: 600; }
+.landing-footer .foot-legal:hover { color: var(--p-primary-2); text-decoration: underline; }
 
 /* Scroll reveal */
 .reveal {

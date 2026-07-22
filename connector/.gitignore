@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+out/
+release/
+
+# playwright browser cache (installed via postinstall)
+.playwright/
+
+# local runtime state — NEVER commit portal sessions or credentials
+.state/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# electron-builder
+*.blockmap

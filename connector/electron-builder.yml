@@ -1,0 +1,45 @@
+# electron-builder packaging config.
+#
+# Signing is the real overhead of shipping this app (the scrape logic is already
+# written). Fill the signing blocks below when certificates are in hand:
+#   - Windows: Authenticode EV cert (avoids SmartScreen warnings).
+#   - macOS:   Apple Developer ID + notarization (avoids Gatekeeper blocks).
+appId: in.prohippo.connector
+productName: ProHippo Connector
+copyright: Copyright © MEHTAJI BIZCON LLP
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+  - "!**/*.map"
+
+# Playwright's Chromium is fetched by the postinstall step; bundle it with the
+# app so the user doesn't download a browser on first run.
+extraResources:
+  - from: .playwright
+    to: playwright
+    filter: ["**/*"]
+
+win:
+  target: [nsis]
+  # certificateFile / certificatePassword — set via env for CI signing.
+
+mac:
+  target: [dmg]
+  category: public.app-category.business
+  hardenedRuntime: true
+  # notarize: true  # requires APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+# Auto-update via electron-updater. Point this at the release host once chosen
+# (GitHub Releases or a private bucket).
+publish:
+  provider: generic
+  url: https://updates.prohippo.in/connector/

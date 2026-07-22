@@ -1,0 +1,29 @@
+{
+  "name": "prohippo-connector",
+  "productName": "ProHippo Connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local desktop connector for ProHippo — parallel, human-paced portal sync across many PANs on a residential IP.",
+  "author": "MEHTAJI BIZCON LLP",
+  "license": "UNLICENSED",
+  "main": "src/main/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "lint": "eslint src",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "firebase": "^12.16.0",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-updater": "^6.3.9"
+  }
+}

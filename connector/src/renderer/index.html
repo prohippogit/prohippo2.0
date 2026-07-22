@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ProHippo Connector</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <div>
+        <div class="title">ProHippo Connector</div>
+        <div class="tag">Parallel, human-paced portal sync</div>
+      </div>
+    </div>
+    <div id="who" class="who">Not signed in</div>
+  </header>
+
+  <!-- Sign-in -->
+  <section id="signinCard" class="card">
+    <h2>Sign in</h2>
+    <p class="muted">Use your ProHippo practitioner login. The connector uses it only to fetch stored portal credentials and push data back — same account as the web app.</p>
+    <div class="row">
+      <input id="email" type="email" placeholder="you@firm.in" autocomplete="username" />
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="signinBtn" class="primary">Sign in</button>
+    </div>
+    <div id="signinErr" class="err"></div>
+  </section>
+
+  <!-- Sync -->
+  <section id="syncCard" class="card hidden">
+    <div class="sync-head">
+      <h2>Run sync</h2>
+      <div class="controls">
+        <label>Scope
+          <select id="scope">
+            <option value="eproc">e-Proceedings (fast)</option>
+            <option value="appeals">Appeals only</option>
+            <option value="all">Everything</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="headless" /> Run hidden</label>
+        <button id="runBtn" class="primary">Sync selected PANs</button>
+      </div>
+    </div>
+    <p class="muted">Up to 5 PANs sync at once, each in its own isolated browser session, started a few seconds apart. Everything is randomly paced to stay within safe, human-like limits on your home connection.</p>
+    <div id="board" class="board"></div>
+  </section>
+
+  <footer class="foot">
+    Operated by MEHTAJI BIZCON LLP · interim parallel-sync tier · credentials stay encrypted server-side and in-memory only.
+  </footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

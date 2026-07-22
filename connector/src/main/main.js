@@ -1,0 +1,79 @@
+// Electron main process.
+//
+// Owns the window, the Firebase session, and the worker pool. The renderer is a
+// thin UI that talks to this process over a locked-down preload bridge — it
+// never sees credentials or Firebase internals directly.
+"use strict";
+
+const path = require("path");
+const { app, BrowserWindow, ipcMain } = require("electron");
+const fb = require("./firebaseClient");
+const { runPool } = require("./pool");
+
+const isDev = process.argv.includes("--dev");
+let win = null;
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1080,
+    height: 760,
+    minWidth: 820,
+    minHeight: 560,
+    title: "ProHippo Connector",
+    backgroundColor: "#0F0E1D",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  win.removeMenu();
+  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  if (isDev) win.webContents.openDevTools({ mode: "detach" });
+}
+
+// Push a progress event to the renderer.
+function send(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+// ---- IPC handlers ----------------------------------------------------------
+
+ipcMain.handle("auth:signIn", async (_e, { email, password }) => {
+  return fb.signIn(email, password);
+});
+
+ipcMain.handle("auth:signOut", async () => {
+  await fb.signOutUser();
+  return { ok: true };
+});
+
+ipcMain.handle("auth:current", async () => fb.currentUser());
+
+// jobs: [{ assesseeId, pan, label, scope, knowns }]
+ipcMain.handle("sync:run", async (_e, { jobs, scope, headless }) => {
+  if (!fb.currentUser()) throw new Error("Sign in first.");
+  const onEvent = (evt) => send("sync:event", evt);
+  const results = await runPool(jobs, onEvent, { scope, headless });
+  return results;
+});
+
+// TODO: list assessees that have a stored portal credential, so the UI can show
+// a pick-list. This should call a small Cloud Function (or read Firestore with
+// the signed-in user's token) rather than embedding any query logic here.
+ipcMain.handle("assessees:list", async () => {
+  return []; // placeholder — wire to backend
+});
+
+app.whenReady().then(() => {
+  fb.init();
+  createWindow();
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});

@@ -18,6 +18,8 @@ const PATHS = {
   SAVE_ENTITY: "/iec/returnservicesapi/auth/saveEntity",
   SERVICES_SAVE: "/iec/servicesapi/auth/saveEntity",
   SERVICES_GET: "/iec/servicesapi/auth/getEntity",
+  ITF_INVOKE: "/iec/itfweb/auth/invoke", // filed-form data
+  PDFWEB: "/iec/pdfweb/pdf", // renders a filed form to PDF
   DOC_BASE: "/iec/document/",
 };
 const FORM = { formName: "FO-041_PCDNG" };
@@ -84,6 +86,47 @@ function getDoc(page, { docId }) {
   );
 }
 
+// POST a JSON body to a service that streams back a binary (PDF), e.g. pdfweb
+// which renders a filed form. Returns base64 like getDoc, or an error/notPdf.
+// Port of portal-net.js postDoc().
+function postDoc(page, { path, serviceName, payload }) {
+  return page.evaluate(
+    async ({ path, serviceName, payload }) => {
+      const ORIGIN = window.location.origin;
+      const headers = { "Content-Type": "application/json", Accept: "application/pdf" };
+      if (serviceName) headers["sn"] = serviceName;
+      try {
+        const resp = await fetch(ORIGIN + path, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: payload != null ? JSON.stringify(payload) : undefined,
+        });
+        if (!resp.ok) {
+          let t = ""; try { t = await resp.text(); } catch { /* noop */ }
+          return { ok: false, status: resp.status, text: (t || "").slice(0, 300) };
+        }
+        const ct = resp.headers.get("content-type") || "";
+        const buf = await resp.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        // An error usually comes back as JSON, not a PDF — surface it as such.
+        if (/json|text/i.test(ct)) {
+          const txt = new TextDecoder().decode(bytes);
+          let json = null; try { json = JSON.parse(txt); } catch { /* noop */ }
+          return { ok: false, status: resp.status, json, notPdf: true, text: (txt || "").slice(0, 300) };
+        }
+        let bin = "";
+        const CH = 0x8000;
+        for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+        return { ok: true, status: resp.status, base64: btoa(bin), contentType: ct || "application/pdf", bytes: bytes.length };
+      } catch (err) {
+        return { ok: false, error: String((err && err.message) || err) };
+      }
+    },
+    { path, serviceName, payload }
+  );
+}
+
 // The paginated e-Proceedings list for one status flag. Port of
 // portal-net.js fetchProceedings().
 function proceedings(page, { pan, statusFlag, pageSize, pageNo }) {
@@ -101,4 +144,4 @@ function proceedings(page, { pan, statusFlag, pageSize, pageNo }) {
   });
 }
 
-module.exports = { PATHS, FORM, apiCall, getDoc, proceedings };
+module.exports = { PATHS, FORM, apiCall, getDoc, postDoc, proceedings };

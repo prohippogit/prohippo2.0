@@ -15,6 +15,32 @@ const { POOL } = require("./config");
 const { rand, jsleep } = require("./pacing");
 const { runPanSync } = require("./portalWorker");
 
+// The portal sits behind a bot-filtering WAF that rejects obviously-automated
+// browsers with a "Permission Denied!!" page. Two things trip it: the
+// --enable-automation flag Playwright adds, and navigator.webdriver === true.
+// We remove the flag at launch and mask the property per-context. We also
+// prefer the user's REAL Google Chrome (channel: "chrome") over Playwright's
+// bundled "Chrome for Testing" — a genuine Chrome fingerprint is far less likely
+// to be flagged than the testing build.
+const STEALTH_ARGS = ["--disable-blink-features=AutomationControlled"];
+const IGNORE_DEFAULT_ARGS = ["--enable-automation"];
+
+async function launchHardenedBrowser(headless) {
+  const opts = { headless, args: STEALTH_ARGS, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
+  try {
+    return await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
+  } catch (chromeErr) {
+    try {
+      return await chromium.launch(opts); // bundled Chromium (present in dev only)
+    } catch {
+      throw new Error(
+        "Google Chrome is required to run the sync. Please install it from " +
+        "google.com/chrome, then try again."
+      );
+    }
+  }
+}
+
 // job = { assesseeId, pan, label, scope, knowns }
 // onEvent(evt) receives { assesseeId, phase, message, level } for the UI log.
 async function runPool(jobs, onEvent, opts = {}) {
@@ -22,9 +48,7 @@ async function runPool(jobs, onEvent, opts = {}) {
   const scope = opts.scope || "eproc";
 
   // One shared browser process; each job opens its own isolated context.
-  const browser = await chromium.launch({
-    headless: opts.headless === true, // default: visible, so the user can watch/step in
-  });
+  const browser = await launchHardenedBrowser(opts.headless === true);
 
   const queue = [...jobs];
   const results = [];
@@ -44,19 +68,24 @@ async function runPool(jobs, onEvent, opts = {}) {
         // A stable, ordinary desktop UA. Do NOT randomise the UA per-run — a
         // rotating fingerprint is MORE suspicious than a consistent one.
       });
+      // Mask the automation signal the WAF checks. Runs before any page script.
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+      });
 
-      const emit = (phase, message, level = "info") =>
-        onEvent && onEvent({ assesseeId: job.assesseeId, pan: job.pan, phase, message, level });
+      const emit = (phase, message, level = "info", pct) =>
+        onEvent && onEvent({ assesseeId: job.assesseeId, pan: job.pan, phase, message, level, pct });
 
       try {
-        emit("start", `Sync started (${scope})`);
+        emit("start", `Sync started (${scope})`, "info", 3);
         const r = await runPanSync({ context, job, scope, emit });
         results.push({ assesseeId: job.assesseeId, ok: true, ...r });
         const parts = [];
         if (r.proceedings) parts.push(`${r.proceedings} proceedings`);
         if (r.notices) parts.push(`${r.notices} docs`);
         if (r.responses) parts.push(`${r.responses} replies`);
-        emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success");
+        if (r.appeals) parts.push(`${r.appeals} appeals`);
+        emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success", 100);
       } catch (err) {
         results.push({ assesseeId: job.assesseeId, ok: false, error: String(err && err.message || err) });
         emit("error", String(err && err.message || err), "error");

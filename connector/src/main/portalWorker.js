@@ -27,7 +27,7 @@
 "use strict";
 
 const { withCredential } = require("./credentials");
-const { login } = require("./portalLogin");
+const { login, startLogoutGuard } = require("./portalLogin");
 const { syncPortalData } = require("./portalFetch");
 
 // Log in the given context to the portal for one PAN, then run the scoped sync.
@@ -44,10 +44,18 @@ async function runPanSync({ context, job, scope, emit }) {
     // closure only; never logged or stored.
     await login(page, cred, emit);
 
+    // Keep the portal's "disabled Back/Forward — Logout?" guard dismissed for the
+    // whole sync (any stray navigation can trigger it). Auto-clicks "No".
+    const stopGuard = startLogoutGuard(page);
+
     // ---- STEP 2: SCOPED, INCREMENTAL FETCH + INGEST --------------------------
     // Direct JSON API (session-cookie auth), scope + knowns diff, PDF download,
     // and ingest — all in portalFetch.js. Updates `summary` counters.
-    Object.assign(summary, await syncPortalData(page, job, scope, emit, summary));
+    try {
+      Object.assign(summary, await syncPortalData(page, job, scope, emit, summary));
+    } finally {
+      stopGuard();
+    }
   });
 
   await page.close().catch(() => {});

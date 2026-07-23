@@ -15,7 +15,7 @@ async function afterSignIn(user) {
 $("googleBtn").addEventListener("click", async () => {
   $("signinErr").textContent = "";
   $("googleBtn").disabled = true;
-  $("googleBtn").textContent = "Opening your browser… complete sign-in there";
+  $("googleBtn").textContent = "Opening your browser… finish sign-in there";
   try {
     const user = await window.connector.signInWithGoogle();
     await afterSignIn(user);
@@ -42,9 +42,10 @@ $("signinBtn").addEventListener("click", async () => {
   }
 });
 
-// --- Load PANs -------------------------------------------------------------
-// Placeholder cards until assessees:list is wired to the backend.
+// --- Assessees + selection -------------------------------------------------
 let JOBS = [];
+const selected = new Set();
+
 async function loadAssessees() {
   const list = await window.connector.listAssessees();
   JOBS = (list || []).map((a) => ({
@@ -53,83 +54,134 @@ async function loadAssessees() {
     label: a.name || a.pan,
     knowns: a.knowns || {},
   }));
-  renderBoard();
+  selected.clear();
+  renderRows();
+  syncSelectionUI();
 }
 
-function renderBoard() {
-  const board = $("board");
-  board.innerHTML = "";
+function renderRows() {
+  const rows = $("rows");
+  rows.innerHTML = "";
   if (JOBS.length === 0) {
-    board.innerHTML =
-      `<div class="empty">No assessees with a saved portal login yet. ` +
-      `Add portal credentials for an assessee in the ProHippo web app, then reload.</div>`;
-    $("runBtn").disabled = true;
+    rows.innerHTML =
+      `<div class="empty">No assessees with a saved portal login yet.<br>` +
+      `Add portal credentials for an assessee in the ProHippo web app, then click Reload.</div>`;
+    $("selAll").disabled = true;
     return;
   }
-  $("runBtn").disabled = false;
+  $("selAll").disabled = false;
   for (const j of JOBS) {
     const el = document.createElement("div");
-    el.className = "pan";
-    el.id = "pan-" + j.assesseeId;
+    el.className = "row";
+    el.id = "row-" + j.assesseeId;
     el.innerHTML =
-      `<div class="h"><span class="name"></span><span class="pill info">idle</span></div>` +
-      `<div class="msg"></div>`;
+      `<label class="cbx"><input type="checkbox" data-id="${j.assesseeId}"></label>` +
+      `<div class="nm"><div class="name"></div><div class="pan"></div></div>` +
+      `<div class="prog"><div class="bar-out"><div class="bar-in"></div></div>` +
+        `<div class="msg"><span class="pct">—</span> · <span class="txt">idle</span></div></div>` +
+      `<span class="pill idle">idle</span>`;
     el.querySelector(".name").textContent = j.label;
-    board.appendChild(el);
+    el.querySelector(".pan").textContent = j.pan || "";
+    rows.appendChild(el);
   }
+  // Wire per-row checkboxes.
+  rows.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const id = cb.dataset.id;
+      if (cb.checked) selected.add(id);
+      else selected.delete(id);
+      $("row-" + id).classList.toggle("sel", cb.checked);
+      syncSelectionUI();
+    });
+  });
 }
+
+function syncSelectionUI() {
+  const n = selected.size;
+  $("selCount").textContent = `${n} selected`;
+  $("runBtn").disabled = n === 0;
+  $("runBtn").textContent = n ? `Sync selected (${n})` : "Sync selected";
+  const all = JOBS.length > 0 && n === JOBS.length;
+  const some = n > 0 && n < JOBS.length;
+  const selAll = $("selAll");
+  selAll.checked = all;
+  selAll.indeterminate = some;
+}
+
+$("selAll").addEventListener("change", () => {
+  const on = $("selAll").checked;
+  selected.clear();
+  document.querySelectorAll('#rows input[type="checkbox"]').forEach((cb) => {
+    cb.checked = on;
+    $("row-" + cb.dataset.id).classList.toggle("sel", on);
+    if (on) selected.add(cb.dataset.id);
+  });
+  syncSelectionUI();
+});
 
 $("reloadBtn").addEventListener("click", async () => {
   $("reloadBtn").disabled = true;
-  try {
-    await loadAssessees();
-  } catch (err) {
-    alert(friendly(err));
-  } finally {
-    $("reloadBtn").disabled = false;
-  }
+  try { await loadAssessees(); }
+  catch (err) { alert(friendly(err)); }
+  finally { $("reloadBtn").disabled = false; }
 });
 
 // --- Run sync --------------------------------------------------------------
 $("runBtn").addEventListener("click", async () => {
   const scope = $("scope").value;
   const headless = $("headless").checked;
-  $("runBtn").disabled = true;
+  const jobs = JOBS.filter((j) => selected.has(j.assesseeId));
+  if (!jobs.length) return;
+  setControlsDisabled(true);
+  for (const j of jobs) setRow(j.assesseeId, { level: "info", pct: 0, msg: "queued" });
   try {
-    // Reset board state.
-    for (const j of JOBS) setPan(j.assesseeId, "info", "queued", true);
-    await window.connector.runSync(JOBS, scope, headless);
+    await window.connector.runSync(jobs, scope, headless);
   } catch (err) {
     alert(friendly(err));
   } finally {
-    $("runBtn").disabled = false;
+    setControlsDisabled(false);
   }
 });
 
+function setControlsDisabled(on) {
+  $("runBtn").disabled = on || selected.size === 0;
+  $("reloadBtn").disabled = on;
+  $("selAll").disabled = on;
+  $("scope").disabled = on;
+  document.querySelectorAll('#rows input[type="checkbox"]').forEach((cb) => (cb.disabled = on));
+}
+
 // Live per-PAN events from the pool.
 window.connector.onSyncEvent((evt) => {
-  const level = evt.level || "info";
-  setPan(evt.assesseeId, level, `${evt.phase}: ${evt.message}`);
+  setRow(evt.assesseeId, { level: evt.level || "info", pct: evt.pct, msg: `${evt.message}` });
 });
 
-function setPan(assesseeId, level, message, replace) {
-  const el = $("pan-" + assesseeId);
+// Update one row's bar + pill + message. pct undefined → keep current width.
+function setRow(assesseeId, { level, pct, msg }) {
+  const el = $("row-" + assesseeId);
   if (!el) return;
+  const bar = el.querySelector(".bar-in");
   const pill = el.querySelector(".pill");
+  const txt = el.querySelector(".txt");
+  const pctEl = el.querySelector(".pct");
+
+  if (typeof pct === "number") {
+    bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    pctEl.textContent = Math.round(pct) + "%";
+  }
+  bar.classList.toggle("ok", level === "success");
+  bar.classList.toggle("err", level === "error");
+  if (level === "error") { bar.style.width = "100%"; pctEl.textContent = "—"; }
+
   pill.className = "pill " + level;
-  pill.textContent = { info: "running", success: "done", warn: "todo", error: "error" }[level] || level;
-  const msg = el.querySelector(".msg");
-  const line = document.createElement("div");
-  line.textContent = message;
-  if (replace) msg.innerHTML = "";
-  msg.appendChild(line);
-  msg.scrollTop = msg.scrollHeight;
+  pill.textContent = { info: "running", success: "done", warn: "note", error: "error" }[level] || level;
+  if (msg) txt.textContent = msg;
 }
 
 function friendly(err) {
   const m = String((err && err.message) || err);
   if (m.includes("auth/invalid-credential") || m.includes("auth/wrong-password"))
-    return "Wrong email or password. If you use Google to sign in to ProHippo, use the “Sign in with Google” button above instead.";
+    return "Wrong email or password. If you use Google to sign in to ProHippo, use the “Sign in with Google” button above.";
   if (m.includes("auth/user-not-found")) return "No such account. If you sign in with Google, use the Google button above.";
   if (m.includes("network")) return "Network error — check your connection.";
   return m.replace(/^Error:\s*/, "");

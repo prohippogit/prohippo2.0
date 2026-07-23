@@ -187,9 +187,9 @@ async function login(page, cred, emit) {
     const { status, state: next } = await page.evaluate(tickInPage, { creds, state });
     state = next;
 
-    if (status === "dual") emit("login", "Dual login — taking over the existing session…");
-    else if (status === "userid") emit("login", "Entered User ID…");
-    else if (status === "password") emit("login", "Entered password…");
+    if (status === "dual") emit("login", "Dual login — taking over the existing session…", "info", 8);
+    else if (status === "userid") emit("login", "Entered User ID…", "info", 8);
+    else if (status === "password") emit("login", "Entered password…", "info", 14);
     else if (status === "expired-retrying") emit("login", "Session expired — retrying login…", "warn");
 
     if (status === "logged-in") break;
@@ -201,19 +201,36 @@ async function login(page, cred, emit) {
     }
   }
 
-  // We're off the login screen. The SPA can sit on a half-loaded route that just
-  // spins after an automated login; nudge the Angular router to the Dashboard
-  // (hash navigation is safe — same technique the sync uses), then settle.
-  emit("login", "Reaching dashboard…");
-  await page.evaluate((hash) => { location.hash = hash; }, PORTAL.dashboardHash);
-  await page.waitForFunction(
-    () => /dashboard/i.test(location.hash) && !/\/login/i.test(location.href),
-    null,
-    { timeout: 8000 }
-  ).catch(() => { /* best-effort; some portals land on dashboard without the hash */ });
-  await jsleep(400, 800);
-
-  emit("login", "Logged in — on the portal dashboard", "success");
+  // We're off the login screen and the session cookie is set. The sync calls the
+  // JSON API directly with that cookie, so we do NOT navigate anywhere — any URL
+  // change (even a hash nudge to the dashboard) trips the portal's "disabled
+  // Back/Forward — Logout?" guard. Just settle so the cookie is fully in place.
+  await jsleep(900, 1500);
+  emit("login", "Logged in", "success", 20);
 }
 
-module.exports = { login };
+// The portal pops a "For security reasons… Are you sure you want to Logout?"
+// modal on any navigation. If it ever shows, keep clicking "No" so it never
+// blocks the sync. Port of dismissLogoutDialog from the extension. Returns a
+// stop() function; run it for the whole sync and stop() in a finally.
+function startLogoutGuard(page) {
+  let stopped = false;
+  const tick = async () => {
+    if (stopped) return;
+    try {
+      await page.evaluate(() => {
+        const txt = document.body.innerText || "";
+        if (!/want to logout|disabled back/i.test(txt)) return;
+        const btn = [...document.querySelectorAll("button, a")]
+          .filter((el) => el && el.offsetParent !== null)
+          .find((x) => /^(no|cancel)$/i.test((x.textContent || "").trim()));
+        if (btn) btn.click();
+      });
+    } catch { /* page busy / navigating — try again next tick */ }
+    if (!stopped) setTimeout(tick, 400);
+  };
+  setTimeout(tick, 200);
+  return () => { stopped = true; };
+}
+
+module.exports = { login, startLogoutGuard };

@@ -9,53 +9,63 @@
 <body>
   <header class="bar">
     <div class="brand">
-      <span class="logo">◆</span>
+      <img class="mark" src="assets/prohippo-mark.png" alt="ProHippo" />
       <div>
-        <div class="title">ProHippo Connector</div>
+        <div class="title">ProHippo <span>Connector</span></div>
         <div class="tag">Parallel, human-paced portal sync</div>
       </div>
     </div>
-    <div id="who" class="who">Not signed in</div>
+    <div id="who" class="who"></div>
   </header>
 
   <!-- Sign-in -->
-  <section id="signinCard" class="card">
-    <h2>Sign in</h2>
-    <p class="muted">Use your ProHippo practitioner login — same account as the web app. The connector uses it only to fetch stored portal credentials and push data back.</p>
-    <button id="googleBtn" class="google">Sign in with Google</button>
-    <div class="divider"><span>or with email</span></div>
-    <div class="row">
+  <section id="signinCard" class="signin-wrap">
+    <div class="signin">
+      <img class="logo-full" src="assets/prohippo-logo.png" alt="ProHippo" />
+      <h2>Sign in to continue</h2>
+      <p class="muted">Same account as the web app. Used only to fetch your stored portal logins and push data back.</p>
+      <button id="googleBtn" class="google">Sign in with Google</button>
+      <div class="divider"><span>or with email</span></div>
       <input id="email" type="email" placeholder="you@firm.in" autocomplete="username" />
       <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
-      <button id="signinBtn" class="primary">Sign in</button>
+      <button id="signinBtn" class="primary block">Sign in</button>
+      <div id="signinErr" class="err"></div>
     </div>
-    <div id="signinErr" class="err"></div>
+    <div class="signin-foot">Operated by MEHTAJI BIZCON LLP · credentials stay encrypted server-side and in-memory only.</div>
   </section>
 
   <!-- Sync -->
-  <section id="syncCard" class="card hidden">
-    <div class="sync-head">
-      <h2>Run sync</h2>
+  <section id="syncCard" class="hidden">
+    <div class="toolbar">
+      <div class="tb-left">
+        <h2>Sync</h2>
+        <span id="selCount" class="sel-count">0 selected</span>
+      </div>
       <div class="controls">
-        <label>Scope
+        <label class="ctl">Scope
           <select id="scope">
             <option value="eproc">e-Proceedings (fast)</option>
-            <option value="appeals">Appeals only</option>
+            <option value="appeals">Appeals only (Form 35)</option>
             <option value="all">Everything</option>
           </select>
         </label>
         <label class="chk"><input type="checkbox" id="headless" /> Run hidden</label>
         <button id="reloadBtn" class="ghost">Reload</button>
-        <button id="runBtn" class="primary">Sync selected PANs</button>
+        <button id="runBtn" class="primary" disabled>Sync selected</button>
       </div>
     </div>
-    <p class="muted">Up to 5 PANs sync at once, each in its own isolated browser session, started a few seconds apart. Everything is randomly paced to stay within safe, human-like limits on your home connection.</p>
-    <div id="board" class="board"></div>
-  </section>
+    <p class="muted note">Up to 5 PANs sync at once, each in its own isolated browser session, started a few seconds apart. Every step is randomly paced to stay within safe, human-like limits on your home connection.</p>
 
-  <footer class="foot">
-    Operated by MEHTAJI BIZCON LLP · interim parallel-sync tier · credentials stay encrypted server-side and in-memory only.
-  </footer>
+    <div class="list" id="list">
+      <div class="lhead">
+        <label class="cbx"><input type="checkbox" id="selAll" /></label>
+        <div class="col-name">Assessee</div>
+        <div class="col-prog">Progress</div>
+        <div class="col-status">Status</div>
+      </div>
+      <div id="rows"></div>
+    </div>
+  </section>
 
   <script src="renderer.js"></script>
 </body>

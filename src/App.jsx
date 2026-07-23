@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from './auth';
 import Login from './Login';
 import Landing from './Landing';
 import Onboarding from './Onboarding';
+import ConnectorDownload from './ConnectorDownload';
 
 function Splash({ label = "Loading your practice…" }) {
   return (
@@ -116,6 +117,7 @@ function Shell() {
       case "communications": content = <Communications/>; break;
       case "ai": content = <AiParser onOpenNotice={openReview}/>; break;
       case "reports": content = <Reports/>; break;
+      case "connector": content = <ConnectorDownload/>; break;
       case "settings": content = <SettingsPage/>; break;
       default: content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>;
     }

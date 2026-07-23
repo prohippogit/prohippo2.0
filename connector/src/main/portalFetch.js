@@ -18,6 +18,7 @@
 const { jsleep, PACE } = require("./pacing");
 const { PATHS, FORM, apiCall, getDoc, proceedings } = require("./portalApi");
 const { ingestSyncMessage } = require("./ingest");
+const { syncAppealForms } = require("./portalAppeals");
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -101,7 +102,7 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
     // Unchanged closed proceeding (or unchanged active one in eproc mode): skip
     // its detail call and every per-notice reply call entirely.
     if (countMatches && (isClosed(r) || scope === "eproc")) continue;
-    emit("fetch", `Notices ${i + 1}/${targets.length} — ${(r.name || "proceeding").slice(0, 28)}…`);
+    emit("fetch", `Notices ${i + 1}/${targets.length} — ${(r.name || "proceeding").slice(0, 28)}…`, "info", 30 + Math.round(((i + 1) / targets.length) * 50));
     const det = await apiCall(page, {
       path: PATHS.GET_ENTITY, serviceName: "eProceedingDetailsService",
       payload: { serviceName: "eProceedingDetailsService", proceedingReqId: r.proceedingReqId, pan, header: FORM },
@@ -164,7 +165,7 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
     const kp = knownByProc[r.proceedingReqId] || {};
     if (isClosed(r) && kp.o) continue;
     if (scope === "eproc" && !isClosed(r) && !r.closureSeqNo) continue;
-    emit("fetch", `Orders — ${(r.name || "proceeding").slice(0, 28)}…`);
+    emit("fetch", `Orders — ${(r.name || "proceeding").slice(0, 28)}…`, "info", 84);
     try {
       const clo = await apiCall(page, {
         path: PATHS.GET_ENTITY, serviceName: "downloadClosureOrder",
@@ -210,13 +211,11 @@ async function syncPortalData(page, job, scope, emit, summary) {
   job.knowns = job.knowns || {};
 
   if (scope === "appeals") {
-    // TODO(port pass 3): syncAppealForms — filed Form 35s via viewFiledForms +
-    // pdfweb render (deepMergeShape/template), then ingest kind:"appealForm".
-    emit("fetch", "Appeals (Form 35) fetch — coming in pass 3", "warn");
+    await syncAppealForms(page, job, pan, summary, emit);
     return summary;
   }
 
-  emit("fetch", "Fetching e-Proceedings (FYA)…");
+  emit("fetch", "Fetching e-Proceedings (FYA)…", "info", 24);
   const rows = [];
   const push = (res, tab) => {
     const list = res && res.json && res.json.eProceedingPaginatedRequests;
@@ -242,15 +241,15 @@ async function syncPortalData(page, job, scope, emit, summary) {
 
   if (!rows.length) { emit("fetch", "Nothing in FYA — up to date"); return summary; }
 
-  emit("fetch", `${rows.length} proceeding(s) — saving…`);
+  emit("fetch", `${rows.length} proceeding(s) — saving…`, "info", 30);
   await ingestSyncMessage({ assesseeId: job.assesseeId, kind: "proceedings", proceedings: rows });
   summary.proceedings = rows.length;
 
   await syncNotices(page, job, pan, rows, summary, emit);
 
   if (scope === "all") {
-    // TODO(port pass 3): syncAppealForms on a full sync too.
-    emit("fetch", "Form 35 appeals fetch — coming in pass 3", "warn");
+    try { await syncAppealForms(page, job, pan, summary, emit); }
+    catch { /* appeals are best-effort; don't fail the whole sync */ }
   }
   return summary;
 }

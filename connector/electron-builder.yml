@@ -1,9 +1,11 @@
 # electron-builder packaging config.
 #
-# Signing is the real overhead of shipping this app (the scrape logic is already
-# written). Fill the signing blocks below when certificates are in hand:
-#   - Windows: Authenticode EV cert (avoids SmartScreen warnings).
-#   - macOS:   Apple Developer ID + notarization (avoids Gatekeeper blocks).
+# Builds an unsigned .dmg (macOS) and .exe NSIS installer (Windows) with the
+# ProHippo icon. Unsigned builds work but show a one-time OS warning on first
+# open (Gatekeeper on Mac, SmartScreen on Windows) — see README. To remove the
+# warnings later, add certs to CI:
+#   - Windows: Authenticode (EV) cert.
+#   - macOS:   Apple Developer ID + notarization.
 appId: in.prohippo.connector
 productName: ProHippo Connector
 copyright: Copyright © MEHTAJI BIZCON LLP
@@ -12,34 +14,43 @@ directories:
   output: release
   buildResources: build
 
+# The app drives the user's own Google Chrome (channel: "chrome"), so we do NOT
+# bundle a browser — keeps the download small. Chrome is a prerequisite.
 files:
   - src/**/*
   - package.json
   - "!**/*.map"
 
-# Playwright's Chromium is fetched by the postinstall step; bundle it with the
-# app so the user doesn't download a browser on first run.
-extraResources:
-  - from: .playwright
-    to: playwright
-    filter: ["**/*"]
+# Stable asset names (no version) so the website can always link the same URL:
+#   https://github.com/prohippogit/prohippo2.0/releases/latest/download/ProHippo-Connector-mac.dmg
+#   https://github.com/prohippogit/prohippo2.0/releases/latest/download/ProHippo-Connector-win.exe
+artifactName: "ProHippo-Connector-${os}.${ext}"
 
 win:
   target: [nsis]
-  # certificateFile / certificatePassword — set via env for CI signing.
+  icon: build/icon.png
+  # certificateFile / certificatePassword — set via env in CI when a cert exists.
 
 mac:
   target: [dmg]
+  icon: build/icon.png
   category: public.app-category.business
-  hardenedRuntime: true
-  # notarize: true  # requires APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
+  # hardenedRuntime/notarize require an Apple Developer ID; enable when we have one.
+
+dmg:
+  title: "ProHippo Connector"
 
 nsis:
   oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
 
-# Auto-update via electron-updater. Point this at the release host once chosen
-# (GitHub Releases or a private bucket).
+# Publish built installers to a GitHub Release. The website links to
+# releases/latest/download/<artifactName> (public URL; the download button on
+# prohippo.in is what's gated behind login).
 publish:
-  provider: generic
-  url: https://updates.prohippo.in/connector/
+  provider: github
+  owner: prohippogit
+  repo: prohippo2.0
+  releaseType: release

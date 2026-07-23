@@ -29,8 +29,15 @@ async function launchHardenedBrowser(headless) {
   const opts = { headless, args: STEALTH_ARGS, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
   try {
     return await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
-  } catch {
-    return await chromium.launch(opts); // fall back to bundled Chromium
+  } catch (chromeErr) {
+    try {
+      return await chromium.launch(opts); // bundled Chromium (present in dev only)
+    } catch {
+      throw new Error(
+        "Google Chrome is required to run the sync. Please install it from " +
+        "google.com/chrome, then try again."
+      );
+    }
   }
 }
 

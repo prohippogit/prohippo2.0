@@ -84,6 +84,11 @@ export const fmtDateLong = (iso) => {
   const d = new Date(iso);
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
+// Date + time, e.g. "23 Jul 2026, 2:18 PM" — for "last synced at" displays.
+export const fmtDateTime = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+};
 export const daysFromNow = (iso) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);

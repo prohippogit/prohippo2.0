@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, titleCase, fmtINR, fmtDate, fmtDateLong, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO } from './store';
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
@@ -1024,7 +1024,7 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
             />
           )}
           <div className="muted" style={{fontSize: 11.5}}>
-            Last synced: {a.portalLastSyncedAt ? fmtDateLong(a.portalLastSyncedAt) : "never"}
+            Last synced: {a.portalLastSyncedAt ? fmtDateTime(a.portalLastSyncedAt) : "never"}
             {typeof a.portalProceedingCount === "number" ? ` · ${a.portalProceedingCount} proceedings` : ""}
             {typeof a.portalNoticeCount === "number" ? ` · ${a.portalNoticeCount} notices` : ""}
           </div>

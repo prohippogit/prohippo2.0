@@ -66,18 +66,19 @@ async function runPool(jobs, onEvent, opts = {}) {
         Object.defineProperty(navigator, "webdriver", { get: () => undefined });
       });
 
-      const emit = (phase, message, level = "info") =>
-        onEvent && onEvent({ assesseeId: job.assesseeId, pan: job.pan, phase, message, level });
+      const emit = (phase, message, level = "info", pct) =>
+        onEvent && onEvent({ assesseeId: job.assesseeId, pan: job.pan, phase, message, level, pct });
 
       try {
-        emit("start", `Sync started (${scope})`);
+        emit("start", `Sync started (${scope})`, "info", 3);
         const r = await runPanSync({ context, job, scope, emit });
         results.push({ assesseeId: job.assesseeId, ok: true, ...r });
         const parts = [];
         if (r.proceedings) parts.push(`${r.proceedings} proceedings`);
         if (r.notices) parts.push(`${r.notices} docs`);
         if (r.responses) parts.push(`${r.responses} replies`);
-        emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success");
+        if (r.appeals) parts.push(`${r.appeals} appeals`);
+        emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success", 100);
       } catch (err) {
         results.push({ assesseeId: job.assesseeId, ok: false, error: String(err && err.message || err) });
         emit("error", String(err && err.message || err), "error");

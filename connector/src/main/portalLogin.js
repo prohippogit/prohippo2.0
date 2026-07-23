@@ -187,9 +187,9 @@ async function login(page, cred, emit) {
     const { status, state: next } = await page.evaluate(tickInPage, { creds, state });
     state = next;
 
-    if (status === "dual") emit("login", "Dual login — taking over the existing session…");
-    else if (status === "userid") emit("login", "Entered User ID…");
-    else if (status === "password") emit("login", "Entered password…");
+    if (status === "dual") emit("login", "Dual login — taking over the existing session…", "info", 8);
+    else if (status === "userid") emit("login", "Entered User ID…", "info", 8);
+    else if (status === "password") emit("login", "Entered password…", "info", 14);
     else if (status === "expired-retrying") emit("login", "Session expired — retrying login…", "warn");
 
     if (status === "logged-in") break;
@@ -206,7 +206,7 @@ async function login(page, cred, emit) {
   // change (even a hash nudge to the dashboard) trips the portal's "disabled
   // Back/Forward — Logout?" guard. Just settle so the cookie is fully in place.
   await jsleep(900, 1500);
-  emit("login", "Logged in", "success");
+  emit("login", "Logged in", "success", 20);
 }
 
 // The portal pops a "For security reasons… Are you sure you want to Logout?"

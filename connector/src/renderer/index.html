@@ -7,23 +7,9 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- ProHippo hippo mark, reused in header + login card via <use> -->
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="ph-hippo" viewBox="0 0 64 64">
-      <ellipse cx="19" cy="19" rx="6.5" ry="7.5" fill="currentColor"/>
-      <ellipse cx="45" cy="19" rx="6.5" ry="7.5" fill="currentColor"/>
-      <rect x="10" y="21" width="44" height="31" rx="15.5" fill="currentColor"/>
-      <circle cx="24" cy="30" r="2.6" fill="#4F46BE"/>
-      <circle cx="40" cy="30" r="2.6" fill="#4F46BE"/>
-      <rect x="19" y="35" width="26" height="15" rx="7.5" fill="#EDE7FF"/>
-      <circle cx="28" cy="43" r="2.3" fill="#4F46BE"/>
-      <circle cx="36" cy="43" r="2.3" fill="#4F46BE"/>
-    </symbol>
-  </svg>
-
   <header class="bar">
     <div class="brand">
-      <span class="mark"><svg class="hippo"><use href="#ph-hippo"/></svg></span>
+      <img class="mark" src="assets/prohippo-mark.png" alt="ProHippo" />
       <div>
         <div class="title">ProHippo <span>Connector</span></div>
         <div class="tag">Parallel, human-paced portal sync</div>
@@ -35,8 +21,8 @@
   <!-- Sign-in -->
   <section id="signinCard" class="signin-wrap">
     <div class="signin">
-      <span class="mark lg"><svg class="hippo"><use href="#ph-hippo"/></svg></span>
-      <h2>Sign in to ProHippo</h2>
+      <img class="logo-full" src="assets/prohippo-logo.png" alt="ProHippo" />
+      <h2>Sign in to continue</h2>
       <p class="muted">Same account as the web app. Used only to fetch your stored portal logins and push data back.</p>
       <button id="googleBtn" class="google">Sign in with Google</button>
       <div class="divider"><span>or with email</span></div>

@@ -7,10 +7,12 @@ import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  signInWithCustomToken,
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
-import { auth } from "./firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions } from "./firebase";
 
 const EMAIL_KEY = "prohippo-email-for-signin";
 
@@ -39,6 +41,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [pendingEmail, setPendingEmail] = React.useState(null); // email a link was just sent to
+  const [otpPending, setOtpPending] = React.useState(null); // { channel, target } a code was sent to
   const [error, setError] = React.useState(null);
   const [completingLink, setCompletingLink] = React.useState(false);
 
@@ -64,7 +67,7 @@ export function AuthProvider({ children }) {
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
-      if (u) setPendingEmail(null);
+      if (u) { setPendingEmail(null); setOtpPending(null); }
     });
   }, []);
 
@@ -113,14 +116,53 @@ export function AuthProvider({ children }) {
         return false;
       }
     },
+    // Passwordless OTP login. `channel` is "email" (live) or "sms" (later).
+    // On success a code is sent and { channel, target } is remembered so the
+    // UI can switch to the code-entry step.
+    requestOtp: async (channel, target) => {
+      setError(null);
+      const clean = (target || "").trim();
+      if (channel === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+        setError("Please enter a valid email address.");
+        return null;
+      }
+      try {
+        const call = httpsCallable(functions, "requestOtp");
+        const res = await call({ channel, target: channel === "email" ? clean.toLowerCase() : clean });
+        setOtpPending({ channel, target: channel === "email" ? clean.toLowerCase() : clean });
+        return res.data || { ok: true };
+      } catch (e) {
+        console.error("requestOtp:", e);
+        setError(e?.message || "Could not send the code. Please try again.");
+        return null;
+      }
+    },
+    // Verify a code for the pending challenge and sign the user in.
+    verifyOtp: async (code) => {
+      setError(null);
+      if (!otpPending) { setError("Request a code first."); return false; }
+      try {
+        const call = httpsCallable(functions, "verifyOtp");
+        const res = await call({ channel: otpPending.channel, target: otpPending.target, code: String(code || "") });
+        const token = res.data?.token;
+        if (!token) { setError("Could not verify the code. Please try again."); return false; }
+        await signInWithCustomToken(auth, token);
+        return true;
+      } catch (e) {
+        console.error("verifyOtp:", e);
+        setError(e?.message || "That code didn't work. Please try again.");
+        return false;
+      }
+    },
+    resetOtp: () => setOtpPending(null),
     resetPendingEmail: () => setPendingEmail(null),
     clearError: () => setError(null),
     signOutUser: () => signOut(auth),
-  }), []);
+  }), [otpPending]);
 
   const value = React.useMemo(
-    () => ({ user, loading: loading || completingLink, pendingEmail, error, ...api }),
-    [user, loading, completingLink, pendingEmail, error, api]
+    () => ({ user, loading: loading || completingLink, pendingEmail, otpPending, error, ...api }),
+    [user, loading, completingLink, pendingEmail, otpPending, error, api]
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

@@ -186,11 +186,12 @@ export function DataProvider({ children }) {
     return {
       notify,
       // profile
-      createProfile: async ({ ownerName, firmName }) => {
+      createProfile: async ({ ownerName, firmName, phone }) => {
         await setDoc(userRef(), {
           ownerName: (ownerName || "").trim(),
           firmName: (firmName || "").trim(),
           email: user?.email || "",
+          phone: (phone || "").trim(),
           invoiceSeq: 120,
           createdAt: new Date().toISOString(),
         }, { merge: true });

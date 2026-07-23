@@ -26,6 +26,14 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 // The value must be 32 random bytes, base64-encoded (openssl rand -base64 32).
 const credentialEncKey = defineSecret("CREDENTIAL_ENC_KEY");
 
+// ---- Passwordless OTP login (Email now via Resend; SMS via 2Factor later) ----
+// Resend API key for sending the login email.  firebase functions:secrets:set RESEND_API_KEY
+const resendApiKey = defineSecret("RESEND_API_KEY");
+// A server-only pepper mixed into every OTP hash, so a Firestore leak never
+// exposes a usable code.  Set once to 32 random bytes, base64-encoded:
+//   openssl rand -base64 32 | firebase functions:secrets:set OTP_PEPPER
+const otpPepper = defineSecret("OTP_PEPPER");
+
 // Model IDs are config, not code — swap them here if Google renames a model.
 // To list the models your key can use, run:
 //   curl "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY"
@@ -857,4 +865,236 @@ exports.ingestPortalAppealForm = onCall({ region: "us-central1", maxInstances: 1
   const id = "f35_" + crypto.createHash("sha1").update(docKey).digest("hex").slice(0, 20);
   await noticesCol.doc(id).set({ ...base, createdAt: new Date().toISOString() }, { merge: true });
   return { ok: true, added: true, linked: Boolean(proceedingReqId) };
+});
+
+/* ============================================================
+   Passwordless OTP login  (channel-agnostic engine)
+
+   One engine, two delivery channels:
+     • email  → live now, sent via Resend
+     • sms    → wired but disabled until the DLT header PRHIPO is active on
+                2Factor; enable by flipping CHANNEL_ENABLED.sms and filling in
+                sendSmsOtp() (endpoint sketched below).
+
+   Flow:  requestOtp → we generate a 6-digit code, store it HASHED (sha256 with
+   a server pepper + per-code salt) in an admin-only `otpChallenges` doc with a
+   short expiry, and send it.  verifyOtp → check the hash, attempt cap and
+   expiry, then resolve/create the Firebase user and mint a CUSTOM TOKEN. The
+   client calls signInWithCustomToken, so Firestore rules and every other
+   callable keep working unchanged.
+
+   The `otpChallenges` collection needs no security rule: firestore.rules denies
+   everything outside users/{uid}, so only these Admin-SDK functions touch it.
+   ============================================================ */
+
+const CHANNEL_ENABLED = { email: true, sms: false };
+
+const OTP_TTL_MS = 10 * 60 * 1000; // a code is valid for 10 minutes
+const OTP_MAX_ATTEMPTS = 5; // wrong tries before the challenge is burned
+const OTP_RESEND_COOLDOWN_MS = 30 * 1000; // min gap between two sends
+const OTP_MAX_SENDS_PER_WINDOW = 5; // sends allowed per rolling window
+const OTP_SEND_WINDOW_MS = 60 * 60 * 1000; // the rolling window (1 hour)
+
+// The From address for the login email. Resend requires a VERIFIED domain in
+// production — add your domain in the Resend dashboard, complete the DNS
+// records, then set this to an address on it (e.g. "ProHippo <login@yourdomain>").
+// `onboarding@resend.dev` works out of the box but only delivers to the Resend
+// account owner's own email — fine for a first test, not for real users.
+const OTP_EMAIL_FROM = "ProHippo <onboarding@resend.dev>";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const normEmail = (v) => String(v || "").trim().toLowerCase();
+const isDev = () => process.env.FUNCTIONS_EMULATOR === "true";
+
+function genOtp() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+function hashOtp(code, salt) {
+  return crypto.createHash("sha256").update(`${otpPepper.value()}|${salt}|${code}`).digest("hex");
+}
+// A stable, non-reversible doc id for a channel+target (peppered so the id
+// itself never leaks the email/phone).
+function challengeId(channel, target) {
+  return crypto.createHash("sha256").update(`${otpPepper.value()}|${channel}|${target}`).digest("hex");
+}
+function safeEqualHex(a, b) {
+  const bufA = Buffer.from(String(a), "hex");
+  const bufB = Buffer.from(String(b), "hex");
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+function otpEmailHtml(code) {
+  return `<!doctype html><html><body style="margin:0;background:#F7F6FB;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F6FB;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background:#ffffff;border:1px solid #ECE9F5;border-radius:16px;padding:32px;">
+        <tr><td style="font-weight:800;font-size:20px;color:#2A1B4A;letter-spacing:-0.02em;">ProHippo</td></tr>
+        <tr><td style="padding-top:20px;font-size:14px;color:#6B6480;line-height:1.5;">Use this code to sign in to your ProHippo account:</td></tr>
+        <tr><td style="padding:22px 0;">
+          <div style="font-size:34px;font-weight:800;letter-spacing:10px;color:#2A1B4A;background:#F3F0FB;border-radius:12px;padding:16px 0;text-align:center;">${code}</div>
+        </td></tr>
+        <tr><td style="font-size:13px;color:#6B6480;line-height:1.5;">This code expires in 10 minutes. If you didn't request it, you can safely ignore this email — no one can sign in without it.</td></tr>
+        <tr><td style="padding-top:22px;border-top:1px solid #ECE9F5;margin-top:10px;font-size:11px;color:#9A93AD;">Income-tax litigation &amp; practice management</td></tr>
+      </table>
+    </td></tr>
+  </table></body></html>`;
+}
+
+async function sendEmailOtp(email, code) {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey.value()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: OTP_EMAIL_FROM,
+      to: [email],
+      subject: `${code} is your ProHippo sign-in code`,
+      html: otpEmailHtml(code),
+      text: `${code} is your ProHippo sign-in code. It expires in 10 minutes. If you didn't request it, ignore this email.`,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error("Resend send failed:", res.status, detail.slice(0, 300));
+    throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again in a moment.");
+  }
+}
+
+// Placeholder for the SMS channel — filled in when the DLT header PRHIPO is
+// live on 2Factor. We generate the OTP; 2Factor only transports it, substituting
+// it into the approved template's XXXX variable:
+//   https://2factor.in/API/V1/{TWOFACTOR_API_KEY}/SMS/{phoneE164}/{code}/ProHippoLoginOTP
+// eslint-disable-next-line no-unused-vars
+async function sendSmsOtp(_phone, _code) {
+  throw new HttpsError("failed-precondition", "SMS login isn't switched on yet.");
+}
+
+async function resolveUserByEmail(email) {
+  try {
+    const u = await admin.auth().getUserByEmail(email);
+    if (!u.emailVerified) {
+      await admin.auth().updateUser(u.uid, { emailVerified: true }).catch(() => {});
+    }
+    return u.uid;
+  } catch (e) {
+    if (e.code === "auth/user-not-found") {
+      const u = await admin.auth().createUser({ email, emailVerified: true });
+      return u.uid;
+    }
+    throw e;
+  }
+}
+
+const OTP_OPTS = { region: "us-central1", secrets: [resendApiKey, otpPepper], maxInstances: 10 };
+
+// Step 1 — generate + send a one-time code.
+exports.requestOtp = onCall(OTP_OPTS, async (request) => {
+  const channel = String(request.data?.channel || "email");
+  if (!CHANNEL_ENABLED[channel]) {
+    throw new HttpsError("failed-precondition", channel === "sms" ? "SMS login isn't switched on yet — please use email." : "That sign-in method isn't available.");
+  }
+  if (channel !== "email") throw new HttpsError("invalid-argument", "Unsupported channel.");
+
+  const email = normEmail(request.data?.target);
+  if (!EMAIL_RE.test(email)) throw new HttpsError("invalid-argument", "Please enter a valid email address.");
+
+  const ref = db.collection("otpChallenges").doc(challengeId(channel, email));
+  const now = Date.now();
+  const snap = await ref.get();
+  let sendCount = 1;
+  let windowStart = now;
+  if (snap.exists) {
+    const d = snap.data();
+    if (d.lastSentAt && now - d.lastSentAt < OTP_RESEND_COOLDOWN_MS) {
+      const wait = Math.ceil((OTP_RESEND_COOLDOWN_MS - (now - d.lastSentAt)) / 1000);
+      throw new HttpsError("resource-exhausted", `Please wait ${wait}s before requesting another code.`);
+    }
+    const withinWindow = d.windowStart && now - d.windowStart < OTP_SEND_WINDOW_MS;
+    const priorSends = withinWindow ? d.sendCount || 0 : 0;
+    if (priorSends >= OTP_MAX_SENDS_PER_WINDOW) {
+      throw new HttpsError("resource-exhausted", "Too many codes requested for this email. Please try again later.");
+    }
+    sendCount = priorSends + 1;
+    windowStart = withinWindow ? d.windowStart : now;
+  }
+
+  const code = genOtp();
+  const salt = crypto.randomBytes(16).toString("base64");
+  await ref.set({
+    channel,
+    target: email,
+    codeHash: hashOtp(code, salt),
+    salt,
+    expiresAt: now + OTP_TTL_MS,
+    attempts: 0,
+    consumed: false,
+    lastSentAt: now,
+    windowStart,
+    sendCount,
+    updatedAt: new Date().toISOString(),
+  });
+
+  try {
+    await sendEmailOtp(email, code);
+  } catch (e) {
+    // In the emulator, don't fail the request if Resend isn't configured —
+    // the devCode below lets you complete the flow locally.
+    if (!isDev()) throw e;
+    console.warn("[dev] email send skipped/failed:", e.message || e);
+  }
+
+  const out = { ok: true, channel, cooldownSeconds: OTP_RESEND_COOLDOWN_MS / 1000, ttlSeconds: OTP_TTL_MS / 1000 };
+  // In the emulator, return the code so the flow is testable without Resend.
+  if (isDev()) { console.info(`[dev] OTP for ${email}: ${code}`); out.devCode = code; }
+  return out;
+});
+
+// Step 2 — verify a code and mint a Firebase custom token.
+exports.verifyOtp = onCall(OTP_OPTS, async (request) => {
+  const channel = String(request.data?.channel || "email");
+  if (!CHANNEL_ENABLED[channel] || channel !== "email") {
+    throw new HttpsError("failed-precondition", "That sign-in method isn't available.");
+  }
+  const email = normEmail(request.data?.target);
+  const code = String(request.data?.code || "").replace(/\D/g, "");
+  if (!EMAIL_RE.test(email) || code.length !== 6) {
+    throw new HttpsError("invalid-argument", "Enter the 6-digit code we emailed you.");
+  }
+
+  const ref = db.collection("otpChallenges").doc(challengeId(channel, email));
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "No code is pending for this email. Please request a new one.");
+  }
+  const d = snap.data();
+  const now = Date.now();
+  if (d.consumed) throw new HttpsError("failed-precondition", "That code was already used. Please request a new one.");
+  if (now > d.expiresAt) {
+    await ref.delete().catch(() => {});
+    throw new HttpsError("deadline-exceeded", "That code has expired. Please request a new one.");
+  }
+  if ((d.attempts || 0) >= OTP_MAX_ATTEMPTS) {
+    await ref.delete().catch(() => {});
+    throw new HttpsError("resource-exhausted", "Too many incorrect attempts. Please request a new code.");
+  }
+
+  if (!safeEqualHex(hashOtp(code, d.salt), d.codeHash)) {
+    const attempts = (d.attempts || 0) + 1;
+    await ref.set({ attempts }, { merge: true });
+    const left = OTP_MAX_ATTEMPTS - attempts;
+    if (left <= 0) {
+      await ref.delete().catch(() => {});
+      throw new HttpsError("resource-exhausted", "Too many incorrect attempts. Please request a new code.");
+    }
+    throw new HttpsError("permission-denied", `Incorrect code. ${left} ${left === 1 ? "try" : "tries"} left.`);
+  }
+
+  // Correct — burn the challenge and mint a token for the resolved account.
+  await ref.set({ consumed: true }, { merge: true });
+  const uid = await resolveUserByEmail(email);
+  const token = await admin.auth().createCustomToken(uid);
+  await ref.delete().catch(() => {});
+  return { token };
 });

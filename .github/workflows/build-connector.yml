@@ -41,6 +41,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Bake the Google "Desktop app" OAuth client into the build so sign-in
+      # works in the distributed app. Values come from repo secrets, never the
+      # repo. (Installed-app secrets aren't confidential; PKCE protects sign-in.)
+      - name: Write Google OAuth config
+        shell: bash
+        run: |
+          printf '{ "clientId": "%s", "clientSecret": "%s" }\n' \
+            "${GOOGLE_OAUTH_CLIENT_ID}" "${GOOGLE_OAUTH_CLIENT_SECRET}" > google-oauth.json
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+
       - name: Build installer
         run: npx electron-builder --publish never
 

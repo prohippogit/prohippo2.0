@@ -19,6 +19,7 @@ directories:
 files:
   - src/**/*
   - package.json
+  - google-oauth.json # written by CI from repo secrets (or your local dev copy)
   - "!**/*.map"
 
 # Stable asset names (no version) so the website can always link the same URL:

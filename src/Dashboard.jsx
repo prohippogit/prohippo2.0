@@ -59,7 +59,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
               onKeyDown={e => { if (e.key === "Enter") onSearch(query); }}
             />
           </div>
-          <InstallAppButton className="btn btn-secondary" label="Download app"/>
+          <InstallAppButton className="btn btn-secondary" label="Install web app"/>
           <div className="user-chip">
             <Avatar name={data.profile.ownerName || "You"} color="violet"/>
             <div style={{lineHeight: 1.2}}>

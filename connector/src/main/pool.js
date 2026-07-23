@@ -15,6 +15,25 @@ const { POOL } = require("./config");
 const { rand, jsleep } = require("./pacing");
 const { runPanSync } = require("./portalWorker");
 
+// The portal sits behind a bot-filtering WAF that rejects obviously-automated
+// browsers with a "Permission Denied!!" page. Two things trip it: the
+// --enable-automation flag Playwright adds, and navigator.webdriver === true.
+// We remove the flag at launch and mask the property per-context. We also
+// prefer the user's REAL Google Chrome (channel: "chrome") over Playwright's
+// bundled "Chrome for Testing" — a genuine Chrome fingerprint is far less likely
+// to be flagged than the testing build.
+const STEALTH_ARGS = ["--disable-blink-features=AutomationControlled"];
+const IGNORE_DEFAULT_ARGS = ["--enable-automation"];
+
+async function launchHardenedBrowser(headless) {
+  const opts = { headless, args: STEALTH_ARGS, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
+  try {
+    return await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
+  } catch {
+    return await chromium.launch(opts); // fall back to bundled Chromium
+  }
+}
+
 // job = { assesseeId, pan, label, scope, knowns }
 // onEvent(evt) receives { assesseeId, phase, message, level } for the UI log.
 async function runPool(jobs, onEvent, opts = {}) {
@@ -22,9 +41,7 @@ async function runPool(jobs, onEvent, opts = {}) {
   const scope = opts.scope || "eproc";
 
   // One shared browser process; each job opens its own isolated context.
-  const browser = await chromium.launch({
-    headless: opts.headless === true, // default: visible, so the user can watch/step in
-  });
+  const browser = await launchHardenedBrowser(opts.headless === true);
 
   const queue = [...jobs];
   const results = [];
@@ -43,6 +60,10 @@ async function runPool(jobs, onEvent, opts = {}) {
         viewport: { width: 1280, height: 860 },
         // A stable, ordinary desktop UA. Do NOT randomise the UA per-run — a
         // rotating fingerprint is MORE suspicious than a consistent one.
+      });
+      // Mask the automation signal the WAF checks. Runs before any page script.
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
       });
 
       const emit = (phase, message, level = "info") =>

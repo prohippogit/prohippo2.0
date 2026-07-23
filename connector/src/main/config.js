@@ -5,6 +5,9 @@
 // sync with ../../../src/firebaseConfig.js.
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+
 const firebaseConfig = {
   apiKey: "AIzaSyBgs1cgmwmF0OtT-2HzaPgXS1XuagUoDsU",
   authDomain: "prohippo2.firebaseapp.com",
@@ -34,4 +37,18 @@ const POOL = {
   startStagger: { min: 1500, max: 4200 }, // ms between launching workers
 };
 
-module.exports = { firebaseConfig, FUNCTIONS_REGION, PORTAL, POOL };
+// Google sign-in (system-browser loopback flow) needs a Google OAuth "Desktop
+// app" client. Its id + secret live in connector/google-oauth.json, which is
+// git-ignored (never committed). Shape:
+//   { "clientId": "....apps.googleusercontent.com", "clientSecret": "..." }
+// Returns null when not configured (Google button then shows a setup hint).
+function getGoogleOAuthConfig() {
+  try {
+    const p = path.join(__dirname, "..", "..", "google-oauth.json");
+    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (j && j.clientId && j.clientSecret) return { clientId: j.clientId, clientSecret: j.clientSecret };
+  } catch { /* not configured */ }
+  return null;
+}
+
+module.exports = { firebaseConfig, FUNCTIONS_REGION, PORTAL, POOL, getGoogleOAuthConfig };

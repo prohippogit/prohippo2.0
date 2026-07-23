@@ -8,6 +8,7 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const fb = require("./firebaseClient");
+const googleAuth = require("./googleAuth");
 const { runPool } = require("./pool");
 
 const isDev = process.argv.includes("--dev");
@@ -42,6 +43,11 @@ function send(channel, payload) {
 
 ipcMain.handle("auth:signIn", async (_e, { email, password }) => {
   return fb.signIn(email, password);
+});
+
+ipcMain.handle("auth:google", async () => {
+  const idToken = await googleAuth.getGoogleIdToken();
+  return fb.signInWithGoogleIdToken(idToken);
 });
 
 ipcMain.handle("auth:signOut", async () => {

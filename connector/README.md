@@ -63,8 +63,29 @@ npm install          # also runs `playwright install chromium`
 npm run dev          # launches Electron with devtools
 ```
 
-Sign in with a ProHippo practitioner account (same as the web app). The board
-shows one card per PAN with live progress.
+Sign in with a ProHippo practitioner account (same as the web app) — Google or
+email/password. The board shows one card per PAN with live progress.
+
+## Google sign-in setup (one-time)
+
+If your ProHippo account signs in **with Google**, the connector needs a Google
+OAuth "Desktop app" client so it can sign you in through your real browser
+(Google blocks sign-in inside embedded app windows). This is a one-time setup
+for your firm.
+
+1. Open the Google Cloud credentials page for the project:
+   **https://console.cloud.google.com/apis/credentials?project=prohippo2**
+   (sign in as the account that owns the ProHippo Firebase project).
+2. Click **+ CREATE CREDENTIALS → OAuth client ID**.
+3. **Application type: Desktop app**. Name it `ProHippo Connector`. Click **Create**.
+4. A box shows a **Client ID** and **Client secret** — keep it open.
+5. In the `connector` folder, copy `google-oauth.example.json` to
+   **`google-oauth.json`** and paste the two values in. (This file is
+   git-ignored — it never leaves your machine.)
+6. Restart the connector (`npm run dev`) and click **Sign in with Google**.
+
+The Google token is accepted by Firebase as the *same account* your web-app
+Google sign-in uses — same uid, same data.
 
 ## Build installers
 

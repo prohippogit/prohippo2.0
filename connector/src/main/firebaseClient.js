@@ -15,6 +15,8 @@ const { initializeApp } = require("firebase/app");
 const {
   getAuth,
   signInWithEmailAndPassword,
+  signInWithCredential,
+  GoogleAuthProvider,
   signOut,
 } = require("firebase/auth");
 const { getFunctions, httpsCallable } = require("firebase/functions");
@@ -47,6 +49,17 @@ async function signIn(email, password) {
   init();
   const cred = await signInWithEmailAndPassword(auth, email, password);
   return { uid: cred.user.uid, email: cred.user.email };
+}
+
+// Sign in with a Google ID token obtained via the desktop system-browser flow
+// (googleAuth.js). Firebase accepts Google tokens issued to any OAuth client in
+// the same project, so this is the same account the web app's Google sign-in
+// creates — same uid, same data.
+async function signInWithGoogleIdToken(idToken) {
+  init();
+  const cred = GoogleAuthProvider.credential(idToken);
+  const res = await signInWithCredential(auth, cred);
+  return { uid: res.user.uid, email: res.user.email };
 }
 
 async function signOutUser() {
@@ -106,6 +119,7 @@ async function listPortalAssessees() {
 module.exports = {
   init,
   signIn,
+  signInWithGoogleIdToken,
   signOutUser,
   currentUser,
   uid,

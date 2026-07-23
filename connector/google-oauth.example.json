@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy this file to google-oauth.json (same folder) and paste your Google OAuth 'Desktop app' client id + secret. google-oauth.json is git-ignored and never committed. See README > Google sign-in setup.",
+  "clientId": "PASTE_CLIENT_ID.apps.googleusercontent.com",
+  "clientSecret": "PASTE_CLIENT_SECRET"
+}

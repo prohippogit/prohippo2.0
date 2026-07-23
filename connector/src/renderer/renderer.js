@@ -5,6 +5,28 @@
 const $ = (id) => document.getElementById(id);
 
 // --- Sign in ---------------------------------------------------------------
+async function afterSignIn(user) {
+  $("who").textContent = user.email;
+  $("signinCard").classList.add("hidden");
+  $("syncCard").classList.remove("hidden");
+  await loadAssessees();
+}
+
+$("googleBtn").addEventListener("click", async () => {
+  $("signinErr").textContent = "";
+  $("googleBtn").disabled = true;
+  $("googleBtn").textContent = "Opening your browser… complete sign-in there";
+  try {
+    const user = await window.connector.signInWithGoogle();
+    await afterSignIn(user);
+  } catch (err) {
+    $("signinErr").textContent = friendly(err);
+  } finally {
+    $("googleBtn").disabled = false;
+    $("googleBtn").textContent = "Sign in with Google";
+  }
+});
+
 $("signinBtn").addEventListener("click", async () => {
   const email = $("email").value.trim();
   const password = $("password").value;
@@ -12,10 +34,7 @@ $("signinBtn").addEventListener("click", async () => {
   $("signinBtn").disabled = true;
   try {
     const user = await window.connector.signIn(email, password);
-    $("who").textContent = user.email;
-    $("signinCard").classList.add("hidden");
-    $("syncCard").classList.remove("hidden");
-    await loadAssessees();
+    await afterSignIn(user);
   } catch (err) {
     $("signinErr").textContent = friendly(err);
   } finally {
@@ -110,8 +129,8 @@ function setPan(assesseeId, level, message, replace) {
 function friendly(err) {
   const m = String((err && err.message) || err);
   if (m.includes("auth/invalid-credential") || m.includes("auth/wrong-password"))
-    return "Wrong email or password.";
-  if (m.includes("auth/user-not-found")) return "No such account.";
+    return "Wrong email or password. If you use Google to sign in to ProHippo, use the “Sign in with Google” button above instead.";
+  if (m.includes("auth/user-not-found")) return "No such account. If you sign in with Google, use the Google button above.";
   if (m.includes("network")) return "Network error — check your connection.";
   return m.replace(/^Error:\s*/, "");
 }

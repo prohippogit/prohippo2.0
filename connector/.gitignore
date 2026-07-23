@@ -13,6 +13,9 @@ release/
 .state/
 *.log
 
+# Google OAuth desktop client (id + secret) — machine-local, never committed
+google-oauth.json
+
 # OS
 .DS_Store
 Thumbs.db

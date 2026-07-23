@@ -16,7 +16,7 @@ const NAV_ITEMS = [
 ];
 
 const NAV_BOTTOM = [
-  { id: "connector", label: "Desktop App", icon: "download" },
+  { id: "connector", label: "Sync Connector App", icon: "download" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 

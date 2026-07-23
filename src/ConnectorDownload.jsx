@@ -96,9 +96,9 @@ export default function ConnectorDownload() {
   return (
     <div style={{maxWidth: 720, margin: "0 auto"}}>
       <div style={{marginBottom: 8}}>
-        <h1 style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", margin: 0}}>Desktop Connector</h1>
+        <h1 style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", margin: 0}}>Sync Connector App</h1>
         <p className="muted" style={{fontSize: 13.5, marginTop: 6, maxWidth: "62ch"}}>
-          The Connector syncs many PANs from the income-tax portal <b>in parallel</b>, straight from your
+          The Sync Connector syncs many PANs from the income-tax portal <b>in parallel</b>, straight from your
           own computer — much faster than one at a time, and safe for your IP. Install it once, sign in
           with this same ProHippo account, and the data flows into your Matters automatically.
         </p>

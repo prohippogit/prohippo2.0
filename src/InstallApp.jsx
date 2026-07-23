@@ -19,7 +19,7 @@ function HelpRow({ icon, title, steps }) {
   );
 }
 
-export function InstallAppButton({ className = "btn btn-secondary", label = "Install web app" }) {
+export function InstallAppButton({ className = "btn btn-secondary", label = "Desktop app" }) {
   const [available, setAvailable] = React.useState(canInstall());
   const [showHelp, setShowHelp] = React.useState(false);
   React.useEffect(() => onInstallChange(setAvailable), []);

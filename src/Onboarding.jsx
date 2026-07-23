@@ -9,6 +9,7 @@ export default function Onboarding() {
   const { createProfile, loadSampleData } = useData();
   const [ownerName, setOwnerName] = React.useState(user?.displayName || "");
   const [firmName, setFirmName] = React.useState("");
+  const [phone, setPhone] = React.useState(user?.phoneNumber || "");
   const [withSample, setWithSample] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState(null);
@@ -20,7 +21,7 @@ export default function Onboarding() {
     setSaving(true);
     setError(null);
     try {
-      await createProfile({ ownerName, firmName });
+      await createProfile({ ownerName, firmName, phone });
       if (withSample) await loadSampleData();
       // DataProvider's profile listener flips the app into the dashboard.
     } catch (e) {
@@ -53,7 +54,11 @@ export default function Onboarding() {
             </div>
             <div className="field">
               <label>Firm name</label>
-              <input value={firmName} placeholder="e.g. Jayesh Vyas & Co." onChange={(e) => setFirmName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") finish(); }} />
+              <input value={firmName} placeholder="e.g. Jayesh Vyas & Co." onChange={(e) => setFirmName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Mobile number <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+              <input value={phone} type="tel" inputMode="numeric" placeholder="e.g. +91 98250 11234" onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") finish(); }} />
             </div>
 
             <div

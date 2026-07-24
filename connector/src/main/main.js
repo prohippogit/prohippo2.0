@@ -41,8 +41,12 @@ function send(channel, payload) {
 
 // ---- IPC handlers ----------------------------------------------------------
 
-ipcMain.handle("auth:signIn", async (_e, { email, password }) => {
-  return fb.signIn(email, password);
+ipcMain.handle("auth:requestOtp", async (_e, { email }) => {
+  return fb.requestEmailOtp(email);
+});
+
+ipcMain.handle("auth:verifyOtp", async (_e, { email, code }) => {
+  return fb.verifyEmailOtp(email, code);
 });
 
 ipcMain.handle("auth:google", async () => {

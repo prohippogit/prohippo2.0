@@ -47,6 +47,12 @@ button.google:hover:not(:disabled){background:#f6f7f8}
 .signin .primary{margin-top:14px}
 .divider{display:flex;align-items:center;gap:12px;color:var(--muted-2);font-size:12px;margin:16px 0 4px}
 .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.signin .otp-sent{margin:12px auto 2px;max-width:34ch;font-size:12.5px}
+.signin #code{text-align:center;letter-spacing:6px;font-size:18px;font-weight:700}
+.otp-actions{display:flex;justify-content:space-between;margin-top:12px}
+.linkbtn{background:none;border:none;color:var(--muted-2);font-size:12px;padding:2px 4px;cursor:pointer}
+.linkbtn:hover:not(:disabled){color:var(--text)}
+.linkbtn:disabled{cursor:default;opacity:.7}
 .signin-foot{color:var(--muted-2);font-size:11.5px;margin-top:20px;line-height:1.5}
 
 /* ---- sync toolbar ---- */

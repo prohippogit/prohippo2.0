@@ -6,7 +6,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("connector", {
-  signIn: (email, password) => ipcRenderer.invoke("auth:signIn", { email, password }),
+  requestOtp: (email) => ipcRenderer.invoke("auth:requestOtp", { email }),
+  verifyOtp: (email, code) => ipcRenderer.invoke("auth:verifyOtp", { email, code }),
   signInWithGoogle: () => ipcRenderer.invoke("auth:google"),
   signOut: () => ipcRenderer.invoke("auth:signOut"),
   currentUser: () => ipcRenderer.invoke("auth:current"),

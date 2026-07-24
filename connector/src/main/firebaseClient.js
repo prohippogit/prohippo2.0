@@ -1,9 +1,14 @@
 // Firebase client for the connector's main process.
 //
 // Uses the SAME Firebase project and the SAME callable Cloud Functions as the
-// web app. The connector signs in as the practitioner (email/password) so that
-// getPortalCredential / ingestPortal* run with request.auth set — the functions
-// reject unauthenticated calls.
+// web app. The connector signs in as the practitioner — via Email OTP (the same
+// passwordless flow the web app uses) or Google — so that getPortalCredential /
+// ingestPortal* run with request.auth set; the functions reject unauthenticated
+// calls.
+//
+// Email OTP: requestOtp emails a 6-digit code; verifyOtp checks it and returns a
+// Firebase custom token, which we exchange with signInWithCustomToken. Both
+// callables are unauthenticated by design — they ARE the login mechanism.
 //
 // NOTE ON PERSISTENCE: the web SDK's default auth persistence is browser-only.
 // In Electron's main (Node) process we use in-memory persistence and sign in on
@@ -14,7 +19,7 @@
 const { initializeApp } = require("firebase/app");
 const {
   getAuth,
-  signInWithEmailAndPassword,
+  signInWithCustomToken,
   signInWithCredential,
   GoogleAuthProvider,
   signOut,
@@ -45,10 +50,26 @@ function init() {
   storage = getStorage(app);
 }
 
-async function signIn(email, password) {
+const normEmail = (v) => String(v || "").trim().toLowerCase();
+
+// Email OTP step 1 — ask the backend to email a 6-digit code.
+async function requestEmailOtp(email) {
   init();
-  const cred = await signInWithEmailAndPassword(auth, email, password);
-  return { uid: cred.user.uid, email: cred.user.email };
+  const { data } = await httpsCallable(functions, "requestOtp")({ channel: "email", target: normEmail(email) });
+  return data || { ok: true };
+}
+
+// Email OTP step 2 — verify the code, then sign in with the returned custom token.
+async function verifyEmailOtp(email, code) {
+  init();
+  const { data } = await httpsCallable(functions, "verifyOtp")({
+    channel: "email",
+    target: normEmail(email),
+    code: String(code || "").replace(/\D/g, ""),
+  });
+  if (!data || !data.token) throw new Error("Could not verify the code. Please try again.");
+  const res = await signInWithCustomToken(auth, data.token);
+  return { uid: res.user.uid, email: res.user.email };
 }
 
 // Sign in with a Google ID token obtained via the desktop system-browser flow
@@ -118,7 +139,8 @@ async function listPortalAssessees() {
 
 module.exports = {
   init,
-  signIn,
+  requestEmailOtp,
+  verifyEmailOtp,
   signInWithGoogleIdToken,
   signOutUser,
   currentUser,

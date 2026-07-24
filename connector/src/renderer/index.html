@@ -26,9 +26,24 @@
       <p class="muted">Same account as the web app. Used only to fetch your stored portal logins and push data back.</p>
       <button id="googleBtn" class="google">Sign in with Google</button>
       <div class="divider"><span>or with email</span></div>
-      <input id="email" type="email" placeholder="you@firm.in" autocomplete="username" />
-      <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
-      <button id="signinBtn" class="primary block">Sign in</button>
+
+      <!-- Step 1: request a code -->
+      <div id="otpRequest">
+        <input id="email" type="email" placeholder="you@firm.in" autocomplete="username" />
+        <button id="sendCodeBtn" class="primary block">Email me a code</button>
+      </div>
+
+      <!-- Step 2: enter the code (shown after a code is sent) -->
+      <div id="otpVerify" class="hidden">
+        <p class="muted otp-sent">We emailed a 6-digit code to <b id="otpEmail"></b>.</p>
+        <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit code" autocomplete="one-time-code" />
+        <button id="verifyBtn" class="primary block">Verify &amp; sign in</button>
+        <div class="otp-actions">
+          <button id="resendBtn" class="linkbtn" disabled>Resend code</button>
+          <button id="changeEmailBtn" class="linkbtn">Use a different email</button>
+        </div>
+      </div>
+
       <div id="signinErr" class="err"></div>
     </div>
     <div class="signin-foot">Operated by MEHTAJI BIZCON LLP · credentials stay encrypted server-side and in-memory only.</div>

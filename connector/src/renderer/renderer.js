@@ -27,19 +27,95 @@ $("googleBtn").addEventListener("click", async () => {
   }
 });
 
-$("signinBtn").addEventListener("click", async () => {
+// --- Email OTP (passwordless, same flow as the web app) --------------------
+let otpEmail = "";
+let resendTimer = null;
+
+function startResendCooldown(seconds) {
+  clearInterval(resendTimer);
+  let left = seconds || 30;
+  const btn = $("resendBtn");
+  const tick = () => {
+    if (left <= 0) {
+      clearInterval(resendTimer);
+      btn.disabled = false;
+      btn.textContent = "Resend code";
+    } else {
+      btn.disabled = true;
+      btn.textContent = `Resend in ${left}s`;
+      left -= 1;
+    }
+  };
+  tick();
+  resendTimer = setInterval(tick, 1000);
+}
+
+async function sendCode() {
   const email = $("email").value.trim();
-  const password = $("password").value;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    $("signinErr").textContent = "Enter a valid email address.";
+    return;
+  }
   $("signinErr").textContent = "";
-  $("signinBtn").disabled = true;
+  $("sendCodeBtn").disabled = true;
+  $("sendCodeBtn").textContent = "Sending…";
   try {
-    const user = await window.connector.signIn(email, password);
-    await afterSignIn(user);
+    const res = await window.connector.requestOtp(email);
+    otpEmail = email;
+    $("otpEmail").textContent = email;
+    $("otpRequest").classList.add("hidden");
+    $("otpVerify").classList.remove("hidden");
+    $("code").value = "";
+    $("code").focus();
+    startResendCooldown((res && res.cooldownSeconds) || 30);
   } catch (err) {
     $("signinErr").textContent = friendly(err);
   } finally {
-    $("signinBtn").disabled = false;
+    $("sendCodeBtn").disabled = false;
+    $("sendCodeBtn").textContent = "Email me a code";
   }
+}
+
+async function verifyCode() {
+  const code = $("code").value.replace(/\D/g, "");
+  if (code.length !== 6) {
+    $("signinErr").textContent = "Enter the 6-digit code we emailed you.";
+    return;
+  }
+  $("signinErr").textContent = "";
+  $("verifyBtn").disabled = true;
+  $("verifyBtn").textContent = "Verifying…";
+  try {
+    const user = await window.connector.verifyOtp(otpEmail, code);
+    clearInterval(resendTimer);
+    await afterSignIn(user);
+  } catch (err) {
+    $("signinErr").textContent = friendly(err);
+    $("code").value = "";
+    $("code").focus();
+  } finally {
+    $("verifyBtn").disabled = false;
+    $("verifyBtn").textContent = "Verify & sign in";
+  }
+}
+
+$("sendCodeBtn").addEventListener("click", sendCode);
+$("verifyBtn").addEventListener("click", verifyCode);
+$("resendBtn").addEventListener("click", async () => {
+  if ($("resendBtn").disabled) return;
+  await sendCode();
+});
+$("changeEmailBtn").addEventListener("click", () => {
+  clearInterval(resendTimer);
+  $("otpVerify").classList.add("hidden");
+  $("otpRequest").classList.remove("hidden");
+  $("signinErr").textContent = "";
+  $("email").focus();
+});
+$("email").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCode(); });
+$("code").addEventListener("keydown", (e) => { if (e.key === "Enter") verifyCode(); });
+$("code").addEventListener("input", () => {
+  if ($("code").value.replace(/\D/g, "").length === 6) verifyCode();
 });
 
 // --- Assessees + selection -------------------------------------------------
@@ -180,9 +256,8 @@ function setRow(assesseeId, { level, pct, msg }) {
 
 function friendly(err) {
   const m = String((err && err.message) || err);
-  if (m.includes("auth/invalid-credential") || m.includes("auth/wrong-password"))
-    return "Wrong email or password. If you use Google to sign in to ProHippo, use the “Sign in with Google” button above.";
-  if (m.includes("auth/user-not-found")) return "No such account. If you sign in with Google, use the Google button above.";
   if (m.includes("network")) return "Network error — check your connection.";
-  return m.replace(/^Error:\s*/, "");
+  // The OTP Cloud Functions already return user-friendly messages (expired
+  // code, too many attempts, etc.) — surface them as-is, just trimmed.
+  return m.replace(/^Error:\s*/, "").replace(/^FirebaseError:\s*/, "");
 }

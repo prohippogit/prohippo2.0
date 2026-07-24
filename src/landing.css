@@ -398,32 +398,50 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
-  .lp-hero { grid-template-columns: 1fr; min-height: 100dvh; align-content: center; }
-  .lp-hero-visual { height: min(38dvh, 430px); }
-  .lp-journey { height: auto; padding-top: 54px; }
+  /* On mobile the sections stack and size to their content — no section is
+     forced to the full viewport height (that left large blank gaps). */
+  .lp-hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    align-content: start;
+    padding: 104px clamp(20px, 4vw, 64px) 56px;
+    gap: 28px;
+  }
+  .lp-hero-visual { height: auto; max-height: min(46vh, 430px); }
+  .lp-hero-visual img { max-height: min(46vh, 430px); }
+
+  .lp-manifesto { min-height: auto; padding: 92px clamp(20px, 4vw, 64px) 84px; }
+
+  .lp-journey { height: auto; padding-top: 0; }
   .lp-journey-head { display: none; }
   .lp-track { width: 100%; height: auto; display: block; transform: none; }
   .lp-panel {
-    width: 100%; height: auto; min-height: 100dvh;
-    padding-top: 116px; padding-bottom: 70px;
+    width: 100%; height: auto; min-height: auto;
+    padding: 52px clamp(20px, 4vw, 64px);
     display: flex; flex-direction: column;
-    align-items: stretch; justify-content: center; gap: 34px;
+    align-items: stretch; justify-content: flex-start; gap: 26px;
     grid-template-columns: 1fr;
   }
   .lp-panel .lp-art,
   .lp-panel.fp-b .lp-art,
   .lp-panel.fp-c .lp-art,
   .lp-panel.fp-d .lp-art {
-    width: 100%; height: min(48vh, 520px);
-    align-self: auto; transform: none; order: -1;
+    width: 100%; height: auto; max-height: min(52vh, 480px);
+    align-self: auto; transform: none; order: 0;
   }
   .lp-panel .lp-copy,
   .lp-panel.fp-b .lp-copy,
   .lp-panel.fp-c .lp-copy,
   .lp-panel.fp-d .lp-copy { align-self: auto; padding: 0; grid-column: auto; }
-  .lp-control { grid-template-columns: 1fr; }
+
+  .lp-control { grid-template-columns: 1fr; min-height: auto; padding: 84px clamp(20px, 4vw, 64px); gap: 40px; }
   .lp-proof { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; border-top: 0; }
   .lp-proof-row { border-top: 1px solid var(--lp-line); border-bottom: 0; }
+
+  .lp-closing { padding: 64px clamp(20px, 4vw, 64px); }
+  .lp-closing-card { min-height: auto; padding: 40px clamp(24px, 6vw, 44px) 240px; }
+  .lp-mascot { width: min(62vw, 300px); }
+
   .lp-footer { grid-template-columns: 1fr; align-items: start; }
   .lp-foot-meta { text-align: left; }
 }

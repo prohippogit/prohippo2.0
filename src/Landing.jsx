@@ -1,252 +1,286 @@
-/* ProHippo — public landing page (shown before sign-in) */
+/* ProHippo — public landing page (shown before sign-in).
+   Design: kinetic hero, a pinned horizontal "Notice -> Appeal" journey,
+   a manifesto, a control section and a closing mascot card. */
 import React from "react";
-import { Icon } from "./shared";
-import { InstallAppButton } from "./InstallApp";
-import heroImg from "./assets/hero.png";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
 import "./landing.css";
+import logo from "./assets/landing/prohippo-logo.webp";
+import heroScene from "./assets/landing/hero-notice-scene.webp";
+import mascot from "./assets/landing/prohippo-mascot.webp";
+import f01 from "./assets/landing/features/01-notice-issued.webp";
+import f02 from "./assets/landing/features/02-email-unopened.webp";
+import f03 from "./assets/landing/features/03-whatsapp-alert.webp";
+import f04 from "./assets/landing/features/04-hearing-calendar.webp";
+import f05 from "./assets/landing/features/05-hearing-reminder.webp";
+import f06 from "./assets/landing/features/06-reply-submit.webp";
+import f07 from "./assets/landing/features/07-order-countdown.webp";
+import f08 from "./assets/landing/features/08-appeal-filed.webp";
 
-function BrandMark({ height = 36 }) {
-  return <img src="/prohippo-logo.png" alt="ProHippo" style={{ height, width: "auto" }} />;
-}
+gsap.registerPlugin(ScrollTrigger);
 
-/* Adds .visible to .reveal children when they scroll into view */
-function useReveal() {
-  React.useEffect(() => {
-    const els = document.querySelectorAll(".landing .reveal");
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("visible");
-            io.unobserve(e.target);
-          }
+const JOURNEY = [
+  { img: f01, variant: "fp-a", tag: "Notice detected",
+    title: "The notice is issued.",
+    body: "ProHippo starts watching the matter the moment a digital notice leaves the Income Tax Department.",
+    alt: "Income Tax officer issuing a digital notice while the ProHippo mascot follows its journey." },
+  { img: f02, variant: "fp-b", tag: "Inbox monitored",
+    title: "Email misses it. ProHippo does not.",
+    body: "Even when the assessee leaves the email unopened, the deadline never disappears from view.",
+    alt: "ProHippo mascot finding an unopened notice inside a crowded email inbox." },
+  { img: f03, variant: "fp-c", tag: "User alerted",
+    title: "The right alert reaches WhatsApp.",
+    body: "The user gets the matter, assessment year and due date where attention already lives.",
+    alt: "Tax notice travelling into a phone alert beside the ProHippo mascot." },
+  { img: f04, variant: "fp-d", tag: "Calendar synced",
+    title: "The hearing books itself.",
+    body: "ProHippo reads the notice and places the hearing in the calendar with the matter attached.",
+    alt: "ProHippo mascot adding a tax hearing document to a calendar automatically." },
+  { img: f05, variant: "fp-a", tag: "Hearing ready",
+    title: "The reminder arrives on time.",
+    body: "On the hearing date, a clear mobile notification brings the right file back to the top.",
+    alt: "Mobile hearing reminder connected to the prepared ProHippo mascot." },
+  { img: f06, variant: "fp-c", tag: "Reply submitted",
+    title: "Type. Review. Submit.",
+    body: "Prepare the reply in one focused workspace, then move it forward without losing the matter thread.",
+    alt: "ProHippo mascot typing a reply and pressing a glowing submit control." },
+  { img: f07, variant: "fp-b", tag: "Appeal window open",
+    title: "The order starts a live countdown.",
+    body: "When the order arrives, ProHippo turns the appeal window into a deadline nobody can ignore.",
+    alt: "ProHippo mascot reading an order beside a live appeal countdown." },
+  { img: f08, variant: "fp-d", tag: "Portal confirmed",
+    title: "The appeal closes the loop.",
+    body: "File the appeal and see the Income Tax portal acknowledgement inside the same connected matter.",
+    alt: "ProHippo mascot filing an appeal and receiving portal confirmation." },
+];
+
+const PROOF = [
+  { k: "Always visible", v: "No notice gets buried." },
+  { k: "Always moving", v: "No handoff loses context." },
+  { k: "Always on time", v: "No deadline becomes a surprise." },
+];
+
+/* Ports the design's GSAP timeline: hero intro, the pinned horizontal
+   journey scrub, and the section reveals. Honours reduced-motion. */
+function useJourneyMotion(rootRef) {
+  React.useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const ctx = gsap.context(() => {
+      gsap.from(".lp-nav", { y: -24, opacity: 0, duration: 0.8, ease: "power3.out" });
+      gsap.from(".lp-piece", { yPercent: 112, duration: 0.85, stagger: 0.05, ease: "power4.out", delay: 0.1 });
+      gsap.from([".lp-hero-logo", ".lp-hero-sub", ".lp-hero-cta"], { y: 18, opacity: 0, duration: 0.7, stagger: 0.07, ease: "power3.out", delay: 0.4 });
+      gsap.from(".lp-hero-visual img", { y: 26, opacity: 0, scale: 0.96, transformOrigin: "center bottom", duration: 0.9, ease: "power3.out", delay: 0.25 });
+
+      const track = root.querySelector(".lp-track");
+      const shell = root.querySelector(".lp-journey");
+
+      if (track && shell && window.matchMedia("(min-width: 901px)").matches) {
+        const distance = () => Math.max(0, track.scrollWidth - window.innerWidth);
+        const journeyTween = gsap.to(track, {
+          x: () => -distance(),
+          ease: "none",
+          scrollTrigger: { trigger: shell, start: "top top", end: () => "+=" + distance(), pin: true, scrub: 0.75, invalidateOnRefresh: true, anticipatePin: 1 },
         });
-      },
-      { threshold: 0.12 }
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
+        gsap.fromTo(".lp-progress span", { scaleX: 0 }, {
+          scaleX: 1, ease: "none",
+          scrollTrigger: { trigger: shell, start: "top top", end: () => "+=" + distance(), scrub: true },
+        });
+        root.querySelectorAll(".lp-art img").forEach((image) => {
+          gsap.fromTo(image, { xPercent: 3 }, {
+            xPercent: -3, ease: "none",
+            scrollTrigger: { trigger: image.closest(".lp-panel"), containerAnimation: journeyTween, start: "left right", end: "right left", scrub: true },
+          });
+        });
+        root.querySelectorAll(".lp-panel").forEach((panel) => {
+          const copy = panel.querySelector(".lp-copy");
+          if (!copy) return;
+          gsap.fromTo(copy, { x: 42, opacity: 0.35 }, {
+            x: 0, opacity: 1, ease: "none",
+            scrollTrigger: { trigger: panel, containerAnimation: journeyTween, start: "left 82%", end: "left 48%", scrub: true },
+          });
+        });
+      } else if (track) {
+        root.querySelectorAll(".lp-panel").forEach((panel) => {
+          gsap.from(panel, { y: 48, opacity: 0, duration: 0.8, ease: "power3.out", scrollTrigger: { trigger: panel, start: "top 82%", once: true } });
+        });
+      }
+
+      gsap.from(".lp-manifesto-line", { yPercent: 105, duration: 0.9, stagger: 0.08, ease: "power4.out", scrollTrigger: { trigger: ".lp-manifesto", start: "top 70%", once: true } });
+      gsap.from(".lp-closing-card", { clipPath: "inset(16% 10% 16% 10% round 16px)", scale: 0.94, duration: 1, ease: "power3.out", scrollTrigger: { trigger: ".lp-closing", start: "top 70%", once: true } });
+      gsap.from(".lp-proof-row", { x: 30, opacity: 0, duration: 0.7, stagger: 0.12, ease: "power3.out", scrollTrigger: { trigger: ".lp-proof", start: "top 78%", once: true } });
+      gsap.from(".lp-closing-card img", { yPercent: 18, rotate: 3, opacity: 0, duration: 1, ease: "power3.out", scrollTrigger: { trigger: ".lp-closing", start: "top 68%", once: true } });
+    }, root);
+
+    return () => ctx.revert();
+  }, [rootRef]);
 }
 
-const FEATURES = [
-  {
-    icon: "sparkle", tint: "var(--p-lavender-2)", color: "var(--p-primary-2)",
-    title: "AI notice parser",
-    desc: "Upload a scrutiny or demand notice and let AI extract the section, assessment year, deadlines and demand — ready to file in seconds.",
-  },
-  {
-    icon: "doc", tint: "var(--p-pink)", color: "#C13388",
-    title: "Notices & replies",
-    desc: "Every notice tracked from receipt to submission, with drafts, statuses and due dates that never slip through the cracks.",
-  },
-  {
-    icon: "calendar", tint: "var(--p-amber)", color: "#B07512",
-    title: "Hearings & deadlines",
-    desc: "A single calendar for hearings, adjournments and statutory due dates — urgent items surface before they become emergencies.",
-  },
-  {
-    icon: "users", tint: "var(--p-mint)", color: "#1B8C5C",
-    title: "Assessee directory",
-    desc: "All your clients with PANs, contacts and complete matter history in one searchable place.",
-  },
-  {
-    icon: "scale", tint: "var(--p-lavender-2)", color: "var(--p-primary-2)",
-    title: "Matters & litigation",
-    desc: "Follow each appeal across CIT(A), ITAT and beyond — grounds, demands and outcomes organised by assessee.",
-  },
-  {
-    icon: "invoice", tint: "var(--p-coral)", color: "#B8463A",
-    title: "Invoices & reports",
-    desc: "Raise invoices, watch outstanding fees, and see how your practice is really doing with built-in reports.",
-  },
-];
+/* Playful pointer parallax on the hero title. */
+function useHeroHover(rootRef) {
+  React.useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
 
-const STEPS = [
-  {
-    title: "Bring in a notice",
-    desc: "Drop in the PDF you received from the department. The AI parser reads it and fills in the details for you.",
-  },
-  {
-    title: "Review & organise",
-    desc: "Confirm the extracted details, link the notice to an assessee and matter, and set the response deadline.",
-  },
-  {
-    title: "Track to closure",
-    desc: "Draft the reply, log hearings and communications, invoice the work — everything stays connected until the matter closes.",
-  },
-];
+    const heroTitle = root.querySelector(".lp-hero-title");
+    if (!heroTitle) return;
+    const pieces = Array.from(heroTitle.querySelectorAll(".lp-piece"));
 
-const BAND_POINTS = [
-  "Built specifically for Indian income-tax practice",
-  "Your data is private to your account, stored securely in the cloud",
-  "Sign in with Google or a one-time email link — no passwords",
-  "Works wherever you are, on any modern browser",
-];
+    const onMove = (event) => {
+      const b = heroTitle.getBoundingClientRect();
+      const x = (event.clientX - b.left) / b.width - 0.5;
+      const y = (event.clientY - b.top) / b.height - 0.5;
+      pieces.forEach((piece, i) => {
+        const d = i % 2 === 0 ? 1 : -1;
+        gsap.to(piece, { x: x * 18 * d, y: y * 12 * (i % 3 === 0 ? -1 : 1), rotate: x * 1.5 * d, duration: 0.36, ease: "power2.out", overwrite: "auto" });
+      });
+    };
+    const onLeave = () => {
+      pieces.forEach((piece) => gsap.to(piece, { x: 0, y: 0, rotate: 0, duration: 0.55, ease: "elastic.out(1, 0.55)", overwrite: "auto" }));
+    };
+    heroTitle.addEventListener("pointermove", onMove);
+    heroTitle.addEventListener("pointerleave", onLeave);
+    return () => {
+      heroTitle.removeEventListener("pointermove", onMove);
+      heroTitle.removeEventListener("pointerleave", onLeave);
+    };
+  }, [rootRef]);
+}
 
 export default function Landing({ onSignIn }) {
-  useReveal();
+  const rootRef = React.useRef(null);
+  useJourneyMotion(rootRef);
+  useHeroHover(rootRef);
+
+  const year = new Date().getFullYear();
+  const scrollTo = (id) => (e) => {
+    e.preventDefault();
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
-    <div className="landing">
-      <div className="landing-blob b1" />
-      <div className="landing-blob b2" />
-      <div className="landing-blob b3" />
-
-      <div className="landing-inner">
-        {/* Nav */}
-        <nav className="landing-nav hero-in d1">
-          <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 56 }} />
-          <div className="spacer" />
-          <a className="landing-nav-link" href="#features">Features</a>
-          <a className="landing-nav-link" href="#how">How it works</a>
-          <InstallAppButton className="btn btn-secondary btn-sm"/>
-          <button className="btn btn-primary btn-sm" onClick={onSignIn}>Sign in</button>
+    <main className="landing-site" ref={rootRef}>
+      {/* Nav */}
+      <header className="lp-nav">
+        <button className="lp-brand" onClick={scrollTo("lp-top")} aria-label="ProHippo — back to top">
+          <span className="lp-dot">H</span>
+          <span>ProHippo</span>
+        </button>
+        <nav className="lp-nav-links">
+          <a className="lp-nav-link" href="#lp-journey" onClick={scrollTo("lp-journey")}>How it works</a>
+          <button className="lp-nav-link hide-xs" onClick={onSignIn}>Sign in</button>
+          <button className="lp-nav-cta" onClick={onSignIn}>Get ProHippo</button>
         </nav>
+      </header>
 
-        {/* Hero */}
-        <header className="landing-hero">
-          <div>
-            <div className="hero-eyebrow hero-in d1">
-              <span className="pill-dot" /> Built for income-tax professionals
-            </div>
-            <h1 className="hero-title hero-in d2">
-              Your entire tax practice,<br />
-              <span className="accent">in one calm place.</span>
-            </h1>
-            <p className="hero-sub hero-in d3">
-              ProHippo keeps notices, hearings, assessees, matters and invoices organised —
-              with an AI parser that reads department notices for you, so nothing is missed
-              and no deadline slips.
-            </p>
-            <div className="hero-ctas hero-in d4">
-              <button className="btn btn-primary btn-lg" onClick={onSignIn}>
-                Get started <Icon name="arrow-right" size={16} />
-              </button>
-              <a className="btn btn-secondary btn-lg" href="#features" style={{ textDecoration: "none" }}>
-                Explore features
-              </a>
-            </div>
-            <div className="hero-note hero-in d4">
-              Free to start · Sign in with Google or a secure email link
-            </div>
-          </div>
+      {/* Hero */}
+      <section className="lp-hero" id="lp-top">
+        <div className="lp-hero-copy">
+          <img className="lp-hero-logo" src={logo} alt="ProHippo" />
+          <h1 className="lp-hero-title" aria-label="Never miss an income tax notice again.">
+            <span className="lp-line">
+              <span className="lp-piece">Never</span> <span className="lp-piece">miss</span>{" "}
+              <span className="lp-piece">an</span> <span className="lp-piece">income</span>
+            </span>
+            <span className="lp-line">
+              <span className="lp-piece">tax</span> <span className="lp-piece">notice</span>{" "}
+              <span className="lp-piece lp-piece-accent">again.</span>
+            </span>
+          </h1>
+          <p className="lp-hero-sub">From notice to appeal, ProHippo watches everything.</p>
+          <button className="lp-btn lp-btn-primary lp-hero-cta" onClick={onSignIn}>Get ProHippo</button>
+        </div>
+        <figure className="lp-hero-visual">
+          <img src={heroScene} alt="ProHippo beside a mobile tax notice alert and an Income Tax notice envelope." />
+        </figure>
+      </section>
 
-          <div className="hero-visual hero-in d5">
-            <img src={heroImg} alt="" aria-hidden="true" />
-            <div className="hero-chip c1">
-              <div className="chip-icon" style={{ background: "var(--p-lavender-2)", color: "var(--p-primary-2)" }}>
-                <Icon name="sparkle" size={15} />
+      {/* Manifesto */}
+      <section className="lp-manifesto">
+        <p className="lp-manifesto-kicker">One matter. One unbroken journey.</p>
+        <h2 className="lp-manifesto-title">
+          <span className="lp-line"><span className="lp-manifesto-line">Never unseen.</span></span>
+          <span className="lp-line"><span className="lp-manifesto-line accent">Never too late.</span></span>
+        </h2>
+      </section>
+
+      {/* Journey */}
+      <section className="lp-journey" id="lp-journey">
+        <div className="lp-journey-head">
+          <span>Notice</span>
+          <div className="lp-progress" aria-hidden="true"><span /></div>
+          <span>Appeal</span>
+        </div>
+        <div className="lp-track">
+          {JOURNEY.map((p, i) => (
+            <article className={`lp-panel ${p.variant}`} key={i}>
+              <div className="lp-copy">
+                <h2>{p.title}</h2>
+                <p>{p.body}</p>
+                <span className="lp-tag"><i aria-hidden="true" />{p.tag}</span>
               </div>
-              <div>
-                Notice parsed
-                <span className="chip-sub">u/s 143(2) · AY 2024-25</span>
-              </div>
+              <figure className="lp-art">
+                <img src={p.img} alt={p.alt} loading={i > 0 ? "lazy" : "eager"} />
+              </figure>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* Control */}
+      <section className="lp-control">
+        <div>
+          <h2>Deadline anxiety has a new ending.</h2>
+          <p className="lp-control-sub">Every alert, hearing, reply, order and appeal stays connected to the matter that created it.</p>
+        </div>
+        <div className="lp-proof">
+          {PROOF.map((row) => (
+            <div className="lp-proof-row" key={row.k}>
+              <strong>{row.k}</strong>
+              <span>{row.v}</span>
             </div>
-            <div className="hero-chip c2">
-              <div className="chip-icon" style={{ background: "var(--p-amber)", color: "#B07512" }}>
-                <Icon name="clock" size={15} />
-              </div>
-              <div>
-                Reply due in 6 days
-                <span className="chip-sub">Reminder set</span>
-              </div>
-            </div>
-          </div>
-        </header>
+          ))}
+        </div>
+      </section>
 
-        {/* Features */}
-        <section id="features" className="landing-section">
-          <div className="reveal">
-            <div className="section-label">Features</div>
-            <h2 className="section-title">Everything a tax practice runs on</h2>
-            <p className="section-sub">
-              One workspace instead of spreadsheets, folders and sticky notes — designed
-              around the way income-tax work actually flows.
-            </p>
+      {/* Closing */}
+      <section className="lp-closing" id="lp-contact">
+        <div className="lp-closing-card">
+          <div className="lp-closing-inner">
+            <p className="lp-closing-kicker">Ready when the notice arrives.</p>
+            <h2>Put every tax matter under control.</h2>
           </div>
-          <div className="feature-grid">
-            {FEATURES.map((f, i) => (
-              <div key={f.title} className="feature-card reveal" style={{ "--reveal-delay": `${(i % 3) * 0.08}s` }}>
-                <div className="feature-icon" style={{ background: f.tint, color: f.color }}>
-                  <Icon name={f.icon} size={20} />
-                </div>
-                <h3>{f.title}</h3>
-                <p>{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+          <button className="lp-btn lp-btn-ink" onClick={onSignIn}>Get ProHippo</button>
+          <img className="lp-mascot" src={mascot} alt="ProHippo mascot ready to manage the next tax matter." />
+        </div>
+      </section>
 
-        {/* How it works */}
-        <section id="how" className="landing-section">
-          <div className="reveal">
-            <div className="section-label">How it works</div>
-            <h2 className="section-title">From notice to closure in three steps</h2>
-          </div>
-          <div className="steps">
-            {STEPS.map((s, i) => (
-              <div key={s.title} className="step-card reveal" style={{ "--reveal-delay": `${i * 0.1}s` }}>
-                <div className="step-num">{i + 1}</div>
-                <h3>{s.title}</h3>
-                <p>{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Highlight band */}
-        <section className="landing-section">
-          <div className="highlight-band reveal">
-            <div>
-              <h2>Calm software for a demanding profession</h2>
-              <p className="band-sub">
-                Deadlines, departments and demands are stressful enough. Your practice
-                management shouldn't be.
-              </p>
-            </div>
-            <div className="band-list">
-              {BAND_POINTS.map((p) => (
-                <div key={p} className="band-item">
-                  <span className="band-check"><Icon name="check" size={13} stroke={2.6} /></span>
-                  {p}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Final CTA */}
-        <section className="landing-cta reveal">
-          <BrandMark height={92} />
-          <h2>Ready to tidy up your practice?</h2>
-          <p>Sign in and set up your firm in under a minute. Your data stays private to your account.</p>
-          <button className="btn btn-primary btn-lg" onClick={onSignIn}>
-            Get started with ProHippo <Icon name="arrow-right" size={16} />
-          </button>
-        </section>
-
-        {/* Footer */}
-        <footer className="landing-footer">
-          <div className="foot-brand">
-            <img src="/prohippo-logo.png" alt="ProHippo" style={{ height: 30 }} />
-          </div>
-          <div className="spacer" />
-          <span>Income-tax litigation & practice management</span>
-          <span>·</span>
-          <span>© {new Date().getFullYear()} ProHippo</span>
-          <div style={{ flexBasis: "100%", height: 0 }} />
-          <nav className="foot-legal-row">
-            <a href="/about" className="foot-legal">About</a>
-            <a href="/privacy" className="foot-legal">Privacy Policy</a>
-            <a href="/terms" className="foot-legal">Terms &amp; Conditions</a>
-            <a href="/contact" className="foot-legal">Contact</a>
-            <a href="/data-deletion" className="foot-legal">Data Deletion</a>
-          </nav>
-          <div style={{ flexBasis: "100%", height: 0 }} />
-          <span style={{ fontSize: 11.5 }}>ProHippo is a product operated by MEHTAJI BIZCON LLP (LLPIN AAV-0638), Ahmedabad, India.</span>
-        </footer>
-      </div>
-    </div>
+      {/* Footer */}
+      <footer className="lp-footer">
+        <div>
+          <a className="lp-brand" href="#lp-top" onClick={scrollTo("lp-top")}>
+            <span className="lp-dot">H</span>
+            <span>ProHippo</span>
+          </a>
+          <p className="lp-foot-tag">Tax matter management for people who cannot afford to miss what matters.</p>
+        </div>
+        <nav className="lp-foot-links" aria-label="Legal and company">
+          <a href="/about">About</a>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms &amp; Conditions</a>
+          <a href="/contact">Contact</a>
+          <a href="/data-deletion">Data Deletion</a>
+        </nav>
+        <span className="lp-foot-meta">© {year} ProHippo</span>
+        <div className="lp-foot-legal">
+          ProHippo is a product operated by MEHTAJI BIZCON LLP (LLPIN AAV-0638), Ahmedabad, India.
+        </div>
+      </footer>
+    </main>
   );
 }

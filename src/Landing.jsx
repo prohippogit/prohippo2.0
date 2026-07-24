@@ -5,6 +5,7 @@ import React from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
+import { CascadeText } from "@/components/ui/CascadeText";
 import "./landing.css";
 import logo from "./assets/landing/prohippo-logo.webp";
 import heroScene from "./assets/landing/hero-notice-scene.webp";
@@ -71,7 +72,7 @@ function useJourneyMotion(rootRef) {
 
     const ctx = gsap.context(() => {
       gsap.from(".lp-nav", { y: -24, opacity: 0, duration: 0.8, ease: "power3.out" });
-      gsap.from(".lp-piece", { yPercent: 112, duration: 0.85, stagger: 0.05, ease: "power4.out", delay: 0.1 });
+      gsap.from(".lp-hero-title", { y: 22, opacity: 0, duration: 0.8, ease: "power4.out", delay: 0.1 });
       gsap.from([".lp-hero-logo", ".lp-hero-sub", ".lp-hero-cta"], { y: 18, opacity: 0, duration: 0.7, stagger: 0.07, ease: "power3.out", delay: 0.4 });
       gsap.from(".lp-hero-visual img", { y: 26, opacity: 0, scale: 0.96, transformOrigin: "center bottom", duration: 0.9, ease: "power3.out", delay: 0.25 });
 
@@ -119,43 +120,63 @@ function useJourneyMotion(rootRef) {
   }, [rootRef]);
 }
 
-/* Playful pointer parallax on the hero title. */
-function useHeroHover(rootRef) {
+/* Drives the hero headline cascade: plays once on mount (so touch
+   devices see it), then follows hover. Honours reduced-motion. */
+function useHeadlineReveal(totalChars, { stagger = 25, duration = 260, delay = 650 } = {}) {
+  const [hovered, setHovered] = React.useState(false);
+  const [auto, setAuto] = React.useState(false);
   React.useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    const runFor = totalChars * stagger + duration + 260;
+    const on = setTimeout(() => setAuto(true), delay);
+    const off = setTimeout(() => setAuto(false), delay + runFor);
+    return () => { clearTimeout(on); clearTimeout(off); };
+  }, [totalChars, stagger, duration, delay]);
+  return {
+    revealed: hovered || auto,
+    bind: { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) },
+  };
+}
 
-    const heroTitle = root.querySelector(".lp-hero-title");
-    if (!heroTitle) return;
-    const pieces = Array.from(heroTitle.querySelectorAll(".lp-piece"));
+/* Hero headline. Split per word (so lines still wrap on narrow screens)
+   while the cascade stagger runs continuously across the whole phrase;
+   "again." keeps the brand accent. Stagger start indices are precomputed
+   here so the render stays free of mutation. */
+const HERO_SEGMENTS = (() => {
+  const raw = [
+    { w: "Never", line: 1 }, { w: "miss", line: 1 }, { w: "an", line: 1 }, { w: "income", line: 1 },
+    { w: "tax", line: 2 }, { w: "notice", line: 2 }, { w: "again.", line: 2, accent: true },
+  ];
+  let start = 0;
+  return raw.map((seg) => {
+    const withStart = { ...seg, start };
+    start += seg.w.length + 1; // +1 keeps the stagger flowing across the space
+    return withStart;
+  });
+})();
+const HERO_TITLE_CHARS = HERO_SEGMENTS.reduce((n, s) => n + s.w.length + 1, 0);
+const ACCENT_PROPS = { color: "#6d55e7", hoverColor: "#9a80ff", className: "lp-accent" };
 
-    const onMove = (event) => {
-      const b = heroTitle.getBoundingClientRect();
-      const x = (event.clientX - b.left) / b.width - 0.5;
-      const y = (event.clientY - b.top) / b.height - 0.5;
-      pieces.forEach((piece, i) => {
-        const d = i % 2 === 0 ? 1 : -1;
-        gsap.to(piece, { x: x * 18 * d, y: y * 12 * (i % 3 === 0 ? -1 : 1), rotate: x * 1.5 * d, duration: 0.36, ease: "power2.out", overwrite: "auto" });
-      });
-    };
-    const onLeave = () => {
-      pieces.forEach((piece) => gsap.to(piece, { x: 0, y: 0, rotate: 0, duration: 0.55, ease: "elastic.out(1, 0.55)", overwrite: "auto" }));
-    };
-    heroTitle.addEventListener("pointermove", onMove);
-    heroTitle.addEventListener("pointerleave", onLeave);
-    return () => {
-      heroTitle.removeEventListener("pointermove", onMove);
-      heroTitle.removeEventListener("pointerleave", onLeave);
-    };
-  }, [rootRef]);
+function HeroHeadline({ revealed, bind }) {
+  const renderLine = (lineNo) =>
+    HERO_SEGMENTS.filter((s) => s.line === lineNo).map((s, i) => (
+      <React.Fragment key={s.start}>
+        {i > 0 ? " " : null}
+        <CascadeText text={s.w} hovered={revealed} startIndex={s.start} {...(s.accent ? ACCENT_PROPS : {})} />
+      </React.Fragment>
+    ));
+  return (
+    <h1 className="lp-hero-title" aria-label="Never miss an income tax notice again." {...bind}>
+      <span className="lp-line" aria-hidden="true">{renderLine(1)}</span>
+      <span className="lp-line" aria-hidden="true">{renderLine(2)}</span>
+    </h1>
+  );
 }
 
 export default function Landing({ onSignIn }) {
   const rootRef = React.useRef(null);
   useJourneyMotion(rootRef);
-  useHeroHover(rootRef);
+  const { revealed, bind } = useHeadlineReveal(HERO_TITLE_CHARS);
 
   const year = new Date().getFullYear();
   const scrollTo = (id) => (e) => {
@@ -182,16 +203,7 @@ export default function Landing({ onSignIn }) {
       <section className="lp-hero" id="lp-top">
         <div className="lp-hero-copy">
           <img className="lp-hero-logo" src={logo} alt="ProHippo" />
-          <h1 className="lp-hero-title" aria-label="Never miss an income tax notice again.">
-            <span className="lp-line">
-              <span className="lp-piece">Never</span> <span className="lp-piece">miss</span>{" "}
-              <span className="lp-piece">an</span> <span className="lp-piece">income</span>
-            </span>
-            <span className="lp-line">
-              <span className="lp-piece">tax</span> <span className="lp-piece">notice</span>{" "}
-              <span className="lp-piece lp-piece-accent">again.</span>
-            </span>
-          </h1>
+          <HeroHeadline revealed={revealed} bind={bind} />
           <p className="lp-hero-sub">From notice to appeal, ProHippo watches everything.</p>
           <button className="lp-btn lp-btn-primary lp-hero-cta" onClick={onSignIn}>Get ProHippo</button>
         </div>

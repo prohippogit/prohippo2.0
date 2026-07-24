@@ -1,13 +1,45 @@
 /* ProHippo — client-side vector PDF invoice generation (jsPDF).
-   Text is real vector type using an embedded DejaVu Sans subset that
-   includes the rupee sign, so the PDF stays crisp at any zoom.
+   Text is real vector type using an embedded subset of the Poppins family
+   (Regular / Medium / SemiBold / Bold / ExtraBold / Italic) that includes
+   the rupee sign, so the PDF stays crisp at any zoom and matches the
+   reference invoice's typography.
 
    The layout is a full GST tax invoice (multiple line items, HSN/SAC,
    per-item GST, CGST/SGST or IGST split, bank details, terms & notes),
    fully driven by a configurable accent colour and invoice settings.
    GST can be switched off for a plain (non-GST) bill. */
 import { jsPDF } from "jspdf";
-import { INVOICE_FONT_REGULAR, INVOICE_FONT_BOLD } from "./fonts/invoiceFonts.js";
+import {
+  POPPINS_REGULAR, POPPINS_MEDIUM, POPPINS_SEMIBOLD,
+  POPPINS_BOLD, POPPINS_EXTRABOLD, POPPINS_ITALIC,
+} from "./fonts/invoiceFonts.js";
+
+/* jsPDF addresses fonts by (family, style); we register the extra Poppins
+   weights as their own families and resolve a friendly weight name to the
+   right (family, style) pair. */
+const FONT_FAMILY = "Poppins";
+const registerFonts = (doc) => {
+  const add = (b64, file, family, style) => {
+    doc.addFileToVFS(file, b64);
+    doc.addFont(file, family, style);
+  };
+  add(POPPINS_REGULAR, "Poppins-Regular.ttf", FONT_FAMILY, "normal");
+  add(POPPINS_BOLD, "Poppins-Bold.ttf", FONT_FAMILY, "bold");
+  add(POPPINS_ITALIC, "Poppins-Italic.ttf", FONT_FAMILY, "italic");
+  add(POPPINS_MEDIUM, "Poppins-Medium.ttf", "PoppinsMedium", "normal");
+  add(POPPINS_SEMIBOLD, "Poppins-SemiBold.ttf", "PoppinsSemiBold", "normal");
+  add(POPPINS_EXTRABOLD, "Poppins-ExtraBold.ttf", "PoppinsExtraBold", "normal");
+};
+const WEIGHTS = {
+  regular: [FONT_FAMILY, "normal"],
+  medium: ["PoppinsMedium", "normal"],
+  semibold: ["PoppinsSemiBold", "normal"],
+  bold: [FONT_FAMILY, "bold"],
+  extrabold: ["PoppinsExtraBold", "normal"],
+  italic: [FONT_FAMILY, "italic"],
+};
+// Legacy `bold` boolean → weight name; an explicit `weight` always wins.
+const resolveWeight = (weight, bold) => WEIGHTS[weight] || (bold ? WEIGHTS.bold : WEIGHTS.regular);
 
 /* ---------------- money / number helpers ---------------- */
 
@@ -139,16 +171,13 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   const t = computeInvoiceTotals(invoice);
 
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
-  doc.addFileToVFS("InvoiceSans.ttf", INVOICE_FONT_REGULAR);
-  doc.addFont("InvoiceSans.ttf", "InvoiceSans", "normal");
-  doc.addFileToVFS("InvoiceSans-Bold.ttf", INVOICE_FONT_BOLD);
-  doc.addFont("InvoiceSans-Bold.ttf", "InvoiceSans", "bold");
+  registerFonts(doc);
 
   const PAGE_H = 297;
   const L = 14, R = 196, W = R - L;
 
-  const text = (str, x, y, { size = 9, bold = false, color = BODY, align = "left", spacing } = {}) => {
-    doc.setFont("InvoiceSans", bold ? "bold" : "normal");
+  const text = (str, x, y, { size = 9, bold = false, weight, color = BODY, align = "left", spacing } = {}) => {
+    doc.setFont(...resolveWeight(weight, bold));
     doc.setFontSize(size);
     doc.setTextColor(...color);
     doc.text(String(str ?? ""), x, y, { align, charSpace: spacing, baseline: "alphabetic" });
@@ -163,9 +192,10 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
     doc.setLineWidth(w);
     doc.line(x1, y1, x2, y2);
   };
-  // Wrap text to a width, returning the array of lines.
-  const wrap = (str, w, size, bold = false) => {
-    doc.setFont("InvoiceSans", bold ? "bold" : "normal");
+  // Wrap text to a width, returning the array of lines. The measuring font must
+  // match the font the caller will draw with, so pass the same weight.
+  const wrap = (str, w, size, weight) => {
+    doc.setFont(...resolveWeight(weight, false));
     doc.setFontSize(size);
     return doc.splitTextToSize(String(str || ""), w);
   };
@@ -191,29 +221,29 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   // firm mark
   const markSize = 13;
   fillRect(L, y - 2, markSize, markSize, accentSoft, 2.5);
-  text((firmName[0] || "F").toUpperCase(), L + markSize / 2, y + markSize / 2 - 0.5, { size: 12, bold: true, color: accent, align: "center" });
+  text((firmName[0] || "F").toUpperCase(), L + markSize / 2, y + markSize / 2 - 0.5, { size: 12, weight: "extrabold", color: accent, align: "center" });
 
   const hx = L + markSize + 5;
   let hy = y + 1;
-  text(firmName, hx, hy, { size: 13.5, bold: true, color: INK });
+  text(firmName, hx, hy, { size: 13.5, weight: "bold", color: INK });
   hy += 4.4;
   if (firmAddress) {
     wrap(firmAddress, 78, 7.6).forEach((ln) => { text(ln, hx, hy, { size: 7.6, color: MUTED }); hy += 3.3; });
   }
-  if (firmGstin) { text(`GSTIN: ${firmGstin}`, hx, hy, { size: 7.8, bold: true, color: BODY }); hy += 3.4; }
+  if (firmGstin) { text(`GSTIN: ${firmGstin}`, hx, hy, { size: 7.8, weight: "semibold", color: BODY }); hy += 3.4; }
   if (firmPhone) { text(`Ph: ${firmPhone}`, hx, hy, { size: 7.6, color: MUTED }); hy += 3.3; }
   if (firmEmail) { text(firmEmail, hx, hy, { size: 7.6, color: MUTED }); hy += 3.3; }
 
   // right: big "Invoice" wordmark + meta
-  text("Invoice", R, y + 4, { size: 30, bold: true, color: accent, align: "right", spacing: -0.3 });
+  text("Invoice", R, y + 4, { size: 30, weight: "extrabold", color: accent, align: "right", spacing: -0.3 });
   let my = y + 11;
   const metaRow = (label, value) => {
     // value right-aligned at R; label sits just to its left so long numbers never collide.
-    doc.setFont("InvoiceSans", "bold");
+    doc.setFont(...resolveWeight("bold"));
     doc.setFontSize(9);
     const vw = doc.getTextWidth(String(value));
-    text(label, R - vw - 3, my, { size: 7, bold: true, color: MUTED, align: "right", spacing: 0.3 });
-    text(value, R, my, { size: 9, bold: true, color: INK, align: "right" });
+    text(label, R - vw - 3, my, { size: 7, weight: "semibold", color: MUTED, align: "right", spacing: 0.3 });
+    text(value, R, my, { size: 9, weight: "bold", color: INK, align: "right" });
     my += 5;
   };
   metaRow("INVOICE #", invoice?.number || "—");
@@ -221,7 +251,7 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   // status chip
   const chipW = 22, chipH = 5.6;
   fillRect(R - chipW, my - 0.5, chipW, chipH, tint(statusColor, 0.82), 2.8);
-  text(status, R - chipW / 2, my + 3.4, { size: 7, bold: true, color: statusColor, align: "center", spacing: 0.4 });
+  text(status, R - chipW / 2, my + 3.4, { size: 7, weight: "semibold", color: statusColor, align: "center", spacing: 0.4 });
 
   y = Math.max(hy, my + 8) + 3;
   line(L, y, R, y, accent, 0.9);
@@ -233,17 +263,17 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   const partyBoxTop = y;
   const drawParty = (x, label, name, addr, extras) => {
     let py = partyBoxTop + 6;
-    text(label, x, py, { size: 7.2, bold: true, color: accent, align: "left", spacing: 0.5 });
+    text(label, x, py, { size: 7.2, weight: "semibold", color: accent, align: "left", spacing: 0.5 });
     py += 6;
-    text(name, x, py, { size: 11, bold: true, color: INK });
+    text(name, x, py, { size: 11, weight: "bold", color: INK });
     py += 4.6;
     if (addr) wrap(addr, colW - 8, 8).forEach((ln) => { text(ln, x, py, { size: 8, color: BODY }); py += 3.5; });
     (extras || []).forEach(([lab, val]) => {
       if (!val) return;
       py += 1.5;
-      text(lab, x, py, { size: 6.8, bold: true, color: MUTED, spacing: 0.4 });
+      text(lab, x, py, { size: 6.8, weight: "semibold", color: MUTED, spacing: 0.4 });
       py += 3.4;
-      text(val, x, py, { size: 8.4, bold: true, color: BODY });
+      text(val, x, py, { size: 8.4, weight: "semibold", color: BODY });
       py += 0.4;
     });
     return py;
@@ -267,10 +297,10 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
     const sH = 12;
     fillRect(L, y, colW, sH, panelBg, 3);
     fillRect(L + colW + gap, y, colW, sH, panelBg, 3);
-    text("PLACE OF SUPPLY", L + 5, y + 4.6, { size: 6.8, bold: true, color: MUTED, spacing: 0.4 });
-    text(cfg.placeOfSupply || "—", L + 5, y + 9, { size: 9, bold: true, color: INK });
-    text("COUNTRY OF SUPPLY", L + colW + gap + 5, y + 4.6, { size: 6.8, bold: true, color: MUTED, spacing: 0.4 });
-    text(cfg.countryOfSupply || "India", L + colW + gap + 5, y + 9, { size: 9, bold: true, color: INK });
+    text("PLACE OF SUPPLY", L + 5, y + 4.6, { size: 6.8, weight: "semibold", color: MUTED, spacing: 0.4 });
+    text(cfg.placeOfSupply || "—", L + 5, y + 9, { size: 9, weight: "semibold", color: INK });
+    text("COUNTRY OF SUPPLY", L + colW + gap + 5, y + 4.6, { size: 6.8, weight: "semibold", color: MUTED, spacing: 0.4 });
+    text(cfg.countryOfSupply || "India", L + colW + gap + 5, y + 9, { size: 9, weight: "semibold", color: INK });
     y += sH + 6;
   } else {
     y += 1;
@@ -322,7 +352,7 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   const drawTableHeader = (top) => {
     const hH = 8;
     fillRect(L, top, W, hH, accent, 1.5);
-    cols.forEach((c) => text(c.h, cellX(c), top + 5.3, { size: 6.8, bold: true, color: accentText, align: c.a, spacing: 0.2 }));
+    cols.forEach((c) => text(c.h, cellX(c), top + 5.3, { size: 6.8, weight: "semibold", color: accentText, align: c.a, spacing: 0.2 }));
     return top + hH;
   };
 
@@ -366,8 +396,8 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
         descLines.forEach((ln, i) => text(ln, c.x + 2.5, baseY + i * 3.7, { size: 8.4, color: INK }));
         noteLines.forEach((ln, i) => text(ln, c.x + 2.5, baseY + descLines.length * 3.7 + i * 3, { size: 7, color: MUTED }));
       } else {
-        const bold = c.k === "total";
-        text(cellVal(c, r, idx), cellX(c), baseY, { size: 8.2, bold, color: bold ? INK : BODY, align: c.a });
+        const isTotal = c.k === "total";
+        text(cellVal(c, r, idx), cellX(c), baseY, { size: 8.2, weight: isTotal ? "semibold" : "regular", color: isTotal ? INK : BODY, align: c.a });
       }
     });
     y += rowH;
@@ -385,9 +415,9 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
 
   /* -- right: totals block -- */
   const totRow = (label, value, { big = false, color = INK, strong = false } = {}) => {
-    text(label, totalsX, ry, { size: big ? 11 : 8.6, bold: big || strong, color: big ? INK : MUTED });
-    text(value, R, ry, { size: big ? 13 : 9, bold: true, color, align: "right" });
-    ry += big ? 9 : 6.2;
+    text(label, totalsX, ry, { size: big ? 12 : 8.6, weight: big ? "extrabold" : (strong ? "semibold" : "medium"), color: big ? INK : MUTED });
+    text(value, R, ry, { size: big ? 14 : 9, weight: big ? "extrabold" : "semibold", color, align: "right" });
+    ry += big ? 9.5 : 6.2;
   };
   totRow("Sub Total", fmtRupee(t.subTotal));
   if (t.gstEnabled) {
@@ -405,9 +435,9 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   totRow("Total", fmtRupee(t.grandTotal), { big: true, color: accent });
   ry += 1;
   // amount in words
-  text("INVOICE TOTAL (IN WORDS)", totalsX, ry, { size: 6.6, bold: true, color: MUTED, spacing: 0.3 });
+  text("INVOICE TOTAL (IN WORDS)", totalsX, ry, { size: 6.6, weight: "semibold", color: MUTED, spacing: 0.3 });
   ry += 4.2;
-  wrap(amountInWords(t.grandTotal), totalsW, 7.6, false).forEach((ln) => { text(ln, totalsX, ry, { size: 7.6, color: BODY }); ry += 3.4; });
+  wrap(amountInWords(t.grandTotal), totalsW, 7.6, "italic").forEach((ln) => { text(ln, totalsX, ry, { size: 7.6, weight: "italic", color: BODY }); ry += 3.4; });
 
   /* -- left: bank & payment details -- */
   const bank = {
@@ -418,9 +448,9 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   };
   const hasBank = bank.name || bank.account || bank.ifsc || bank.upi;
   if (cfg.showBankDetails !== false && hasBank) {
-    text("BANK & PAYMENT DETAILS", L, ly, { size: 7.2, bold: true, color: accent, spacing: 0.4 });
+    text("BANK & PAYMENT DETAILS", L, ly, { size: 7.2, weight: "semibold", color: accent, spacing: 0.4 });
     ly += 5.5;
-    const brow = (lab, val) => { if (!val) return; text(lab, L, ly, { size: 8, color: MUTED }); text(val, L + leftW, ly, { size: 8, bold: true, color: INK, align: "right" }); ly += 5; };
+    const brow = (lab, val) => { if (!val) return; text(lab, L, ly, { size: 8, color: MUTED }); text(val, L + leftW, ly, { size: 8, weight: "semibold", color: INK, align: "right" }); ly += 5; };
     brow("Bank", bank.name);
     brow("Account No.", bank.account);
     brow("IFSC", bank.ifsc);
@@ -430,16 +460,16 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
 
   const terms = (cfg.terms || "").trim();
   if (terms) {
-    text("TERMS & CONDITIONS", L, ly, { size: 7.2, bold: true, color: accent, spacing: 0.4 });
+    text("TERMS & CONDITIONS", L, ly, { size: 7.2, weight: "semibold", color: accent, spacing: 0.4 });
     ly += 5;
-    wrap(terms, leftW + 20, 8, false).forEach((ln) => { text(ln, L, ly, { size: 8, color: BODY }); ly += 3.6; });
+    wrap(terms, leftW + 20, 8).forEach((ln) => { text(ln, L, ly, { size: 8, color: BODY }); ly += 3.6; });
     ly += 3;
   }
   const notes = (cfg.notes || invoice?.notes || "").trim();
   if (notes) {
-    text("ADDITIONAL NOTES", L, ly, { size: 7.2, bold: true, color: accent, spacing: 0.4 });
+    text("ADDITIONAL NOTES", L, ly, { size: 7.2, weight: "semibold", color: accent, spacing: 0.4 });
     ly += 5;
-    wrap(notes, leftW + 20, 8, false).forEach((ln) => { text(ln, L, ly, { size: 8, color: BODY }); ly += 3.6; });
+    wrap(notes, leftW + 20, 8, "italic").forEach((ln) => { text(ln, L, ly, { size: 8, weight: "italic", color: BODY }); ly += 3.6; });
   }
 
   /* ================= FOOTER / SIGNATURE ================= */
@@ -449,8 +479,8 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
   const footY = sigY + 6;
   if (firmEmail) text(firmEmail, L, footY, { size: 8, color: MUTED });
   if (firmPhone) text(firmPhone, L, footY + 4, { size: 8, color: MUTED });
-  text((cfg.signatoryLabel || "AUTHORISED SIGNATORY"), R, footY, { size: 7, bold: true, color: MUTED, align: "right", spacing: 0.4 });
-  text(firmName, R, footY + 5, { size: 9.5, bold: true, color: INK, align: "right" });
+  text((cfg.signatoryLabel || "AUTHORISED SIGNATORY"), R, footY, { size: 7, weight: "semibold", color: MUTED, align: "right", spacing: 0.4 });
+  text(firmName, R, footY + 5, { size: 9.5, weight: "bold", color: INK, align: "right" });
 
   /* page footer on every page */
   const pageCount = doc.internal.getNumberOfPages();

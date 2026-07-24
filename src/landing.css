@@ -171,25 +171,13 @@
   perspective: 700px;
   cursor: default;
 }
-.lp-hero-title .lp-line { display: block; overflow: hidden; padding: 0.05em 0.08em 0.12em 0; }
-.lp-piece {
-  display: inline-block;
-  transform-origin: center bottom;
-  transition: color 250ms ease, filter 250ms ease;
-}
-.lp-hero-title:hover .lp-piece { color: color-mix(in srgb, var(--lp-ink) 76%, var(--lp-primary)); }
-.lp-hero-title .lp-piece:hover { color: var(--lp-primary); filter: drop-shadow(0 10px 18px rgb(83 58 179 / 0.15)); }
-.lp-piece-accent {
-  color: transparent;
-  background: linear-gradient(105deg, var(--lp-primary), color-mix(in srgb, var(--lp-primary) 72%, var(--lp-ink)));
-  background-clip: text;
-  -webkit-background-clip: text;
-}
-.lp-hero-title:hover .lp-piece-accent,
-.lp-hero-title .lp-piece-accent:hover {
-  color: transparent;
-  filter: saturate(1.18) drop-shadow(0 10px 18px rgb(83 58 179 / 0.16));
-}
+.lp-hero-title .lp-line { display: block; overflow: visible; padding: 0.05em 0.08em 0.08em 0; }
+
+/* Cascade reveal (see components/ui/CascadeText.jsx) */
+.cascade-text { display: inline-block; position: relative; }
+.lp-hero-title .cascade-text { vertical-align: top; }
+.cascade-inner { display: inline-flex; overflow: hidden; position: relative; height: 1em; vertical-align: top; }
+.cascade-char { display: inline-block; position: relative; will-change: transform; }
 .lp-hero-sub { max-width: 620px; margin: 24px 0 0; color: var(--lp-muted); font-size: clamp(1rem, 1.4vw, 1.3rem); line-height: 1.55; }
 .lp-hero-cta { margin-top: 28px; }
 .lp-hero-visual { position: relative; z-index: 2; width: 100%; height: min(72dvh, 760px); margin: 0; display: flex; align-items: center; justify-content: center; }

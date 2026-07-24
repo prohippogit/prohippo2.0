@@ -34,6 +34,11 @@ const STYLE = `
 .ap-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .ap-toolbar .search { flex: 1; min-width: 200px; }
 .ap-sort { font-family: inherit; font-size: 12.5px; color: var(--p-text-2); background: var(--p-card); border: 1px solid var(--p-line-2); border-radius: 10px; padding: 8px 10px; }
+.ap-head { display: flex; align-items: baseline; gap: 10px; }
+.ap-head .ap-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14.5px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.ap-head .pill { flex-shrink: 0; white-space: nowrap; }
+.ap-sub { font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ap-subject { overflow-wrap: anywhere; min-width: 0; }
 `;
 
 const SORTS = {
@@ -169,12 +174,12 @@ function OrderCard({ o, selected, onClick }) {
       style={{borderLeftColor: u.fg}}
       onClick={onClick}
     >
-      <div className="between" style={{alignItems: "baseline", gap: 10}}>
-        <span style={{fontWeight: 700, fontSize: 14.5, letterSpacing: "-0.01em"}}>{titleCase(n.assessee || "—")}</span>
+      <div className="ap-head">
+        <span className="ap-name">{titleCase(n.assessee || "—")}</span>
         <span className={`pill pill-${u.pill}`}><span className="pill-dot" style={{background: "currentColor"}}/>{pillTxt}</span>
       </div>
-      <div className="muted" style={{fontSize: 12, marginTop: 3}}>
-        {n.subject || `Order u/s ${n.section || "—"}`} · AY {n.ay || "—"}
+      <div className="ap-sub muted">
+        AY {n.ay || "—"} · {n.subject || `Order u/s ${n.section || "—"}`}
       </div>
       <div className="center" style={{gap: 8, marginTop: 10, flexWrap: "wrap", justifyContent: "flex-start"}}>
         <span className="pill pill-primary">Appeal to {o.route}</span>
@@ -225,7 +230,7 @@ function Workspace({ x, allNotices, onOpenNotice }) {
         <div className="muted" style={{fontSize: 12.5, marginTop: 4, display: "flex", gap: 14, flexWrap: "wrap"}}>
           <span>PAN <b style={{color: "var(--p-text-2)"}}>{n.pan || "—"}</b></span>
           <span>AY <b style={{color: "var(--p-text-2)"}}>{n.ay || "—"}</b></span>
-          <span>{n.subject || `Order u/s ${n.section || "—"}`}</span>
+          <span className="ap-subject">{n.subject || `Order u/s ${n.section || "—"}`}</span>
           {n.din && <span>DIN …{String(n.din).slice(-6)}</span>}
         </div>
       </div>

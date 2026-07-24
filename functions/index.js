@@ -900,7 +900,7 @@ const OTP_SEND_WINDOW_MS = 60 * 60 * 1000; // the rolling window (1 hour)
 // records, then set this to an address on it (e.g. "ProHippo <login@yourdomain>").
 // `onboarding@resend.dev` works out of the box but only delivers to the Resend
 // account owner's own email — fine for a first test, not for real users.
-const OTP_EMAIL_FROM = "ProHippo <onboarding@resend.dev>";
+const OTP_EMAIL_FROM = "ProHippo <login@prohippo.in>";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const normEmail = (v) => String(v || "").trim().toLowerCase();

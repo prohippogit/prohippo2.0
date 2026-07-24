@@ -1,10 +1,32 @@
 /* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
-import { downloadInvoicePDF, amountInWords } from './invoicePdf';
+import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee } from './invoicePdf';
+
+/* ---- invoice appearance / defaults, persisted in profile.invoiceSettings ---- */
+export const ACCENT_PRESETS = [
+  { name: "Violet", hex: "#6C5CE7" },
+  { name: "Crimson", hex: "#E11D48" },
+  { name: "Blue", hex: "#2563EB" },
+  { name: "Emerald", hex: "#059669" },
+  { name: "Amber", hex: "#D97706" },
+  { name: "Fuchsia", hex: "#C026D3" },
+  { name: "Teal", hex: "#0D9488" },
+  { name: "Slate", hex: "#334155" },
+];
+export const DEFAULT_INVOICE_SETTINGS = {
+  accent: "#6C5CE7", firmGstin: "",
+  bankName: "", bankAccount: "", bankIfsc: "", bankUpi: "",
+  terms: "1. Goods once sold will not be taken back.",
+  notes: "Thank you for your business.",
+  placeOfSupply: "", countryOfSupply: "India",
+  gstEnabledDefault: true, defaultGstRate: 18, gstType: "CGST_SGST",
+  showBankDetails: true, signatoryLabel: "Authorised Signatory",
+};
+const resolveInvoiceSettings = (profile) => ({ ...DEFAULT_INVOICE_SETTINGS, ...(profile?.invoiceSettings || {}) });
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 
@@ -30,57 +52,111 @@ function Legend({ color, label }) {
 
 /* ---------------- Invoices ---------------- */
 
+/* Invoice Maker — build a full GST tax invoice with multiple line items,
+   a GST on/off toggle and a per-page settings gear for colours & defaults. */
 export function InvoiceModal({ initial, onClose }) {
-  const { data, addInvoice, updateInvoice, notify } = useData();
+  const { data, profile, addInvoice, updateInvoice, notify } = useData();
+  const settings = resolveInvoiceSettings(profile);
   const isEdit = Boolean(initial?.id);
-  const [form, setForm] = React.useState({
-    assessee: "", date: todayISO(), ay: "", service: "", amount: "", due: daysAway(30),
-    ...initial,
-  });
-  const [showAddAssessee, setShowAddAssessee] = React.useState(false);
-  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
-  const amount = Number(form.amount);
-  const linked = data.assessees.find(a => a.name === form.assessee);
-  const valid = Boolean(linked) && form.date && amount > 0;
+  const blankItem = () => ({ description: "", note: "", hsn: "", qty: 1, rate: "", gst: settings.defaultGstRate });
 
+  const [form, setForm] = React.useState(() => {
+    if (initial?.id) {
+      const items = (initial.items && initial.items.length)
+        ? initial.items.map(x => ({ ...blankItem(), ...x }))
+        : [{ ...blankItem(), description: initial.service || "", note: initial.ay ? `AY ${initial.ay}` : "", rate: initial.amount || "", gst: 0 }];
+      return {
+        assessee: initial.assessee || "",
+        date: initial.date || todayISO(), due: initial.due || daysAway(30),
+        gstEnabled: initial.gstEnabled !== false && (initial.gstEnabled === true || Boolean(initial.items?.length)),
+        gstType: initial.gstType || settings.gstType || "CGST_SGST",
+        customerGstin: initial.customerGstin || "",
+        notes: initial.notes || "",
+        items,
+      };
+    }
+    return {
+      assessee: "", date: todayISO(), due: daysAway(30),
+      gstEnabled: settings.gstEnabledDefault, gstType: settings.gstType || "CGST_SGST",
+      customerGstin: "", notes: "", items: [blankItem()],
+    };
+  });
+
+  const [showAddAssessee, setShowAddAssessee] = React.useState(false);
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [previewInv, setPreviewInv] = React.useState(null);
+
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const linked = data.assessees.find(a => a.name === form.assessee);
   const assesseeOptions = data.assessees.map(a => ({ value: a.name, label: titleCase(a.name), sub: a.pan }));
-  // Ongoing proceedings of the selected assessee feed the service and AY
-  // suggestions; both fields still accept free text.
-  const proceedings = linked ? data.matters.filter(m => m.pan === linked.pan && !["Closed", "Decided"].includes(m.status)) : [];
-  const serviceOptions = proceedings.map(m => ({
-    value: `${m.type}${m.section ? ` u/s ${m.section}` : ""} — professional fees`,
-    label: `${m.type}${m.section ? ` u/s ${m.section}` : ""} — AY ${m.ay}`,
-    sub: [m.ref, m.bench, m.status].filter(Boolean).join(" · "),
-    ay: m.ay,
-  }));
-  const ayOptions = [...new Set([
-    ...proceedings.map(m => m.ay),
-    ...(linked ? data.notices.filter(n => n.pan === linked.pan).map(n => n.ay) : []),
-    ...(linked ? data.hearings.filter(h => h.pan === linked.pan).map(h => h.ay) : []),
-  ].filter(Boolean))].sort().reverse();
+
+  const pickAssessee = (name) => {
+    const a = data.assessees.find(x => x.name === name);
+    setForm(f => ({ ...f, assessee: name, customerGstin: f.customerGstin || a?.gstin || "" }));
+  };
+  const setItem = (i, k, v) => setForm(f => ({ ...f, items: f.items.map((it, idx) => idx === i ? { ...it, [k]: v } : it) }));
+  const addItem = () => setForm(f => ({ ...f, items: [...f.items, blankItem()] }));
+  const removeItem = (i) => setForm(f => ({ ...f, items: f.items.length > 1 ? f.items.filter((_, idx) => idx !== i) : f.items }));
+
+  const totals = computeInvoiceTotals(form);
+  const valid = Boolean(linked) && form.date && totals.grandTotal > 0 && form.items.some(it => (it.description || "").trim());
+
+  const buildRec = () => {
+    const items = form.items
+      .filter(it => (it.description || "").trim() || Number(it.rate) > 0)
+      .map(it => ({
+        description: (it.description || "").trim(), note: (it.note || "").trim(), hsn: (it.hsn || "").trim(),
+        qty: Number(it.qty) || 0, rate: Number(it.rate) || 0, gst: form.gstEnabled ? (Number(it.gst) || 0) : 0,
+      }));
+    const t = computeInvoiceTotals({ ...form, items });
+    const summary = items.map(x => x.description).filter(Boolean);
+    return {
+      assessee: form.assessee,
+      customerName: linked?.name || form.assessee,
+      customerAddress: linked?.address || "",
+      customerGstin: (form.customerGstin || "").trim(),
+      date: form.date, due: form.due,
+      gstEnabled: form.gstEnabled, gstType: form.gstType,
+      items, notes: (form.notes || "").trim(),
+      service: summary.length > 1 ? `${summary[0]} +${summary.length - 1} more` : (summary[0] || "Professional fees"),
+      amount: t.grandTotal, subTotal: t.subTotal, taxTotal: t.taxTotal,
+    };
+  };
+
+  const openPreview = () => {
+    if (!valid) { notify("Add a customer and at least one priced line item first.", "alert"); return; }
+    setPreviewInv({ ...buildRec(), number: initial?.number || "DRAFT", received: initial?.received || 0 });
+  };
 
   const save = async () => {
     if (!valid) return;
-    const rec = { assessee: form.assessee, date: form.date, ay: form.ay, service: form.service, amount, due: form.due };
+    const rec = buildRec();
     if (isEdit) {
       updateInvoice(initial.id, rec);
       notify(`Invoice ${initial.number} updated`);
     } else {
       const inv = await addInvoice(rec);
       if (!inv) return;
-      notify(`Invoice ${inv.number || ""} raised — ${fmtINR(amount)}`);
+      notify(`Invoice ${inv.number || ""} raised — ${fmtINR(rec.amount)}`);
     }
     onClose();
   };
 
+  const gstOn = form.gstEnabled;
+
   return (
     <Modal
-      title={isEdit ? "Edit invoice" : "New invoice"}
-      sub={isEdit ? `${initial.number} — the invoice number stays unchanged` : "The invoice number is assigned automatically"}
+      title={<span className="center" style={{gap: 10, justifyContent: "flex-start"}}>
+        <span>{isEdit ? "Edit invoice" : "Invoice Maker"}</span>
+        <button className="icon-btn" style={{width: 30, height: 30}} title="Invoice settings" onClick={() => setShowSettings(true)}><Icon name="settings" size={15}/></button>
+      </span>}
+      sub={isEdit ? `${initial.number} — the invoice number stays unchanged` : "The invoice number is assigned automatically on save"}
       onClose={onClose}
+      width={860}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{isEdit ? "Save changes" : "Raise invoice"}</button>
+        <button className="btn btn-secondary" onClick={openPreview}><Icon name="doc" size={14}/>Preview</button>
+        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{isEdit ? "Save changes" : "Finalize invoice"}</button>
       </>}
     >
       {data.assessees.length === 0 && (
@@ -88,32 +164,189 @@ export function InvoiceModal({ initial, onClose }) {
           <AssesseeRequiredNote message={NEEDS_ASSESSEE} onCreate={() => setShowAddAssessee(true)}/>
         </div>
       )}
+
       <div className="form-grid">
-        <FormField label="Assessee" required full>
-          <ComboBox value={form.assessee} onChange={set("assessee")} options={assesseeOptions} subMono placeholder={data.assessees.length ? "Search name or PAN…" : "No assessees yet"}/>
+        <FormField label="Party / Customer" required full>
+          <ComboBox value={form.assessee} onChange={pickAssessee} options={assesseeOptions} subMono placeholder={data.assessees.length ? "Search name or PAN…" : "No customers yet"}/>
         </FormField>
-        <FormField label="Service description" full>
-          <ComboBox
-            value={form.service}
-            onChange={set("service")}
-            options={serviceOptions}
-            onPick={(o) => { if (o.ay) set("ay")(o.ay); }}
-            placeholder={linked ? (serviceOptions.length ? "Pick an ongoing proceeding or type your own…" : "e.g. ITAT appeal — drafting & hearing fees") : "Select an assessee to see their proceedings…"}
-          />
-        </FormField>
-        <FormField label="Assessment year">
-          <ComboBox value={form.ay} onChange={set("ay")} options={ayOptions} placeholder={ayOptions.length ? "Pick or type an AY…" : "2021-22"}/>
-        </FormField>
-        <FormField label="Amount (₹)" required><TextInput type="number" value={form.amount} onChange={set("amount")} placeholder="0"/></FormField>
         <FormField label="Invoice date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
         <FormField label="Due date"><TextInput type="date" value={form.due} onChange={set("due")}/></FormField>
       </div>
+
+      {/* GST controls */}
+      <div className="between" style={{marginTop: 14, padding: "12px 14px", background: "var(--p-card-tint)", borderRadius: 12, border: "1px solid var(--p-line-2)", flexWrap: "wrap", gap: 12}}>
+        <div className="center" style={{gap: 12, justifyContent: "flex-start"}}>
+          <Toggle checked={gstOn} onChange={set("gstEnabled")} label="GST applicable"/>
+          <div>
+            <div style={{fontWeight: 700, fontSize: 13}}>GST applicable</div>
+            <div className="muted" style={{fontSize: 11.5}}>{gstOn ? "Tax is calculated per line item" : "Plain bill — no tax columns"}</div>
+          </div>
+        </div>
+        {gstOn && (
+          <div className="center" style={{gap: 10, flexWrap: "wrap"}}>
+            <div className="field" style={{gap: 4}}>
+              <label style={{fontSize: 11}}>Tax logic</label>
+              <SelectInput value={form.gstType} onChange={set("gstType")} options={[{ value: "CGST_SGST", label: "CGST + SGST (intra-state)" }, { value: "IGST", label: "IGST (inter-state)" }]}/>
+            </div>
+            <div className="field" style={{gap: 4}}>
+              <label style={{fontSize: 11}}>Customer GSTIN</label>
+              <TextInput value={form.customerGstin} onChange={set("customerGstin")} placeholder="e.g. 24ABCDE1234F1Z5" mono/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Line items */}
+      <div style={{marginTop: 16}}>
+        <div className="between" style={{marginBottom: 8}}>
+          <div style={{fontWeight: 800, fontSize: 13.5}}>Particulars</div>
+          <span className="pill pill-muted">{form.items.length} item{form.items.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div style={{overflowX: "auto"}}>
+          <table className="lineitems">
+            <thead>
+              <tr>
+                <th style={{width: "38%"}}>Description</th>
+                <th style={{width: 96}}>HSN/SAC</th>
+                <th className="num" style={{width: 64}}>Qty</th>
+                <th className="num" style={{width: 96}}>Rate (₹)</th>
+                {gstOn && <th className="num" style={{width: 70}}>GST %</th>}
+                <th className="num" style={{width: 104}}>Amount</th>
+                <th style={{width: 34}}/>
+              </tr>
+            </thead>
+            <tbody>
+              {form.items.map((it, i) => {
+                const rowTotal = totals.rows[i]?.total || 0;
+                return (
+                  <tr key={i}>
+                    <td>
+                      <input placeholder="Product or service" value={it.description} onChange={e => setItem(i, "description", e.target.value)}/>
+                      <input className="note" placeholder="Add a note or specification (optional)" value={it.note} onChange={e => setItem(i, "note", e.target.value)}/>
+                    </td>
+                    <td><input placeholder="e.g. 9982" value={it.hsn} onChange={e => setItem(i, "hsn", e.target.value)}/></td>
+                    <td><input className="right" type="number" value={it.qty} onChange={e => setItem(i, "qty", e.target.value)}/></td>
+                    <td><input className="right" type="number" placeholder="0" value={it.rate} onChange={e => setItem(i, "rate", e.target.value)}/></td>
+                    {gstOn && <td><input className="right" type="number" value={it.gst} onChange={e => setItem(i, "gst", e.target.value)}/></td>}
+                    <td className="num" style={{paddingTop: 15, fontWeight: 700, fontSize: 12.5, whiteSpace: "nowrap"}}>{fmtRupee(rowTotal)}</td>
+                    <td style={{paddingTop: 10}}>
+                      <button className="btn btn-ghost btn-xs" title="Remove line" style={{color: "var(--p-danger)"}} onClick={() => removeItem(i)} disabled={form.items.length <= 1}><Icon name="trash" size={13}/></button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <button className="btn btn-secondary btn-sm" style={{marginTop: 10}} onClick={addItem}><Icon name="plus" size={13}/>Add line item</button>
+      </div>
+
+      {/* Additional notes + live summary */}
+      <div className="grid-split" style={{gap: 16, marginTop: 18, alignItems: "start"}}>
+        <FormField label="Notes on this invoice">
+          <textarea rows={3} value={form.notes} onChange={e => set("notes")(e.target.value)} placeholder="Shown under the totals on the PDF" style={{border: "1px solid var(--p-line)", background: "white", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, outline: "none", resize: "vertical", fontFamily: "inherit"}}/>
+        </FormField>
+        <div style={{background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", borderRadius: 14, padding: "14px 16px"}}>
+          <div className="between" style={{fontSize: 13, padding: "3px 0"}}><span className="muted">Sub Total</span><span style={{fontWeight: 700}}>{fmtRupee(totals.subTotal)}</span></div>
+          {gstOn && totals.gstType === "IGST" && <div className="between" style={{fontSize: 13, padding: "3px 0"}}><span className="muted">IGST</span><span style={{fontWeight: 700}}>{fmtRupee(totals.igst)}</span></div>}
+          {gstOn && totals.gstType === "CGST_SGST" && <>
+            <div className="between" style={{fontSize: 13, padding: "3px 0"}}><span className="muted">CGST</span><span style={{fontWeight: 700}}>{fmtRupee(totals.cgst)}</span></div>
+            <div className="between" style={{fontSize: 13, padding: "3px 0"}}><span className="muted">SGST</span><span style={{fontWeight: 700}}>{fmtRupee(totals.sgst)}</span></div>
+          </>}
+          {Math.abs(totals.roundOff) >= 0.005 && <div className="between" style={{fontSize: 13, padding: "3px 0"}}><span className="muted">Round Off</span><span style={{fontWeight: 700}}>{totals.roundOff >= 0 ? "+" : "−"}{fmtRupee(Math.abs(totals.roundOff))}</span></div>}
+          <div className="between" style={{borderTop: "1px solid var(--p-line)", marginTop: 8, paddingTop: 10}}>
+            <span style={{fontWeight: 800, fontSize: 15}}>Grand Total</span>
+            <span style={{fontWeight: 800, fontSize: 17, color: "var(--p-primary)"}}>{fmtRupee(totals.grandTotal)}</span>
+          </div>
+        </div>
+      </div>
+
       {showAddAssessee && (
-        <AssesseeModal
-          onClose={() => setShowAddAssessee(false)}
-          onSaved={(a) => set("assessee")(a.name)}
-        />
+        <AssesseeModal onClose={() => setShowAddAssessee(false)} onSaved={(a) => pickAssessee(a.name)}/>
       )}
+      {showSettings && <InvoiceSettingsModal onClose={() => setShowSettings(false)}/>}
+      {previewInv && <InvoiceView invoice={previewInv} onClose={() => setPreviewInv(null)} onEdit={() => setPreviewInv(null)}/>}
+    </Modal>
+  );
+}
+
+/* Invoice appearance & defaults — colours, firm GSTIN, bank details, terms. */
+export function InvoiceSettingsModal({ onClose }) {
+  const { profile, setProfile, notify } = useData();
+  const [s, setS] = React.useState(() => resolveInvoiceSettings(profile));
+  const set = (k) => (v) => setS(x => ({ ...x, [k]: v }));
+
+  const save = () => {
+    setProfile({ invoiceSettings: { ...s, defaultGstRate: Number(s.defaultGstRate) || 0 } });
+    notify("Invoice settings saved");
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="Invoice settings"
+      sub="Colours, tax defaults and the details printed on every invoice PDF"
+      onClose={onClose}
+      width={640}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={save}><Icon name="check" size={14}/>Save settings</button>
+      </>}
+    >
+      <div style={{fontWeight: 800, fontSize: 13, marginBottom: 8}}>Accent colour</div>
+      <div className="row" style={{gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 6}}>
+        {ACCENT_PRESETS.map(p => (
+          <button key={p.hex} type="button" title={p.name} className={`swatch ${s.accent?.toLowerCase() === p.hex.toLowerCase() ? "active" : ""}`} style={{background: p.hex}} onClick={() => set("accent")(p.hex)}/>
+        ))}
+        <label className="center" style={{gap: 6, fontSize: 12}}>
+          <input type="color" value={s.accent} onChange={e => set("accent")(e.target.value)} style={{width: 34, height: 30, border: "none", background: "none", cursor: "pointer", padding: 0}}/>
+          <span className="muted" style={{fontFamily: "ui-monospace, monospace"}}>{s.accent}</span>
+        </label>
+      </div>
+
+      <div style={{height: 1, background: "var(--p-line)", margin: "16px 0"}}/>
+
+      <div className="between" style={{marginBottom: 14}}>
+        <div>
+          <div style={{fontWeight: 700, fontSize: 13}}>GST applicable by default</div>
+          <div className="muted" style={{fontSize: 11.5}}>New invoices start with GST {s.gstEnabledDefault ? "on" : "off"}</div>
+        </div>
+        <Toggle checked={s.gstEnabledDefault} onChange={set("gstEnabledDefault")} label="GST default"/>
+      </div>
+
+      <div className="form-grid">
+        <FormField label="Default tax logic"><SelectInput value={s.gstType} onChange={set("gstType")} options={[{ value: "CGST_SGST", label: "CGST + SGST" }, { value: "IGST", label: "IGST" }]}/></FormField>
+        <FormField label="Default GST rate (%)"><TextInput type="number" value={s.defaultGstRate} onChange={set("defaultGstRate")} placeholder="18"/></FormField>
+        <FormField label="Your firm GSTIN"><TextInput value={s.firmGstin} onChange={set("firmGstin")} placeholder="e.g. 24ABCDE1234F1Z5" mono/></FormField>
+        <FormField label="Signatory label"><TextInput value={s.signatoryLabel} onChange={set("signatoryLabel")} placeholder="Authorised Signatory"/></FormField>
+        <FormField label="Place of supply"><TextInput value={s.placeOfSupply} onChange={set("placeOfSupply")} placeholder="e.g. Gujarat"/></FormField>
+        <FormField label="Country of supply"><TextInput value={s.countryOfSupply} onChange={set("countryOfSupply")} placeholder="India"/></FormField>
+      </div>
+
+      <div style={{height: 1, background: "var(--p-line)", margin: "16px 0"}}/>
+      <div className="between" style={{marginBottom: 12}}>
+        <div style={{fontWeight: 800, fontSize: 13}}>Bank & payment details</div>
+        <div className="center" style={{gap: 8}}>
+          <span className="muted" style={{fontSize: 11.5}}>Show on PDF</span>
+          <Toggle checked={s.showBankDetails !== false} onChange={set("showBankDetails")} label="Show bank details"/>
+        </div>
+      </div>
+      <div className="form-grid">
+        <FormField label="Bank name"><TextInput value={s.bankName} onChange={set("bankName")} placeholder="e.g. HDFC Bank"/></FormField>
+        <FormField label="Account number"><TextInput value={s.bankAccount} onChange={set("bankAccount")} placeholder="Account no."/></FormField>
+        <FormField label="IFSC"><TextInput value={s.bankIfsc} onChange={set("bankIfsc")} placeholder="IFSC code" mono/></FormField>
+        <FormField label="UPI ID"><TextInput value={s.bankUpi} onChange={set("bankUpi")} placeholder="name@bank"/></FormField>
+      </div>
+
+      <div style={{height: 1, background: "var(--p-line)", margin: "16px 0"}}/>
+      <div className="col" style={{gap: 12}}>
+        <FormField label="Terms & conditions">
+          <textarea rows={2} value={s.terms} onChange={e => set("terms")(e.target.value)} placeholder="1. Goods once sold will not be taken back." style={{border: "1px solid var(--p-line)", background: "white", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, outline: "none", resize: "vertical", fontFamily: "inherit"}}/>
+        </FormField>
+        <FormField label="Default notes">
+          <textarea rows={2} value={s.notes} onChange={e => set("notes")(e.target.value)} placeholder="Thank you for your business." style={{border: "1px solid var(--p-line)", background: "white", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, outline: "none", resize: "vertical", fontFamily: "inherit"}}/>
+        </FormField>
+      </div>
     </Modal>
   );
 }
@@ -150,100 +383,29 @@ function PaymentModal({ invoice, onClose }) {
   );
 }
 
-function MetaCell({ label, value }) {
-  return (
-    <div>
-      <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>{label}</div>
-      <div style={{fontSize: 13.5, fontWeight: 800, marginTop: 3}}>{value}</div>
-    </div>
-  );
-}
-
-/* On-screen preview of the vector PDF invoice, with download / edit actions. */
+/* On-screen preview of the actual vector PDF invoice (rendered in an
+   embedded viewer), with download / edit actions. */
 function InvoiceView({ invoice, onClose, onEdit }) {
   const { data, profile } = useData();
   const assessee = data.assessees.find(a => a.name === invoice.assessee);
-  const firmName = (profile?.firmName || "").trim() || (profile?.ownerName || "").trim() || "Tax practice";
-  const balance = invoiceOutstanding(invoice);
-  const fmt2 = (n) => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  const dataUri = React.useMemo(
+    () => invoicePDFDataUri({ invoice, assessee, profile }),
+    [invoice, assessee, profile]
+  );
   return (
     <Modal
-      title={`Invoice ${invoice.number}`}
-      sub="Preview of the PDF that will be downloaded"
+      title={`Invoice ${invoice.number || "preview"}`}
+      sub="Vector PDF — exactly what downloads"
       onClose={onClose}
-      width={660}
+      width={880}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Close</button>
-        <button className="btn btn-secondary" onClick={onEdit}><Icon name="edit" size={14}/>Edit</button>
+        {onEdit && <button className="btn btn-secondary" onClick={onEdit}><Icon name="edit" size={14}/>Edit</button>}
         <button className="btn btn-primary" onClick={() => downloadInvoicePDF({ invoice, assessee, profile })}><Icon name="download" size={14}/>Download PDF</button>
       </>}
     >
-      <div style={{border: "1px solid var(--p-line)", borderRadius: 14, padding: "22px 24px", background: "white"}}>
-        <div className="between" style={{alignItems: "flex-start"}}>
-          <div>
-            <div style={{fontSize: 19, fontWeight: 800, letterSpacing: "-0.02em"}}>{firmName}</div>
-            {profile?.ownerName && profile.ownerName !== firmName && <div className="muted" style={{fontSize: 12, marginTop: 2}}>{profile.ownerName}</div>}
-            {profile?.firmAddress && <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{profile.firmAddress}</div>}
-            {(profile?.email || profile?.firmMobile) && <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{[profile?.email, profile?.firmMobile].filter(Boolean).join("  ·  ")}</div>}
-          </div>
-          <div style={{fontSize: 19, fontWeight: 800, letterSpacing: "0.12em", color: "var(--p-primary)"}}>INVOICE</div>
-        </div>
-        <div style={{height: 3, background: "var(--p-primary)", borderRadius: 2, margin: "14px 0 16px"}}/>
-        <div className="grid" style={{gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12}}>
-          <MetaCell label="INVOICE NO." value={invoice.number}/>
-          <MetaCell label="INVOICE DATE" value={fmtDateLong(invoice.date)}/>
-          <MetaCell label="DUE DATE" value={invoice.due ? fmtDateLong(invoice.due) : "—"}/>
-        </div>
-        <div style={{marginTop: 18}}>
-          <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>BILLED TO</div>
-          <div style={{fontSize: 15, fontWeight: 800, marginTop: 4}}>{titleCase(invoice.assessee)}</div>
-          {assessee?.pan && <div style={{fontSize: 12, marginTop: 2, fontFamily: "ui-monospace, monospace"}}>PAN: {assessee.pan}</div>}
-          {assessee?.address && <div className="muted" style={{fontSize: 12, marginTop: 2}}>{assessee.address}</div>}
-        </div>
-        <table style={{width: "100%", marginTop: 16, borderCollapse: "collapse", fontSize: 13}}>
-          <thead>
-            <tr style={{background: "var(--p-lavender-2)"}}>
-              <th style={{textAlign: "left", padding: "8px 10px", fontSize: 10.5, letterSpacing: "0.06em", color: "var(--p-text-3)"}}>PARTICULARS</th>
-              <th style={{textAlign: "left", padding: "8px 10px", fontSize: 10.5, letterSpacing: "0.06em", color: "var(--p-text-3)", width: 90}}>AY</th>
-              <th style={{textAlign: "right", padding: "8px 10px", fontSize: 10.5, letterSpacing: "0.06em", color: "var(--p-text-3)", width: 130}}>AMOUNT (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style={{padding: "10px", borderBottom: "1px solid var(--p-line-2)"}}>{invoice.service || "Professional fees"}</td>
-              <td style={{padding: "10px", borderBottom: "1px solid var(--p-line-2)"}}>{invoice.ay || "—"}</td>
-              <td style={{padding: "10px", borderBottom: "1px solid var(--p-line-2)", textAlign: "right", fontWeight: 700}}>{fmt2(invoice.amount)}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div style={{display: "flex", justifyContent: "flex-end", marginTop: 12}}>
-          <div style={{minWidth: 240}}>
-            <div className="between" style={{padding: "4px 10px"}}>
-              <span style={{fontWeight: 800, fontSize: 14}}>Total</span>
-              <span style={{fontWeight: 800, fontSize: 15}}>₹ {fmt2(invoice.amount)}</span>
-            </div>
-            {(invoice.received || 0) > 0 && <>
-              <div className="between" style={{padding: "3px 10px", fontSize: 12.5}}>
-                <span className="muted">Received</span><span style={{fontWeight: 700}}>₹ {fmt2(invoice.received)}</span>
-              </div>
-              <div className="between" style={{padding: "3px 10px", fontSize: 12.5}}>
-                <span className="muted">Balance due</span>
-                <span style={{fontWeight: 800, color: balance > 0 ? "#C13388" : "var(--p-success)"}}>₹ {fmt2(balance)}</span>
-              </div>
-            </>}
-          </div>
-        </div>
-        <div style={{marginTop: 14}}>
-          <div style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "var(--p-text-3)"}}>AMOUNT IN WORDS</div>
-          <div style={{fontSize: 12.5, marginTop: 3}}>{amountInWords(invoice.amount)}</div>
-        </div>
-        <div className="between" style={{marginTop: 20, alignItems: "flex-end"}}>
-          <StatusPill status={invoiceStatus(invoice)}/>
-          <div style={{textAlign: "right"}}>
-            <div style={{fontWeight: 800, fontSize: 12.5}}>For {firmName}</div>
-            <div className="muted" style={{fontSize: 11, marginTop: 26, borderTop: "1px solid var(--p-line)", paddingTop: 5}}>Authorised Signatory</div>
-          </div>
-        </div>
+      <div style={{height: "72vh", border: "1px solid var(--p-line)", borderRadius: 12, overflow: "hidden", background: "#525659"}}>
+        <iframe title={`Invoice ${invoice.number || ""}`} src={dataUri} style={{width: "100%", height: "100%", border: 0}}/>
       </div>
     </Modal>
   );
@@ -257,6 +419,7 @@ export function Invoices() {
   const [payFor, setPayFor] = React.useState(null);
   const [editFor, setEditFor] = React.useState(null);
   const [viewFor, setViewFor] = React.useState(null);
+  const [showSettings, setShowSettings] = React.useState(false);
 
   const assesseeOf = (inv) => data.assessees.find(a => a.name === inv.assessee);
   const invoices = [...data.invoices].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -312,6 +475,7 @@ export function Invoices() {
           </div>
         </div>
         <div className="topbar-actions">
+          <button className="btn btn-secondary" title="Invoice settings" onClick={() => setShowSettings(true)}><Icon name="settings" size={14}/>Settings</button>
           <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export</button>
           <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New invoice</button>
         </div>
@@ -420,6 +584,7 @@ export function Invoices() {
       </div>
 
       {showNew && <InvoiceModal onClose={() => setShowNew(false)}/>}
+      {showSettings && <InvoiceSettingsModal onClose={() => setShowSettings(false)}/>}
       {payFor && <PaymentModal invoice={payFor} onClose={() => setPayFor(null)}/>}
       {editFor && <InvoiceModal initial={editFor} onClose={() => setEditFor(null)}/>}
       {viewFor && (

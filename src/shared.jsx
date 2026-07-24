@@ -277,6 +277,23 @@ export function ComboBox({ value, onChange, onPick, options, placeholder, mono, 
   );
 }
 
+/* On/off pill switch. */
+export function Toggle({ checked, onChange, label, disabled }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      className={`switch ${checked ? "on" : ""}`}
+      onClick={() => !disabled && onChange(!checked)}
+    >
+      <span className="switch-knob"/>
+    </button>
+  );
+}
+
 export function EmptyState({ icon = "folder", title, sub, action }) {
   return (
     <div style={{textAlign: "center", padding: "48px 20px"}}>

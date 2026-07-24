@@ -463,6 +463,58 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .utab:hover { color: var(--p-text); }
 .utab.active { color: var(--p-primary); border-bottom-color: var(--p-primary); }
 
+/* Toggle switch */
+.switch {
+  position: relative;
+  width: 44px; height: 25px;
+  border-radius: 999px;
+  border: none;
+  background: var(--p-line-2);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.18s ease;
+  flex-shrink: 0;
+}
+.switch.on { background: var(--p-primary); }
+.switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.switch-knob {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(20,19,43,0.28);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.switch.on .switch-knob { transform: translateX(19px); }
+
+/* Editable line-items table (invoice maker) */
+.lineitems { width: 100%; border-collapse: collapse; }
+.lineitems th {
+  text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  color: var(--p-text-3); text-transform: uppercase;
+  padding: 0 8px 8px; white-space: nowrap;
+}
+.lineitems th.num, .lineitems td.num { text-align: right; }
+.lineitems td { padding: 4px 6px; vertical-align: top; }
+.lineitems input {
+  width: 100%; border: 1px solid var(--p-line);
+  background: white; border-radius: 9px;
+  padding: 8px 10px; font-size: 12.5px; outline: none;
+  transition: all 0.12s ease;
+}
+.lineitems input:focus { border-color: var(--p-primary-3); box-shadow: 0 0 0 3px rgba(108,92,231,0.12); }
+.lineitems input.right { text-align: right; }
+.lineitems input.note { margin-top: 5px; font-size: 11.5px; color: var(--p-text-2); background: var(--p-card-tint); }
+
+.swatch {
+  width: 30px; height: 30px; border-radius: 9px; cursor: pointer;
+  border: 2px solid transparent; padding: 0;
+  transition: transform 0.1s ease;
+}
+.swatch:hover { transform: scale(1.08); }
+.swatch.active { border-color: var(--p-text); box-shadow: 0 0 0 2px white inset; }
+
 /* Form */
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 12px; font-weight: 600; color: var(--p-text-2); }

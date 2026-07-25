@@ -18,7 +18,7 @@ import {
    weights as their own families and resolve a friendly weight name to the
    right (family, style) pair. */
 const FONT_FAMILY = "Poppins";
-const registerFonts = (doc) => {
+export const registerFonts = (doc) => {
   const add = (b64, file, family, style) => {
     doc.addFileToVFS(file, b64);
     doc.addFont(file, family, style);
@@ -39,7 +39,7 @@ const WEIGHTS = {
   italic: [FONT_FAMILY, "italic"],
 };
 // Legacy `bold` boolean → weight name; an explicit `weight` always wins.
-const resolveWeight = (weight, bold) => WEIGHTS[weight] || (bold ? WEIGHTS.bold : WEIGHTS.regular);
+export const resolveWeight = (weight, bold) => WEIGHTS[weight] || (bold ? WEIGHTS.bold : WEIGHTS.regular);
 
 /* ---------------- money / number helpers ---------------- */
 

@@ -1,10 +1,14 @@
 /* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
-import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO } from './store';
+import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO,
+  assesseeLedger, groupLedger, groupsOf, assesseeOutstanding, allocatePayment } from './store';
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee } from './invoicePdf';
+import { downloadLedgerPDF, ledgerPDFDataUri, downloadReceiptPDF, receiptPDFDataUri } from './ledgerPdf';
+
+const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
 
 /* ---- invoice appearance / defaults, persisted in profile.invoiceSettings ---- */
 export const ACCENT_PRESETS = [
@@ -351,17 +355,31 @@ export function InvoiceSettingsModal({ onClose }) {
   );
 }
 
-function PaymentModal({ invoice, onClose }) {
-  const { updateInvoice, notify } = useData();
+/* Record a payment against a single invoice — writes a numbered receipt and
+   bumps the invoice's received amount, then hands the receipt back so the
+   caller can offer the printable receipt PDF. */
+function PaymentModal({ invoice, onClose, onReceipt }) {
+  const { data, addReceipt, notify } = useData();
   const balance = invoiceOutstanding(invoice);
-  const [amount, setAmount] = React.useState(String(balance));
-  const val = Number(amount);
-  const valid = val > 0 && val <= balance;
+  const assessee = data.assessees.find(a => a.name === invoice.assessee);
+  const [form, setForm] = React.useState({ amount: String(balance), date: todayISO(), mode: "UPI", note: "" });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const [busy, setBusy] = React.useState(false);
+  const val = Number(form.amount);
+  const valid = val > 0 && val <= balance + 0.01;
 
-  const save = () => {
-    if (!valid) return;
-    updateInvoice(invoice.id, { received: (invoice.received || 0) + val });
-    notify(`Payment of ${fmtINR(val)} recorded against ${invoice.number}`);
+  const save = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    const rec = await addReceipt({
+      assessee: invoice.assessee, group: assessee?.group || "",
+      date: form.date, amount: val, mode: form.mode, note: form.note.trim(),
+      allocations: [{ invoiceId: invoice.id, invoiceNumber: invoice.number, amount: val }],
+    });
+    setBusy(false);
+    if (!rec) return;
+    notify(`Receipt ${rec.number} — ${fmtINR(val)} against ${invoice.number}`);
+    onReceipt?.(rec);
     onClose();
   };
 
@@ -370,16 +388,181 @@ function PaymentModal({ invoice, onClose }) {
       title="Record payment"
       sub={`${invoice.number} · ${titleCase(invoice.assessee)} · balance ${fmtINR(balance)}`}
       onClose={onClose}
-      width={420}
+      width={460}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" disabled={!valid} style={{opacity: valid ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>Record payment</button>
+        <button className="btn btn-primary" disabled={!valid || busy} style={{opacity: valid && !busy ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{busy ? "Saving…" : "Record & receipt"}</button>
       </>}
     >
-      <FormField label="Amount received (₹)" required>
-        <TextInput type="number" value={amount} onChange={setAmount}/>
-      </FormField>
+      <div className="form-grid">
+        <FormField label="Amount received (₹)" required><TextInput type="number" value={form.amount} onChange={set("amount")}/></FormField>
+        <FormField label="Payment date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
+        <FormField label="Mode"><SelectInput value={form.mode} onChange={set("mode")} options={PAY_MODES}/></FormField>
+        <FormField label="Reference / note"><TextInput value={form.note} onChange={set("note")} placeholder="e.g. NEFT ref, cheque no."/></FormField>
+      </div>
     </Modal>
+  );
+}
+
+/* Receive a payment against an assessee — auto-allocated across their open
+   invoices oldest-first. Anything beyond the total outstanding is kept as an
+   advance on the receipt. */
+function AssesseePaymentModal({ assessee, onClose, onReceipt }) {
+  const { data, addReceipt, notify } = useData();
+  const outstanding = assesseeOutstanding(data, assessee.name);
+  const [form, setForm] = React.useState({ amount: String(outstanding || ""), date: todayISO(), mode: "UPI", note: "" });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const [busy, setBusy] = React.useState(false);
+  const val = Number(form.amount);
+  const valid = val > 0;
+  const { allocations, advance } = allocatePayment(data, assessee.name, val || 0);
+
+  const save = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    const rec = await addReceipt({
+      assessee: assessee.name, group: assessee.group || "",
+      date: form.date, amount: val, mode: form.mode, note: form.note.trim(), allocations,
+    });
+    setBusy(false);
+    if (!rec) return;
+    notify(`Receipt ${rec.number} — ${fmtINR(val)} from ${titleCase(assessee.name)}`);
+    onReceipt?.(rec);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="Receive payment"
+      sub={`${titleCase(assessee.name)} · outstanding ${fmtINR(outstanding)}`}
+      onClose={onClose}
+      width={480}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid || busy} style={{opacity: valid && !busy ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{busy ? "Saving…" : "Record & receipt"}</button>
+      </>}
+    >
+      <div className="form-grid">
+        <FormField label="Amount received (₹)" required><TextInput type="number" value={form.amount} onChange={set("amount")}/></FormField>
+        <FormField label="Payment date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
+        <FormField label="Mode"><SelectInput value={form.mode} onChange={set("mode")} options={PAY_MODES}/></FormField>
+        <FormField label="Reference / note"><TextInput value={form.note} onChange={set("note")} placeholder="e.g. NEFT ref, cheque no."/></FormField>
+      </div>
+      {val > 0 && (
+        <div style={{marginTop: 12, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
+          <div className="muted" style={{fontSize: 11.5, marginBottom: 6, fontWeight: 700}}>APPLIED TO</div>
+          {allocations.length === 0 && <div className="muted" style={{fontSize: 12.5}}>No open invoices — recorded as an advance.</div>}
+          {allocations.map(a => (
+            <div key={a.invoiceId} className="between" style={{fontSize: 12.5, padding: "2px 0"}}>
+              <span style={{fontFamily: "ui-monospace, monospace"}}>{a.invoiceNumber}</span><span style={{fontWeight: 700}}>{fmtINR(a.amount)}</span>
+            </div>
+          ))}
+          {advance > 0.01 && <div className="between" style={{fontSize: 12.5, padding: "2px 0", color: "var(--p-primary-2)"}}><span>Advance / on account</span><span style={{fontWeight: 700}}>{fmtINR(advance)}</span></div>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* Take a payment against a whole group. It is recorded at the group level and
+   appears only in the group ledger — it does not touch individual invoices. */
+function GroupPaymentModal({ group, onClose, onReceipt }) {
+  const { addReceipt, notify } = useData();
+  const [form, setForm] = React.useState({ amount: String(group.outstanding || ""), date: todayISO(), mode: "UPI", note: "" });
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const [busy, setBusy] = React.useState(false);
+  const val = Number(form.amount);
+  const valid = val > 0;
+
+  const save = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    const rec = await addReceipt({
+      assessee: "", group: group.name, date: form.date, amount: val, mode: form.mode, note: form.note.trim(),
+    });
+    setBusy(false);
+    if (!rec) return;
+    notify(`Receipt ${rec.number} — ${fmtINR(val)} for ${group.name}`);
+    onReceipt?.(rec);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="Group payment"
+      sub={`${group.name} · outstanding ${fmtINR(group.outstanding)}`}
+      onClose={onClose}
+      width={480}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid || busy} style={{opacity: valid && !busy ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{busy ? "Saving…" : "Record & receipt"}</button>
+      </>}
+    >
+      <div style={{marginBottom: 12, padding: "10px 12px", background: "var(--p-lavender-2)", borderRadius: 11, fontSize: 12, lineHeight: 1.5}}>
+        <Icon name="info" size={12}/> This receipt is recorded against the group as a whole and shows only in the group ledger. To settle a specific invoice, take the payment on that assessee instead.
+      </div>
+      <div className="form-grid">
+        <FormField label="Amount received (₹)" required><TextInput type="number" value={form.amount} onChange={set("amount")}/></FormField>
+        <FormField label="Payment date"><TextInput type="date" value={form.date} onChange={set("date")}/></FormField>
+        <FormField label="Mode"><SelectInput value={form.mode} onChange={set("mode")} options={PAY_MODES}/></FormField>
+        <FormField label="Reference / note"><TextInput value={form.note} onChange={set("note")} placeholder="e.g. NEFT ref, cheque no."/></FormField>
+      </div>
+    </Modal>
+  );
+}
+
+/* Preview a receipt / ledger vector PDF in an embedded viewer. */
+function PdfPreviewModal({ title, sub, dataUri, onDownload, onClose }) {
+  return (
+    <Modal
+      title={title}
+      sub={sub}
+      onClose={onClose}
+      width={880}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        <button className="btn btn-primary" onClick={onDownload}><Icon name="download" size={14}/>Download PDF</button>
+      </>}
+    >
+      <div style={{height: "72vh", border: "1px solid var(--p-line)", borderRadius: 12, overflow: "hidden", background: "#525659"}}>
+        <iframe title={title} src={dataUri} style={{width: "100%", height: "100%", border: 0}}/>
+      </div>
+    </Modal>
+  );
+}
+
+function ReceiptView({ receipt, onClose }) {
+  const { data, profile } = useData();
+  const outstandingAfter = receipt.assessee ? assesseeOutstanding(data, receipt.assessee) : undefined;
+  const args = React.useMemo(() => ({
+    receipt,
+    party: { name: receipt.assessee ? titleCase(receipt.assessee) : receipt.group },
+    profile, outstandingAfter,
+  }), [receipt, profile, outstandingAfter]);
+  const dataUri = React.useMemo(() => receiptPDFDataUri(args), [args]);
+  return (
+    <PdfPreviewModal
+      title={`Receipt ${receipt.number || ""}`}
+      sub="Payment receipt — curvy theme"
+      dataUri={dataUri}
+      onDownload={() => downloadReceiptPDF(args)}
+      onClose={onClose}
+    />
+  );
+}
+
+function LedgerView({ ledger, party, isGroup, onClose }) {
+  const { profile } = useData();
+  const args = React.useMemo(() => ({ ledger, party, isGroup, profile }), [ledger, party, isGroup, profile]);
+  const dataUri = React.useMemo(() => ledgerPDFDataUri(args), [args]);
+  return (
+    <PdfPreviewModal
+      title={isGroup ? `Group ledger — ${party.name}` : `Ledger — ${titleCase(party.name)}`}
+      sub="Statement of account — curvy theme"
+      dataUri={dataUri}
+      onDownload={() => downloadLedgerPDF(args)}
+      onClose={onClose}
+    />
   );
 }
 
@@ -411,15 +594,132 @@ function InvoiceView({ invoice, onClose, onEdit }) {
   );
 }
 
+/* Per-assessee ledgers: outstanding, statement download and payment intake. */
+function LedgersPanel() {
+  const { data } = useData();
+  const [search, setSearch] = React.useState("");
+  const [payFor, setPayFor] = React.useState(null);
+  const [ledgerFor, setLedgerFor] = React.useState(null);
+  const [receipt, setReceipt] = React.useState(null);
+
+  const rows = data.assessees.map(a => {
+    const invs = data.invoices.filter(i => i.assessee === a.name);
+    const hasReceipts = (data.receipts || []).some(r => r.assessee === a.name);
+    return { a, count: invs.length, hasReceipts, billed: invs.reduce((s, i) => s + (i.amount || 0), 0), outstanding: assesseeOutstanding(data, a.name) };
+  }).filter(r => r.count > 0 || r.hasReceipts);
+
+  const q = search.toLowerCase().trim();
+  const filtered = rows
+    .filter(r => !q || [r.a.name, r.a.pan, r.a.group].some(v => (v || "").toLowerCase().includes(q)))
+    .sort((x, y) => y.outstanding - x.outstanding || x.a.name.localeCompare(y.a.name));
+
+  const openLedger = (a) => setLedgerFor({ ledger: assesseeLedger(data, a.name), party: { name: a.name, pan: a.pan, group: a.group } });
+
+  return (
+    <div className="card" style={{padding: 0, overflow: "hidden"}}>
+      <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center", gap: 12, flexWrap: "wrap"}}>
+        <div>
+          <div className="card-title">Assessee ledgers</div>
+          <div className="card-sub">Statement of account, payments & receipts per assessee</div>
+        </div>
+        <div className="search" style={{width: 250}}>
+          <Icon name="search" size={15}/>
+          <input placeholder="Name, PAN, group…" value={search} onChange={e => setSearch(e.target.value)}/>
+        </div>
+      </div>
+      {filtered.length === 0 ? (
+        <EmptyState icon="wallet" title="No billed assessees yet" sub="Raise an invoice and the assessee's ledger appears here."/>
+      ) : (
+        <table className="tbl">
+          <thead><tr><th>Assessee</th><th>Group</th><th>Billed</th><th>Outstanding</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map(({ a, billed, outstanding }) => (
+              <tr key={a.id}>
+                <td className="strong">{titleCase(a.name)}{a.pan && <div className="muted" style={{fontSize: 11, fontFamily: "ui-monospace, monospace"}}>{a.pan}</div>}</td>
+                <td>{a.group ? <span className="pill pill-primary">{a.group}</span> : <span className="muted">—</span>}</td>
+                <td className="strong">{fmtINR(billed)}</td>
+                <td><span style={{fontWeight: 800, color: outstanding > 0 ? "#C13388" : "var(--p-success)"}}>{outstanding > 0 ? fmtINR(outstanding) : "Settled"}</span></td>
+                <td>
+                  <div className="row" style={{gap: 4, justifyContent: "flex-end"}}>
+                    {outstanding > 0 && <button className="btn btn-secondary btn-xs" onClick={() => setPayFor(a)}><Icon name="wallet" size={12}/>Receive</button>}
+                    <button className="btn btn-ghost btn-xs" title="Ledger PDF" onClick={() => openLedger(a)}><Icon name="doc" size={12}/>Ledger</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {payFor && <AssesseePaymentModal assessee={payFor} onClose={() => setPayFor(null)} onReceipt={setReceipt}/>}
+      {ledgerFor && <LedgerView {...ledgerFor} onClose={() => setLedgerFor(null)}/>}
+      {receipt && <ReceiptView receipt={receipt} onClose={() => setReceipt(null)}/>}
+    </div>
+  );
+}
+
+/* Group ledgers: consolidated statements and group-level payment intake. */
+function GroupsPanel() {
+  const { data } = useData();
+  const groups = groupsOf(data);
+  const [payFor, setPayFor] = React.useState(null);
+  const [ledgerFor, setLedgerFor] = React.useState(null);
+  const [receipt, setReceipt] = React.useState(null);
+
+  const openLedger = (g) => {
+    const gl = groupLedger(data, g.name);
+    setLedgerFor({ ledger: gl, isGroup: true, party: { name: g.name, memberCount: gl.members.length, byParty: gl.byParty } });
+  };
+
+  if (groups.length === 0) {
+    return (
+      <div className="card">
+        <EmptyState icon="group" title="No groups yet" sub="Tag assessees with a Group on their profile to build consolidated group ledgers here." />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid-cards">
+      {groups.map(g => (
+        <div key={g.name} className="card">
+          <div className="between" style={{marginBottom: 12}}>
+            <div className="center" style={{gap: 12}}>
+              <div style={{width: 42, height: 42, borderRadius: 13, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", display: "grid", placeItems: "center"}}><Icon name="group" size={18}/></div>
+              <div>
+                <div style={{fontWeight: 800, fontSize: 15}}>{g.name}</div>
+                <div className="muted" style={{fontSize: 12}}>{g.members.length} assessee{g.members.length === 1 ? "" : "s"}</div>
+              </div>
+            </div>
+          </div>
+          <div className="between" style={{padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, marginBottom: 12}}>
+            <span className="muted" style={{fontSize: 12.5}}>Group outstanding</span>
+            <span style={{fontWeight: 800, fontSize: 15, color: g.outstanding > 0 ? "#C13388" : "var(--p-success)"}}>{g.outstanding > 0 ? fmtINR(g.outstanding) : "Settled"}</span>
+          </div>
+          <div className="row" style={{gap: 8}}>
+            <button className="btn btn-secondary btn-sm" style={{flex: 1, justifyContent: "center"}} onClick={() => setPayFor(g)}><Icon name="wallet" size={13}/>Group payment</button>
+            <button className="btn btn-primary btn-sm" style={{flex: 1, justifyContent: "center"}} onClick={() => openLedger(g)}><Icon name="doc" size={13}/>Group ledger</button>
+          </div>
+        </div>
+      ))}
+      {payFor && <GroupPaymentModal group={payFor} onClose={() => setPayFor(null)} onReceipt={setReceipt}/>}
+      {ledgerFor && <LedgerView {...ledgerFor} onClose={() => setLedgerFor(null)}/>}
+      {receipt && <ReceiptView receipt={receipt} onClose={() => setReceipt(null)}/>}
+    </div>
+  );
+}
+
 export function Invoices() {
   const { data, profile, removeInvoice, notify } = useData();
+  const [tab, setTab] = React.useState("invoices");
   const [filter, setFilter] = React.useState("All");
   const [search, setSearch] = React.useState("");
   const [showNew, setShowNew] = React.useState(false);
   const [payFor, setPayFor] = React.useState(null);
   const [editFor, setEditFor] = React.useState(null);
   const [viewFor, setViewFor] = React.useState(null);
+  const [receipt, setReceipt] = React.useState(null);
   const [showSettings, setShowSettings] = React.useState(false);
+  const groupCount = groupsOf(data).length;
 
   const assesseeOf = (inv) => data.assessees.find(a => a.name === inv.assessee);
   const invoices = [...data.invoices].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -476,11 +776,27 @@ export function Invoices() {
         </div>
         <div className="topbar-actions">
           <button className="btn btn-secondary" title="Invoice settings" onClick={() => setShowSettings(true)}><Icon name="settings" size={14}/>Settings</button>
-          <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export</button>
+          {tab === "invoices" && <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export</button>}
           <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New invoice</button>
         </div>
       </div>
 
+      <div className="row" style={{gap: 6, marginBottom: 18, flexWrap: "wrap"}}>
+        {[
+          { k: "invoices", label: "Invoices", icon: "invoice", n: invoices.length },
+          { k: "ledgers", label: "Assessee ledgers", icon: "wallet", n: null },
+          { k: "groups", label: "Group ledgers", icon: "group", n: groupCount || null },
+        ].map(t => (
+          <button key={t.k} className={`fchip ${tab === t.k ? "active" : ""}`} style={{display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px"}} onClick={() => setTab(t.k)}>
+            <Icon name={t.icon} size={13}/>{t.label}{t.n ? ` · ${t.n}` : ""}
+          </button>
+        ))}
+      </div>
+
+      {tab === "ledgers" && <LedgersPanel/>}
+      {tab === "groups" && <GroupsPanel/>}
+
+      {tab === "invoices" && <>
       {invoices.length > 0 && (
         <div className="grid-main" style={{marginBottom: 18}}>
           <div className="card">
@@ -582,10 +898,12 @@ export function Invoices() {
           </table>
         )}
       </div>
+      </>}
 
       {showNew && <InvoiceModal onClose={() => setShowNew(false)}/>}
       {showSettings && <InvoiceSettingsModal onClose={() => setShowSettings(false)}/>}
-      {payFor && <PaymentModal invoice={payFor} onClose={() => setPayFor(null)}/>}
+      {payFor && <PaymentModal invoice={payFor} onClose={() => setPayFor(null)} onReceipt={setReceipt}/>}
+      {receipt && <ReceiptView receipt={receipt} onClose={() => setReceipt(null)}/>}
       {editFor && <InvoiceModal initial={editFor} onClose={() => setEditFor(null)}/>}
       {viewFor && (
         <InvoiceView

@@ -44,7 +44,7 @@ export const invoiceStatus = (inv) => {
 
 export const invoiceOutstanding = (inv) => Math.max(0, inv.amount - (inv.received || 0));
 
-const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "todos"];
+const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "todos", "receipts"];
 
 const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
 export const nextColor = (assessees) => AVATAR_COLORS[assessees.length % AVATAR_COLORS.length];
@@ -110,9 +110,9 @@ export function buildSampleData() {
 /* ---------------- context ---------------- */
 
 const emptyData = () => ({
-  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], todos: [],
+  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], todos: [], receipts: [],
   profile: { ownerName: "", firmName: "" },
-  invoiceSeq: 120,
+  invoiceSeq: 120, receiptSeq: 0,
 });
 
 const DataCtx = React.createContext(null);
@@ -149,7 +149,7 @@ export function DataProvider({ children }) {
       if (snap.exists()) {
         const p = snap.data();
         setProfile({ id: uid, ...p });
-        setData((d) => ({ ...d, profile: { ownerName: p.ownerName || "", firmName: p.firmName || "" }, invoiceSeq: p.invoiceSeq || 120 }));
+        setData((d) => ({ ...d, profile: { ownerName: p.ownerName || "", firmName: p.firmName || "" }, invoiceSeq: p.invoiceSeq || 120, receiptSeq: p.receiptSeq || 0 }));
       } else {
         setProfile(null);
       }
@@ -209,6 +209,7 @@ export function DataProvider({ children }) {
             hearings: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             notices: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             invoices: (r) => r.assessee === a.name,
+            receipts: (r) => r.assessee === a.name,
             communications: (r) => r.to === a.name || (a.email && r.to === a.email) || (a.mobile && r.to === a.mobile),
           };
           const refs = [doc(db, "users", uid, "assessees", a.id)];
@@ -245,6 +246,35 @@ export function DataProvider({ children }) {
         } catch (e) { fail(e); return null; }
       },
       updateInvoice: updateIn("invoices"), removeInvoice: removeFrom("invoices"),
+      /* Record a payment receipt. `allocations` (optional) is a list of
+         { invoiceId, invoiceNumber, amount } — each named invoice's `received`
+         is bumped in the same transaction so invoice status stays consistent.
+         A group payment passes no allocations and just `group` set: it shows
+         only in the group ledger and doesn't touch any single invoice. */
+      addReceipt: async (rec) => {
+        try {
+          const rRef = doc(colRef("receipts"));
+          const allocations = rec.allocations || [];
+          let number = rec.number;
+          await runTransaction(db, async (tx) => {
+            // All reads must precede writes in a Firestore transaction.
+            const invRefs = allocations.map((a) => doc(db, "users", uid, "invoices", a.invoiceId));
+            const invSnaps = [];
+            for (const ref of invRefs) invSnaps.push(await tx.get(ref));
+            const snap = await tx.get(userRef());
+            const seq = ((snap.data()?.receiptSeq) || 0) + 1;
+            number = rec.number || `RCPT/${fyOf(rec.date || todayISO())}/${String(seq).padStart(4, "0")}`;
+            allocations.forEach((a, i) => {
+              const cur = invSnaps[i].data();
+              if (cur) tx.update(invRefs[i], { received: (cur.received || 0) + (Number(a.amount) || 0) });
+            });
+            tx.set(rRef, { ...rec, number, createdAt: new Date().toISOString() });
+            tx.update(userRef(), { receiptSeq: seq });
+          });
+          return { id: rRef.id, ...rec, number };
+        } catch (e) { fail(e); return null; }
+      },
+      removeReceipt: removeFrom("receipts"),
       loadSampleData: async () => {
         try {
           const sample = buildSampleData();
@@ -271,7 +301,7 @@ export function DataProvider({ children }) {
               await batch.commit();
             }
           }
-          await updateDoc(userRef(), { invoiceSeq: 120 });
+          await updateDoc(userRef(), { invoiceSeq: 120, receiptSeq: 0 });
           notify("All practice data cleared");
         } catch (e) { fail(e); }
       },
@@ -302,6 +332,123 @@ export const assesseeStats = (data, a) => {
 };
 
 export const totalOutstanding = (data) => data.invoices.reduce((s, i) => s + invoiceOutstanding(i), 0);
+
+/* ---------------- ledgers & groups ---------------- */
+
+// Human-readable line for a receipt in a ledger / on a receipt PDF.
+export const receiptParticulars = (r) => {
+  const mode = r.mode ? `${r.mode}` : "Payment";
+  const against = (r.allocations || []).map((a) => a.invoiceNumber).filter(Boolean);
+  if (against.length) return `${mode} received — against ${against.join(", ")}`;
+  if (r.group && !r.assessee) return `${mode} received — group account`;
+  return `${mode} received`;
+};
+
+/* A running-balance statement of account for one assessee: every invoice is a
+   debit, every receipt a credit. Any legacy `received` amount recorded on an
+   invoice before receipts were tracked is reconciled into a single credit so
+   the closing balance always equals the assessee's true outstanding. */
+export const assesseeLedger = (data, name) => {
+  const invs = data.invoices.filter((i) => i.assessee === name);
+  const rcpts = (data.receipts || []).filter((r) => r.assessee === name);
+  const entries = [];
+  invs.forEach((i) => entries.push({
+    date: i.date, sort: i.createdAt || i.date || "", kind: "invoice",
+    ref: i.number, particulars: i.service || "Professional fees",
+    debit: i.amount || 0, credit: 0,
+  }));
+  rcpts.forEach((r) => entries.push({
+    date: r.date, sort: r.createdAt || r.date || "", kind: "receipt",
+    ref: r.number || "Receipt", particulars: receiptParticulars(r),
+    debit: 0, credit: r.amount || 0,
+  }));
+  const legacy = invs.reduce((s, i) => s + (i.received || 0), 0) - rcpts.reduce((s, r) => s + (r.amount || 0), 0);
+  if (legacy > 0.005) entries.push({
+    date: null, sort: "", kind: "receipt", ref: "—",
+    particulars: "Payments received (recorded on invoices)", debit: 0, credit: legacy, legacy: true,
+  });
+  entries.sort((a, b) => (a.date || "9999-99-99").localeCompare(b.date || "9999-99-99") || a.sort.localeCompare(b.sort));
+  let bal = 0;
+  entries.forEach((e) => { bal += e.debit - e.credit; e.balance = bal; });
+  const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+  const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+  return { entries, totalDebit, totalCredit, closing: Math.max(0, totalDebit - totalCredit) };
+};
+
+export const assesseeOutstanding = (data, name) =>
+  data.invoices.filter((i) => i.assessee === name).reduce((s, i) => s + invoiceOutstanding(i), 0);
+
+// Distinct non-empty groups with their member counts and outstanding.
+export const groupsOf = (data) => {
+  const map = new Map();
+  data.assessees.forEach((a) => {
+    const g = (a.group || "").trim();
+    if (!g) return;
+    if (!map.has(g)) map.set(g, { name: g, members: [] });
+    map.get(g).members.push(a);
+  });
+  return [...map.values()].map((g) => ({
+    ...g,
+    outstanding: groupLedger(data, g.name).closing,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+};
+
+/* Consolidated statement for a whole group: every member's invoices and
+   receipts, plus group-level receipts (payments taken against the group as a
+   whole, which appear only here). Each entry carries the party name. */
+export const groupLedger = (data, group) => {
+  const members = data.assessees.filter((a) => (a.group || "").trim() === group);
+  const names = new Set(members.map((a) => a.name));
+  const entries = [];
+  data.invoices.filter((i) => names.has(i.assessee)).forEach((i) => entries.push({
+    date: i.date, sort: i.createdAt || i.date || "", kind: "invoice", party: i.assessee,
+    ref: i.number, particulars: i.service || "Professional fees", debit: i.amount || 0, credit: 0,
+  }));
+  (data.receipts || []).filter((r) => r.assessee && names.has(r.assessee)).forEach((r) => entries.push({
+    date: r.date, sort: r.createdAt || r.date || "", kind: "receipt", party: r.assessee,
+    ref: r.number || "Receipt", particulars: receiptParticulars(r), debit: 0, credit: r.amount || 0,
+  }));
+  (data.receipts || []).filter((r) => (r.group || "").trim() === group && !r.assessee).forEach((r) => entries.push({
+    date: r.date, sort: r.createdAt || r.date || "", kind: "receipt", party: "Group account",
+    ref: r.number || "Receipt", particulars: receiptParticulars(r), debit: 0, credit: r.amount || 0,
+  }));
+  // Legacy per-member reconciliation.
+  members.forEach((m) => {
+    const invs = data.invoices.filter((i) => i.assessee === m.name);
+    const rcpts = (data.receipts || []).filter((r) => r.assessee === m.name);
+    const legacy = invs.reduce((s, i) => s + (i.received || 0), 0) - rcpts.reduce((s, r) => s + (r.amount || 0), 0);
+    if (legacy > 0.005) entries.push({
+      date: null, sort: "", kind: "receipt", party: m.name, ref: "—",
+      particulars: "Payments received (recorded on invoices)", debit: 0, credit: legacy, legacy: true,
+    });
+  });
+  entries.sort((a, b) => (a.date || "9999-99-99").localeCompare(b.date || "9999-99-99") || a.sort.localeCompare(b.sort));
+  let bal = 0;
+  entries.forEach((e) => { bal += e.debit - e.credit; e.balance = bal; });
+  const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+  const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+  // Per-party closing for the summary block.
+  const byParty = members.map((m) => ({ name: m.name, outstanding: assesseeOutstanding(data, m.name) }));
+  return { entries, members, byParty, totalDebit, totalCredit, closing: Math.max(0, totalDebit - totalCredit) };
+};
+
+/* Oldest-first allocation of a payment across an assessee's outstanding
+   invoices. Returns { allocations, advance } where advance is any amount left
+   over once every invoice is settled. */
+export const allocatePayment = (data, name, amount) => {
+  let left = Number(amount) || 0;
+  const allocations = [];
+  const open = data.invoices
+    .filter((i) => i.assessee === name && invoiceOutstanding(i) > 0)
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  for (const inv of open) {
+    if (left <= 0.005) break;
+    const take = Math.min(left, invoiceOutstanding(inv));
+    allocations.push({ invoiceId: inv.id, invoiceNumber: inv.number, amount: Math.round(take * 100) / 100 });
+    left = Math.round((left - take) * 100) / 100;
+  }
+  return { allocations, advance: Math.max(0, left) };
+};
 
 export const overdueAmount = (data) =>
   data.invoices.filter((i) => invoiceStatus(i) === "Overdue").reduce((s, i) => s + invoiceOutstanding(i), 0);

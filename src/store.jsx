@@ -44,10 +44,13 @@ export const invoiceStatus = (inv) => {
 
 export const invoiceOutstanding = (inv) => Math.max(0, inv.amount - (inv.received || 0));
 
-const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "todos", "receipts"];
+const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "todos", "receipts", "groups"];
 
 const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
 export const nextColor = (assessees) => AVATAR_COLORS[assessees.length % AVATAR_COLORS.length];
+
+// Palette used for first-class group cards / avatars.
+export const GROUP_COLORS = ["violet", "blue", "teal", "amber", "pink", "coral", "mint"];
 
 /* ---------------- sample data (dates relative to today) ---------------- */
 
@@ -110,7 +113,7 @@ export function buildSampleData() {
 /* ---------------- context ---------------- */
 
 const emptyData = () => ({
-  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], todos: [], receipts: [],
+  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], todos: [], receipts: [], groups: [],
   profile: { ownerName: "", firmName: "" },
   invoiceSeq: 120, receiptSeq: 0,
 });
@@ -275,6 +278,83 @@ export function DataProvider({ children }) {
         } catch (e) { fail(e); return null; }
       },
       removeReceipt: removeFrom("receipts"),
+      // ---- groups (first-class) ----
+      addGroup: addTo("groups"),
+      updateGroup: updateIn("groups"),
+      /* Rename a group everywhere: the group doc plus the denormalised `group`
+         string on every member (kept in sync so invoices & ledgers, which read
+         assessee.group, keep working unchanged). */
+      renameGroup: async (id, oldName, newName) => {
+        try {
+          if (id) await updateDoc(doc(db, "users", uid, "groups", id), { name: newName });
+          const snap = await getDocs(colRef("assessees"));
+          const refs = snap.docs.filter((d) => (d.data().group || "") === oldName).map((d) => d.ref);
+          for (let i = 0; i < refs.length; i += 450) {
+            const batch = writeBatch(db);
+            refs.slice(i, i + 450).forEach((ref) => batch.update(ref, { group: newName, groupId: id || "" }));
+            await batch.commit();
+          }
+        } catch (e) { fail(e); }
+      },
+      // Delete the group doc and ungroup its members (assessees are untouched otherwise).
+      removeGroup: async (id, name) => {
+        try {
+          if (id) await deleteDoc(doc(db, "users", uid, "groups", id));
+          const snap = await getDocs(colRef("assessees"));
+          const refs = snap.docs.filter((d) => (d.data().group || "") === name).map((d) => d.ref);
+          for (let i = 0; i < refs.length; i += 450) {
+            const batch = writeBatch(db);
+            refs.slice(i, i + 450).forEach((ref) => batch.update(ref, { group: "", groupId: "" }));
+            await batch.commit();
+          }
+        } catch (e) { fail(e); }
+      },
+      // Tag / untag assessees. Passing an empty name removes them from any group.
+      setGroupMembers: async (ids, name, groupId) => {
+        try {
+          for (let i = 0; i < ids.length; i += 450) {
+            const batch = writeBatch(db);
+            ids.slice(i, i + 450).forEach((aid) => batch.update(doc(db, "users", uid, "assessees", aid), { group: name || "", groupId: name ? (groupId || "") : "" }));
+            await batch.commit();
+          }
+        } catch (e) { fail(e); }
+      },
+      /* One-time reconcile: create a group doc for every legacy `group` string
+         that doesn't have one yet, and stamp each assessee's groupId. Idempotent
+         — only ever creates what's missing, so it's safe to call repeatedly. */
+      ensureGroupDocs: async () => {
+        try {
+          const [aSnap, gSnap] = await Promise.all([getDocs(colRef("assessees")), getDocs(colRef("groups"))]);
+          const byName = new Map(gSnap.docs.map((d) => [d.data().name, d.id]));
+          const names = [];
+          aSnap.docs.forEach((d) => { const g = (d.data().group || "").trim(); if (g && !names.includes(g)) names.push(g); });
+          const toCreate = names.filter((n) => !byName.has(n));
+          if (toCreate.length) {
+            const batch = writeBatch(db);
+            toCreate.forEach((name, i) => {
+              const ref = doc(colRef("groups"));
+              batch.set(ref, { name, color: GROUP_COLORS[(byName.size + i) % GROUP_COLORS.length], notes: "", contact: "", createdAt: new Date(Date.now() + i).toISOString() });
+              byName.set(name, ref.id);
+            });
+            await batch.commit();
+          }
+          // Stamp / correct groupId on assessees.
+          const stamps = aSnap.docs.filter((d) => {
+            const g = (d.data().group || "").trim();
+            const want = g ? (byName.get(g) || "") : "";
+            return (d.data().groupId || "") !== want;
+          });
+          for (let i = 0; i < stamps.length; i += 450) {
+            const batch = writeBatch(db);
+            stamps.slice(i, i + 450).forEach((d) => {
+              const g = (d.data().group || "").trim();
+              batch.update(d.ref, { groupId: g ? (byName.get(g) || "") : "" });
+            });
+            await batch.commit();
+          }
+          return toCreate.length;
+        } catch (e) { fail(e); return null; }
+      },
       loadSampleData: async () => {
         try {
           const sample = buildSampleData();
@@ -378,17 +458,30 @@ export const assesseeLedger = (data, name) => {
 export const assesseeOutstanding = (data, name) =>
   data.invoices.filter((i) => i.assessee === name).reduce((s, i) => s + invoiceOutstanding(i), 0);
 
-// Distinct non-empty groups with their member counts and outstanding.
+// The first-class group doc (colour / notes / contact) for a group name.
+export const groupMeta = (data, name) => (data.groups || []).find((g) => g.name === name) || null;
+
+/* Every group, whether it exists as a first-class doc, is only implied by an
+   assessee's `group` string, or is an empty doc with no members yet. Each entry
+   merges the doc's metadata (id, colour, notes, contact) with live roll-ups. */
 export const groupsOf = (data) => {
   const map = new Map();
+  const ensure = (name) => {
+    if (!map.has(name)) map.set(name, { name, members: [], doc: null });
+    return map.get(name);
+  };
+  (data.groups || []).forEach((g) => { if ((g.name || "").trim()) ensure(g.name.trim()).doc = g; });
   data.assessees.forEach((a) => {
     const g = (a.group || "").trim();
-    if (!g) return;
-    if (!map.has(g)) map.set(g, { name: g, members: [] });
-    map.get(g).members.push(a);
+    if (g) ensure(g).members.push(a);
   });
   return [...map.values()].map((g) => ({
-    ...g,
+    name: g.name,
+    id: g.doc?.id || null,
+    color: g.doc?.color || null,
+    notes: g.doc?.notes || "",
+    contact: g.doc?.contact || "",
+    members: g.members,
     outstanding: groupLedger(data, g.name).closing,
   })).sort((a, b) => a.name.localeCompare(b.name));
 };

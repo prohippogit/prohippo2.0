@@ -1,6 +1,8 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
-import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO } from './store';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
+import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
+  groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS } from './store';
+import { downloadLedgerPDF } from './ledgerPdf';
 import { MatterModal } from './Other';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
@@ -167,12 +169,292 @@ function entityPill(status) {
   return map[status] || { bg: "var(--p-card-tint)", c: "var(--p-text-2)" };
 }
 
+/* ---------------- Groups (first-class) ---------------- */
+
+// Roll-up counts for a group's members.
+function groupStats(data, members) {
+  const pans = new Set(members.map((m) => (m.pan || "").toUpperCase()).filter(Boolean));
+  const matters = data.matters.filter((m) => !["Closed", "Decided"].includes(m.status) && pans.has((m.pan || "").toUpperCase())).length;
+  const hearings = upcomingHearings(data).filter((h) => pans.has((h.pan || "").toUpperCase())).length;
+  return { matters, hearings };
+}
+
+// Create / edit a group's metadata (name, colour, billing contact, notes).
+function GroupModal({ initial, onClose }) {
+  const { data, addGroup, updateGroup, renameGroup, notify } = useData();
+  const isEdit = Boolean(initial?.id);
+  const [form, setForm] = React.useState({ name: "", color: GROUP_COLORS[0], notes: "", contact: "", ...initial });
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const [busy, setBusy] = React.useState(false);
+  const name = form.name.trim();
+  const dup = groupsOf(data).some((g) => g.name.toLowerCase() === name.toLowerCase() && g.name !== initial?.name);
+  const valid = name && !dup;
+
+  const save = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    if (isEdit) {
+      if (name !== initial.name) await renameGroup(initial.id, initial.name, name);
+      await updateGroup(initial.id, { name, color: form.color, notes: form.notes.trim(), contact: form.contact.trim() });
+    } else {
+      await addGroup({ name, color: form.color, notes: form.notes.trim(), contact: form.contact.trim() });
+    }
+    setBusy(false);
+    notify(isEdit ? "Group updated" : `Group “${name}” created`);
+    onClose(name);
+  };
+
+  return (
+    <Modal
+      title={isEdit ? "Edit group" : "New group"}
+      sub={isEdit ? "Renaming updates every member" : "Create a group, then add assessees to it"}
+      onClose={() => onClose()}
+      width={480}
+      footer={<>
+        <button className="btn btn-secondary" onClick={() => onClose()}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid || busy} style={{opacity: valid && !busy ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{busy ? "Saving…" : isEdit ? "Save group" : "Create group"}</button>
+      </>}
+    >
+      <FormField label="Group name" required>
+        <TextInput value={form.name} onChange={set("name")} placeholder="e.g. Shah Group"/>
+        {dup && <div style={{fontSize: 11.5, color: "var(--p-danger)", marginTop: 4}}>A group with this name already exists.</div>}
+      </FormField>
+      <div className="field" style={{marginTop: 12}}>
+        <label>Colour</label>
+        <div className="row" style={{gap: 8, flexWrap: "wrap"}}>
+          {GROUP_COLORS.map((c) => (
+            <button key={c} type="button" onClick={() => set("color")(c)} title={c}
+              style={{padding: 0, border: form.color === c ? "2px solid var(--p-text)" : "2px solid transparent", borderRadius: "50%", background: "none", cursor: "pointer"}}>
+              <Avatar name={form.name || "G"} color={c} round soft/>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="form-grid" style={{marginTop: 12}}>
+        <FormField label="Billing contact (optional)" full><TextInput value={form.contact} onChange={set("contact")} placeholder="Name / phone / email for group billing"/></FormField>
+        <FormField label="Notes (optional)" full><TextInput value={form.notes} onChange={set("notes")} placeholder="Anything worth remembering about this group"/></FormField>
+      </div>
+    </Modal>
+  );
+}
+
+// Pick assessees to add to a group (moving them out of any current group).
+function AddMembersModal({ group, onClose }) {
+  const { data, setGroupMembers, notify } = useData();
+  const [q, setQ] = React.useState("");
+  const [sel, setSel] = React.useState(() => new Set());
+  const [busy, setBusy] = React.useState(false);
+  const candidates = data.assessees.filter((a) => (a.group || "") !== group.name);
+  const ql = q.toLowerCase().trim();
+  const shown = candidates.filter((a) => !ql || a.name.toLowerCase().includes(ql) || (a.pan || "").toLowerCase().includes(ql) || (a.group || "").toLowerCase().includes(ql));
+  const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const save = async () => {
+    if (sel.size === 0 || busy) return;
+    setBusy(true);
+    await setGroupMembers([...sel], group.name, group.id);
+    setBusy(false);
+    notify(`${sel.size} assessee${sel.size === 1 ? "" : "s"} added to ${group.name}`);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={`Add to ${group.name}`}
+      sub="Selected assessees move into this group"
+      onClose={onClose}
+      width={520}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={sel.size === 0 || busy} style={{opacity: sel.size && !busy ? 1 : 0.5}} onClick={save}><Icon name="check" size={14}/>{busy ? "Adding…" : `Add ${sel.size || ""}`}</button>
+      </>}
+    >
+      <div className="search" style={{width: "100%", marginBottom: 10}}>
+        <Icon name="search" size={15}/>
+        <input placeholder="Search name, PAN, current group…" value={q} onChange={(e) => setQ(e.target.value)}/>
+      </div>
+      <div className="col" style={{gap: 6, maxHeight: 340, overflowY: "auto"}}>
+        {shown.length === 0 && <div className="muted" style={{fontSize: 13, textAlign: "center", padding: 20}}>No assessees to add.</div>}
+        {shown.map((a) => (
+          <label key={a.id} className="center" style={{gap: 10, justifyContent: "flex-start", padding: "9px 11px", background: sel.has(a.id) ? "var(--p-lavender-2)" : "var(--p-card-tint)", borderRadius: 10, cursor: "pointer"}}>
+            <input type="checkbox" checked={sel.has(a.id)} onChange={() => toggle(a.id)}/>
+            <Avatar name={a.name} color={a.color} round soft size="sm"/>
+            <div style={{flex: 1, minWidth: 0}}>
+              <div className="strong" style={{fontSize: 13}}>{titleCase(a.name)}</div>
+              <div className="muted" style={{fontSize: 11.5}}>{a.pan}{a.group ? ` · currently in ${a.group}` : ""}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+// Card for one group in the Groups grid.
+function GroupCard({ g, data, onOpen }) {
+  const st = groupStats(data, g.members);
+  return (
+    <div className="card" style={{cursor: "pointer"}} onClick={() => onOpen(g.name)}>
+      <div className="center" style={{gap: 12, justifyContent: "flex-start", marginBottom: 12}}>
+        <Avatar name={g.name} color={g.color || "violet"} round soft size="lg"/>
+        <div style={{minWidth: 0}}>
+          <div style={{fontWeight: 800, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{g.name}</div>
+          <div className="muted" style={{fontSize: 12}}>{g.members.length} assessee{g.members.length === 1 ? "" : "s"}</div>
+        </div>
+      </div>
+      <div className="row" style={{gap: 6, marginBottom: 12, flexWrap: "wrap"}}>
+        {g.members.slice(0, 6).map((m) => <Avatar key={m.id} name={m.name} color={m.color} round soft size="sm"/>)}
+        {g.members.length > 6 && <span className="muted" style={{fontSize: 12, alignSelf: "center"}}>+{g.members.length - 6}</span>}
+      </div>
+      <div className="between" style={{padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11}}>
+        <div className="center" style={{gap: 14}}>
+          <span className="muted" style={{fontSize: 12}}><Icon name="scale" size={12}/> {st.matters}</span>
+          <span className="muted" style={{fontSize: 12}}><Icon name="calendar" size={12}/> {st.hearings}</span>
+        </div>
+        <span style={{fontWeight: 800, fontSize: 13.5, color: g.outstanding > 0 ? "#C13388" : "var(--p-success)"}}>{g.outstanding > 0 ? fmtINR(g.outstanding) : "Settled"}</span>
+      </div>
+    </div>
+  );
+}
+
+// Groups grid + "new group". Reconciles legacy string groups into docs on mount.
+function GroupsView({ onOpenGroup }) {
+  const { data, ensureGroupDocs } = useData();
+  const [showNew, setShowNew] = React.useState(false);
+  React.useEffect(() => { ensureGroupDocs(); }, [ensureGroupDocs]);
+  const groups = groupsOf(data);
+  const ungrouped = data.assessees.filter((a) => !(a.group || "").trim()).length;
+
+  return (
+    <>
+      <div className="between" style={{marginBottom: 12, flexWrap: "wrap", gap: 10}}>
+        <div className="muted" style={{fontSize: 12.5}}>{groups.length} group{groups.length === 1 ? "" : "s"}{ungrouped ? ` · ${ungrouped} ungrouped` : ""}</div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}><Icon name="plus" size={13}/>New group</button>
+      </div>
+      {groups.length === 0 ? (
+        <div className="card"><EmptyState icon="group" title="No groups yet" sub="Create a group, or tag assessees with a Group on their profile — they'll be gathered here automatically." action={<button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New group</button>}/></div>
+      ) : (
+        <div className="grid-cards">
+          {groups.map((g) => <GroupCard key={g.name} g={g} data={data} onOpen={onOpenGroup}/>)}
+        </div>
+      )}
+      {showNew && <GroupModal onClose={(name) => { setShowNew(false); if (name) onOpenGroup(name); }}/>}
+    </>
+  );
+}
+
+// Drill-in: manage a single group's metadata, members and ledger.
+function GroupDetail({ groupName, onBack, onOpenAssessee, onRename, profile }) {
+  const { data, removeGroup, setGroupMembers, notify } = useData();
+  const [showEdit, setShowEdit] = React.useState(false);
+  const [showAdd, setShowAdd] = React.useState(false);
+  const g = groupsOf(data).find((x) => x.name === groupName);
+
+  React.useEffect(() => { if (!g) onBack(); }, [g, onBack]);
+  if (!g) return null;
+
+  const st = groupStats(data, g.members);
+  const ledger = groupLedger(data, g.name);
+
+  const doDelete = async () => {
+    if (!window.confirm(`Delete the group “${g.name}”? Its ${g.members.length} assessee${g.members.length === 1 ? "" : "s"} will be ungrouped (not deleted).`)) return;
+    onBack();
+    await removeGroup(g.id, g.name);
+    notify(`Group “${g.name}” removed`);
+  };
+  const removeMember = async (a) => {
+    await setGroupMembers([a.id], "", "");
+    notify(`${titleCase(a.name)} removed from ${g.name}`);
+  };
+  const downloadLedger = () => downloadLedgerPDF({
+    ledger, isGroup: true,
+    party: { name: g.name, memberCount: g.members.length, byParty: ledger.byParty },
+    profile,
+  });
+
+  return (
+    <div className="animate-in">
+      <div className="center" style={{gap: 8, marginBottom: 16, fontSize: 13}}>
+        <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrow-left" size={14}/>Groups</button>
+        <span className="muted">Groups / </span>
+        <span style={{fontWeight: 600}}>{g.name}</span>
+      </div>
+
+      <div className="card" style={{marginBottom: 18}}>
+        <div className="between" style={{flexWrap: "wrap", gap: 12}}>
+          <div className="center" style={{gap: 14}}>
+            <Avatar name={g.name} color={g.color || "violet"} round soft size="lg"/>
+            <div>
+              <div style={{fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em"}}>{g.name}</div>
+              <div className="muted" style={{fontSize: 12.5, marginTop: 2}}>{g.members.length} assessee{g.members.length === 1 ? "" : "s"}{g.contact ? ` · ${g.contact}` : ""}</div>
+            </div>
+          </div>
+          <div className="center" style={{gap: 8}}>
+            <button className="btn btn-secondary btn-sm" onClick={downloadLedger}><Icon name="doc" size={13}/>Group ledger</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(true)}><Icon name="edit" size={13}/>Edit</button>
+            <button className="icon-btn" style={{width: 34, height: 34}} title="Delete group" onClick={doDelete}><Icon name="trash" size={15}/></button>
+          </div>
+        </div>
+        <div className="grid-stats" style={{gap: 12, marginTop: 18}}>
+          <MiniStat label="Assessees" value={g.members.length} icon="users"/>
+          <MiniStat label="Active matters" value={st.matters} icon="scale"/>
+          <MiniStat label="Upcoming hearings" value={st.hearings} icon="calendar" accent="pink"/>
+          <MiniStat label="Outstanding" value={g.outstanding ? fmtINR(g.outstanding) : "₹0"} icon="wallet" accent={g.outstanding > 100000 ? "warn" : "default"}/>
+        </div>
+        {g.notes && <div style={{marginTop: 16, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, fontSize: 12.5, color: "var(--p-text-2)"}}>{g.notes}</div>}
+      </div>
+
+      <div className="card" style={{padding: 0, overflow: "hidden"}}>
+        <div className="between" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", flexWrap: "wrap", gap: 10}}>
+          <div className="card-title">Members</div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}><Icon name="plus" size={13}/>Add member</button>
+        </div>
+        {g.members.length === 0 ? (
+          <EmptyState icon="users" title="No members yet" sub="Add assessees to this group." action={<button className="btn btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Add member</button>}/>
+        ) : (
+          <table className="tbl">
+            <thead><tr><th>Assessee</th><th>PAN</th><th>Entity</th><th>Outstanding</th><th></th></tr></thead>
+            <tbody>
+              {g.members.map((a) => {
+                const ep = entityPill(a.status);
+                const out = assesseeOutstanding(data, a.name);
+                return (
+                  <tr key={a.id} style={{cursor: "pointer"}} onClick={() => onOpenAssessee(a)}>
+                    <td>
+                      <div className="center" style={{gap: 10, justifyContent: "flex-start"}}>
+                        <Avatar name={a.name} color={a.color} round soft size="sm"/>
+                        <span className="strong">{titleCase(a.name)}</span>
+                      </div>
+                    </td>
+                    <td className="strong" style={{fontFamily: "ui-monospace, monospace", fontSize: 12}}>{a.pan}</td>
+                    <td><span className="pill" style={{background: ep.bg, color: ep.c, fontWeight: 700}}>{a.status}</span></td>
+                    <td><span style={{fontWeight: 700, color: out > 0 ? "#C13388" : "var(--p-success)"}}>{out > 0 ? fmtINR(out) : "—"}</span></td>
+                    <td onClick={(e) => e.stopPropagation()} style={{textAlign: "right"}}>
+                      <button className="btn btn-ghost btn-xs" title="Remove from group" style={{color: "var(--p-danger)"}} onClick={() => removeMember(a)}><Icon name="x" size={13}/>Remove</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {showEdit && <GroupModal initial={{ id: g.id, name: g.name, color: g.color || GROUP_COLORS[0], notes: g.notes, contact: g.contact }} onClose={(newName) => { setShowEdit(false); if (newName && newName !== g.name) onRename(newName); }}/>}
+      {showAdd && <AddMembersModal group={g} onClose={() => setShowAdd(false)}/>}
+    </div>
+  );
+}
+
 export function Assessees({ onOpen, initialSearch = "" }) {
-  const { data, notify } = useData();
+  const { data, profile, notify } = useData();
+  const [view, setView] = React.useState("list"); // "list" | "groups"
+  const [openGroup, setOpenGroup] = React.useState(null); // group name being viewed
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState(initialSearch);
   const [sortBy, setSortBy] = React.useState("recent");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [groupFilter, setGroupFilter] = React.useState("all");
   const [page, setPage] = React.useState(1);
   const [showAdd, setShowAdd] = React.useState(false);
   const [editAssessee, setEditAssessee] = React.useState(null);
@@ -182,7 +464,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   const running = React.useRef(false); // true only while a bulk sync is in progress
 
   React.useEffect(() => { setSearch(initialSearch); }, [initialSearch]);
-  React.useEffect(() => { setPage(1); }, [tab, search, sortBy, statusFilter]);
+  React.useEffect(() => { setPage(1); }, [tab, search, sortBy, statusFilter, groupFilter]);
 
   // While a bulk sync runs, ingest each streamed message and advance the queue
   // when an assessee signals it's done.
@@ -244,8 +526,10 @@ export function Assessees({ onOpen, initialSearch = "" }) {
     return a.status === tab;
   };
   const q = search.toLowerCase();
+  const matchesGroup = (a) => groupFilter === "all" || (groupFilter === "__none" ? !(a.group || "").trim() : (a.group || "") === groupFilter);
   const filtered = data.assessees.filter(a =>
     matchesTab(a) &&
+    matchesGroup(a) &&
     (statusFilter === "all" || (statusFilter === "active" ? isActive(a) : !isActive(a))) &&
     (!q || a.name.toLowerCase().includes(q) || a.pan.toLowerCase().includes(q) || (a.group || "").toLowerCase().includes(q) || (a.mobile || "").includes(q))
   );
@@ -277,12 +561,11 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       </div>
 
       {data.assessees.length > 0 && (
-        <div className="tabs" style={{marginBottom: 14}}>
-          {["All", "Individual", "Company", "Firm/LLP", "HUF", "Trust"].map(t => (
-            <div key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
-              {t}
-              <span style={{marginLeft: 6, opacity: 0.65, fontSize: 11}}>{tabCount(t)}</span>
-            </div>
+        <div className="row" style={{gap: 6, marginBottom: 16, flexWrap: "wrap"}}>
+          {[{ k: "list", label: "All assessees", icon: "users" }, { k: "groups", label: "Groups", icon: "group", n: groupsOf(data).length }].map(v => (
+            <button key={v.k} className={`fchip ${view === v.k ? "active" : ""}`} style={{display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px"}} onClick={() => { setView(v.k); setOpenGroup(null); }}>
+              <Icon name={v.icon} size={13}/>{v.label}{v.n ? ` · ${v.n}` : ""}
+            </button>
           ))}
         </div>
       )}
@@ -296,8 +579,20 @@ export function Assessees({ onOpen, initialSearch = "" }) {
             action={<button className="btn btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Add assessee</button>}
           />
         </div>
+      ) : view === "groups" ? (
+        openGroup
+          ? <GroupDetail groupName={openGroup} onBack={() => setOpenGroup(null)} onOpenAssessee={onOpen} onRename={setOpenGroup} profile={profile}/>
+          : <GroupsView onOpenGroup={setOpenGroup}/>
       ) : (
         <>
+          <div className="tabs" style={{marginBottom: 14}}>
+            {["All", "Individual", "Company", "Firm/LLP", "HUF", "Trust"].map(t => (
+              <div key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
+                {t}
+                <span style={{marginLeft: 6, opacity: 0.65, fontSize: 11}}>{tabCount(t)}</span>
+              </div>
+            ))}
+          </div>
           {(selected.size > 0 || bulk) && (
             <div className="card" style={{marginBottom: 12, padding: "12px 16px", background: "var(--p-card-tint)", border: "1px solid var(--p-primary-3)"}}>
               <div className="between" style={{alignItems: "center", flexWrap: "wrap", gap: 10}}>
@@ -323,6 +618,14 @@ export function Assessees({ onOpen, initialSearch = "" }) {
           <div className="between" style={{marginBottom: 12, flexWrap: "wrap", gap: 10, alignItems: "center"}}>
             <div className="muted" style={{fontSize: 12.5}}>{sorted.length} assessee{sorted.length === 1 ? "" : "s"}{statusFilter !== "all" ? ` · ${statusFilter}` : ""}</div>
             <div className="center" style={{gap: 10, flexWrap: "wrap"}}>
+              <label className="center" style={{gap: 6, fontSize: 12.5}}>
+                <span className="muted center" style={{gap: 5}}><Icon name="group" size={13}/>Group</span>
+                <select className="ph-select" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="__none">Ungrouped</option>
+                  {groupsOf(data).map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
+                </select>
+              </label>
               <label className="center" style={{gap: 6, fontSize: 12.5}}>
                 <span className="muted center" style={{gap: 5}}><Icon name="filter" size={13}/>Status</span>
                 <select className="ph-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>

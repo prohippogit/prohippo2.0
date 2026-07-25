@@ -3,8 +3,8 @@
    communications) can open it when a record needs an assessee that
    doesn't exist yet. */
 import React from 'react';
-import { Icon, Modal, FormField, TextInput, SelectInput } from './shared';
-import { useData, nextColor } from './store';
+import { Icon, Modal, FormField, TextInput, SelectInput, ComboBox } from './shared';
+import { useData, nextColor, groupsOf } from './store';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
@@ -46,6 +46,8 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
     ...initial,
   });
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  // Suggest existing groups so the same group isn't re-created via a typo.
+  const groupOptions = groupsOf(data).map((g) => ({ value: g.name, label: g.name, sub: `${g.members.length} assessee${g.members.length === 1 ? "" : "s"}` }));
   const pan = form.pan.trim().toUpperCase();
   // Flag a duplicate only when ANOTHER saved assessee already has this exact
   // PAN (normalised both sides). Never against the one being edited.
@@ -248,7 +250,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         <FormField label={lbl("Name", "name")} required full><TextInput value={form.name} onChange={set("name")} placeholder="Assessee name"/></FormField>
         <FormField label="Status"><SelectInput value={form.status} onChange={onStatus} options={STATUS_OPTIONS}/></FormField>
         <FormField label={lbl(dobLabel, "dob")}><TextInput value={form.dob} onChange={set("dob")} type="date"/></FormField>
-        <FormField label="Group"><TextInput value={form.group} onChange={set("group")} placeholder="e.g. Shah Group"/></FormField>
+        <FormField label="Group"><ComboBox value={form.group} onChange={set("group")} options={groupOptions} placeholder="e.g. Shah Group"/></FormField>
         <FormField label="Assigned staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Staff name"/></FormField>
         <FormField label={lbl("Mobile", "mobile")}><TextInput value={form.mobile} onChange={set("mobile")} placeholder="+91 …"/></FormField>
         <FormField label={lbl("Email", "email")}><TextInput value={form.email} onChange={set("email")} type="email" placeholder="name@example.com"/></FormField>

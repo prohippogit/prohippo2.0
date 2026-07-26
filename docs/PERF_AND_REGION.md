@@ -237,48 +237,68 @@ GitHub Releases) and worth doing before the next batch.
 
 ---
 
-## 5. Measuring
+## 5. Measured results (2026-07-26, real practice data)
 
-Every PAN now logs its own breakdown. In the connector, open DevTools
-(`npm run dev`) and look for:
+Every PAN logs its own breakdown — as a tooltip on its row, and as a
+`[sync timing]` line in the DevTools console. Buckets: `login`, `list`,
+`notice-list`, `pdf`, `replies`, `ingest`, `order-list`, `f35-render`, `pacing`.
 
-```
-[sync timing] ABCDE1234F: 23.4s total — pdf 9.1s, ingest 5.2s, login 4.8s, notice-list 2.1s, replies 1.4s, pacing 0.8s
-```
+Five real PANs, the last four run concurrently:
 
-The same line is on each row as a tooltip, so a screenshot from a real practice
-is enough to diagnose a slow sync.
+| PAN | Proceedings | New docs | Total | login | ingest | pdf |
+| --- | --- | --- | --- | --- | --- | --- |
+| CUXPS9996L | 14 | 0 | **15.5 s** | 9.0 | 1.2 | – |
+| ABIPP8547L | 5 | 0 | **11.7 s** | 9.4 | 0.2 | – |
+| AABFI9185R | 8 | 0 | **16.3 s** | 12.9 | 0.1 | – |
+| AALFJ4935C | 2 | 4 | **22.2 s** | 9.7 | 7.8 | 2.2 |
+| AAWPM8125C | 12 | 3 | **23.2 s** | 9.7 | 7.0 | 1.3 |
 
-Buckets: `login`, `list`, `notice-list`, `pdf`, `replies`, `ingest`,
-`order-list`, `f35-render`, `pacing`.
+Against 10-20 minutes per PAN before, i.e. **roughly 40-60× on the repeat case**.
+Four PANs at once finished in ~25 s wall clock, which puts 50 already-synced
+clients at concurrency 5 around 4 minutes.
 
-**What to watch, and what it decides:**
+### What the numbers say
 
-- **`ingest` still large after step 2** → the callables aren't the problem
-  anymore; it's the PDF upload leg. The bucket
-  (`prohippo2.firebasestorage.app`) is in `us-central1` while the database is in
-  Mumbai, so uploads from India cross the planet. Deferred on purpose: after the
-  knowns fix a repeat sync uploads *zero* PDFs, and the planned two-lane split
-  will overlap uploads with portal work. If `ingest` is still material after
-  both, add an `asia-south1` bucket for new files (bucket locations are
-  permanent, so this needs a `bucket` field on each notice so downloads know
-  where to look).
-- **`pdf` dominant** → expected on first syncs; addressed next batch by
-  downloading via `context.request` (raw bytes in Node, no base64 through CDP)
-  with 2-3 concurrent downloads.
-- **`login` > ~8 s** → the portal itself is slow; not much left to trim.
-- **`pacing` material** → the deliberate 120-320 ms gaps between documents. Only
-  reconsider with numbers in hand; it is an IP-safety measure.
+**`login` is now the bottleneck, at 55-80% of every run.** 9.4-12.9 s, and it is
+the largest bucket in all five. Everything else combined is 2-3 s on a
+nothing-new sync. Some of that is the portal's own SPA load and auth response and
+is not ours to fix, but the poll loop (a `page.evaluate` every 360-680 ms) means
+each login step is discovered up to a tick late. Event-driven waits are the
+obvious next target — worth perhaps 2-4 s.
 
----
+**`ingest` is the second cost, but ONLY when documents are fetched.** 0.1-1.2 s
+with nothing new; **7.0-7.8 s for 3-4 documents** — about 2 s per document. And
+note the asymmetry with `pdf`: downloading 4 PDFs *from the portal* took 2.2 s,
+while pushing those same 4 to our own backend took 7.8 s.
 
-## 6. Expected results
+That 2 s per document is the Storage upload, and the bucket
+(`prohippo2.firebasestorage.app`) is in `us-central1` while everything else is
+now in Mumbai — so every PDF crosses the planet. Two possible fixes:
 
-| | Before | After this batch |
-| --- | --- | --- |
-| Repeat sync, one client, nothing new | 10-20 min | **~20-30 s** |
-| First sync, ~75 notices | 10-20 min | **~3-4 min** |
-| Bulk, 50 already-synced clients, 5 at a time | hours | **~3-5 min** |
+1. **Upload concurrently** (the two-lane split). Four uploads at once is roughly
+   the cost of the slowest, so ~7.8 s becomes ~2 s. No migration, no schema
+   change.
+2. **An `asia-south1` bucket** for new files. Cuts each upload rather than
+   overlapping them, but bucket locations are permanent, so this means a second
+   bucket plus a `bucket` field on every notice so downloads know where to look.
+
+**Do (1) first.** It is the bigger win and far cheaper. Revisit (2) only if
+`ingest` is still material afterwards.
+
+**`pdf` is cheap** — 1.3-2.2 s for 3-4 documents. The planned `context.request`
+change (raw bytes in Node instead of base64 through CDP) is still worth doing for
+large PDFs, but it is not where the time goes.
+
+**`pacing` is 0.6-1.1 s** — the deliberate 120-320 ms gaps between documents.
+Leave it; it is an IP-safety measure and it is not costing much.
+
+## 6. Results vs. prediction
+
+| | Before | Predicted | **Actual** |
+| --- | --- | --- | --- |
+| Repeat sync, one client, nothing new | 10-20 min | ~20-30 s | **11.7-16.3 s** |
+| Sync fetching a few new documents | 10-20 min | – | **22-23 s** |
+| Bulk, 50 already-synced clients, 5 at a time | hours | ~3-5 min | **~4 min** (extrapolated) |
 
 Concurrency stays at **5** deliberately. Every change above *reduces* the number
 of requests made to the income-tax portal — the knowns fix alone cuts repeat-sync
@@ -290,11 +310,50 @@ attributed.
 
 ## 7. Still open
 
+Re-ordered by the measurements above rather than by the original guesses — the
+per-document work I had planned matters much less than login does.
+
+**Deadlines first**
+
+- **Node 20 → 22.** Google decommissions the Node 20 runtime on **2026-10-30**;
+  after that these functions cannot be deployed at all. Deliberate change, wants
+  testing, not a last-minute edit.
+- **Auto-update for the connector.** `electron-updater` is a dependency that is
+  never used (§4). Until it is wired up, none of this reaches a desktop user who
+  doesn't manually reinstall — and the Iowa functions can't be retired, which
+  keeps the `minInstances` bill doubled.
+
+**Performance, in measured priority order**
+
+1. **Login** — 55-80% of every sync. Replace the 360-680 ms poll with
+   event-driven waits so each step isn't discovered up to a tick late. Part of
+   the 9-13 s is the portal's own SPA and auth latency and is not recoverable.
+2. **Concurrent uploads** — ~2 s per document today, all of it crossing to the
+   `us-central1` bucket. Four at once ≈ the cost of one. Cheaper and bigger than
+   the bucket migration; do it first and re-measure.
+3. **`context.request` PDF downloads** — raw bytes in Node instead of base64
+   through CDP. Worth doing for large PDFs, but `pdf` is only 1.3-2.2 s, so this
+   is no longer urgent.
+4. **Two-tier sync** — show the notice list before the PDFs finish. Less valuable
+   now that a whole sync is ~20 s; keep it in mind for practices with far more
+   history than the PANs measured here.
+5. **Bundled ingest** — one call per N notices. Deprioritised: the callable leg is
+   fast now that it is in-region; the upload leg is the cost, and (2) addresses it.
+6. **`asia-south1` Storage bucket** — only if `ingest` is still material after
+   (2). Needs a `bucket` field on every notice, since bucket locations are
+   permanent.
+
+**Observability gap found during verification**
+
+- `onPortalOrderWritten` only writes to the log on failure, so a successful
+  automatic summarisation is indistinguishable from an early return at the guard.
+  Add a one-line success log; otherwise the only way to confirm it worked is to
+  open the notice and look.
+
+**Product**
+
 - **Bulk sync interruptions** — remember progress and offer "Resume — N left" on
   next launch. Still manual; nothing runs on its own.
 - **Freshness labels** — "synced 3 days ago" per client, highlighting anything
   over a week old. There is no background sync by design, so staleness is
   currently invisible.
-- **Next batch** — bundled ingest (one call per N notices instead of one per
-  notice), the two-lane fetch/upload split, `context.request` PDF downloads, and
-  showing the notice list before the PDFs finish.

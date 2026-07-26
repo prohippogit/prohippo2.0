@@ -12,7 +12,7 @@
 
 const { chromium } = require("playwright");
 const { POOL } = require("./config");
-const { rand, jsleep } = require("./pacing");
+const { jsleep } = require("./pacing");
 const { runPanSync } = require("./portalWorker");
 
 // The portal sits behind a bot-filtering WAF that rejects obviously-automated
@@ -29,7 +29,7 @@ async function launchHardenedBrowser(headless) {
   const opts = { headless, args: STEALTH_ARGS, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
   try {
     return await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
-  } catch (chromeErr) {
+  } catch {
     try {
       return await chromium.launch(opts); // bundled Chromium (present in dev only)
     } catch {
@@ -45,7 +45,10 @@ async function launchHardenedBrowser(headless) {
 // onEvent(evt) receives { assesseeId, phase, message, level } for the UI log.
 async function runPool(jobs, onEvent, opts = {}) {
   const maxConcurrent = opts.maxConcurrent || POOL.maxConcurrent;
-  const scope = opts.scope || "eproc";
+  // "all" is the default: with the incremental knowns in place it costs barely
+  // more than "eproc" on an already-synced PAN (two extra list calls), and
+  // choosing "eproc" quietly leaves filed Form 35s and the FYI tab unsynced.
+  const scope = opts.scope || "all";
 
   // One shared browser process; each job opens its own isolated context.
   const browser = await launchHardenedBrowser(opts.headless === true);
@@ -85,6 +88,14 @@ async function runPool(jobs, onEvent, opts = {}) {
         if (r.notices) parts.push(`${r.notices} docs`);
         if (r.responses) parts.push(`${r.responses} replies`);
         if (r.appeals) parts.push(`${r.appeals} appeals`);
+        // Where the time actually went, per PAN. This is how the remaining
+        // tuning calls (does the PDF bucket need moving to asia-south1? is the
+        // per-document pacing earning its keep?) get settled with real numbers
+        // from real practices instead of estimates.
+        if (r.timing) {
+          const secs = (r.timing.totalMs / 1000).toFixed(1);
+          emit("timing", `${secs}s total — ${r.timing.line}`, "info");
+        }
         emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success", 100);
       } catch (err) {
         results.push({ assesseeId: job.assesseeId, ok: false, error: String(err && err.message || err) });

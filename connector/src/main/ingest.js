@@ -41,13 +41,16 @@ async function ingestSyncMessage(payload) {
     const data = await fb.callable("ingestPortalNotice", {
       assesseeId, notice: meta, storagePath, filename: n.filename,
     });
-    // Auto-parse order PDFs on fetch so the real doc type (order vs demand notice
-    // vs computation sheet) + the order's metadata are known immediately — drives
-    // appeal detection and the Form 35 match. Best-effort.
-    if (meta.isOrder && storagePath && data && data.noticeId) {
-      try { await fb.callable("summarizePortalNotice", { noticeId: data.noticeId }); }
-      catch { /* best-effort */ }
-    }
+    // Order PDFs still get auto-parsed (the real doc type — order vs demand
+    // notice vs computation sheet — plus the order's own metadata drives appeal
+    // detection and the Form 35 match), but NOT from here.
+    //
+    // This used to await summarizePortalNotice inline: a Gemini read of the PDF,
+    // 5-25s per order, capped at 5 concurrent instances shared across every
+    // worker, sitting squarely on the sync's critical path. It is now a Firestore
+    // trigger on the notice document (see onNoticeWritten in functions/index.js),
+    // so it runs on Google's side after the sync has moved on — and still
+    // completes if the user closes the connector the moment the sync ends.
     return { kind: "notice", data };
   }
 

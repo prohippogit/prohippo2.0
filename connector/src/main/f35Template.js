@@ -15,7 +15,6 @@ function loadF35Template() {
   if (cached) return cached;
   const src = fs.readFileSync(path.join(__dirname, "f35-template.js"), "utf8");
   const window = {};
-  // eslint-disable-next-line no-new-func
   new Function("window", src)(window); // assigns window.__PH_F35
   cached = window.__PH_F35 || null;
   return cached;

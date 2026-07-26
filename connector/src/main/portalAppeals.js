@@ -10,7 +10,7 @@
 "use strict";
 
 const { jsleep, PACE } = require("./pacing");
-const { PATHS, FORM, apiCall, getDoc, postDoc } = require("./portalApi");
+const { PATHS, apiCall, getDoc, postDoc } = require("./portalApi");
 const { ingestSyncMessage } = require("./ingest");
 const { loadF35Template } = require("./f35Template");
 
@@ -52,8 +52,11 @@ function ayFromForm(d) {
   return y + "-" + String((y + 1) % 100).padStart(2, "0");
 }
 
+const NO_CLOCK = { time: (_name, fn) => fn(), add: () => {} };
+
 async function syncAppealForms(page, job, pan, summary, emit) {
   const assesseeId = job.assesseeId;
+  const t = (job && job.timer) || NO_CLOCK;
   emit("appeals", "Fetching filed appeals (Form 35)…", "info", 88);
 
   let forms;
@@ -117,7 +120,7 @@ async function syncAppealForms(page, job, pan, summary, emit) {
       const body = { formStatus: f.formStatus || "Completed", udinNum: null, formName: "F35", submitMode: "Online", data: f35data, list: F35T ? F35T.list : {}, dscJson, childData: F35T ? F35T.childData : {} };
       let rendered = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        rendered = await postDoc(page, { path: PATHS.PDFWEB, serviceName: "F35", payload: body });
+        rendered = await t.time("f35-render", () => postDoc(page, { path: PATHS.PDFWEB, serviceName: "F35", payload: body }));
         if (rendered && rendered.ok) break;
         const st = rendered && rendered.status;
         if (st && st < 500) break; // a 4xx won't fix itself
@@ -160,7 +163,7 @@ async function syncAppealForms(page, job, pan, summary, emit) {
       }
     } catch { /* attachments best-effort */ }
 
-    await ingestSyncMessage({
+    await t.time("ingest", () => ingestSyncMessage({
       assesseeId, kind: "appealForm",
       appeal: {
         formCd: "F35", formName: "Form 35", ackNum, ackDt,
@@ -175,10 +178,10 @@ async function syncAppealForms(page, job, pan, summary, emit) {
         disputedDemand: d.disputedDemandAmount || "",
         formPdfError, attachments,
       },
-    });
+    }));
     summary.appeals = (summary.appeals || 0) + 1;
     emit("appeals", `Filed appeal ${ackNum} — saved`, "info", 94);
-    await jsleep(...PACE.betweenDocs);
+    await t.time("pacing", () => jsleep(...PACE.betweenDocs));
   }
 }
 

@@ -28,6 +28,9 @@ async function withCredential(assesseeId, fn) {
   try {
     return await fn(cred);
   } finally {
+    // Deliberately dead-looking: dropping our reference is the whole point, so
+    // the linter's "this assignment is never read" is exactly what we want here.
+    // eslint-disable-next-line no-useless-assignment
     cred = null;
   }
 }

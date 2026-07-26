@@ -17,14 +17,13 @@ export const auth = getAuth(app);
 
 // Cloud Functions. Which region's copy this build calls.
 //
-// Firestore is in asia-south1 (Mumbai) and the functions now deploy to BOTH
-// asia-south1 and us-central1 under the same names (see REGIONS in
-// functions/index.js), so this is a free switch — once the Mumbai copies exist.
-//
-// STILL "us-central1" ON PURPOSE: deploying hosting with "asia-south1" before
-// the functions are live in Mumbai takes the live web app down. Deploy functions
-// first, then flip this. Ordered runbook: docs/PERF_AND_REGION.md.
-export const functions = getFunctions(app, "us-central1");
+// asia-south1 (Mumbai) — co-located with Firestore. Every callable is deployed to
+// both asia-south1 and us-central1 under the same name (see REGIONS in
+// functions/index.js), and the Mumbai copies went live on 2026-07-26, so this is
+// the near end of the wire for Indian users AND for the functions' own Firestore
+// calls. The us-central1 copies stay deployed for connectors that predate the
+// switch. Background: docs/PERF_AND_REGION.md.
+export const functions = getFunctions(app, "asia-south1");
 
 // Storage for downloaded notice/order PDFs (per-user paths).
 export const storage = getStorage(app);
@@ -40,6 +39,5 @@ if (useEmulators) {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
   connectStorageEmulator(storage, "127.0.0.1", 9199);
-  // eslint-disable-next-line no-console
   console.info("ProHippo: using Firebase emulators");
 }

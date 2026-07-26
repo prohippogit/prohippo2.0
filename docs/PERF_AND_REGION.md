@@ -122,7 +122,7 @@ across all workers**, blocking the sync each time.
 > **Order matters.** Steps 1 and 2 must not be swapped. Flipping a client to a
 > region with no deployed function takes that client offline until step 1 lands.
 
-### Step 1 — Deploy the functions (safe; nothing breaks)
+### Step 1 — Deploy the functions (safe; nothing breaks) — ✅ DONE 2026-07-26
 
 ```bash
 firebase deploy --only functions
@@ -151,22 +151,62 @@ appear **twice** — once per region — and be `ACTIVE`.
 Nothing is using Mumbai yet. The existing web app and every installed connector
 still call Iowa, exactly as before.
 
+#### What actually happened, for whoever adds the next region
+
+The first deploy **partially failed** and needed two retries. Both causes were
+first-time-in-a-new-region races, and neither indicated anything wrong with the
+code. Expect the same if a third region is ever added.
+
+1. **9 of 11 callables failed their Cloud Build** with an unhelpful
+   `HTTP Error: 500, Could not create Cloud Run service` / *"An unexpected error
+   occurred"*. The build log gave the real reason:
+
+   ```
+   NAME_UNKNOWN: Repository "gcf-artifacts" not found
+   failed to ensure registry read/write access to
+   asia-south1-docker.pkg.dev/prohippo2/gcf-artifacts/...
+   ```
+
+   Firebase creates the regional `gcf-artifacts` Artifact Registry repository as
+   part of the first deploy into a region, but launches all the builds
+   concurrently. Two won the race; nine hit a registry that did not exist yet and
+   died one second in, during ANALYZING. **Fix: redeploy.** The repository exists
+   after the first attempt, so the retry succeeds.
+
+2. **`onPortalOrderWritten` failed** with `Permission denied while using the
+   Eventarc Service Agent`. The Eventarc and Pub/Sub service identities are
+   created *during* that same first deploy, so their permissions had not
+   propagated. Firebase says so in the error. **Fix: wait ~5 minutes, redeploy.**
+
+Neither is diagnosable from the top-level output — the build failures in
+particular look alarming and generic. Go straight to the build log:
+
+```bash
+gcloud builds list --region=asia-south1 --project=prohippo2 --limit=5
+gcloud builds log <BUILD_ID> --region=asia-south1 --project=prohippo2 2>&1 | tail -50
+```
+
 ### Step 2 — Flip the clients to Mumbai
 
-One line in each of two files:
+One line in each of two files, both now flipped:
 
 - `src/firebase.js` → `getFunctions(app, "asia-south1")`
 - `connector/src/main/config.js` → `const FUNCTIONS_REGION = "asia-south1";`
 
-Then:
+The web app deploys itself: `firebase-deploy.yml` runs on every push to the
+default branch, so **merging the change is what puts the web app on Mumbai** —
+there is no separate hosting command to run, and no chance to stage it. That is
+precisely why step 1 has to be verified first:
 
 ```bash
-npm run build
-firebase deploy --only hosting
+gcloud functions list --project=prohippo2 --filter="name~/locations/asia-south1/" --format="value(name)" | wc -l
 ```
 
-The web app is now on Mumbai. Rebuild and re-release the connector to move
-desktop users (see the caveat below).
+Expect 12 (11 callables + `onPortalOrderWritten`). If that number is short, do
+not merge — the live web app would call functions that aren't there.
+
+Desktop users move only when they install a rebuilt connector (see the caveat
+below).
 
 ### Step 3 — Retire Iowa (much later, or never)
 

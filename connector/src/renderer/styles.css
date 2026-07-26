@@ -103,3 +103,20 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary);cursor:p
   .row{grid-template-columns:28px 1fr;grid-template-areas:"c n" ". p" ". s";row-gap:8px}
   .cbx{grid-area:c}.nm{grid-area:n}.prog{grid-area:p}.pill{grid-area:s}
 }
+
+/* ---- update notice ----
+   Sits under the header, only rendered when a newer build exists. Deliberately
+   calm: an available update is information, not a problem, and it must never
+   read like a sync error. */
+.updbar{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:0 24px 16px;padding:10px 14px;
+  background:rgba(108,92,231,.12);border:1px solid rgba(108,92,231,.35);
+  border-radius:10px;color:#cfc7ff;font-size:12.5px;
+}
+.updbtn{
+  margin-left:auto;padding:6px 14px;border:0;border-radius:8px;cursor:pointer;
+  background:var(--primary);color:#fff;font-size:12px;font-weight:700;
+  font-family:inherit;
+}
+.updbtn:hover{background:var(--primary-2)}

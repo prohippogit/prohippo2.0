@@ -219,21 +219,60 @@ There is no rush, and one good reason to wait: it also halves the
 
 ---
 
-## 4. Known caveat: the connector cannot update itself
+## 4. Releasing the connector (and auto-update)
 
-`electron-updater` is listed in `connector/package.json` but is **not wired up
-anywhere in the code**. There is no update check, so desktop users only get new
-builds by downloading the installer again.
+`electron-updater` used to be a dependency that nothing imported — there was no
+update check at all, so any improvement only reached a practitioner who happened
+to notice and reinstall. It is now wired up in `connector/src/main/updater.js`.
 
-Two consequences:
+### How a release works
 
-1. Step 3 above can't be done confidently — you have no way to know when the
-   last old connector is gone. Leaving both regions live is fine.
-2. More importantly, **none of the improvements here reach existing desktop
-   users until they manually reinstall.**
+```bash
+git tag connector-v1.0.1 && git push origin connector-v1.0.1
+```
 
-Wiring up auto-update is small (`electron-builder.yml` already publishes to
-GitHub Releases) and worth doing before the next batch.
+**The tag must be `connector-vX.Y.Z`** — full semver, three parts. CI reads the
+version out of the tag and writes it into `package.json` before building, because
+auto-update works by comparing the installed version against the one recorded in
+`latest*.yml`. A tag that isn't semver **fails the build on purpose**, with a
+message saying so: shipping a build whose version didn't move produces installers
+nobody can ever be upgraded from, which is worse than a failed build.
+
+This replaces the older `connector-v2` / `connector-v3` style. Those tags would
+now be rejected.
+
+`build-connector.yml` then attaches the installers **plus `latest.yml`,
+`latest-mac.yml` and the blockmaps** to the single `connector-latest` release,
+marked `make_latest`. That is the update feed; electron-updater's GitHub provider
+finds it with no extra configuration.
+
+### Platform difference — a real constraint
+
+| | Behaviour |
+| --- | --- |
+| **Windows** (NSIS) | Full auto-update. Downloads in the background, installs on quit. |
+| **macOS** | **Cannot self-update.** Checks for updates and shows a banner with a download link. |
+
+macOS is not an oversight. Squirrel.Mac refuses to apply an update to an app
+without a valid code signature, and CI builds unsigned on purpose
+(`CSC_IDENTITY_AUTO_DISCOVERY: "false"` — there is no Apple Developer ID yet).
+*Checking* is safe unsigned; only *applying* is blocked. So macOS users are told a
+new version exists and handed a one-click download, which still solves the real
+problem: they find out.
+
+Buy an Apple Developer ID and notarize, and macOS gets the same background flow —
+delete the platform branch in `updater.js`. That would also remove the one-time
+Gatekeeper warning on first open.
+
+### The one-time cliff
+
+Builds already installed (version `0.1.0`) contain **no updater code**, so they
+will never check. Those users must install once more by hand to get onto the
+auto-updating track. Unavoidable, and worth saying plainly when announcing the
+release. From `1.0.0` onward it is automatic on Windows and one click on macOS.
+
+Until no `0.1.0` build is left in the wild, the `us-central1` functions must stay
+deployed (step 3 of §3), which also keeps the `minInstances` bill doubled.
 
 ---
 
@@ -313,15 +352,16 @@ attributed.
 Re-ordered by the measurements above rather than by the original guesses — the
 per-document work I had planned matters much less than login does.
 
-**Deadlines first**
+**Done — the two deadline items**
 
-- **Node 20 → 22.** Google decommissions the Node 20 runtime on **2026-10-30**;
-  after that these functions cannot be deployed at all. Deliberate change, wants
-  testing, not a last-minute edit.
-- **Auto-update for the connector.** `electron-updater` is a dependency that is
-  never used (§4). Until it is wired up, none of this reaches a desktop user who
-  doesn't manually reinstall — and the Iowa functions can't be retired, which
-  keeps the `minInstances` bill doubled.
+- ~~**Node 20 → 22.**~~ `functions/package.json` now declares Node 22, ahead of
+  Google's 2026-10-30 decommission of Node 20. **Needs a `firebase deploy --only
+  functions` to take effect** — a runtime change rebuilds every function, in both
+  regions. Nothing in `functions/index.js` is version-sensitive: it uses only
+  `crypto`, the Firebase SDKs and global `fetch` (stable since Node 18).
+- ~~**Auto-update for the connector.**~~ Wired up — see §4 for the release flow,
+  the mandatory `connector-vX.Y.Z` tag format, and why macOS notifies rather than
+  self-installs.
 
 **Performance, in measured priority order**
 

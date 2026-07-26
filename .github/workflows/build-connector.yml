@@ -38,6 +38,24 @@ jobs:
         with:
           node-version: 20
 
+      # Auto-update compares the INSTALLED app's package.json version against the
+      # version recorded in latest*.yml. If the version never moves, no update is
+      # ever offered — so the release tag is the single source of truth for it,
+      # and a malformed tag fails the build rather than shipping a build nobody
+      # can be upgraded from.
+      - name: Set version from the release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#connector-v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '$TAG' must be connector-vX.Y.Z so auto-update can compare versions (got '$VERSION'). Example: connector-v1.0.1"
+            exit 1
+          fi
+          npm version --no-git-tag-version --allow-same-version "$VERSION"
+          echo "Building connector $VERSION"
+
       - name: Install dependencies
         run: npm install
 

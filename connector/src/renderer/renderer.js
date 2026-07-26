@@ -266,6 +266,47 @@ function setRow(assesseeId, { level, pct, msg }) {
   if (msg) txt.textContent = msg;
 }
 
+// --- Update notice ------------------------------------------------------------
+// Driven by the main process (see updater.js). Windows downloads in the
+// background and installs on quit; macOS can't self-update unsigned, so there
+// the button just opens the .dmg download.
+window.connector.onUpdateState((evt) => {
+  const bar = $("updateBar");
+  const msg = $("updateMsg");
+  const btn = $("updateBtn");
+  const version = evt.version ? ` (${evt.version})` : "";
+
+  if (evt.state === "manual") {
+    msg.textContent = `A newer version of the Connector is available${version}.`;
+    btn.textContent = "Download";
+    btn.classList.remove("hidden");
+    bar.classList.remove("hidden");
+    return;
+  }
+  if (evt.state === "downloading") {
+    const pct = typeof evt.percent === "number" ? ` — ${evt.percent}%` : "";
+    msg.textContent = `Downloading update${version}${pct}… you can keep working.`;
+    btn.classList.add("hidden");
+    bar.classList.remove("hidden");
+    return;
+  }
+  if (evt.state === "ready") {
+    msg.textContent = `Update${version} ready — it will install when you quit.`;
+    btn.textContent = "Restart now";
+    btn.classList.remove("hidden");
+    bar.classList.remove("hidden");
+    return;
+  }
+  bar.classList.add("hidden"); // "idle" — already current, or the check failed
+});
+
+$("updateBtn").addEventListener("click", async () => {
+  $("updateBtn").disabled = true;
+  try { await window.connector.installUpdate(); }
+  catch { await window.connector.openDownloadPage().catch(() => {}); }
+  finally { $("updateBtn").disabled = false; }
+});
+
 function friendly(err) {
   const m = String((err && err.message) || err);
   if (m.includes("network")) return "Network error — check your connection.";

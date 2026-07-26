@@ -10,6 +10,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const fb = require("./firebaseClient");
 const googleAuth = require("./googleAuth");
 const { runPool } = require("./pool");
+const { initUpdater } = require("./updater");
 
 const isDev = process.argv.includes("--dev");
 let win = null;
@@ -79,6 +80,9 @@ ipcMain.handle("assessees:list", async () => {
 app.whenReady().then(() => {
   fb.init();
   createWindow();
+  // Check for a new build shortly after launch. Windows installs it on quit;
+  // macOS can't self-update unsigned, so it offers a download link instead.
+  initUpdater(win);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

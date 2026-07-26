@@ -19,4 +19,15 @@ contextBridge.exposeInMainWorld("connector", {
     ipcRenderer.on("sync:event", handler);
     return () => ipcRenderer.removeListener("sync:event", handler);
   },
+
+  // --- auto-update ---
+  // States: "idle" | "manual" | "downloading" | "ready". See updater.js.
+  onUpdateState: (cb) => {
+    const handler = (_e, evt) => cb(evt);
+    ipcRenderer.on("update:state", handler);
+    return () => ipcRenderer.removeListener("update:state", handler);
+  },
+  // Windows: relaunch into the downloaded build. macOS: open the .dmg download.
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+  openDownloadPage: () => ipcRenderer.invoke("update:openDownload"),
 });

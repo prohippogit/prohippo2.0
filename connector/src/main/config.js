@@ -19,15 +19,13 @@ const firebaseConfig = {
 
 // Which region's copy of the callables this build talks to.
 //
-// Firestore is in asia-south1 (Mumbai) and the functions now deploy to BOTH
-// asia-south1 and us-central1 under the same names (see REGIONS in
-// functions/index.js), so this is a free switch — once the Mumbai copies exist.
-//
-// STILL "us-central1" ON PURPOSE. Flipping this to "asia-south1" before the
-// functions have been deployed to Mumbai would take every client that ships with
-// the new value straight offline. Deploy the functions first, confirm the Mumbai
-// copies are live, then flip. Full ordered runbook: docs/PERF_AND_REGION.md.
-const FUNCTIONS_REGION = "us-central1";
+// asia-south1 (Mumbai) — co-located with Firestore. Every callable is deployed to
+// both asia-south1 and us-central1 under the same name (see REGIONS in
+// functions/index.js), and the Mumbai copies went live on 2026-07-26. This cuts
+// both legs of every ingest call: the hop from the user's machine, and the
+// functions' own Firestore round trips. The us-central1 copies stay deployed so
+// connectors built before this change keep working. See docs/PERF_AND_REGION.md.
+const FUNCTIONS_REGION = "asia-south1";
 
 // The income-tax e-filing portal.
 const PORTAL = {

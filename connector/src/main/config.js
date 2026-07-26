@@ -17,7 +17,16 @@ const firebaseConfig = {
   appId: "1:172465235057:web:cb2718881728d4e8b467d0",
 };
 
-// Callable Cloud Functions live in us-central1 (see functions/index.js).
+// Which region's copy of the callables this build talks to.
+//
+// Firestore is in asia-south1 (Mumbai) and the functions now deploy to BOTH
+// asia-south1 and us-central1 under the same names (see REGIONS in
+// functions/index.js), so this is a free switch — once the Mumbai copies exist.
+//
+// STILL "us-central1" ON PURPOSE. Flipping this to "asia-south1" before the
+// functions have been deployed to Mumbai would take every client that ships with
+// the new value straight offline. Deploy the functions first, confirm the Mumbai
+// copies are live, then flip. Full ordered runbook: docs/PERF_AND_REGION.md.
 const FUNCTIONS_REGION = "us-central1";
 
 // The income-tax e-filing portal.

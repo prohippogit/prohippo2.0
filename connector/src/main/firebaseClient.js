@@ -137,6 +137,73 @@ async function listPortalAssessees() {
   });
 }
 
+// Build the incremental-sync hints for ONE PAN — the connector's port of
+// buildSyncKnowns() in src/Assessees.jsx. Without these the sync has no idea
+// what it already holds, so it re-downloads every notice PDF, every filed reply
+// and re-renders every Form 35 on every single run.
+//
+//   knownDins        DINs + docKeys already on file (a docKey covers closure
+//                    orders as "sat:<id>" and filed Form 35s as "f35:<ackNum>")
+//   knownByProc      per-proceeding { n: notice count, o: has an order } so a
+//                    proceeding whose count hasn't moved is skipped entirely
+//   knownResponseIds replies already recorded
+//   knownActiveProcs proceedingReqIds we hold as Active — lets "eproc" scope
+//                    spot which ones just left FYA (i.e. closed) without
+//                    scanning the whole FYI list
+//
+// Reads Firestore directly with the signed-in user's token; firestore.rules
+// already scopes users/{uid}/** to the owner. Both queries are single-field
+// equality, so Firestore's automatic indexes cover them — no index to deploy.
+async function getSyncKnowns(pan) {
+  init();
+  const user = currentUser();
+  if (!user) throw new Error("Sign in first.");
+  const p = String(pan || "").toUpperCase().trim();
+  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [] };
+  if (!p) return empty;
+
+  const [noticeSnap, matterSnap] = await Promise.all([
+    getDocs(query(collection(firestore, `users/${user.uid}/notices`), where("pan", "==", p))),
+    getDocs(query(collection(firestore, `users/${user.uid}/matters`), where("pan", "==", p))),
+  ]);
+
+  const knownDins = new Set();
+  const knownResponseIds = new Set();
+  const procNotices = {}; // proceedingReqId -> Set<DIN>
+  const procHasOrder = new Set();
+
+  noticeSnap.forEach((d) => {
+    const n = d.data() || {};
+    if (n.din) knownDins.add(String(n.din));
+    if (n.docKey) knownDins.add(String(n.docKey));
+    const pid = n.proceedingReqId;
+    if (pid) {
+      if (n.isOrder) procHasOrder.add(String(pid));
+      if (n.din) (procNotices[pid] || (procNotices[pid] = new Set())).add(String(n.din));
+    }
+    for (const r of n.responses || []) {
+      if (r && r.responseId != null) knownResponseIds.add(String(r.responseId));
+    }
+  });
+
+  const knownByProc = {};
+  for (const pid of Object.keys(procNotices)) knownByProc[pid] = { n: procNotices[pid].size };
+  for (const pid of procHasOrder) (knownByProc[pid] || (knownByProc[pid] = { n: 0 })).o = true;
+
+  const knownActiveProcs = [];
+  matterSnap.forEach((d) => {
+    const m = d.data() || {};
+    if (m.status === "Active" && m.proceedingReqId) knownActiveProcs.push(String(m.proceedingReqId));
+  });
+
+  return {
+    knownDins: [...knownDins],
+    knownByProc,
+    knownResponseIds: [...knownResponseIds],
+    knownActiveProcs,
+  };
+}
+
 module.exports = {
   init,
   requestEmailOtp,
@@ -148,4 +215,5 @@ module.exports = {
   uploadBase64,
   callable,
   listPortalAssessees,
+  getSyncKnowns,
 };

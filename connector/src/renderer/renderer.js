@@ -124,11 +124,14 @@ const selected = new Set();
 
 async function loadAssessees() {
   const list = await window.connector.listAssessees();
+  // No `knowns` here on purpose: the renderer has no Firestore access, and this
+  // used to send an empty object that silently disabled the whole incremental
+  // diff. Each worker now reads its own PAN's knowns in the main process, in
+  // parallel with the login (see portalWorker.js).
   JOBS = (list || []).map((a) => ({
     assesseeId: a.id,
     pan: a.pan || a.portalUserId,
     label: a.name || a.pan,
-    knowns: a.knowns || {},
   }));
   selected.clear();
   renderRows();
@@ -229,6 +232,15 @@ function setControlsDisabled(on) {
 
 // Live per-PAN events from the pool.
 window.connector.onSyncEvent((evt) => {
+  // The per-phase timing breakdown isn't a status line — it would be overwritten
+  // by "Done" a moment later. Park it on the row as a tooltip and log it, so a
+  // slow sync can be diagnosed from a screenshot or the console.
+  if (evt.phase === "timing") {
+    const el = $("row-" + evt.assesseeId);
+    if (el) el.title = evt.message;
+    console.info(`[sync timing] ${evt.pan || evt.assesseeId}: ${evt.message}`);
+    return;
+  }
   setRow(evt.assesseeId, { level: evt.level || "info", pct: evt.pct, msg: `${evt.message}` });
 });
 

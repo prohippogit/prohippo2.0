@@ -12,12 +12,47 @@
  * never reaches the browser.
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const crypto = require("crypto");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 const db = admin.firestore();
+
+/* ---------- where these functions run ----------------------------------------
+ * Firestore for this project lives in asia-south1 (Mumbai) — but these functions
+ * were originally pinned to us-central1 (Iowa), Google's default. That split them
+ * from the database by ~250ms PER OPERATION, and a single ingest call makes
+ * dozens to hundreds of sequential Firestore calls. Co-locating with the database
+ * is worth more than any other change in this file.
+ *
+ * v2 HTTP/callable functions accept an ARRAY of regions and deploy one copy per
+ * region under the SAME name, so both are served at once. That matters because
+ * the desktop connector has no auto-update: an already-installed copy keeps
+ * calling us-central1 and must keep working. Clients pick their region at the
+ * SDK level (getFunctions(app, region)).
+ *
+ * MIGRATION ORDER — see docs/PERF_AND_REGION.md. In short:
+ *   1. Deploy this file (both regions live).            ← safe, nothing breaks
+ *   2. Flip the clients to asia-south1 and redeploy.
+ *   3. Much later, once no old connector is in the wild, drop "us-central1"
+ *      below and redeploy to retire the Iowa copies.
+ *
+ * Do NOT reorder: flipping a client to a region that has no deployed function
+ * takes that client down until step 1 lands.
+ * -------------------------------------------------------------------------- */
+const PRIMARY_REGION = "asia-south1"; // co-located with Firestore
+const REGIONS = [PRIMARY_REGION, "us-central1"];
+
+// Firestore triggers are bound to the database's own region — there is no choice
+// to make and no array to pass.
+const TRIGGER_REGION = PRIMARY_REGION;
+
+// Keeping one instance warm removes a 1-3s cold start from the first sync of the
+// day. NOTE: this is applied PER REGION, so while REGIONS holds two entries you
+// are paying for two warm instances. Step 3 of the migration halves that.
+const KEEP_WARM = 1;
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
@@ -287,7 +322,7 @@ function validate(raw) {
 
 exports.parseNotice = onCall(
   {
-    region: "us-central1",
+    region: REGIONS,
     secrets: [geminiApiKey],
     timeoutSeconds: 120,
     memory: "512MiB",
@@ -407,7 +442,7 @@ function decryptSecret({ iv, ct, tag }) {
 }
 
 const credDocPath = (uid, assesseeId) => `portalCreds/${uid}__${assesseeId}`;
-const CALLABLE_OPTS = { region: "us-central1", secrets: [credentialEncKey], maxInstances: 10 };
+const CALLABLE_OPTS = { region: REGIONS, secrets: [credentialEncKey], maxInstances: 10 };
 
 // Save (or replace) an assessee's portal login.
 exports.savePortalCredential = onCall(CALLABLE_OPTS, async (request) => {
@@ -456,7 +491,7 @@ exports.getPortalCredential = onCall(CALLABLE_OPTS, async (request) => {
 });
 
 // Remove a saved portal login.
-exports.deletePortalCredential = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+exports.deletePortalCredential = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
   const { assesseeId } = request.data || {};
@@ -474,7 +509,18 @@ exports.deletePortalCredential = onCall({ region: "us-central1", maxInstances: 1
    assessee and deduped by a stable content hash so repeat syncs only add
    what's new. Notice-level detail (deduped by DIN) and PDFs come next.
    ============================================================ */
-exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+// db.getAll() takes refs as varargs and rejects an empty call; it is also worth
+// keeping each batch bounded. Returns snapshots in the order the refs came in.
+async function getAllChunked(refs, size = 300) {
+  if (!refs.length) return [];
+  const out = [];
+  for (let i = 0; i < refs.length; i += size) {
+    out.push(...(await db.getAll(...refs.slice(i, i + size))));
+  }
+  return out;
+}
+
+exports.ingestPortalProceedings = onCall({ region: REGIONS, maxInstances: 10, minInstances: KEEP_WARM }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
   const { assesseeId, proceedings } = request.data || {};
@@ -490,15 +536,56 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
 
   const col = db.collection(`users/${uid}/assessees/${assesseeId}/portalProceedings`);
   const mattersCol = db.collection(`users/${uid}/matters`);
-  let added = 0, updated = 0, mattersAdded = 0;
-  const closed = []; // proceedings that flipped Active → Closed this sync
+
+  // This used to run FOUR sequential Firestore round trips per proceeding
+  // (proceeding get + set, matter get + set). At 40 proceedings that is ~160
+  // calls one after another, and every one of them crossed from us-central1 to
+  // the Mumbai database — roughly 40 seconds of pure waiting, paid on EVERY
+  // sync including ones where nothing changed. Now: read everything in one
+  // batch, decide in memory, write in one batch.
+  //
+  // A payload should never list the same proceeding twice, but dedupe by target
+  // document id anyway — batched reads all see the pre-sync state, so a repeat
+  // would otherwise be counted (and "closed"-detected) more than once.
+  const byProcDoc = new Map(); // portalProceedings doc id -> row
+  const byMatterDoc = new Map(); // matters doc id -> { row, prId }
   for (const p of proceedings) {
     const key = [p.name, p.ay, p.fy, p.pan, p.statusDate].map((x) => (x || "")).join("|");
-    const id = crypto.createHash("sha1").update(key).digest("hex").slice(0, 24);
-    const ref = col.doc(id);
-    const snap = await ref.get();
-    if (snap.exists) updated++; else added++;
-    await ref.set(
+    byProcDoc.set(crypto.createHash("sha1").update(key).digest("hex").slice(0, 24), p);
+    const prId = String(p.proceedingReqId || "");
+    if (prId) {
+      const mId = "pcdng_" + crypto.createHash("sha1").update(prId).digest("hex").slice(0, 20);
+      byMatterDoc.set(mId, { row: p, prId });
+    }
+  }
+
+  const procIds = [...byProcDoc.keys()];
+  const matterIds = [...byMatterDoc.keys()];
+  const [procSnaps, matterSnaps] = await Promise.all([
+    getAllChunked(procIds.map((id) => col.doc(id))),
+    getAllChunked(matterIds.map((id) => mattersCol.doc(id))),
+  ]);
+  const matterById = new Map(matterIds.map((id, i) => [id, matterSnaps[i]]));
+
+  const now = new Date().toISOString();
+  const writer = db.bulkWriter();
+  let added = 0, updated = 0, mattersAdded = 0;
+  const closed = []; // proceedings that flipped Active → Closed this sync
+
+  // BulkWriter applies its own retry policy, but each set() returns a promise —
+  // leaving those unattached turns a permanently-failed write into an unhandled
+  // rejection AND loses the row silently. Collect failures and report them.
+  const writeErrors = [];
+  const track = (p) => {
+    p.catch((e) => writeErrors.push(String((e && e.message) || e)));
+    return p;
+  };
+
+  procIds.forEach((id, i) => {
+    const p = byProcDoc.get(id);
+    if (procSnaps[i].exists) updated++; else added++;
+    track(writer.set(
+      col.doc(id),
       {
         name: p.name || "",
         ay: p.ay || "",
@@ -509,55 +596,67 @@ exports.ingestPortalProceedings = onCall({ region: "us-central1", maxInstances: 
         statusDate: p.statusDate || "",
         noticeCount: typeof p.noticeCount === "number" ? p.noticeCount : null,
         tab: p.tab || "",
-        syncedAt: new Date().toISOString(),
+        syncedAt: now,
       },
       { merge: true }
-    );
+    ));
+  });
 
-    // Each proceeding is a Matter (case file). Dedup by proceedingReqId; a
-    // conservative merge keeps the practitioner's own edits (status, priority…).
-    const prId = String(p.proceedingReqId || "");
-    if (prId) {
-      const mId = "pcdng_" + crypto.createHash("sha1").update(prId).digest("hex").slice(0, 20);
-      const mRef = mattersCol.doc(mId);
-      const mSnap = await mRef.get();
-      const cur = mSnap.exists ? mSnap.data() : {};
-      const base = {
-        type: deriveAuthority(p.name, ""),
-        assessee: assesseeName || p.assessee || "",
-        pan: assesseePan || (p.pan || "").toUpperCase(),
-        ay: formatAy(p.ay),
-        ref: p.name || "",
-        proceedingReqId: prId,
-        proceedingName: p.name || "",
-        noticeCount: typeof p.viewNoticeCount === "number" ? p.viewNoticeCount : (typeof p.noticeCount === "number" ? p.noticeCount : null),
-        source: "portal",
-        portalSyncedAt: new Date().toISOString(),
-      };
-      // "For your Information" = completed/informational → Closed; "For your
-      // Action" = still needs action → Active.
-      const portalStatus = /information/i.test(p.tab || "") ? "Closed" : "Active";
-      if (!mSnap.exists) {
-        await mRef.set({ ...base, section: "", bench: "", status: portalStatus, priority: "medium", staff: a.staff || "", createdAt: new Date().toISOString() }, { merge: true });
-        mattersAdded++;
-      } else {
-        // Refresh portal-owned fields only; never overwrite user-set status etc.
-        const patch = { proceedingReqId: prId, proceedingName: base.proceedingName, noticeCount: base.noticeCount, source: cur.source || "portal", portalSyncedAt: base.portalSyncedAt };
-        for (const k of ["type", "assessee", "pan", "ay", "ref"]) if (!cur[k]) patch[k] = base[k];
-        // Track the portal tab only while the status is still an auto value
-        // (don't clobber a manually chosen status like "Decided").
-        if (cur.status === "Active" || cur.status === "Closed" || !cur.status) patch.status = portalStatus;
-        await mRef.set(patch, { merge: true });
-        if (cur.status === "Active" && portalStatus === "Closed") {
-          closed.push({ proceedingReqId: prId, proceedingName: p.name || "", ay: formatAy(p.ay), type: base.type });
-        }
+  // Each proceeding is a Matter (case file). Dedup by proceedingReqId; a
+  // conservative merge keeps the practitioner's own edits (status, priority…).
+  for (const [mId, { row: p, prId }] of byMatterDoc) {
+    const mSnap = matterById.get(mId);
+    const cur = mSnap && mSnap.exists ? mSnap.data() : {};
+    const base = {
+      type: deriveAuthority(p.name, ""),
+      assessee: assesseeName || p.assessee || "",
+      pan: assesseePan || (p.pan || "").toUpperCase(),
+      ay: formatAy(p.ay),
+      ref: p.name || "",
+      proceedingReqId: prId,
+      proceedingName: p.name || "",
+      noticeCount: typeof p.viewNoticeCount === "number" ? p.viewNoticeCount : (typeof p.noticeCount === "number" ? p.noticeCount : null),
+      source: "portal",
+      portalSyncedAt: now,
+    };
+    // "For your Information" = completed/informational → Closed; "For your
+    // Action" = still needs action → Active.
+    const portalStatus = /information/i.test(p.tab || "") ? "Closed" : "Active";
+    if (!mSnap || !mSnap.exists) {
+      track(writer.set(
+        mattersCol.doc(mId),
+        { ...base, section: "", bench: "", status: portalStatus, priority: "medium", staff: a.staff || "", createdAt: now },
+        { merge: true }
+      ));
+      mattersAdded++;
+    } else {
+      // Refresh portal-owned fields only; never overwrite user-set status etc.
+      const patch = { proceedingReqId: prId, proceedingName: base.proceedingName, noticeCount: base.noticeCount, source: cur.source || "portal", portalSyncedAt: base.portalSyncedAt };
+      for (const k of ["type", "assessee", "pan", "ay", "ref"]) if (!cur[k]) patch[k] = base[k];
+      // Track the portal tab only while the status is still an auto value
+      // (don't clobber a manually chosen status like "Decided").
+      if (cur.status === "Active" || cur.status === "Closed" || !cur.status) patch.status = portalStatus;
+      track(writer.set(mattersCol.doc(mId), patch, { merge: true }));
+      if (cur.status === "Active" && portalStatus === "Closed") {
+        closed.push({ proceedingReqId: prId, proceedingName: p.name || "", ay: formatAy(p.ay), type: base.type });
       }
     }
   }
-  await db.doc(`users/${uid}/assessees/${assesseeId}`).set(
-    { portalLastSyncedAt: new Date().toISOString(), portalProceedingCount: proceedings.length },
+
+  track(writer.set(
+    db.doc(`users/${uid}/assessees/${assesseeId}`),
+    { portalLastSyncedAt: now, portalProceedingCount: proceedings.length },
     { merge: true }
-  );
+  ));
+  await writer.close();
+
+  if (writeErrors.length) {
+    throw new HttpsError(
+      "internal",
+      `Saved ${procIds.length - writeErrors.length} of ${procIds.length} proceedings; ` +
+      `${writeErrors.length} write(s) failed: ${writeErrors[0]}`
+    );
+  }
   return { ok: true, added, updated, mattersAdded, closed, total: proceedings.length };
 });
 
@@ -606,19 +705,13 @@ function deriveAuthority(proceedingName, section) {
 // Record one portal notice/order as a real app notice (deduped by DIN), attach
 // its Storage PDF, and — when its response is due in the future — create a
 // hearing/calendar entry. The PDF bytes never pass through this function.
-exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInstances: KEEP_WARM }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
   const { assesseeId, notice, storagePath, filename } = request.data || {};
   if (!assesseeId || !notice || typeof notice !== "object") {
     throw new HttpsError("invalid-argument", "assesseeId and notice are required.");
   }
-
-  // Resolve the assessee so the notice links by name + PAN (how the app joins).
-  const aSnap = await db.doc(`users/${uid}/assessees/${assesseeId}`).get();
-  const a = aSnap.exists ? aSnap.data() : {};
-  const assesseeName = a.name || notice.assessee || "";
-  const pan = (a.pan || notice.pan || "").toUpperCase();
 
   const din = (notice.din || "").toString().trim();
   // Orders (closure orders) have no DIN — dedup them by a stable docKey instead.
@@ -634,8 +727,32 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
   const noticesCol = db.collection(`users/${uid}/notices`);
 
   // Dedup by DIN (notices) or docKey (orders) against ALL notices.
+  //
+  // Anything this function created lives at a DETERMINISTIC id derived from the
+  // same DIN/docKey (see `newId` below), so try that document directly first —
+  // one keyed read instead of a collection query. The query is still needed as a
+  // fallback: a notice uploaded by hand and parsed by AI can carry a DIN under a
+  // random id, and skipping the fallback would duplicate it.
+  const newId = din
+    ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20)
+    : docKey
+      ? "doc_" + crypto.createHash("sha1").update(docKey).digest("hex").slice(0, 20)
+      : null;
+
+  // Resolve the assessee (the notice links by name + PAN, which is how the app
+  // joins) alongside the dedup read rather than before it.
+  const [aSnap, fastSnap] = await Promise.all([
+    db.doc(`users/${uid}/assessees/${assesseeId}`).get(),
+    newId ? noticesCol.doc(newId).get() : Promise.resolve(null),
+  ]);
+  const a = aSnap.exists ? aSnap.data() : {};
+  const assesseeName = a.name || notice.assessee || "";
+  const pan = (a.pan || notice.pan || "").toUpperCase();
+
   let existing = null;
-  if (din) {
+  if (fastSnap && fastSnap.exists) {
+    existing = fastSnap;
+  } else if (din) {
     const q = await noticesCol.where("din", "==", din).limit(1).get();
     if (!q.empty) existing = q.docs[0];
   } else if (docKey) {
@@ -658,9 +775,7 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
     noticeId = existing.id;
     added = false;
   } else {
-    noticeId = din ? "din_" + crypto.createHash("sha1").update(din).digest("hex").slice(0, 20)
-      : docKey ? "doc_" + crypto.createHash("sha1").update(docKey).digest("hex").slice(0, 20)
-        : noticesCol.doc().id;
+    noticeId = newId || noticesCol.doc().id;
     await noticesCol.doc(noticeId).set({
       assessee: assesseeName, pan, ay, authority, section: notice.section || "",
       din, docKey, isOrder, docType: isOrder ? classifyDocType(notice.description || fileName, notice.section, authority) : "",
@@ -697,11 +812,58 @@ exports.ingestPortalNotice = onCall({ region: "us-central1", maxInstances: 10 },
   return { ok: true, noticeId, added, hearingAdded };
 });
 
-// On-demand: summarise one portal notice/order's PDF with Gemini and store the
-// short, type-aware summary back on the notice. Called from the Matters view.
 const STORAGE_BUCKET = "prohippo2.firebasestorage.app";
+
+// Read one notice's PDF, summarise it with Gemini, and write the result back.
+// Shared by the on-demand callable (a practitioner pressing re-parse in the
+// Matters view) and by the Firestore trigger that runs automatically for orders.
+// Returns the patch it applied.
+async function summariseNoticeDoc(ref, n, apiKey) {
+  if (!n.storagePath) throw new HttpsError("failed-precondition", "This notice has no PDF to parse.");
+
+  // Pull the PDF from Storage (admin bypasses rules) and hand it to Gemini.
+  let buf;
+  try {
+    [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(n.storagePath).download();
+  } catch (e) {
+    throw new HttpsError("not-found", "Couldn't read the PDF from Storage: " + (e.message || e));
+  }
+  if (buf.length > MAX_TOTAL_BYTES) {
+    throw new HttpsError("invalid-argument", "PDF is too large to summarise (over 9 MB).");
+  }
+  const files = [{ mimeType: "application/pdf", data: buf.toString("base64") }];
+
+  const out = await callGeminiSummary(PRIMARY_MODEL, apiKey, files, n.authority);
+  const docType = DOC_TYPE_ENUM.includes(out.docType) ? out.docType : undefined;
+  const aiSummary = {
+    summary: typeof out.summary === "string" ? out.summary.trim() : "",
+    items: Array.isArray(out.items) ? out.items.filter((x) => typeof x === "string" && x.trim()).slice(0, 12) : [],
+    isOrder: Boolean(out.isOrder),
+    docType: docType || null,
+    at: new Date().toISOString(),
+  };
+  // Persist the parsed order metadata so appeal-matching and the fee use the
+  // ORDER's own details (not the demand notice's), and the fee auto-fills.
+  const parsed = {
+    orderDate: normDate(out.orderDate) || "",
+    orderSection: str(out.orderSection),
+    orderDin: str(out.orderDin),
+    disputedDemand: typeof out.disputedDemand === "number" && out.disputedDemand > 0 ? out.disputedDemand : null,
+  };
+  const patch = { aiSummary, isOrder: aiSummary.isOrder, parsed, aiSummaryError: "" };
+  // The AI read of the document type wins over the name-based guess.
+  if (docType) patch.docType = docType === "notice" ? "" : docType;
+  if (typeof out.assessedIncome === "number" && out.assessedIncome > 0 && n.assessedIncome == null) {
+    patch.assessedIncome = out.assessedIncome;
+  }
+  await ref.set(patch, { merge: true });
+  return patch;
+}
+
+// On-demand: summarise one portal notice/order's PDF. Called from the Matters
+// view, and the way to retry an order whose automatic parse failed.
 exports.summarizePortalNotice = onCall(
-  { region: "us-central1", secrets: [geminiApiKey], timeoutSeconds: 120, memory: "512MiB", maxInstances: 5 },
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 120, memory: "512MiB", maxInstances: 5 },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
@@ -711,53 +873,60 @@ exports.summarizePortalNotice = onCall(
     const ref = db.doc(`users/${uid}/notices/${noticeId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new HttpsError("not-found", "Notice not found.");
-    const n = snap.data();
-    if (!n.storagePath) throw new HttpsError("failed-precondition", "This notice has no PDF to parse.");
+    const patch = await summariseNoticeDoc(ref, snap.data(), geminiApiKey.value());
+    return { ok: true, aiSummary: patch.aiSummary, docType: patch.docType, parsed: patch.parsed };
+  }
+);
 
-    // Pull the PDF from Storage (admin bypasses rules) and hand it to Gemini.
-    let buf;
+// Auto-parse order PDFs as they land, so the real document type (order vs demand
+// notice vs computation sheet) and the order's own metadata — which drive appeal
+// detection and the Form 35 match — are known without anyone asking.
+//
+// This used to be an awaited call at the END of the connector's per-notice ingest:
+// a 5-25s Gemini read of the PDF, capped at 5 concurrent instances shared across
+// every worker, sitting on the sync's critical path. As a trigger it runs on
+// Google's side after the sync has moved on, and still completes if the user
+// closes the connector the moment the sync ends.
+//
+// Firestore triggers must live in the database's region, so this one is pinned to
+// TRIGGER_REGION rather than taking the REGIONS array.
+exports.onPortalOrderWritten = onDocumentWritten(
+  {
+    document: "users/{uid}/notices/{noticeId}",
+    region: TRIGGER_REGION,
+    secrets: [geminiApiKey],
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    maxInstances: 5,
+  },
+  async (event) => {
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) return; // deleted
+    const n = after.data() || {};
+
+    // Orders only, and only when there's a PDF to read.
+    if (!n.isOrder || !n.storagePath) return;
+    // Exactly one automatic attempt per document. `aiSummary` stops the re-fire
+    // caused by our own write-back; `aiSummaryError` stops a failing PDF from
+    // retrying forever (and running up a Gemini bill). Either way the
+    // practitioner can still retry by hand via summarizePortalNotice.
+    if (n.aiSummary || n.aiSummaryError) return;
+
     try {
-      [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(n.storagePath).download();
-    } catch (e) {
-      throw new HttpsError("not-found", "Couldn't read the PDF from Storage: " + (e.message || e));
+      await summariseNoticeDoc(after.ref, n, geminiApiKey.value());
+    } catch (err) {
+      const message = String((err && err.message) || err).slice(0, 300);
+      console.error("onPortalOrderWritten failed", event.params.noticeId, message);
+      // Surface the failure on the document instead of losing it silently.
+      await after.ref.set({ aiSummaryError: message }, { merge: true }).catch(() => {});
     }
-    if (buf.length > MAX_TOTAL_BYTES) {
-      throw new HttpsError("invalid-argument", "PDF is too large to summarise (over 9 MB).");
-    }
-    const files = [{ mimeType: "application/pdf", data: buf.toString("base64") }];
-
-    const out = await callGeminiSummary(PRIMARY_MODEL, geminiApiKey.value(), files, n.authority);
-    const docType = DOC_TYPE_ENUM.includes(out.docType) ? out.docType : undefined;
-    const aiSummary = {
-      summary: typeof out.summary === "string" ? out.summary.trim() : "",
-      items: Array.isArray(out.items) ? out.items.filter((x) => typeof x === "string" && x.trim()).slice(0, 12) : [],
-      isOrder: Boolean(out.isOrder),
-      docType: docType || null,
-      at: new Date().toISOString(),
-    };
-    // Persist the parsed order metadata so appeal-matching and the fee use the
-    // ORDER's own details (not the demand notice's), and the fee auto-fills.
-    const parsed = {
-      orderDate: normDate(out.orderDate) || "",
-      orderSection: str(out.orderSection),
-      orderDin: str(out.orderDin),
-      disputedDemand: typeof out.disputedDemand === "number" && out.disputedDemand > 0 ? out.disputedDemand : null,
-    };
-    const patch = { aiSummary, isOrder: aiSummary.isOrder, parsed };
-    // The AI read of the document type wins over the name-based guess.
-    if (docType) patch.docType = docType === "notice" ? "" : docType;
-    if (typeof out.assessedIncome === "number" && out.assessedIncome > 0 && n.assessedIncome == null) {
-      patch.assessedIncome = out.assessedIncome;
-    }
-    await ref.set(patch, { merge: true });
-    return { ok: true, aiSummary, docType: patch.docType, parsed };
   }
 );
 
 // Record a response the assessee filed against a notice (remarks text + the
 // Storage paths of its attachment PDFs, uploaded client-side). Appended to the
 // matching notice's responses[], deduped by responseId.
-exports.ingestPortalResponse = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+exports.ingestPortalResponse = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
   const { noticeKey, response } = request.data || {};
@@ -790,7 +959,7 @@ exports.ingestPortalResponse = onCall({ region: "us-central1", maxInstances: 10 
 // Match it to the assessee's First Appeal proceeding by AY (+ corroborate with
 // the appealed order's date/DIN/section) and store it as a document under that
 // proceeding, so it shows in the Matters dropdown alongside notices/orders.
-exports.ingestPortalAppealForm = onCall({ region: "us-central1", maxInstances: 10 }, async (request) => {
+exports.ingestPortalAppealForm = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
   const { assesseeId, appeal, attachments } = request.data || {};
@@ -987,7 +1156,7 @@ async function resolveUserByEmail(email) {
   }
 }
 
-const OTP_OPTS = { region: "us-central1", secrets: [resendApiKey, otpPepper], maxInstances: 10 };
+const OTP_OPTS = { region: REGIONS, secrets: [resendApiKey, otpPepper], maxInstances: 10 };
 
 // Step 1 — generate + send a one-time code.
 exports.requestOtp = onCall(OTP_OPTS, async (request) => {

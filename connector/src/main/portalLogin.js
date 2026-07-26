@@ -16,10 +16,56 @@
 // never logged or persisted.
 "use strict";
 
-const { rand, jsleep, POLL } = require("./pacing");
+const { jsleep, POLL } = require("./pacing");
 const { PORTAL } = require("./config");
 
 const LOGIN_TIMEOUT_MS = 90000;
+
+// Subresources the login screen doesn't need. Blocking these is the single
+// cheapest win in the whole login path — the portal's SPA pulls a lot of
+// artwork and webfonts we never look at.
+//
+// Stylesheets are deliberately NOT in this list. The state machine below decides
+// what's visible with getBoundingClientRect() / offsetParent, and this is an
+// Angular Material app whose control geometry comes entirely from CSS — blocking
+// it would break the detection rather than speed it up.
+const BLOCKED_DURING_LOGIN = new Set(["image", "media", "font"]);
+
+async function blockHeavyAssets(context) {
+  const handler = (route) => {
+    if (BLOCKED_DURING_LOGIN.has(route.request().resourceType())) return route.abort();
+    return route.continue();
+  };
+  await context.route("**/*", handler);
+  // Lifted as soon as we're logged in, so nothing in the fetch phase is touched.
+  return () => context.unroute("**/*", handler).catch(() => {});
+}
+
+// The session cookie lands a moment after the password step returns. Rather than
+// sleeping a blind ~1.2s, watch the portal's cookie jar and continue the instant
+// it stops changing — typically ~350ms. Capped, so a quiet jar can never wedge
+// the sync; hitting the cap just means we waited as long as the old code did.
+async function settleSession(page) {
+  const context = page.context();
+  const deadline = Date.now() + 1500;
+  let prevCount = -1;
+  let stableTicks = 0;
+  while (Date.now() < deadline) {
+    let count;
+    try {
+      count = (await context.cookies(PORTAL.origin)).length;
+    } catch {
+      return; // context going away — nothing useful left to wait for
+    }
+    if (count > 0 && count === prevCount) {
+      if (++stableTicks >= 2) return;
+    } else {
+      stableTicks = 0;
+    }
+    prevCount = count;
+    await jsleep(90, 150);
+  }
+}
 
 // This function is serialized and executed IN THE PAGE. Keep it self-contained
 // (no closures over Node scope). It mirrors the extension's run() tick and its
@@ -165,72 +211,106 @@ function tickInPage({ creds, state }) {
 // Drive the login to completion for one PAN. Throws on timeout or a hard
 // session-expiry loop. On success the caller is on the portal dashboard.
 async function login(page, cred, emit) {
-  await page.goto(PORTAL.origin + PORTAL.loginPath, { waitUntil: "domcontentloaded" });
+  const unblock = await blockHeavyAssets(page.context());
+  try {
+    await page.goto(PORTAL.origin + PORTAL.loginPath, { waitUntil: "domcontentloaded" });
 
-  let state = { sawPassword: false, retried: false, lastUid: "", lastPwd: "" };
-  const started = Date.now();
-  let first = true;
+    let state = { sawPassword: false, retried: false, lastUid: "", lastPwd: "" };
+    const started = Date.now();
+    let first = true;
 
-  // Poll with a jittered cadence — never a fixed interval.
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    if (Date.now() - started > LOGIN_TIMEOUT_MS) {
-      throw new Error("Login timed out after 90s — the portal may be slow or the credential wrong.");
-    }
-    await jsleep(
-      first ? POLL.firstMin : POLL.min,
-      first ? POLL.firstMax : POLL.max
-    );
-    first = false;
-
-    const creds = { portalUserId: cred.portalUserId, portalPassword: cred.portalPassword };
-    const { status, state: next } = await page.evaluate(tickInPage, { creds, state });
-    state = next;
-
-    if (status === "dual") emit("login", "Dual login — taking over the existing session…", "info", 8);
-    else if (status === "userid") emit("login", "Entered User ID…", "info", 8);
-    else if (status === "password") emit("login", "Entered password…", "info", 14);
-    else if (status === "expired-retrying") emit("login", "Session expired — retrying login…", "warn");
-
-    if (status === "logged-in") break;
-    if (status === "expired-failed") {
-      throw new Error(
-        "Portal keeps ending the session. Log out of the Income-tax portal in " +
-        "every other tab, browser and device, then run the sync again."
+    // Poll with a jittered cadence — never a fixed interval.
+    while (true) {
+      if (Date.now() - started > LOGIN_TIMEOUT_MS) {
+        throw new Error("Login timed out after 90s — the portal may be slow or the credential wrong.");
+      }
+      await jsleep(
+        first ? POLL.firstMin : POLL.min,
+        first ? POLL.firstMax : POLL.max
       );
-    }
-  }
+      first = false;
 
-  // We're off the login screen and the session cookie is set. The sync calls the
-  // JSON API directly with that cookie, so we do NOT navigate anywhere — any URL
-  // change (even a hash nudge to the dashboard) trips the portal's "disabled
-  // Back/Forward — Logout?" guard. Just settle so the cookie is fully in place.
-  await jsleep(900, 1500);
-  emit("login", "Logged in", "success", 20);
+      const creds = { portalUserId: cred.portalUserId, portalPassword: cred.portalPassword };
+      const { status, state: next } = await page.evaluate(tickInPage, { creds, state });
+      state = next;
+
+      if (status === "dual") emit("login", "Dual login — taking over the existing session…", "info", 8);
+      else if (status === "userid") emit("login", "Entered User ID…", "info", 8);
+      else if (status === "password") emit("login", "Entered password…", "info", 14);
+      else if (status === "expired-retrying") emit("login", "Session expired — retrying login…", "warn");
+
+      if (status === "logged-in") break;
+      if (status === "expired-failed") {
+        throw new Error(
+          "Portal keeps ending the session. Log out of the Income-tax portal in " +
+          "every other tab, browser and device, then run the sync again."
+        );
+      }
+    }
+
+    // We're off the login screen and the session cookie is set. The sync calls
+    // the JSON API directly with that cookie, so we do NOT navigate anywhere —
+    // any URL change (even a hash nudge to the dashboard) trips the portal's
+    // "disabled Back/Forward — Logout?" guard. Wait only until the cookie jar
+    // has actually settled.
+    await settleSession(page);
+    emit("login", "Logged in", "success", 20);
+  } finally {
+    await unblock();
+  }
 }
 
 // The portal pops a "For security reasons… Are you sure you want to Logout?"
-// modal on any navigation. If it ever shows, keep clicking "No" so it never
-// blocks the sync. Port of dismissLogoutDialog from the extension. Returns a
-// stop() function; run it for the whole sync and stop() in a finally.
-function startLogoutGuard(page) {
-  let stopped = false;
-  const tick = async () => {
-    if (stopped) return;
-    try {
-      await page.evaluate(() => {
-        const txt = document.body.innerText || "";
-        if (!/want to logout|disabled back/i.test(txt)) return;
-        const btn = [...document.querySelectorAll("button, a")]
-          .filter((el) => el && el.offsetParent !== null)
-          .find((x) => /^(no|cancel)$/i.test((x.textContent || "").trim()));
+// modal on any navigation. If it ever shows, click "No" so it never blocks the
+// sync. Returns an async stop(); call it in a finally.
+//
+// This used to poll page.evaluate every 400ms for the entire sync — ~150 CDP
+// round trips a minute per context, contending with the API calls we actually
+// care about, to watch for a dialog that can barely ever appear (we never
+// navigate after login). Now it installs a MutationObserver once and reacts.
+//
+// The observer's check is deliberately cheap: a querySelector for the dialog
+// container, and only then textContent on that container. Reading
+// document.body.innerText — as the old poll did — forces a full layout, which on
+// a busy Angular page would make an observer *worse* than polling.
+async function startLogoutGuard(page) {
+  await page
+    .evaluate(() => {
+      if (window.__phLogoutGuard) return;
+      const DIALOG_SEL =
+        "mat-dialog-container, .mat-dialog-container, .mat-mdc-dialog-container, [role='dialog']";
+      let scheduled = false;
+      const check = () => {
+        scheduled = false;
+        const dlg = document.querySelector(DIALOG_SEL);
+        if (!dlg) return;
+        if (!/want to logout|disabled back/i.test(dlg.textContent || "")) return;
+        const btn = [...dlg.querySelectorAll("button, a")].find((x) =>
+          /^(no|cancel)$/i.test((x.textContent || "").trim())
+        );
         if (btn) btn.click();
+      };
+      // Coalesce mutation bursts into one check per microtask.
+      const observer = new MutationObserver(() => {
+        if (scheduled) return;
+        scheduled = true;
+        Promise.resolve().then(check);
       });
-    } catch { /* page busy / navigating — try again next tick */ }
-    if (!stopped) setTimeout(tick, 400);
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+      window.__phLogoutGuard = observer;
+      check(); // in case the dialog is already up
+    })
+    .catch(() => { /* page busy — the guard is best-effort */ });
+
+  return async () => {
+    await page
+      .evaluate(() => {
+        if (!window.__phLogoutGuard) return;
+        window.__phLogoutGuard.disconnect();
+        delete window.__phLogoutGuard;
+      })
+      .catch(() => { /* page already gone */ });
   };
-  setTimeout(tick, 200);
-  return () => { stopped = true; };
 }
 
 module.exports = { login, startLogoutGuard };

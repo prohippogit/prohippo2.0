@@ -15,7 +15,15 @@ export const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// Cloud Functions (AI notice parsing). Region must match functions/index.js.
+// Cloud Functions. Which region's copy this build calls.
+//
+// Firestore is in asia-south1 (Mumbai) and the functions now deploy to BOTH
+// asia-south1 and us-central1 under the same names (see REGIONS in
+// functions/index.js), so this is a free switch — once the Mumbai copies exist.
+//
+// STILL "us-central1" ON PURPOSE: deploying hosting with "asia-south1" before
+// the functions are live in Mumbai takes the live web app down. Deploy functions
+// first, then flip this. Ordered runbook: docs/PERF_AND_REGION.md.
 export const functions = getFunctions(app, "us-central1");
 
 // Storage for downloaded notice/order PDFs (per-user paths).

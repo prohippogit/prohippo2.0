@@ -47,6 +47,9 @@ connector/
     config.js        Firebase config, portal URLs, POOL cap + stagger
     firebaseClient.js  auth + httpsCallable wrappers
     credentials.js   getPortalCredential — in-memory only, never on disk
+    deviceSession.js "remember this device" key, in the OS keychain
+    updater.js       auto-update (full on Windows, notify-only on macOS)
+    timing.js        per-phase stopwatch reported per PAN
     pacing.js        rand / jsleep / PACE / POLL (ported timings)
     pool.js          worker pool: cap 5, randomised staggered launch
     portalWorker.js  ONE PAN in one isolated context (scaffold + porting plan)
@@ -94,11 +97,54 @@ npm run dist:win     # NSIS installer (needs Authenticode EV cert to sign)
 npm run dist:mac     # DMG (needs Apple Developer ID + notarization)
 ```
 
+## Staying signed in
+
+Firebase Auth's persistence options are all browser-backed, and this app runs
+Firebase in Electron's **main (Node) process** — so the session used to die with
+the process and the practitioner was asked for an emailed code on *every* launch.
+
+Fixed with a "remember this device" key rather than a cached Firebase refresh
+token (the JS SDK has no public way to restore a session from one in Node, and an
+app-scoped key is revocable by us):
+
+1. The first sign-in is unchanged — an emailed code.
+2. The backend issues a random device key and stores only a **peppered, salted
+   hash** of it, the same way the OTP codes are stored. The plaintext never
+   reaches Firestore.
+3. The connector keeps the key in the **OS keychain** via Electron
+   `safeStorage` — macOS Keychain, Windows DPAPI, Linux keyring. That binds it to
+   the logged-in OS account; copied elsewhere it's unopenable ciphertext.
+4. Each launch redeems it silently for a Firebase custom token.
+5. **Sign out** revokes it server-side *and* deletes it locally, so a surviving
+   copy is dead.
+
+Two deliberate choices:
+
+- **Idle expiry of 90 days**, rolling — refreshed on every launch, so an active
+  user is never asked again. "Signed in forever" is a liability for a tool that
+  can reach clients' income-tax portals, and there's no upside.
+- **No rotation on each use.** Rotating would mean a client that fails to persist
+  the new key gets signed out — precisely the annoyance this removes. The key
+  lives in the OS keychain, so a stolen copy already implies a compromised
+  machine, where rotation buys little. Revocation plus the idle window covers it.
+
+If the OS keychain is unavailable (mainly Linux with no keyring) the device is
+simply not remembered and sign-in works as before. It never falls back to writing
+the key in plaintext.
+
+Backend: `issueDeviceKey` (authenticated), `redeemDeviceKey` and
+`revokeDeviceKey` (unauthenticated — they *are* a sign-in mechanism, exactly like
+`verifyOtp`). The `deviceSessions` collection needs no security rule:
+`firestore.rules` denies everything outside `users/{uid}`, so only the Admin SDK
+reaches it.
+
 ## Security
 
 - Portal passwords are decrypted (AES-256-GCM, server-side) and held **in
   memory only** for the duration of one login. Never written to disk, never
   logged, never persisted in connector state.
+- The device key is the one credential kept on disk, and only ever encrypted by
+  the OS keychain — see "Staying signed in" above.
 - `contextIsolation` on, `nodeIntegration` off, `sandbox` on — the renderer can
   only reach the small `connector` bridge in `preload.js`.
 - `.state/`, logs, and any session data are git-ignored.

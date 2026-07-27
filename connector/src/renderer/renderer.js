@@ -7,10 +7,54 @@ const $ = (id) => document.getElementById(id);
 // --- Sign in ---------------------------------------------------------------
 async function afterSignIn(user) {
   $("who").textContent = user.email;
+  $("bootCard").classList.add("hidden");
   $("signinCard").classList.add("hidden");
+  $("signOutBtn").classList.remove("hidden");
   $("syncCard").classList.remove("hidden");
   await loadAssessees();
 }
+
+function showSignIn() {
+  $("bootCard").classList.add("hidden");
+  $("syncCard").classList.add("hidden");
+  $("signOutBtn").classList.add("hidden");
+  $("signinCard").classList.remove("hidden");
+  $("who").textContent = "";
+}
+
+// On launch, try the device key in the OS keychain before showing anything. The
+// whole point is that a returning user on the same machine never sees this
+// screen — they stay signed in until they choose to sign out.
+(async function boot() {
+  try {
+    const user = await window.connector.trySilentSignIn();
+    if (user) { await afterSignIn(user); return; }
+  } catch (err) {
+    console.info("[auth] silent sign-in unavailable:", err);
+  }
+  showSignIn();
+})();
+
+$("signOutBtn").addEventListener("click", async () => {
+  const btn = $("signOutBtn");
+  btn.disabled = true;
+  btn.textContent = "Signing out…";
+  try {
+    await window.connector.signOut();
+    // Drop the previous user's assessees before showing sign-in — the next person
+    // to sign in on this machine must not see them.
+    JOBS = [];
+    selected.clear();
+    renderRows();
+    syncSelectionUI();
+    showSignIn();
+  } catch (err) {
+    alert(friendly(err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Sign out";
+  }
+});
 
 $("googleBtn").addEventListener("click", async () => {
   $("signinErr").textContent = "";

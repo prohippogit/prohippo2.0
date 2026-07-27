@@ -15,7 +15,10 @@
         <div class="tag">Parallel, human-paced portal sync</div>
       </div>
     </div>
-    <div id="who" class="who"></div>
+    <div class="who-wrap">
+      <div id="who" class="who"></div>
+      <button id="signOutBtn" class="linkbtn hidden">Sign out</button>
+    </div>
   </header>
 
   <!-- Update notice. Hidden unless the main process reports a newer build. -->
@@ -24,8 +27,17 @@
     <button id="updateBtn" class="updbtn hidden"></button>
   </div>
 
+  <!-- Restoring a remembered session. Shown first so the sign-in form doesn't
+       flash up for a fraction of a second before being replaced. -->
+  <section id="bootCard" class="signin-wrap">
+    <div class="signin">
+      <img class="logo-full" src="assets/prohippo-logo.png" alt="ProHippo" />
+      <p class="muted">Signing you in…</p>
+    </div>
+  </section>
+
   <!-- Sign-in -->
-  <section id="signinCard" class="signin-wrap">
+  <section id="signinCard" class="signin-wrap hidden">
     <div class="signin">
       <img class="logo-full" src="assets/prohippo-logo.png" alt="ProHippo" />
       <h2>Sign in to continue</h2>

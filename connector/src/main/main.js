@@ -55,6 +55,10 @@ ipcMain.handle("auth:google", async () => {
   return fb.signInWithGoogleIdToken(idToken);
 });
 
+// Restore a remembered session, so a returning user isn't asked for a code.
+// Returns null when there's nothing to restore — the UI then shows sign-in.
+ipcMain.handle("auth:silent", async () => fb.signInSilently());
+
 ipcMain.handle("auth:signOut", async () => {
   await fb.signOutUser();
   return { ok: true };

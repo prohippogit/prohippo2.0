@@ -1,4 +1,6 @@
-/* ProHippo — sign-in screen (Email OTP now · SMS OTP when PRHIPO is live · Google) */
+/* ProHippo — sign-in screen. One field takes a mobile number OR an email; the
+   code is sent by SMS (2Factor) or email (Resend) accordingly. Google is a
+   secondary option. */
 import React from "react";
 import { Icon } from "./shared";
 import { useAuth } from "./auth";
@@ -26,6 +28,17 @@ const Divider = ({ label = "OR" }) => (
   </div>
 );
 
+// Decide whether what the user typed is an email, an Indian mobile number, or
+// not yet valid. Anything with "@" is treated as email; otherwise a run of
+// digits is treated as a phone number.
+function detectChannel(value) {
+  const s = String(value || "").trim();
+  if (!s) return null;
+  if (s.includes("@")) return "email";
+  if (/\d/.test(s) && /^[+\d\s-]+$/.test(s)) return "sms";
+  return null;
+}
+
 // Mask a target for the "code sent to …" line. Email stays readable; phone is masked.
 function maskTarget(channel, target) {
   if (channel === "sms") {
@@ -38,11 +51,13 @@ function maskTarget(channel, target) {
 export default function Login({ onBack }) {
   const { signInWithGoogle, requestOtp, verifyOtp, otpPending, resetOtp, error, clearError } = useAuth();
 
-  const [email, setEmail] = React.useState("");
-  const [phone, setPhone] = React.useState("");
+  const [identifier, setIdentifier] = React.useState("");
   const [code, setCode] = React.useState("");
   const [busy, setBusy] = React.useState(false); // sending or verifying
   const [cooldown, setCooldown] = React.useState(0);
+  const [localErr, setLocalErr] = React.useState("");
+
+  const shownErr = error || localErr;
 
   // Resend countdown tick.
   React.useEffect(() => {
@@ -51,20 +66,30 @@ export default function Login({ onBack }) {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const sendEmail = async () => {
-    if (busy) return;
-    setBusy(true);
-    const res = await requestOtp("email", email);
-    if (res) setCooldown(res.cooldownSeconds || 30);
-    setBusy(false);
-  };
+  const clearErrs = () => { if (error) clearError(); if (localErr) setLocalErr(""); };
 
-  const sendSms = async () => {
+  // Normalise + validate what was typed, then request a code on the right channel.
+  const sendCode = async (raw) => {
     if (busy) return;
-    const digits = phone.replace(/\D/g, "").slice(-10);
-    if (digits.length !== 10) { clearError(); return; }
+    const value = (raw ?? identifier).trim();
+    const channel = detectChannel(value);
+    let target;
+    if (channel === "email") {
+      target = value.toLowerCase();
+    } else if (channel === "sms") {
+      const ten = value.replace(/\D/g, "").slice(-10);
+      if (!/^[6-9]\d{9}$/.test(ten)) {
+        setLocalErr("Enter a valid 10-digit Indian mobile number, or an email address.");
+        return;
+      }
+      target = "+91" + ten;
+    } else {
+      setLocalErr("Enter your mobile number or email address.");
+      return;
+    }
+    setLocalErr("");
     setBusy(true);
-    const res = await requestOtp("sms", "+91" + digits);
+    const res = await requestOtp(channel, target);
     if (res) setCooldown(res.cooldownSeconds || 30);
     setBusy(false);
   };
@@ -85,63 +110,7 @@ export default function Login({ onBack }) {
     setBusy(false);
   };
 
-  const backToMethods = () => { resetOtp(); clearError(); setCode(""); setCooldown(0); };
-
-  // ---- Email OTP block (reused as hero or secondary). Plain render helpers,
-  // NOT nested components, so the inputs don't remount (and lose focus) each keystroke.
-  const emailBlock = (hero) => (
-    <>
-      <div className="field">
-        <label>Email address</label>
-        <input
-          type="email"
-          value={email}
-          placeholder="you@example.com"
-          onChange={(e) => { setEmail(e.target.value); if (error) clearError(); }}
-          onKeyDown={(e) => { if (e.key === "Enter") sendEmail(); }}
-        />
-      </div>
-      <button
-        className={`btn ${hero ? "btn-primary" : "btn-secondary"}`}
-        style={{ width: "100%", justifyContent: "center", height: 44, marginTop: 12, gap: 8, opacity: busy ? 0.7 : 1 }}
-        disabled={busy}
-        onClick={sendEmail}
-      >
-        <Icon name="mail" size={15} /> {busy ? "Sending…" : "Email me a code"}
-      </button>
-    </>
-  );
-
-  // ---- SMS OTP block (only rendered when the channel is enabled) ----
-  const smsBlock = (hero) => (
-    <>
-      <div className="field">
-        <label>Mobile number</label>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ display: "grid", placeItems: "center", padding: "0 12px", height: 44, borderRadius: 10, border: "1px solid var(--p-line-2, #E3DEF0)", background: "var(--p-card-tint, #F7F6FB)", fontSize: 14, fontWeight: 600, color: "var(--p-text-2, #6B6480)", whiteSpace: "nowrap" }}>+91</div>
-          <input
-            type="tel"
-            inputMode="numeric"
-            value={phone}
-            placeholder="98250 11234"
-            style={{ flex: 1 }}
-            onChange={(e) => { setPhone(e.target.value.replace(/[^\d\s]/g, "")); if (error) clearError(); }}
-            onKeyDown={(e) => { if (e.key === "Enter") sendSms(); }}
-          />
-        </div>
-      </div>
-      <button
-        className={`btn ${hero ? "btn-primary" : "btn-secondary"}`}
-        style={{ width: "100%", justifyContent: "center", height: 44, marginTop: 12, gap: 8, opacity: busy ? 0.7 : 1 }}
-        disabled={busy}
-        onClick={sendSms}
-      >
-        <Icon name="phone" size={15} /> {busy ? "Sending…" : "Send OTP"}
-      </button>
-    </>
-  );
-
-  const smsPrimary = AUTH_METHODS.sms; // when live, SMS is the hero method
+  const backToStart = () => { resetOtp(); clearErrs(); setCode(""); setCooldown(0); };
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "radial-gradient(1200px 600px at 50% -10%, #EEE9FF 0%, #F7F6FB 45%, #F7F6FB 100%)" }}>
@@ -162,7 +131,7 @@ export default function Login({ onBack }) {
               </div>
               <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>Enter your code</div>
               <div className="muted" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>
-                We sent a 6-digit code to<br />
+                We sent a 6-digit code {otpPending.channel === "sms" ? "by SMS to" : "to"}<br />
                 <b style={{ color: "var(--p-text)" }}>{maskTarget(otpPending.channel, otpPending.target)}</b>
               </div>
 
@@ -170,7 +139,7 @@ export default function Login({ onBack }) {
                 <OtpInput
                   value={code}
                   disabled={busy}
-                  onChange={(v) => { setCode(v); if (error) clearError(); }}
+                  onChange={(v) => { setCode(v); clearErrs(); }}
                   onComplete={(v) => submitCode(v)}
                 />
               </div>
@@ -195,52 +164,56 @@ export default function Login({ onBack }) {
                 )}
               </div>
 
-              <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={backToMethods}>
-                Use a different method
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={backToStart}>
+                Use a different number or email
               </button>
             </div>
           ) : (
-            /* ---------- Step 1: choose a method ---------- */
+            /* ---------- Step 1: one field for mobile OR email ---------- */
             <>
               <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-0.01em", marginBottom: 4 }}>Sign in</div>
-              <div className="muted" style={{ fontSize: 13, marginBottom: 18 }}>Welcome back. Choose how you'd like to continue.</div>
+              <div className="muted" style={{ fontSize: 13, marginBottom: 18 }}>
+                Enter your mobile number or email — we'll send you a one-time code.
+              </div>
 
-              {smsPrimary ? (
+              <div className="field">
+                <label>Mobile number or email</label>
+                <input
+                  type="text"
+                  value={identifier}
+                  placeholder="98250 11234 or you@firm.in"
+                  autoComplete="username"
+                  onChange={(e) => { setIdentifier(e.target.value); clearErrs(); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") sendCode(); }}
+                />
+              </div>
+              <button
+                className="btn btn-primary"
+                style={{ width: "100%", justifyContent: "center", height: 44, marginTop: 12, gap: 8, opacity: busy ? 0.7 : 1 }}
+                disabled={busy}
+                onClick={() => sendCode()}
+              >
+                <Icon name="arrow-right" size={15} /> {busy ? "Sending…" : "Send me a code"}
+              </button>
+
+              {AUTH_METHODS.google && (
                 <>
-                  {AUTH_METHODS.sms && smsBlock(true)}
-                  {AUTH_METHODS.emailOtp && (<><Divider />{emailBlock(false)}</>)}
-                  {AUTH_METHODS.google && (
-                    <>
-                      <Divider />
-                      <button className="btn btn-secondary" style={{ width: "100%", justifyContent: "center", gap: 10, height: 44 }} onClick={signInWithGoogle}>
-                        <GoogleGlyph /> Continue with Google
-                      </button>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  {AUTH_METHODS.emailOtp && emailBlock(true)}
-                  {AUTH_METHODS.google && (
-                    <>
-                      <Divider />
-                      <button className="btn btn-secondary" style={{ width: "100%", justifyContent: "center", gap: 10, height: 44 }} onClick={signInWithGoogle}>
-                        <GoogleGlyph /> Continue with Google
-                      </button>
-                    </>
-                  )}
+                  <Divider />
+                  <button className="btn btn-secondary" style={{ width: "100%", justifyContent: "center", gap: 10, height: 44 }} onClick={signInWithGoogle}>
+                    <GoogleGlyph /> Continue with Google
+                  </button>
                 </>
               )}
 
               <div className="muted" style={{ fontSize: 11.5, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
-                No password needed — we'll {smsPrimary ? "text" : "email"} you a one-time code to sign in.
+                No password needed — a one-time code is sent to your phone or inbox.
               </div>
             </>
           )}
 
-          {error && (
+          {shownErr && (
             <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, background: "var(--p-coral)", color: "#B8463A", fontSize: 12.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <Icon name="alert" size={14} /> <span>{error}</span>
+              <Icon name="alert" size={14} /> <span>{shownErr}</span>
             </div>
           )}
         </div>

@@ -163,42 +163,116 @@ against what's already on the list.
 
 ## Setup (one-time)
 
-### 1. Verify a sending subdomain in Resend
+There is a deliberate ordering here. DNS verification is the slow part, so it
+goes first; and the webhook has a chicken-and-egg (you need the deployed URL to
+create the webhook, but you need its signing secret to deploy) which step 2
+breaks with a placeholder.
 
-Client mail goes out from **`send.prohippo.in`**, not the bare domain.
+Everything below assumes the Firebase CLI is installed and signed in:
+
+```
+npm install -g firebase-tools
+firebase login
+firebase use prohippo2
+```
+
+### Step 1 — Verify `send.prohippo.in` in Resend
+
+Client mail goes out from a **subdomain**, not the bare domain.
 
 > ⚠️ `login@prohippo.in` carries the sign-in OTPs. If a client marks a document
 > request as spam, that reputation hit must not land on the emails people need
 > in order to get into the product. Keep the two domains separate.
 
-In the Resend dashboard → **Domains** → add `send.prohippo.in`, then add the
-DKIM/SPF records it gives you to DNS and wait for verification. The From address
-is `CLIENT_EMAIL_FROM` in `functions/index.js` — change it there if you use a
-different subdomain.
+1. https://resend.com/domains → **Add Domain**
+2. Enter `send.prohippo.in`, pick a region, **Add**.
+3. Resend shows a set of DNS records (an MX for the return path, a TXT for SPF,
+   and a long TXT for DKIM). Add each one where `prohippo.in`'s DNS is managed.
+4. Wait for the status to go **Verified** (usually minutes, up to a few hours).
 
-### 2. Set the webhook signing secret
+> **The one thing people get wrong:** most DNS panels auto-append the root
+> domain to whatever you type in the *Name* / *Host* field. If Resend says the
+> record name is `send.prohippo.in`, you usually type just `send`; if it says
+> `resend._domainkey.send.prohippo.in`, you type `resend._domainkey.send`.
+> Typing the full name in a panel that auto-appends produces
+> `send.prohippo.in.prohippo.in`, which never verifies. Check what your existing
+> records look like and match that style.
 
-Resend dashboard → **Webhooks** → add an endpoint pointing at the deployed
-`resendWebhook` URL, subscribed to the `email.*` events. Copy its signing secret
-(a `whsec_…` value) and store it:
+The From address is `CLIENT_EMAIL_FROM` in `functions/index.js` — change it there
+if you use a different subdomain.
+
+### Step 2 — Create a placeholder webhook secret, then deploy
+
+The deploy fails (or stops to prompt) if a secret the code references doesn't
+exist yet, so create it before deploying:
 
 ```
-printf '%s' 'whsec_YOUR_SECRET' | firebase functions:secrets:set RESEND_WEBHOOK_SECRET --data-file=-
+printf 'placeholder' | firebase functions:secrets:set RESEND_WEBHOOK_SECRET --data-file=-
 ```
 
-### 3. Deploy
+Then deploy from a checkout of the branch carrying this feature:
 
 ```
-cd ~/prohippo2.0/functions && npm install && cd .. && firebase deploy --only functions
+cd ~/prohippo2.0 && git fetch origin && git checkout -f claude/communications-document-delivery-1cdv0l && git reset --hard origin/claude/communications-document-delivery-1cdv0l
+cd functions && npm install && cd .. && firebase deploy --only functions
 ```
+
+Wait for **`✔ Deploy complete!`**, then copy the URL the CLI prints for
+`resendWebhook`. It looks like:
+
+```
+https://asia-south1-prohippo2.cloudfunctions.net/resendWebhook
+```
+
+If it scrolls past, get it back with `firebase functions:list`.
 
 `resendWebhook` deploys to `asia-south1` only — Resend calls one fixed URL, and
 unlike the callables there is no older client pinned to `us-central1`.
 
-Deploy the functions first, then paste the resulting URL into the Resend
-dashboard, then set the secret and redeploy. Until the secret is set the webhook
-rejects everything with 401 — sending still works, statuses just stay at
-`Queued`.
+### Step 3 — Create the webhook, then set the real secret
+
+1. https://resend.com/webhooks → **Add Webhook**
+2. Paste the URL from step 2.
+3. Subscribe to: `email.sent`, `email.delivered`, `email.delivery_delayed`,
+   `email.opened`, `email.bounced`, `email.complained`.
+4. **Add**, then open the webhook and copy its **Signing Secret** (`whsec_…`).
+
+Store the real secret and redeploy just that function:
+
+```
+printf '%s' 'whsec_PASTE_YOURS_HERE' | firebase functions:secrets:set RESEND_WEBHOOK_SECRET --data-file=-
+firebase deploy --only functions:resendWebhook
+```
+
+> A secret's value is read at cold start, so the redeploy is what makes the new
+> value take effect. Until it does, the webhook rejects everything with 401 —
+> sending still works, statuses just stay at `Queued`.
+
+### Step 4 — Get the UI live
+
+Hosting auto-deploys only from the default branch
+(`claude/keen-ride-FlIY1`, see `.github/workflows/firebase-deploy.yml`). Merge
+the pull request for this branch and the site rebuilds itself — no manual
+hosting deploy.
+
+### Checking it worked
+
+1. Open an assessee whose **email is one you can read** (your own is ideal).
+2. **Communications → Document request** → pick them, add an item, **Send email**.
+3. The mail arrives from `notices@send.prohippo.in`; replying to it should
+   address your own account email.
+4. Back in **Communications → Message log**, the row starts at `Queued` and
+   should reach `Delivered` within seconds, then `Opened` once you open it. If
+   it stays at `Queued`, the webhook is the problem, not the send — see below.
+
+### If something goes wrong
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Send fails, "couldn't send the email right now" | Domain not verified yet, or `RESEND_API_KEY` missing | Check the domain is **Verified**; check Functions logs for the Resend status code |
+| Status stuck at `Queued` | Webhook not reaching the function, or still on the placeholder secret | Resend → the webhook → its delivery attempts. `401` = secret mismatch, redo step 3's redeploy |
+| Resend shows `403` on the webhook | Function not publicly invokable | Cloud Run → `resendwebhook` → Security → allow unauthenticated invocations |
+| "No valid email address on file" | The assessee record has no email | Add one on their profile — the recipient is read server-side from that record, never from the browser |
 
 ---
 

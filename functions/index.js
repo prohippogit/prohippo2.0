@@ -1341,6 +1341,52 @@ exports.verifyOtp = onCall(OTP_OPTS, async (request) => {
   return { token };
 });
 
+// Link a mobile number to the ALREADY-signed-in account (account unification).
+// The user (signed in via email/Google) requests an SMS OTP to the mobile they
+// want to attach (requestOtp channel:"sms"), then calls this with the code. We
+// verify with 2Factor, ensure the number isn't on someone else's account, then
+// attach it to THIS Firebase user — so a later SMS login lands on the same uid.
+// Verifying proves ownership, so a mistyped digit can't hand the account to a
+// stranger who happens to own that number.
+exports.linkPhone = onCall(OTP_OPTS, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { target } = resolveTarget("sms", request.data?.target);
+  const code = String(request.data?.code || "").replace(/\D/g, "");
+  if (code.length < 4 || code.length > 8) throw new HttpsError("invalid-argument", "Enter the code we sent you.");
+
+  const ref = db.collection("otpChallenges").doc(challengeId("sms", target));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "No code is pending. Please request a new one.");
+  const d = snap.data();
+  const now = Date.now();
+  if (d.consumed) throw new HttpsError("failed-precondition", "That code was already used. Please request a new one.");
+  if (now > d.expiresAt) { await ref.delete().catch(() => {}); throw new HttpsError("deadline-exceeded", "That code has expired. Please request a new one."); }
+  if ((d.attempts || 0) >= OTP_MAX_ATTEMPTS) { await ref.delete().catch(() => {}); throw new HttpsError("resource-exhausted", "Too many incorrect attempts. Please request a new code."); }
+  if (!d.sessionId) throw new HttpsError("failed-precondition", "Please request a new code.");
+
+  if (!(await checkSmsOtp(d.sessionId, code)).ok) {
+    const attempts = (d.attempts || 0) + 1;
+    await ref.set({ attempts }, { merge: true });
+    const left = OTP_MAX_ATTEMPTS - attempts;
+    if (left <= 0) { await ref.delete().catch(() => {}); throw new HttpsError("resource-exhausted", "Too many incorrect attempts. Please request a new code."); }
+    throw new HttpsError("permission-denied", `Incorrect code. ${left} ${left === 1 ? "try" : "tries"} left.`);
+  }
+
+  // Never move a number that's already attached to a different account.
+  try {
+    const other = await admin.auth().getUserByPhoneNumber(target);
+    if (other.uid !== uid) throw new HttpsError("already-exists", "This mobile number is already linked to another ProHippo account.");
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    if (e.code !== "auth/user-not-found") throw e;
+  }
+
+  await admin.auth().updateUser(uid, { phoneNumber: target });
+  await ref.delete().catch(() => {});
+  return { ok: true, phone: target };
+});
+
 /* ============================================================
    "Remember this device" — silent sign-in for the desktop connector
 

@@ -156,6 +156,21 @@ export function AuthProvider({ children }) {
     },
     resetOtp: () => setOtpPending(null),
     resetPendingEmail: () => setPendingEmail(null),
+    // Account unification: attach a verified mobile to the signed-in account.
+    // sendLinkCode texts an OTP to the number; linkPhone verifies it and links.
+    // These throw on error so the caller can show a local message (they don't
+    // touch the login `error`/`otpPending` state).
+    sendLinkCode: async (phone) => {
+      const call = httpsCallable(functions, "requestOtp");
+      const res = await call({ channel: "sms", target: String(phone || "").trim() });
+      return res.data || { ok: true };
+    },
+    linkPhone: async (phone, code) => {
+      const call = httpsCallable(functions, "linkPhone");
+      const res = await call({ target: String(phone || "").trim(), code: String(code || "") });
+      try { if (auth.currentUser) await auth.currentUser.reload(); } catch { /* best-effort refresh */ }
+      return res.data;
+    },
     clearError: () => setError(null),
     signOutUser: () => signOut(auth),
   }), [otpPending]);

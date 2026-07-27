@@ -139,6 +139,12 @@ Expect:
 - New `gcf-v2-sources-…-asia-south1` buckets appearing in Cloud Storage. Normal
   deployment plumbing; leave them alone.
 
+> **Since first writing this:** the runtime moved to Node 22 and three callables
+> were added for "remember this device" (`issueDeviceKey`, `redeemDeviceKey`,
+> `revokeDeviceKey`). Both need a `firebase deploy --only functions`, and the
+> function count below is now **15 per region** rather than 11. Deploy the
+> functions *before* releasing a connector build that expects them.
+
 Verify before continuing:
 
 ```bash

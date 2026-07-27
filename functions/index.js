@@ -1267,3 +1267,114 @@ exports.verifyOtp = onCall(OTP_OPTS, async (request) => {
   await ref.delete().catch(() => {});
   return { token };
 });
+
+/* ============================================================
+   "Remember this device" — silent sign-in for the desktop connector
+
+   The connector runs Firebase Auth in Electron's MAIN (Node) process, where the
+   web SDK's persistence options are all browser-backed, so its session died with
+   the process and the practitioner had to enter an emailed code on every single
+   launch.
+
+   Caching the Firebase refresh token isn't a real option: the JS SDK has no
+   public way to restore a session from one in Node, so it would mean hand-rolling
+   calls to Google's token endpoint and still minting a custom token at the end.
+   Instead we issue an app-scoped device key and redeem it the same way an OTP is
+   redeemed — validate, mint a custom token, signInWithCustomToken. Same shape as
+   the code above, and unlike a refresh token it is revocable by us.
+
+   Stored like the OTP codes: only a peppered, salted hash reaches Firestore, so a
+   database leak yields nothing usable. The plaintext key lives solely in the OS
+   keychain on the user's machine (Electron safeStorage).
+
+   `deviceSessions` needs no security rule — firestore.rules denies everything
+   outside users/{uid}, so only these Admin-SDK functions can reach it.
+
+   NO ROTATION, deliberately. Rotating on every launch would mean a client that
+   fails to persist the new key gets signed out, which is exactly the annoyance
+   this feature exists to remove. The key sits in the OS keychain, so a stolen
+   copy implies the machine is already compromised — at which point rotation buys
+   very little. What we do instead: an idle expiry, and server-side revocation on
+   sign-out.
+   ============================================================ */
+
+const DEVICE_IDLE_MS = 90 * 24 * 60 * 60 * 1000; // unused for 90 days → sign in again
+
+function newDeviceKey() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+function hashDeviceKey(key, salt) {
+  return crypto.createHash("sha256").update(`${otpPepper.value()}|dev|${salt}|${key}`).digest("hex");
+}
+// Doc id derived from the key, so redemption is one keyed read rather than a
+// query — while the stored hash still can't be reversed into the key.
+function deviceDocId(key) {
+  return crypto.createHash("sha256").update(`${otpPepper.value()}|devid|${key}`).digest("hex");
+}
+
+const DEVICE_OPTS = { region: REGIONS, secrets: [otpPepper], maxInstances: 10 };
+
+// Issue a device key for the signed-in user. Called by the connector straight
+// after a successful interactive sign-in. Requires auth — this is the only one of
+// the three that does.
+exports.issueDeviceKey = onCall(DEVICE_OPTS, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+
+  const key = newDeviceKey();
+  const salt = crypto.randomBytes(16).toString("base64");
+  const now = Date.now();
+  await db.collection("deviceSessions").doc(deviceDocId(key)).set({
+    uid,
+    keyHash: hashDeviceKey(key, salt),
+    salt,
+    label: String(request.data?.label || "").slice(0, 80), // e.g. the hostname
+    createdAt: now,
+    lastUsedAt: now,
+  });
+  return { deviceKey: key, idleDays: DEVICE_IDLE_MS / 86400000 };
+});
+
+// Redeem a device key for a Firebase custom token. Unauthenticated by design —
+// it IS a sign-in mechanism, exactly like verifyOtp.
+exports.redeemDeviceKey = onCall(DEVICE_OPTS, async (request) => {
+  const key = String(request.data?.deviceKey || "");
+  if (!key) throw new HttpsError("invalid-argument", "deviceKey is required.");
+
+  const ref = db.collection("deviceSessions").doc(deviceDocId(key));
+  const snap = await ref.get();
+  // Deliberately vague: a caller guessing keys learns nothing about which of
+  // "wrong key" / "expired" / "revoked" applies.
+  if (!snap.exists) throw new HttpsError("unauthenticated", "This device needs to sign in again.");
+
+  const d = snap.data();
+  const now = Date.now();
+  if (!safeEqualHex(hashDeviceKey(key, d.salt), d.keyHash)) {
+    throw new HttpsError("unauthenticated", "This device needs to sign in again.");
+  }
+  if (now - (d.lastUsedAt || d.createdAt || 0) > DEVICE_IDLE_MS) {
+    await ref.delete().catch(() => {});
+    throw new HttpsError("unauthenticated", "This device needs to sign in again.");
+  }
+  // Confirm the account still exists (deleted user → dead session).
+  try {
+    await admin.auth().getUser(d.uid);
+  } catch {
+    await ref.delete().catch(() => {});
+    throw new HttpsError("unauthenticated", "This device needs to sign in again.");
+  }
+
+  await ref.set({ lastUsedAt: now }, { merge: true }); // rolling idle window
+  const token = await admin.auth().createCustomToken(d.uid);
+  return { token };
+});
+
+// Forget this device. Called on an explicit sign-out, so the key on disk stops
+// working even if a copy of it survives. Holding the key is the authorisation —
+// there is nothing to escalate by revoking your own session.
+exports.revokeDeviceKey = onCall(DEVICE_OPTS, async (request) => {
+  const key = String(request.data?.deviceKey || "");
+  if (!key) return { ok: true }; // nothing stored client-side; not an error
+  await db.collection("deviceSessions").doc(deviceDocId(key)).delete().catch(() => {});
+  return { ok: true };
+});

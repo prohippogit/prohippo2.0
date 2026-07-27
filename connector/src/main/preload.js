@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("connector", {
   requestOtp: (email) => ipcRenderer.invoke("auth:requestOtp", { email }),
   verifyOtp: (email, code) => ipcRenderer.invoke("auth:verifyOtp", { email, code }),
   signInWithGoogle: () => ipcRenderer.invoke("auth:google"),
+  // Resolves to the user when this device is remembered, or null.
+  trySilentSignIn: () => ipcRenderer.invoke("auth:silent"),
   signOut: () => ipcRenderer.invoke("auth:signOut"),
   currentUser: () => ipcRenderer.invoke("auth:current"),
   listAssessees: () => ipcRenderer.invoke("assessees:list"),

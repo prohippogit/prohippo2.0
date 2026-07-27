@@ -3,8 +3,10 @@ import React from 'react';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { storage } from './firebase';
 import { Icon, StatusPill, EmptyState, titleCase, fmtDateLong, daysFromNow } from './shared';
-import { useData, awaitingNotices, todayISO } from './store';
+import { useData, awaitingNotices, todayISO, itemsFromNoticeDocuments, docRequestsOf } from './store';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
+import DocumentRequestComposer from './DocumentRequest';
+import { renderDocRequest, defaultTitle } from './messageTemplates';
 
 // Open a notice's PDF stored in Firebase Storage (portal-synced notices).
 async function openStoragePdf(storagePath) {
@@ -183,7 +185,7 @@ function Toggle({ on, onToggle, icon, iconColor, title, desc, disabled }) {
 const normDin = (s) => (s || "").replace(/\s+/g, "").toUpperCase();
 
 export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
-  const { data, addNotice, updateNotice, addHearing, addCommunication, addMatter, notify } = useData();
+  const { data, profile, addNotice, updateNotice, addHearing, addDocRequest, addMatter, notify } = useData();
   const isNew = !notice?.id;
   const [edited, setEdited] = React.useState({
     assessee: "", pan: "", ay: "", authority: "Scrutiny", section: "", din: "",
@@ -198,6 +200,9 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
   const [showCreateAssessee, setShowCreateAssessee] = React.useState(false);
   // DIN the user has explicitly chosen to save as a duplicate anyway.
   const [ackDupDin, setAckDupDin] = React.useState("");
+  // Composer opened straight from this notice (existing notices only — a new
+  // one has no id to hang the request off until it's saved).
+  const [composeSeed, setComposeSeed] = React.useState(null);
   const fileRef = React.useRef(null);
 
   // Another notice already recorded with this DIN (excluding this one).
@@ -251,6 +256,13 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
   }, [data.matters, linked, edited.ay, edited.authority]);
   const canCreateMatter = Boolean(linked) && edited.ay.trim() && !matterOnFile;
 
+  // Requests already raised off this notice — shown so the same list doesn't
+  // get prepared twice by two people in the same firm.
+  const requestsForNotice = React.useMemo(
+    () => (linked ? docRequestsOf(data, linked).filter((r) => r.noticeId && r.noticeId === notice?.id) : []),
+    [data, linked, notice?.id]
+  );
+
   // How to refer to the not-yet-created assessee in the prompt — prefer the
   // name read from the notice, and add the PAN when it's present and valid.
   const hasPan = PAN_RE.test(edited.pan);
@@ -263,7 +275,22 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
       ? `${who} isn't in your assessee list. Create the assessee to save this notice — the details are carried over from the notice.`
       : "Select the assessee this notice belongs to, or create a new profile if they aren't on your list yet.";
 
-  const save = () => {
+  /* The fields a document request inherits from this notice — the same shape
+     whether the request is created by the on-save toggle or by opening the
+     composer from the card below. */
+  const requestSeed = React.useCallback((noticeId) => ({
+    assesseeId: linked?.id || "",
+    assessee: linked?.name || "",
+    pan: linked?.pan || "",
+    noticeId: noticeId || notice?.id || "",
+    ay: edited.ay, authority: edited.authority, section: edited.section, din: edited.din,
+    dueDate: edited.hearingDate || "",
+    items: itemsFromNoticeDocuments(edited.documents),
+    channels: ["email", "whatsapp"],
+    status: "draft",
+  }), [linked, notice?.id, edited]);
+
+  const save = async () => {
     if (!valid) return;
     if (dupBlocking) {
       notify("This DIN is already recorded — choose an option in the duplicate notice above", "alert");
@@ -272,8 +299,15 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
     const rec = { ...edited, assessee: linked.name, pan: linked.pan };
     delete rec.aiParsed;
     delete rec.aiWarnings;
-    if (isNew) addNotice(rec);
-    else updateNotice(notice.id, rec);
+    // A new notice is awaited so a document request created below can carry its
+    // id — that link is what stops the same list being prepared twice.
+    let noticeId = notice?.id || "";
+    if (isNew) {
+      const saved = await addNotice(rec);
+      noticeId = saved?.id || "";
+    } else {
+      updateNotice(notice.id, rec);
+    }
 
     const staffOf = data.assessees.find(a => a.pan === rec.pan)?.staff || "";
     const done = ["Notice saved"];
@@ -295,11 +329,17 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
       done.push("Hearing created");
     }
     if (requestDocs && rec.documents.length > 0) {
-      addCommunication({
-        channel: "WhatsApp", to: rec.assessee,
-        subject: `Documents required — ${rec.authority} ${rec.hearingDate ? `hearing on ${fmtDateLong(rec.hearingDate)}` : `notice AY ${rec.ay}`}`,
-        body: rec.documents.map((d, i) => `${i + 1}. ${d}`).join("\n"),
-        time: new Date().toISOString(), template: "Document request", status: "Draft",
+      // Render the message now so the draft is immediately sendable from
+      // Communications without having to reopen the composer first.
+      const seed = { ...requestSeed(noticeId), title: "" };
+      const rendered = renderDocRequest({ request: seed, assessee: linked, profile });
+      addDocRequest({
+        ...seed,
+        title: defaultTitle(seed),
+        message: {
+          subject: rendered.subject, emailHtml: rendered.emailHtml,
+          emailText: rendered.emailText, whatsappText: rendered.whatsappText,
+        },
       });
       done.push("Document request drafted");
     }
@@ -435,8 +475,20 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
                 <div className="card-title">Documents called for</div>
                 <div className="card-sub">Used in the client document request</div>
               </div>
-              <span className="pill pill-primary">{edited.documents.length} items</span>
+              <div className="center" style={{gap: 6}}>
+                <span className="pill pill-primary">{edited.documents.length} items</span>
+                {!isNew && linked && edited.documents.length > 0 && (
+                  <button className="btn btn-secondary btn-xs" onClick={() => setComposeSeed(requestSeed())}>
+                    <Icon name="mail" size={12}/>Prepare request
+                  </button>
+                )}
+              </div>
             </div>
+            {!isNew && linked && requestsForNotice.length > 0 && (
+              <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+                {requestsForNotice.length === 1 ? "1 request" : `${requestsForNotice.length} requests`} already prepared for this notice — see Communications.
+              </div>
+            )}
             <div className="col" style={{gap: 8}}>
               {edited.documents.map((d, i) => (
                 <div key={i} className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, border: "1px solid var(--p-line-2)"}}>
@@ -484,9 +536,9 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
                 on={requestDocs && edited.documents.length > 0}
                 onToggle={() => setRequestDocs(!requestDocs)}
                 disabled={edited.documents.length === 0}
-                icon="whatsapp" iconColor="var(--p-success)"
+                icon="mail" iconColor="var(--p-success)"
                 title="Draft client document request"
-                desc={edited.documents.length ? `${edited.documents.length} items · saved as draft in Communications` : "Add document items to enable"}
+                desc={edited.documents.length ? `${edited.documents.length} items · draft in Communications, ready to send by email or WhatsApp` : "Add document items to enable"}
               />
             </div>
             <div className="row" style={{gap: 8, marginTop: 18}}>
@@ -506,6 +558,8 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
           onSaved={(a) => setEdited(e => ({ ...e, assessee: a.name, pan: a.pan }))}
         />
       )}
+
+      {composeSeed && <DocumentRequestComposer seed={composeSeed} onClose={() => setComposeSeed(null)}/>}
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import React from 'react';
 import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
-  groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS } from './store';
+  groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS,
+  commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus } from './store';
 import { downloadLedgerPDF } from './ledgerPdf';
 import { MatterModal } from './Other';
+import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
@@ -447,7 +449,11 @@ function GroupDetail({ groupName, onBack, onOpenAssessee, onRename, profile }) {
 }
 
 export function Assessees({ onOpen, initialSearch = "" }) {
-  const { data, profile, notify } = useData();
+  const { data, profile, notify, backfillCommunicationLinks } = useData();
+  // Stamp the hard assessee link onto any message or request written before
+  // communications were linked by id. Idempotent, so running it on every visit
+  // to this page costs one read once everything is already stamped.
+  React.useEffect(() => { backfillCommunicationLinks(); }, [backfillCommunicationLinks]);
   const [view, setView] = React.useState("list"); // "list" | "groups"
   const [openGroup, setOpenGroup] = React.useState(null); // group name being viewed
   const [tab, setTab] = React.useState("All");
@@ -736,6 +742,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
   const [showMatter, setShowMatter] = React.useState(false);
   const [closedProceedings, setClosedProceedings] = React.useState([]); // popup after a sync
   const [focusReqId, setFocusReqId] = React.useState(null); // proceeding to expand in Matters
+  const [compose, setCompose] = React.useState(null); // { request } | { seed } for the doc-request composer
   const a = assessee;
   const s = assesseeStats(data, a);
   const hearings = upcomingHearings(data).filter(h => h.pan === a.pan);
@@ -743,7 +750,8 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
   const notices = data.notices.filter(n => n.pan === a.pan);
   const matters = data.matters.filter(m => m.pan === a.pan);
   const invoices = data.invoices.filter(i => i.assessee === a.name);
-  const comms = data.communications.filter(c => c.to === a.name || c.to === a.email || c.to === a.mobile);
+  const comms = commsOf(data, a);
+  const requests = docRequestsOf(data, a).sort((x, y) => (y.updatedAt || y.createdAt || "").localeCompare(x.updatedAt || x.createdAt || ""));
 
   const fy = fyOf(todayISO());
   const billedFY = invoices.filter(i => fyOf(i.date) === fy).reduce((sum, i) => sum + i.amount, 0);
@@ -977,18 +985,59 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       )}
 
       {tab === "Communications" && (
-        <div className="card" style={{padding: 0}}>
-          {comms.length === 0 && <EmptyState icon="chat" title="No messages logged" sub={`Messages sent to ${titleCase(a.name)} will appear here.`}/>}
-          <div className="col">
-            {comms.map(c => (
-              <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12}}>
-                <Icon name={c.channel === "WhatsApp" ? "whatsapp" : "mail"} size={16}/>
-                <div style={{flex: 1}}>
-                  <div className="strong" style={{fontSize: 13}}>{c.subject}</div>
-                  <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{c.channel} · {new Date(c.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
-                </div>
+        <div className="col" style={{gap: 18}}>
+          <div className="card" style={{padding: 0}}>
+            <div className="between" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)"}}>
+              <div>
+                <div className="card-title" style={{fontSize: 15}}>Document requests</div>
+                <div className="card-sub">What has been asked for, and what is still outstanding</div>
               </div>
-            ))}
+              <button className="btn btn-primary btn-sm" onClick={() => setCompose({ seed: { assesseeId: a.id, assessee: a.name, pan: a.pan, channels: ["email", "whatsapp"] } })}>
+                <Icon name="plus" size={13}/>New request
+              </button>
+            </div>
+            {requests.length === 0 ? (
+              <EmptyState icon="doc" title="No document requests yet" sub={`Ask ${titleCase(a.name)} for the papers a notice calls for, and track what comes back.`}/>
+            ) : (
+              <div className="col">
+                {requests.map(r => {
+                  const p = docRequestProgress(r);
+                  return (
+                    <div key={r.id} className="row row-link" onClick={() => setCompose({ request: r })} style={{padding: "13px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12, cursor: "pointer", alignItems: "center"}}>
+                      <Icon name="doc" size={16}/>
+                      <div style={{flex: 1, minWidth: 0}}>
+                        <div className="strong" style={{fontSize: 13}}>{r.title || "Document request"}</div>
+                        <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>
+                          {p.total} item{p.total === 1 ? "" : "s"}{r.sentAt ? ` · ${p.received} received, ${p.pending} pending` : " · not sent yet"}
+                          {r.dueDate ? ` · due ${fmtDateLong(r.dueDate)}` : ""}
+                        </div>
+                      </div>
+                      <RequestStatusPill status={derivedRequestStatus(r)}/>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{padding: 0}}>
+            <div style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)"}}>
+              <div className="card-title" style={{fontSize: 15}}>Message log</div>
+              <div className="card-sub">Every email and WhatsApp hand-off, with its delivery status</div>
+            </div>
+            {comms.length === 0 && <EmptyState icon="chat" title="No messages logged" sub={`Messages sent to ${titleCase(a.name)} will appear here.`}/>}
+            <div className="col">
+              {comms.map(c => (
+                <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12}}>
+                  <Icon name={c.channel === "WhatsApp" ? "whatsapp" : "mail"} size={16}/>
+                  <div style={{flex: 1, minWidth: 0}}>
+                    <div className="strong" style={{fontSize: 13}}>{c.subject}</div>
+                    <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{c.channel} · {new Date(c.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                  <StatusPill status={c.status}/>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -997,6 +1046,14 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
 
       {showEdit && <AssesseeModal initial={a} onClose={() => setShowEdit(false)}/>}
       {showMatter && <MatterModal initial={{ assessee: a.name, pan: a.pan, staff: a.staff }} onClose={() => setShowMatter(false)}/>}
+      {compose && (
+        <DocumentRequestComposer
+          key={compose.request?.id || "new"}
+          request={compose.request}
+          seed={compose.seed}
+          onClose={() => setCompose(null)}
+        />
+      )}
       {closedProceedings.length > 0 && (
         <ClosedProceedingsModal
           items={closedProceedings}

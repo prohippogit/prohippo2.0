@@ -2,7 +2,8 @@
 import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO,
-  assesseeLedger, groupLedger, groupsOf, assesseeOutstanding, allocatePayment } from './store';
+  assesseeLedger, groupLedger, groupsOf, assesseeOutstanding, allocatePayment, docRequestProgress, derivedRequestStatus } from './store';
+import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee } from './invoicePdf';
@@ -1107,18 +1108,27 @@ function MessageModal({ onClose }) {
   const linked = data.assessees.find(a => a.name === form.to);
   const valid = Boolean(linked) && form.subject.trim();
 
-  const save = (status) => {
+  /* An ad-hoc message is a hand-off to WhatsApp / the mail app, so the log
+     records that it was opened there — not that it was delivered. Document
+     requests sent by email go through Resend and do get a real status. */
+  const save = (send) => {
     if (!valid) return;
-    addCommunication({ ...form, time: new Date().toISOString(), status });
-    if (status === "Sent") {
+    let status = "Draft";
+    if (send) {
       const text = encodeURIComponent(`${form.subject}\n\n${form.body}`);
       if (form.channel === "WhatsApp" && linked?.mobile) {
         window.open(`https://wa.me/${linked.mobile.replace(/\D/g, "")}?text=${text}`, "_blank");
+        status = "Opened in WhatsApp";
       } else if (form.channel === "Email" && linked?.email) {
         window.open(`mailto:${linked.email}?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(form.body)}`);
+        status = "Opened in mail app";
+      } else {
+        notify(`No ${form.channel === "WhatsApp" ? "mobile number" : "email address"} on file for ${linked.name}`, "alert");
+        return;
       }
     }
-    notify(status === "Sent" ? "Message logged & opened in " + form.channel : "Draft saved");
+    addCommunication({ ...form, assesseeId: linked.id, assessee: linked.name, time: new Date().toISOString(), status });
+    notify(send ? `Logged & opened in ${form.channel} — press send there` : "Draft saved");
     onClose();
   };
 
@@ -1129,8 +1139,8 @@ function MessageModal({ onClose }) {
       onClose={onClose}
       width={560}
       footer={<>
-        <button className="btn btn-secondary" onClick={() => save("Draft")} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}>Save draft</button>
-        <button className="btn btn-primary" onClick={() => save("Sent")} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}><Icon name="arrow-right" size={14}/>Send</button>
+        <button className="btn btn-secondary" onClick={() => save(false)} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}>Save draft</button>
+        <button className="btn btn-primary" onClick={() => save(true)} disabled={!valid} style={{opacity: valid ? 1 : 0.5}}><Icon name="arrow-right" size={14}/>Open &amp; log</button>
       </>}
     >
       {data.assessees.length === 0 && (
@@ -1159,115 +1169,160 @@ function MessageModal({ onClose }) {
   );
 }
 
+/* A document request in the list — the whole row is the affordance, since the
+   composer is where everything about a request happens. */
+function RequestRow({ req, onOpen }) {
+  const progress = docRequestProgress(req);
+  const status = derivedRequestStatus(req);
+  const overdue = req.dueDate && req.dueDate < todayISO() && !progress.done;
+  return (
+    <div
+      className="row row-link"
+      onClick={() => onOpen(req)}
+      style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12, alignItems: "flex-start", cursor: "pointer"}}
+    >
+      <div style={{width: 38, height: 38, borderRadius: 11, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", display: "grid", placeItems: "center", flexShrink: 0}}>
+        <Icon name="doc" size={16}/>
+      </div>
+      <div style={{flex: 1, minWidth: 0}}>
+        <div className="between">
+          <div className="center" style={{gap: 8}}>
+            <div style={{fontWeight: 700, fontSize: 13.5}}>{titleCase(req.assessee || "")}</div>
+            <RequestStatusPill status={status}/>
+          </div>
+          <div className="muted" style={{fontSize: 11.5}}>
+            {req.dueDate ? <span style={overdue ? {color: "var(--p-danger)", fontWeight: 700} : undefined}>due {fmtDateLong(req.dueDate)}</span> : ""}
+          </div>
+        </div>
+        <div className="semi" style={{fontSize: 13, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+          {req.title || "Document request"}
+        </div>
+        <div className="muted" style={{fontSize: 11.5, marginTop: 4}}>
+          {progress.total} item{progress.total === 1 ? "" : "s"}
+          {req.sentAt ? ` · ${progress.received} received, ${progress.pending} pending` : " · not sent yet"}
+          {(req.channels || []).length ? ` · ${(req.channels || []).map(c => c === "email" ? "Email" : "WhatsApp").join(" + ")}` : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Communications() {
-  const { data, notify } = useData();
-  const [filter, setFilter] = React.useState("All");
+  const { data } = useData();
+  const [filter, setFilter] = React.useState("Requests");
   const [showNew, setShowNew] = React.useState(false);
+  const [compose, setCompose] = React.useState(null); // { request } | { seed }
 
   const comms = [...data.communications].sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+  const requests = [...(data.docRequests || [])].sort((a, b) =>
+    (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
+  );
+
+  const drafts = requests.filter(r => !r.sentAt);
+  const openReqs = requests.filter(r => r.sentAt && !docRequestProgress(r).done);
+
   const counts = {
+    Requests: requests.length,
     All: comms.length,
     WhatsApp: comms.filter(c => c.channel === "WhatsApp").length,
     Email: comms.filter(c => c.channel === "Email").length,
-    Drafts: comms.filter(c => c.status === "Draft").length,
   };
   const filtered = comms.filter(c => {
     if (filter === "All") return true;
-    if (filter === "Drafts") return c.status === "Draft";
     return c.channel === filter;
   });
-
-  const draft = comms.find(c => c.status === "Draft");
-  const draftAssessee = draft && data.assessees.find(a => a.name === draft.to);
-
-  const openDraft = (channel) => {
-    if (!draft) return;
-    const text = `${draft.subject}\n\n${draft.body || ""}`;
-    if (channel === "WhatsApp" && draftAssessee?.mobile) {
-      window.open(`https://wa.me/${draftAssessee.mobile.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank");
-    } else if (channel === "Email" && draftAssessee?.email) {
-      window.open(`mailto:${draftAssessee.email}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body || "")}`);
-    } else {
-      notify("No contact details on file for " + (draft.to || "recipient"), "alert");
-    }
-  };
 
   return (
     <div className="animate-in">
       <div className="topbar">
         <div>
           <div className="page-title">Communications</div>
-          <div className="page-sub">Log of client messages and drafts</div>
+          <div className="page-sub">
+            {drafts.length || openReqs.length
+              ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} · ${openReqs.length} request${openReqs.length === 1 ? "" : "s"} awaiting documents`
+              : "Document requests and the log of client messages"}
+          </div>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New message</button>
+          <button className="btn btn-secondary" onClick={() => setShowNew(true)}><Icon name="chat" size={14}/>New message</button>
+          <button className="btn btn-primary" onClick={() => setCompose({ seed: {} })}><Icon name="plus" size={14}/>Document request</button>
         </div>
       </div>
 
-      <div className={draft ? "grid-main" : "grid"} style={{gap: 18}}>
-        <div className="card" style={{padding: 0}}>
-          <div className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", justifyContent: "space-between"}}>
-            <div className="row" style={{gap: 6}}>
-              {["All", "WhatsApp", "Email", "Drafts"].map(f => (
-                <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
-                  {f}{counts[f] ? ` · ${counts[f]}` : ""}
-                </span>
-              ))}
-            </div>
+      <div className="card" style={{padding: 0, marginBottom: 18}}>
+        <div className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", justifyContent: "space-between"}}>
+          <div className="row" style={{gap: 6}}>
+            {["Requests", "All", "WhatsApp", "Email"].map(f => (
+              <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+                {f === "All" ? "Message log" : f}{counts[f] ? ` · ${counts[f]}` : ""}
+              </span>
+            ))}
           </div>
-          {filtered.length === 0 ? (
+        </div>
+
+        {filter === "Requests" ? (
+          requests.length === 0 ? (
             <EmptyState
-              icon="chat"
-              title={comms.length === 0 ? "No messages yet" : "No messages match this filter"}
-              sub={comms.length === 0 ? "Messages you log or draft — including document requests generated from notices — appear here." : undefined}
-              action={comms.length === 0 ? <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New message</button> : undefined}
+              icon="doc"
+              title="No document requests yet"
+              sub="Open a notice and turn on “Draft client document request”, or start one here. The list is built from what the notice calls for."
+              action={<button className="btn btn-primary" onClick={() => setCompose({ seed: {} })}><Icon name="plus" size={14}/>Document request</button>}
             />
           ) : (
             <div className="col">
-              {filtered.map(c => (
-                <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12, alignItems: "flex-start"}}>
-                  <div style={{width: 38, height: 38, borderRadius: 11, background: c.channel === "WhatsApp" ? "var(--p-mint)" : "#E1EEFF", color: c.channel === "WhatsApp" ? "#1B8C5C" : "#2766C7", display: "grid", placeItems: "center", flexShrink: 0}}>
-                    <Icon name={c.channel === "WhatsApp" ? "whatsapp" : "mail"} size={16}/>
-                  </div>
-                  <div style={{flex: 1, minWidth: 0}}>
-                    <div className="between">
-                      <div className="center" style={{gap: 8}}>
-                        <div style={{fontWeight: 700, fontSize: 13.5}}>{titleCase(c.to)}</div>
-                        {c.template && <span className="pill pill-muted" style={{fontSize: 10}}>{c.template}</span>}
-                      </div>
-                      <div className="muted" style={{fontSize: 11.5}}>{new Date(c.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
-                    </div>
-                    <div className="semi" style={{fontSize: 13, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{c.subject}</div>
-                    <div className="muted" style={{fontSize: 11.5, marginTop: 4}}>{c.channel} · <StatusPill status={c.status}/></div>
-                  </div>
+              {drafts.length > 0 && (
+                <div className="muted" style={{padding: "10px 18px 4px", fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase"}}>
+                  Drafts — not sent
                 </div>
-              ))}
+              )}
+              {drafts.map(r => <RequestRow key={r.id} req={r} onOpen={(req) => setCompose({ request: req })}/>)}
+              {requests.filter(r => r.sentAt).length > 0 && (
+                <div className="muted" style={{padding: "14px 18px 4px", fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase"}}>
+                  Sent
+                </div>
+              )}
+              {requests.filter(r => r.sentAt).map(r => <RequestRow key={r.id} req={r} onOpen={(req) => setCompose({ request: req })}/>)}
             </div>
-          )}
-        </div>
-
-        {draft && (
-          <div className="card">
-            <div className="card-title mb-3">{draft.template || "Draft"} — draft</div>
-            <div className="card-sub mb-4">For {draft.to}</div>
-            <div className="col" style={{gap: 12, padding: 16, background: "var(--p-card-tint)", borderRadius: 14, border: "1px solid var(--p-line-2)"}}>
-              <div style={{fontSize: 12.5, fontWeight: 700}}>Subject</div>
-              <div style={{fontSize: 13}}>{draft.subject}</div>
-              {draft.body && <>
-                <div style={{height: 1, background: "var(--p-line)"}}/>
-                <div style={{fontSize: 12.5, fontWeight: 700}}>Body</div>
-                <div style={{fontSize: 12.5, lineHeight: 1.6, color: "var(--p-text-2)", whiteSpace: "pre-wrap"}}>{draft.body}</div>
-              </>}
-            </div>
-            <div className="row" style={{gap: 8, marginTop: 14}}>
-              <button className="btn btn-primary" style={{flex: 1, justifyContent: "center"}} onClick={() => openDraft("WhatsApp")}><Icon name="whatsapp" size={14}/>Send WhatsApp</button>
-              <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}} onClick={() => openDraft("Email")}><Icon name="mail" size={14}/>Send Email</button>
-            </div>
+          )
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon="chat"
+            title={comms.length === 0 ? "No messages yet" : "No messages match this filter"}
+            sub={comms.length === 0 ? "Every email and WhatsApp hand-off is logged here, with its delivery status." : undefined}
+          />
+        ) : (
+          <div className="col">
+            {filtered.map(c => (
+              <div key={c.id} className="row" style={{padding: "14px 18px", borderBottom: "1px solid var(--p-line-2)", gap: 12, alignItems: "flex-start"}}>
+                <div style={{width: 38, height: 38, borderRadius: 11, background: c.channel === "WhatsApp" ? "var(--p-mint)" : "#E1EEFF", color: c.channel === "WhatsApp" ? "#1B8C5C" : "#2766C7", display: "grid", placeItems: "center", flexShrink: 0}}>
+                  <Icon name={c.channel === "WhatsApp" ? "whatsapp" : "mail"} size={16}/>
+                </div>
+                <div style={{flex: 1, minWidth: 0}}>
+                  <div className="between">
+                    <div className="center" style={{gap: 8}}>
+                      <div style={{fontWeight: 700, fontSize: 13.5}}>{titleCase(c.assessee || c.to)}</div>
+                      {c.template && <span className="pill pill-muted" style={{fontSize: 10}}>{c.template}</span>}
+                    </div>
+                    <div className="muted" style={{fontSize: 11.5}}>{new Date(c.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                  <div className="semi" style={{fontSize: 13, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{c.subject}</div>
+                  <div className="muted" style={{fontSize: 11.5, marginTop: 4}}>{c.channel} · <StatusPill status={c.status}/></div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
       {showNew && <MessageModal onClose={() => setShowNew(false)}/>}
+      {compose && (
+        <DocumentRequestComposer
+          key={compose.request?.id || "new"}
+          request={compose.request}
+          seed={compose.seed}
+          onClose={() => setCompose(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1555,6 +1555,81 @@ export function Reports() {
 
 /* ---------------- Settings ---------------- */
 
+// Attach & verify a mobile number for SMS sign-in, unifying phone + email into
+// one account. Verified once via OTP (proves ownership) — pre-filled from an
+// existing profile/firm mobile when we have one.
+function LinkMobileCard() {
+  const { profile, setProfile, notify } = useData();
+  const { sendLinkCode, linkPhone } = useAuth();
+  const [step, setStep] = React.useState("idle"); // idle | code
+  // Seed from an existing profile/firm mobile — the profile is already loaded by
+  // the time Settings is open, so a lazy initializer is enough (no effect needed).
+  const [phone, setPhone] = React.useState(() => String(profile?.phone || profile?.firmMobile || "").replace(/\D/g, "").slice(-10));
+  const [code, setCode] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const [editing, setEditing] = React.useState(false);
+
+  const linked = Boolean(profile?.phoneVerified && profile?.phone);
+
+  const send = async () => {
+    const ten = phone.replace(/\D/g, "").slice(-10);
+    if (!/^[6-9]\d{9}$/.test(ten)) { setErr("Enter a valid 10-digit mobile number."); return; }
+    setErr(""); setBusy(true);
+    try { await sendLinkCode("+91" + ten); setStep("code"); }
+    catch (e) { setErr(e?.message || "Couldn't send the code."); }
+    finally { setBusy(false); }
+  };
+
+  const verify = async () => {
+    const ten = phone.replace(/\D/g, "").slice(-10);
+    setErr(""); setBusy(true);
+    try {
+      const res = await linkPhone("+91" + ten, code);
+      await setProfile({ phone: res?.phone || ("+91" + ten), phoneVerified: true });
+      notify("Mobile number linked — you can now sign in with it");
+      setStep("idle"); setEditing(false); setCode("");
+    } catch (e) { setErr(e?.message || "That code didn't work."); }
+    finally { setBusy(false); }
+  };
+
+  if (linked && !editing) {
+    return (
+      <KVRow label="Sign-in mobile" value={
+        <span>{profile.phone} <span style={{ color: "#1B8C5C", fontWeight: 700 }}>· Verified</span>{" "}
+          <button className="btn btn-ghost btn-xs" onClick={() => { setEditing(true); setStep("idle"); setCode(""); setErr(""); }}>Change</button>
+        </span>
+      }/>
+    );
+  }
+
+  return (
+    <div style={{ border: "1px dashed var(--p-line-2)", borderRadius: 12, padding: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{editing ? "Change your sign-in mobile" : "Add your mobile for sign-in"}</div>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        Verify your mobile once so you can sign in by SMS — and so phone and email both reach this same account.
+      </div>
+      {step === "idle" ? (
+        <div className="center" style={{ gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, flex: 1, minWidth: 180 }}>
+            <div style={{ display: "grid", placeItems: "center", padding: "0 10px", borderRadius: 8, border: "1px solid var(--p-line-2)", background: "var(--p-card-tint)", fontSize: 13, fontWeight: 600 }}>+91</div>
+            <input type="tel" inputMode="numeric" value={phone} placeholder="98250 11234" style={{ flex: 1 }} onChange={(e) => { setPhone(e.target.value.replace(/[^\d\s]/g, "")); setErr(""); }}/>
+          </div>
+          <button className="btn btn-primary btn-sm" disabled={busy} onClick={send}>{busy ? "Sending…" : "Send code"}</button>
+          {editing && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setEditing(false); setErr(""); }}>Cancel</button>}
+        </div>
+      ) : (
+        <div className="center" style={{ gap: 8, flexWrap: "wrap" }}>
+          <input type="text" inputMode="numeric" maxLength={6} value={code} placeholder="6-digit code" style={{ flex: 1, minWidth: 130, letterSpacing: 4, textAlign: "center", fontWeight: 700 }} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setErr(""); }}/>
+          <button className="btn btn-primary btn-sm" disabled={busy || code.length < 6} onClick={verify}>{busy ? "Verifying…" : "Verify & link"}</button>
+          <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setStep("idle"); setCode(""); }}>Back</button>
+        </div>
+      )}
+      {err && <div style={{ marginTop: 8, color: "#B8463A", fontSize: 12 }}>{err}</div>}
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { data, profile, setProfile, loadSampleData, clearAllData, notify } = useData();
   const { user, signOutUser } = useAuth();
@@ -1618,8 +1693,8 @@ export function SettingsPage() {
         <div className="card">
           <div className="card-title mb-3">Account</div>
           <div className="col" style={{gap: 10}}>
-            <KVRow label="Signed in as" value={user?.email || "—"}/>
-            <KVRow label="Sign-in method" value={user?.providerData?.[0]?.providerId === "google.com" ? "Google" : "Email link"}/>
+            <KVRow label="Signed in as" value={user?.email || user?.phoneNumber || "—"}/>
+            <LinkMobileCard/>
             <KVRow label="Data storage" value="Cloud Firestore — private to your account, synced across your devices"/>
             <button className="btn btn-secondary" style={{alignSelf: "flex-start", marginTop: 4}} onClick={() => { if (window.confirm("Sign out of ProHippo?")) signOutUser(); }}>
               <Icon name="logout" size={14}/>Sign out

@@ -28,7 +28,9 @@ function Splash({ label = "Loading your practice…" }) {
 
 function Shell() {
   const { data, toast } = useData();
+  const { user } = useAuth();
   const [route, setRoute] = React.useState("dashboard");
+  const [linkDismissed, setLinkDismissed] = React.useState(false);
   const [openAssesseeId, setOpenAssesseeId] = React.useState(null);
   const [profileFocus, setProfileFocus] = React.useState(null); // { tab, matterId } when opened via a matter/hearing click
   const [reviewNotice, setReviewNotice] = React.useState(null); // notice record, or {} for a new one
@@ -138,6 +140,14 @@ function Shell() {
         <span/><span/><span/>
       </button>
       <main className="main">
+        {data.profile && !data.profile.phoneVerified && !(user && user.phoneNumber) && route !== "settings" && !linkDismissed && (
+          <div className="animate-in" style={{ margin: "0 0 14px", padding: "10px 14px", borderRadius: 12, background: "var(--p-lavender-2, #EEE9FF)", border: "1px solid var(--p-primary-3, #C9BEF5)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <Icon name="phone" size={16}/>
+            <div style={{ flex: 1, minWidth: 180, fontSize: 13 }}>Add your mobile number to sign in by SMS — and keep phone &amp; email on one account.</div>
+            <button className="btn btn-primary btn-sm" onClick={() => handleNav("settings")}>Add mobile</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setLinkDismissed(true)}>Later</button>
+          </div>
+        )}
         {content}
       </main>
       {toast && (

@@ -162,10 +162,26 @@ function ProfileGate() {
 function AuthGate() {
   const { user, loading } = useAuth();
   const [showLogin, setShowLogin] = React.useState(false);
-  if (loading) return <Splash label="Signing you in…"/>;
-  if (!user) {
-    if (!showLogin) return <Landing onSignIn={() => setShowLogin(true)}/>;
-    return <Login onBack={() => setShowLogin(false)}/>;
+
+  // Hold the sign-in screen mounted while the OTP success animation plays.
+  // verifyOtp ends in signInWithCustomToken, which flips `user` the instant the
+  // code checks out — without this the login screen would be torn down mid-merge
+  // and the confirmation the user just earned would never be seen. Login raises
+  // this on success and drops it from OtpInput's onSuccessSettled.
+  const [holdForOtp, setHoldForOtp] = React.useState(false);
+
+  // Safety net: a signed-in user must never be stranded here if that callback
+  // fails to arrive.
+  React.useEffect(() => {
+    if (!holdForOtp) return;
+    const t = setTimeout(() => setHoldForOtp(false), 2500);
+    return () => clearTimeout(t);
+  }, [holdForOtp]);
+
+  if (loading && !holdForOtp) return <Splash label="Signing you in…"/>;
+  if (!user || holdForOtp) {
+    if (!user && !showLogin) return <Landing onSignIn={() => setShowLogin(true)}/>;
+    return <Login onBack={() => setShowLogin(false)} onHold={setHoldForOtp}/>;
   }
   return (
     <DataProvider>

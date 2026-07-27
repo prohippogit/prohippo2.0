@@ -3,7 +3,7 @@ import React from "react";
 import { Icon } from "./shared";
 import { useAuth } from "./auth";
 import { AUTH_METHODS } from "./authConfig";
-import OtpInput from "./OtpInput";
+import OtpInput from "./components/auth/OtpInput";
 
 function BrandMark({ height = 88 }) {
   return <img src="/prohippo-logo.png" alt="ProHippo" style={{ height, width: "auto" }} />;
@@ -35,14 +35,31 @@ function maskTarget(channel, target) {
   return target;
 }
 
-export default function Login({ onBack }) {
+export default function Login({ onBack, onHold }) {
   const { signInWithGoogle, requestOtp, verifyOtp, otpPending, resetOtp, error, clearError } = useAuth();
 
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");
-  const [code, setCode] = React.useState("");
-  const [busy, setBusy] = React.useState(false); // sending or verifying
+  const [busy, setBusy] = React.useState(false); // sending or resending a code
   const [cooldown, setCooldown] = React.useState(0);
+  const [otpStatus, setOtpStatus] = React.useState("idle"); // idle | verifying | success | error
+  const [resendNonce, setResendNonce] = React.useState(0); // remounts OtpInput on a resend
+
+  // Local snapshot of the pending challenge, set when a code is sent. The auth
+  // context nulls `otpPending` the moment sign-in lands (auth.jsx,
+  // onAuthStateChanged), which would collapse this step out from under the
+  // success animation. Rendering from a copy keeps the code screen up until
+  // OtpInput says it has settled. Seeded from the context so returning to this
+  // screen with a challenge still open lands back on the code step.
+  const [otpView, setOtpView] = React.useState(otpPending);
+
+  // Latest auth API, latched so the OtpInput callbacks below can stay
+  // referentially stable (see the comment on submitCode).
+  const authRef = React.useRef(null);
+  React.useEffect(() => { authRef.current = { verifyOtp, clearError }; });
+
+  const errorTimer = React.useRef(0);
+  React.useEffect(() => () => clearTimeout(errorTimer.current), []);
 
   // Resend countdown tick.
   React.useEffect(() => {
@@ -51,11 +68,15 @@ export default function Login({ onBack }) {
     return () => clearTimeout(t);
   }, [cooldown]);
 
+  // Both senders pass an already-normalised target so the local snapshot below
+  // matches exactly what auth.jsx stores as `otpPending` (it applies the same
+  // trim/lowercase itself, so this is a no-op there).
   const sendEmail = async () => {
     if (busy) return;
     setBusy(true);
-    const res = await requestOtp("email", email);
-    if (res) setCooldown(res.cooldownSeconds || 30);
+    const target = email.trim().toLowerCase();
+    const res = await requestOtp("email", target);
+    if (res) { setOtpView({ channel: "email", target }); setCooldown(res.cooldownSeconds || 30); }
     setBusy(false);
   };
 
@@ -64,28 +85,57 @@ export default function Login({ onBack }) {
     const digits = phone.replace(/\D/g, "").slice(-10);
     if (digits.length !== 10) { clearError(); return; }
     setBusy(true);
-    const res = await requestOtp("sms", "+91" + digits);
-    if (res) setCooldown(res.cooldownSeconds || 30);
+    const target = "+91" + digits;
+    const res = await requestOtp("sms", target);
+    if (res) { setOtpView({ channel: "sms", target }); setCooldown(res.cooldownSeconds || 30); }
     setBusy(false);
   };
 
-  const submitCode = async (value) => {
-    if (busy) return;
-    setBusy(true);
-    const ok = await verifyOtp(value ?? code);
-    if (!ok) setCode(""); // clear so the user can retype
-    setBusy(false);
-  };
+  /* ---- OTP verification ----------------------------------------------------
+     These three callbacks are wrapped in useCallback with no changing deps on
+     purpose. OtpInput's status effect lists onChange/onSuccessSettled among its
+     dependencies and clears its pending timers whenever it re-runs, so a fresh
+     function identity would reschedule the 900ms settle and the 620ms error
+     clear. The resend countdown re-renders this component once a second, which
+     would otherwise make both timings drift. */
+
+  const submitCode = React.useCallback(async (value) => {
+    clearTimeout(errorTimer.current); // a paste during the shake must not be undone by it
+    setOtpStatus("verifying");
+    const ok = await authRef.current.verifyOtp(value);
+    if (ok) {
+      // Sign-in has already happened; hold this screen so the merge can play out.
+      onHold?.(true);
+      setOtpStatus("success");
+    } else {
+      setOtpStatus("error");
+      errorTimer.current = setTimeout(() => setOtpStatus("idle"), 700);
+    }
+  }, [onHold]);
+
+  // Only a real keystroke dismisses the error. OtpInput also fires onChange with
+  // "" when it auto-clears after a shake, and the reason the last attempt failed
+  // ("Incorrect code. 3 tries left.") should survive that.
+  const handleOtpChange = React.useCallback((v) => {
+    if (v) authRef.current.clearError();
+  }, []);
+
+  // Navigation, deliberately at the end of the animation rather than at confirm().
+  const handleSuccessSettled = React.useCallback(() => { onHold?.(false); }, [onHold]);
 
   const resend = async () => {
-    if (cooldown > 0 || busy) return;
+    if (cooldown > 0 || busy || otpStatus !== "idle") return;
     setBusy(true);
-    const res = await requestOtp(otpPending.channel, otpPending.target);
-    if (res) setCooldown(res.cooldownSeconds || 30);
+    const res = await requestOtp(otpView.channel, otpView.target);
+    if (res) { setCooldown(res.cooldownSeconds || 30); setResendNonce((n) => n + 1); }
     setBusy(false);
   };
 
-  const backToMethods = () => { resetOtp(); clearError(); setCode(""); setCooldown(0); };
+  const backToMethods = () => {
+    clearTimeout(errorTimer.current);
+    resetOtp(); clearError();
+    setOtpView(null); setOtpStatus("idle"); setCooldown(0);
+  };
 
   // ---- Email OTP block (reused as hero or secondary). Plain render helpers,
   // NOT nested components, so the inputs don't remount (and lose focus) each keystroke.
@@ -143,6 +193,19 @@ export default function Login({ onBack }) {
 
   const smsPrimary = AUTH_METHODS.sms; // when live, SMS is the hero method
 
+  const verified = otpStatus === "success";
+
+  // The two heading states are stacked and crossfaded so the boxes below never
+  // shift while they're mid-merge.
+  const headLayer = (hidden) => ({
+    position: "absolute", inset: 0,
+    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+    transition: "opacity 240ms cubic-bezier(0.23, 1, 0.32, 1), transform 240ms cubic-bezier(0.23, 1, 0.32, 1)",
+    opacity: hidden ? 0 : 1,
+    transform: hidden ? "translateY(-6px)" : "none",
+    pointerEvents: hidden ? "none" : "auto",
+  });
+
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "radial-gradient(1200px 600px at 50% -10%, #EEE9FF 0%, #F7F6FB 45%, #F7F6FB 100%)" }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
@@ -154,48 +217,66 @@ export default function Login({ onBack }) {
         </div>
 
         <div className="card" style={{ padding: 26 }}>
-          {otpPending ? (
+          {otpView ? (
             /* ---------- Step 2: enter the code ---------- */
             <div style={{ textAlign: "center", padding: "4px 0" }}>
-              <div style={{ width: 52, height: 52, borderRadius: 16, background: "var(--p-mint)", color: "#1B8C5C", display: "grid", placeItems: "center", margin: "0 auto 14px" }}>
-                <Icon name={otpPending.channel === "sms" ? "phone" : "mail"} size={24} />
-              </div>
-              <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>Enter your code</div>
-              <div className="muted" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>
-                We sent a 6-digit code to<br />
-                <b style={{ color: "var(--p-text)" }}>{maskTarget(otpPending.channel, otpPending.target)}</b>
+              <div style={{ position: "relative", height: 138 }}>
+                <div style={headLayer(verified)}>
+                  <div style={{ width: 52, height: 52, borderRadius: 16, background: "var(--p-mint)", color: "#1B8C5C", display: "grid", placeItems: "center", marginBottom: 14 }}>
+                    <Icon name={otpView.channel === "sms" ? "phone" : "mail"} size={24} />
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>
+                    {otpView.channel === "sms" ? "Verify your number" : "Verify your email"}
+                  </div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>
+                    We sent a 6-digit code to<br />
+                    <b style={{ color: "var(--p-text)" }}>{maskTarget(otpView.channel, otpView.target)}</b>
+                  </div>
+                </div>
+
+                <div style={headLayer(!verified)}>
+                  <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>Verified</div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>
+                    Taking you to your practice.
+                  </div>
+                </div>
               </div>
 
-              <div style={{ margin: "20px 0 6px" }}>
-                <OtpInput
-                  value={code}
-                  disabled={busy}
-                  onChange={(v) => { setCode(v); if (error) clearError(); }}
-                  onComplete={(v) => submitCode(v)}
-                />
-              </div>
+              {/* No submit button: six digits verify on their own. */}
+              <OtpInput
+                key={resendNonce}
+                length={6}
+                status={otpStatus}
+                onComplete={submitCode}
+                onChange={handleOtpChange}
+                onSuccessSettled={handleSuccessSettled}
+              />
 
-              <button
-                className="btn btn-primary"
-                style={{ width: "100%", justifyContent: "center", height: 44, marginTop: 14, opacity: busy || code.length < 6 ? 0.7 : 1 }}
-                disabled={busy || code.length < 6}
-                onClick={() => submitCode()}
+              <div
+                className="muted"
+                style={{ fontSize: 12.5, marginTop: 12, transition: "opacity 200ms ease", opacity: verified ? 0.35 : 1 }}
               >
-                {busy ? "Verifying…" : "Verify & sign in"}
-              </button>
-
-              <div className="muted" style={{ fontSize: 12.5, marginTop: 16 }}>
                 Didn't get it?{" "}
                 {cooldown > 0 ? (
                   <span>Resend in {cooldown}s</span>
                 ) : (
-                  <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={resend} disabled={busy}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: "2px 6px" }}
+                    onClick={resend}
+                    disabled={busy || otpStatus !== "idle"}
+                  >
                     Resend code
                   </button>
                 )}
               </div>
 
-              <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={backToMethods}>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ marginTop: 6, transition: "opacity 200ms ease", opacity: verified ? 0 : 1, pointerEvents: verified ? "none" : "auto" }}
+                onClick={backToMethods}
+                disabled={verified}
+              >
                 Use a different method
               </button>
             </div>

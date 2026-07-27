@@ -1,0 +1,282 @@
+.otp {
+  --otp-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --otp-ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --otp-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* ProHippo palette (see :root in app.css). Only these values were changed
+     from the reference; the keyframes, easings, delays and geometry below are
+     the motion contract and are untouched. */
+  --otp-box: var(--p-card-tint, #f8f6ff);
+  --otp-box-edge: var(--p-line-2, #efedf7);
+  --otp-ink: var(--p-text, #14132b);
+  --otp-accent: var(--p-primary, #6c5ce7);
+  --otp-accent-dim: rgba(108, 92, 231, 0.16);
+  --otp-ok: var(--p-success, #20b978);
+  --otp-ok-dim: rgba(32, 185, 120, 0.18);
+  --otp-ok-glow: rgba(32, 185, 120, 0.4);
+  --otp-bad: var(--p-danger, #ee5a5a);
+
+  --otp-box-w: 46px;
+  --otp-box-h: 56px;
+  --otp-gap: 10px;
+}
+
+.otp__stage {
+  position: relative;
+  height: calc(var(--otp-box-h) + 26px);
+}
+
+.otp__boxes {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--otp-gap);
+  cursor: text;
+}
+
+.otp__box {
+  position: relative;
+  width: var(--otp-box-w);
+  height: var(--otp-box-h);
+  border-radius: 13px;
+  background: var(--otp-box);
+  border: 1.5px solid var(--otp-box-edge);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--otp-ink);
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 180ms var(--otp-ease-out),
+    opacity 160ms var(--otp-ease-out);
+}
+
+.otp__box[data-filled='true'] {
+  border-color: var(--otp-accent);
+}
+
+.otp__box[data-active='true'] {
+  border-color: var(--otp-accent);
+  box-shadow: 0 0 0 3.5px var(--otp-accent-dim);
+  transform: scale(1.04);
+}
+
+.otp__box[data-error='true'] {
+  border-color: var(--otp-bad);
+}
+
+.otp__digit {
+  display: block;
+  animation: otp-pop 200ms var(--otp-ease-pop) both;
+}
+
+@keyframes otp-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.72) translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.otp__caret {
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
+  background: var(--otp-accent);
+  animation: otp-blink 1.1s step-end infinite;
+}
+
+@keyframes otp-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.otp__boxes[data-verifying='true'] .otp__box {
+  animation: otp-breathe 1.1s ease-in-out infinite;
+}
+
+@keyframes otp-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.otp__boxes[data-shake='true'] {
+  animation: otp-shake 420ms var(--otp-ease-in-out);
+}
+
+@keyframes otp-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-7px);
+  }
+  30% {
+    transform: translateX(6px);
+  }
+  45% {
+    transform: translateX(-4px);
+  }
+  60% {
+    transform: translateX(3px);
+  }
+  80% {
+    transform: translateX(-1px);
+  }
+}
+
+.otp__boxes[data-merge='true'] .otp__box {
+  animation: none;
+  transform: translateX(var(--otp-dx));
+  transition:
+    transform 340ms var(--otp-ease-in-out),
+    opacity 140ms var(--otp-ease-out) 190ms,
+    border-color 220ms ease 230ms,
+    box-shadow 220ms ease 230ms;
+}
+
+.otp__boxes[data-merge='true'] .otp__box:not([data-survivor='true']) {
+  opacity: 0;
+}
+
+.otp__boxes[data-merge='true'] .otp__box[data-survivor='true'] {
+  border-color: var(--otp-ok);
+  box-shadow: 0 0 22px var(--otp-ok-glow);
+}
+
+.otp__boxes[data-merge='true'] .otp__digit {
+  opacity: 0;
+  transition: opacity 110ms var(--otp-ease-out);
+}
+
+.otp__glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 190px;
+  height: 190px;
+  margin: -95px 0 0 -95px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--otp-ok-dim) 0%, rgba(32, 185, 120, 0) 68%);
+  animation: otp-bloom 720ms var(--otp-ease-out) both;
+}
+
+@keyframes otp-bloom {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+}
+
+.otp__tick {
+  stroke: var(--otp-ok);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: otp-draw 300ms var(--otp-ease-out) forwards;
+}
+
+@keyframes otp-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.otp__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 16px;
+  caret-color: transparent;
+  cursor: text;
+}
+
+.otp__error {
+  animation: otp-fade 200ms var(--otp-ease-out) both;
+}
+
+@keyframes otp-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp *,
+  .otp *::before,
+  .otp *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 140ms !important;
+  }
+  .otp__box[data-active='true'] {
+    transform: none;
+  }
+  .otp__boxes[data-shake='true'] {
+    animation: none;
+  }
+  .otp__boxes[data-merge='true'] .otp__box {
+    transform: none;
+  }
+  .otp__tick {
+    stroke-dashoffset: 0;
+  }
+  .otp__caret {
+    animation: none;
+  }
+}
+
+/* Narrow handsets. Six boxes need 6*46 + 5*10 = 326px, but the login card's
+   interior is ~268px on a 360px screen, so the row clipped on every phone.
+   Scaling the stage shrinks the boxes AND their merge travel by the same
+   factor, so all six still land on one point — the alternative (shrinking
+   --otp-box-w) would desync the px offsets the component sets on --otp-dx.
+   The hidden input's COMPUTED font-size stays 16px under a transform, so this
+   does not reintroduce iOS zoom-on-focus. */
+@media (max-width: 400px) {
+  .otp__stage {
+    height: calc((var(--otp-box-h) + 26px) * 0.8);
+    transform: scale(0.8);
+    transform-origin: center;
+  }
+}

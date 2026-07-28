@@ -163,10 +163,13 @@ against what's already on the list.
 
 ## Setup (one-time)
 
-There is a deliberate ordering here. DNS verification is the slow part, so it
-goes first; and the webhook has a chicken-and-egg (you need the deployed URL to
-create the webhook, but you need its signing secret to deploy) which step 2
-breaks with a placeholder.
+**There is no DNS step.** Client mail goes out from `notices@prohippo.in`, the
+domain already verified in Resend for the login OTPs, so nothing new needs
+verifying and nothing new costs money.
+
+The remaining work is the webhook, which has a chicken-and-egg — you need the
+deployed URL to create the webhook, but you need its signing secret in order to
+deploy — that step 1 breaks with a placeholder.
 
 Everything below assumes the Firebase CLI is installed and signed in:
 
@@ -176,32 +179,25 @@ firebase login
 firebase use prohippo2
 ```
 
-### Step 1 — Verify `send.prohippo.in` in Resend
+### On the sending domain
 
-Client mail goes out from a **subdomain**, not the bare domain.
+Best practice is a dedicated subdomain (`send.prohippo.in`) so a spam complaint
+on a client email can't dent sign-in deliverability. **Resend's free plan allows
+one verified domain**, and `prohippo.in` is already it — a second is a paid
+upgrade.
 
-> ⚠️ `login@prohippo.in` carries the sign-in OTPs. If a client marks a document
-> request as spam, that reputation hit must not land on the emails people need
-> in order to get into the product. Keep the two domains separate.
+That upgrade isn't worth it yet. These are solicited emails to the firm's own
+clients who are expecting them, a few per day; the complaint risk that the
+separation protects against is a bulk/cold-outreach risk. Revisit when volume
+grows — switching is one line (`CLIENT_EMAIL_FROM` in `functions/index.js`) plus
+a DNS verification.
 
-1. https://resend.com/domains → **Add Domain**
-2. Enter `send.prohippo.in`, pick a region, **Add**.
-3. Resend shows a set of DNS records (an MX for the return path, a TXT for SPF,
-   and a long TXT for DKIM). Add each one where `prohippo.in`'s DNS is managed.
-4. Wait for the status to go **Verified** (usually minutes, up to a few hours).
+> **Shared quota:** document requests and login OTPs now draw on the same Resend
+> allowance (free plan: 3,000/month, 100/day). Fine for a small practice, but
+> it's a shared budget — a burst of client emails eats into the headroom your
+> sign-in emails need.
 
-> **The one thing people get wrong:** most DNS panels auto-append the root
-> domain to whatever you type in the *Name* / *Host* field. If Resend says the
-> record name is `send.prohippo.in`, you usually type just `send`; if it says
-> `resend._domainkey.send.prohippo.in`, you type `resend._domainkey.send`.
-> Typing the full name in a panel that auto-appends produces
-> `send.prohippo.in.prohippo.in`, which never verifies. Check what your existing
-> records look like and match that style.
-
-The From address is `CLIENT_EMAIL_FROM` in `functions/index.js` — change it there
-if you use a different subdomain.
-
-### Step 2 — Create a placeholder webhook secret, then deploy
+### Step 1 — Create a placeholder webhook secret, then deploy
 
 The deploy fails (or stops to prompt) if a secret the code references doesn't
 exist yet, so create it before deploying:
@@ -229,10 +225,10 @@ If it scrolls past, get it back with `firebase functions:list`.
 `resendWebhook` deploys to `asia-south1` only — Resend calls one fixed URL, and
 unlike the callables there is no older client pinned to `us-central1`.
 
-### Step 3 — Create the webhook, then set the real secret
+### Step 2 — Create the webhook, then set the real secret
 
 1. https://resend.com/webhooks → **Add Webhook**
-2. Paste the URL from step 2.
+2. Paste the URL from step 1.
 3. Subscribe to: `email.sent`, `email.delivered`, `email.delivery_delayed`,
    `email.opened`, `email.bounced`, `email.complained`.
 4. **Add**, then open the webhook and copy its **Signing Secret** (`whsec_…`).
@@ -248,7 +244,7 @@ firebase deploy --only functions:resendWebhook
 > value take effect. Until it does, the webhook rejects everything with 401 —
 > sending still works, statuses just stay at `Queued`.
 
-### Step 4 — Get the UI live
+### Step 3 — Get the UI live
 
 Hosting auto-deploys only from the default branch
 (`claude/keen-ride-FlIY1`, see `.github/workflows/firebase-deploy.yml`). Merge
@@ -259,7 +255,7 @@ hosting deploy.
 
 1. Open an assessee whose **email is one you can read** (your own is ideal).
 2. **Communications → Document request** → pick them, add an item, **Send email**.
-3. The mail arrives from `notices@send.prohippo.in`; replying to it should
+3. The mail arrives from `notices@prohippo.in`; replying to it should
    address your own account email.
 4. Back in **Communications → Message log**, the row starts at `Queued` and
    should reach `Delivered` within seconds, then `Opened` once you open it. If
@@ -269,8 +265,8 @@ hosting deploy.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Send fails, "couldn't send the email right now" | Domain not verified yet, or `RESEND_API_KEY` missing | Check the domain is **Verified**; check Functions logs for the Resend status code |
-| Status stuck at `Queued` | Webhook not reaching the function, or still on the placeholder secret | Resend → the webhook → its delivery attempts. `401` = secret mismatch, redo step 3's redeploy |
+| Send fails, "couldn't send the email right now" | `RESEND_API_KEY` missing, or the monthly/daily Resend allowance is spent | Check Functions logs for the Resend status code; check usage at resend.com |
+| Status stuck at `Queued` | Webhook not reaching the function, or still on the placeholder secret | Resend → the webhook → its delivery attempts. `401` = secret mismatch, redo step 2's redeploy |
 | Resend shows `403` on the webhook | Function not publicly invokable | Cloud Run → `resendwebhook` → Security → allow unauthenticated invocations |
 | "No valid email address on file" | The assessee record has no email | Add one on their profile — the recipient is read server-side from that record, never from the browser |
 
@@ -314,6 +310,9 @@ Storage with the Admin SDK. Keep the total under ~10 MB.
 
 ## Known limits
 
+- **Shared sending domain and quota.** Client mail and login OTPs both go out
+  from `prohippo.in` and draw on the same Resend allowance. A deliberate
+  cost trade-off, not an oversight — see "On the sending domain" above.
 - **wa.me URL length.** A long checklist produces a long URL. WhatsApp handles
   it, but some browsers truncate around 2 000 characters. Phase 3's link + PDF
   approach removes this.

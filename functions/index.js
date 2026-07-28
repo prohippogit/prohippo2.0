@@ -1518,11 +1518,20 @@ exports.revokeDeviceKey = onCall(DEVICE_OPTS, async (request) => {
    their inbox, not in a black hole.
    ============================================================ */
 
-// Client mail goes out on a SUBDOMAIN, kept separate from login@prohippo.in.
-// A client marking a document request as spam must never dent the deliverability
-// of the emails people need in order to sign in. Verify send.prohippo.in in the
-// Resend dashboard (its own DKIM/SPF records) before this will deliver.
-const CLIENT_EMAIL_FROM = "ProHippo <notices@send.prohippo.in>";
+/* Client mail goes out on the SAME verified domain as the login OTPs.
+ *
+ * Best practice is a separate subdomain (send.prohippo.in), so that a client
+ * marking a document request as spam can't dent the deliverability of the
+ * emails people need in order to sign in. Resend's free plan allows only ONE
+ * verified domain, though, and prohippo.in is already it — a second domain is a
+ * paid upgrade that isn't worth it at this volume.
+ *
+ * The risk of sharing is low here: these are solicited emails to the firm's own
+ * clients, who are expecting them, at a few per day. This is not cold outreach.
+ * If deliverability ever wobbles, moving to a subdomain is this one line plus a
+ * DNS verification.
+ */
+const CLIENT_EMAIL_FROM = "ProHippo <notices@prohippo.in>";
 
 // Per-user send caps. A practising firm sends a handful of these a day; these
 // bounds are far above normal use and exist purely so a bug or a stolen session

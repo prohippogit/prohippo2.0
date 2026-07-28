@@ -1914,3 +1914,22 @@ exports.resendWebhook = onRequest(
     res.status(200).send("ok");
   }
 );
+
+/* ---------- Google Calendar sync ----------
+   Lives in its own module — it is a self-contained feature with its own OAuth
+   flow, and this file is long enough. The region constants, the Firestore
+   handle and the at-rest encryption helpers are passed in rather than
+   redefined there, so there is still exactly one definition of each.
+   Setup: docs/GOOGLE_CALENDAR_SETUP.md */
+Object.assign(
+  exports,
+  require("./googleCalendar").build({
+    REGIONS,
+    PRIMARY_REGION,
+    TRIGGER_REGION,
+    db,
+    credentialEncKey,
+    encryptSecret,
+    decryptSecret,
+  })
+);

@@ -13,6 +13,8 @@ import Login from './Login';
 import Landing from './Landing';
 import Onboarding from './Onboarding';
 import ConnectorDownload from './ConnectorDownload';
+import { useCalendarReturn } from './googleCalendar';
+import { CalendarDeadlineMirror } from './CalendarDeadlineMirror';
 
 function Splash({ label = "Loading your practice…" }) {
   return (
@@ -27,7 +29,7 @@ function Splash({ label = "Loading your practice…" }) {
 }
 
 function Shell() {
-  const { data, toast } = useData();
+  const { data, toast, notify } = useData();
   const { user } = useAuth();
   const [route, setRoute] = React.useState("dashboard");
   const [linkDismissed, setLinkDismissed] = React.useState(false);
@@ -46,6 +48,14 @@ function Shell() {
   };
 
   const openReview = (notice) => setReviewNotice(notice || {});
+
+  /* Google sends the user back to the app root after consent. Report how it
+     went, and put them on Settings — that's where the switches they just
+     unlocked live, and where a failure has to be fixed. */
+  useCalendarReturn(React.useCallback((result) => {
+    notify(result.message, result.icon);
+    if (result.outcome !== "cancelled") setRoute("settings");
+  }, [notify]));
 
   const handleSearch = (q) => {
     setAssesseeQuery(q);
@@ -113,7 +123,7 @@ function Shell() {
       case "dashboard": content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>; break;
       case "assessees": content = <Assessees onOpen={(a) => { setProfileFocus(null); setOpenAssesseeId(a.id); }} initialSearch={assesseeQuery}/>; break;
       case "matters": content = <Matters onOpenMatter={openMatterInProfile}/>; break;
-      case "hearings": content = <Hearings onOpenHearing={openHearingInProfile}/>; break;
+      case "hearings": content = <Hearings onOpenHearing={openHearingInProfile} onNav={handleNav}/>; break;
       case "appeals": content = <Appeals onOpenNotice={openReview}/>; break;
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
@@ -127,6 +137,7 @@ function Shell() {
 
   return (
     <div className="app">
+      <CalendarDeadlineMirror/>
       <div className="mobile-topbar">
         <img src="/prohippo-logo.png" alt="ProHippo" style={{height: 34, width: "auto"}}/>
       </div>

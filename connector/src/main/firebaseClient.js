@@ -58,26 +58,36 @@ function init() {
 }
 
 const normEmail = (v) => String(v || "").trim().toLowerCase();
+// The backend expects E.164; the web app normalises the same way (Login.jsx).
+const normPhone = (v) => "+91" + String(v || "").replace(/\D/g, "").slice(-10);
+const normTarget = (channel, v) => (channel === "sms" ? normPhone(v) : normEmail(v));
 
-// Email OTP step 1 — ask the backend to email a 6-digit code.
-async function requestEmailOtp(email) {
+/* OTP sign-in, on either channel.
+ *
+ * The callables have supported channel: "sms" since SMS login shipped on the
+ * web; the connector was simply still hard-coding "email", so someone who signs
+ * in to the web app by mobile had no way in here. Nothing server-side changes. */
+async function requestOtp(channel, target) {
   init();
-  const { data } = await httpsCallable(functions, "requestOtp")({ channel: "email", target: normEmail(email) });
+  const { data } = await httpsCallable(functions, "requestOtp")({
+    channel,
+    target: normTarget(channel, target),
+  });
   return data || { ok: true };
 }
 
-// Email OTP step 2 — verify the code, then sign in with the returned custom token.
-async function verifyEmailOtp(email, code) {
+// Verify the code, then sign in with the returned custom token.
+async function verifyOtp(channel, target, code) {
   init();
   const { data } = await httpsCallable(functions, "verifyOtp")({
-    channel: "email",
-    target: normEmail(email),
+    channel,
+    target: normTarget(channel, target),
     code: String(code || "").replace(/\D/g, ""),
   });
   if (!data || !data.token) throw new Error("Could not verify the code. Please try again.");
   const res = await signInWithCustomToken(auth, data.token);
   await rememberThisDevice();
-  return { uid: res.user.uid, email: res.user.email };
+  return userInfo(res.user);
 }
 
 // Ask the backend for a device key and stash it in the OS keychain, so the next
@@ -104,7 +114,7 @@ async function signInSilently() {
     const { data } = await httpsCallable(functions, "redeemDeviceKey")({ deviceKey: key });
     if (!data || !data.token) throw new Error("no token");
     const res = await signInWithCustomToken(auth, data.token);
-    return { uid: res.user.uid, email: res.user.email };
+    return userInfo(res.user);
   } catch (err) {
     // The server tells us nothing more specific than "sign in again" by design.
     // A dead key is worthless, so stop carrying it around.
@@ -123,7 +133,7 @@ async function signInWithGoogleIdToken(idToken) {
   const cred = GoogleAuthProvider.credential(idToken);
   const res = await signInWithCredential(auth, cred);
   await rememberThisDevice();
-  return { uid: res.user.uid, email: res.user.email };
+  return userInfo(res.user);
 }
 
 // Sign out, and mean it: revoke the device key server-side so a surviving copy on
@@ -147,10 +157,20 @@ async function signOutUser() {
   if (auth) await signOut(auth);
 }
 
+/* What the UI shows for "signed in as". A phone-only account has no email, so
+   the header would have gone blank once SMS sign-in was allowed here. */
+function userInfo(u) {
+  if (!u) return null;
+  return {
+    uid: u.uid,
+    email: u.email || "",
+    phoneNumber: u.phoneNumber || "",
+    label: u.email || u.phoneNumber || "Signed in",
+  };
+}
+
 function currentUser() {
-  return auth && auth.currentUser
-    ? { uid: auth.currentUser.uid, email: auth.currentUser.email }
-    : null;
+  return auth && auth.currentUser ? userInfo(auth.currentUser) : null;
 }
 
 // The signed-in user's uid, or null. Used to build per-user Storage paths, the
@@ -193,6 +213,12 @@ async function listPortalAssessees() {
       name: a.name || a.pan || d.id,
       pan: a.pan || "",
       portalUserId: a.portalUserId || a.pan || "",
+      // Carried for the connector's search and filters. Free — the document is
+      // already being read; without them the list can only be scrolled.
+      group: a.group || "",
+      staff: a.staff || "",
+      status: a.status || "",
+      lastSyncedAt: a.portalNoticeSyncedAt || "",
     };
   });
 }
@@ -266,8 +292,8 @@ async function getSyncKnowns(pan) {
 
 module.exports = {
   init,
-  requestEmailOtp,
-  verifyEmailOtp,
+  requestOtp,
+  verifyOtp,
   signInWithGoogleIdToken,
   signInSilently,
   signOutUser,

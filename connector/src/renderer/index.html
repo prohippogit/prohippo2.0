@@ -43,22 +43,25 @@
       <h2>Sign in to continue</h2>
       <p class="muted">Same account as the web app. Used only to fetch your stored portal logins and push data back.</p>
       <button id="googleBtn" class="google">Sign in with Google</button>
-      <div class="divider"><span>or with email</span></div>
+      <div class="divider"><span>or with a one-time code</span></div>
 
-      <!-- Step 1: request a code -->
+      <!-- Step 1: request a code. One field takes either a mobile number or an
+           email, exactly like the web app — the channel is detected from what
+           is typed rather than made the user's problem. -->
       <div id="otpRequest">
-        <input id="email" type="email" placeholder="you@firm.in" autocomplete="username" />
-        <button id="sendCodeBtn" class="primary block">Email me a code</button>
+        <input id="identifier" type="text" placeholder="Mobile number or email" autocomplete="username" />
+        <button id="sendCodeBtn" class="primary block">Send me a code</button>
+        <p class="muted hint">We'll text a 10-digit Indian mobile, or email an address.</p>
       </div>
 
       <!-- Step 2: enter the code (shown after a code is sent) -->
       <div id="otpVerify" class="hidden">
-        <p class="muted otp-sent">We emailed a 6-digit code to <b id="otpEmail"></b>.</p>
+        <p class="muted otp-sent">We sent a 6-digit code to <b id="otpTarget"></b>.</p>
         <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit code" autocomplete="one-time-code" />
         <button id="verifyBtn" class="primary block">Verify &amp; sign in</button>
         <div class="otp-actions">
           <button id="resendBtn" class="linkbtn" disabled>Resend code</button>
-          <button id="changeEmailBtn" class="linkbtn">Use a different email</button>
+          <button id="changeTargetBtn" class="linkbtn">Use a different number/email</button>
         </div>
       </div>
 
@@ -89,6 +92,25 @@
     </div>
     <p class="muted note">Up to 5 PANs sync at once, each in its own isolated browser session, started a few seconds apart. Every step is randomly paced to stay within safe, human-like limits on your home connection.</p>
 
+    <!-- Find one assessee among hundreds without scrolling. -->
+    <div class="filters">
+      <div class="srch">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" type="search" placeholder="Search name or PAN…" autocomplete="off" />
+      </div>
+      <select id="fGroup" class="fsel" title="Filter by group"><option value="">All groups</option></select>
+      <select id="fStaff" class="fsel" title="Filter by assigned staff"><option value="">All staff</option></select>
+      <select id="fState" class="fsel" title="Filter by this run's outcome">
+        <option value="">Any status</option>
+        <option value="pending">Not synced yet</option>
+        <option value="success">Done</option>
+        <option value="error">Failed</option>
+        <option value="never">Never synced before</option>
+      </select>
+      <button id="clearFilters" class="ghost sm hidden">Clear</button>
+      <span id="filterCount" class="sel-count"></span>
+    </div>
+
     <div class="list" id="list">
       <div class="lhead">
         <label class="cbx"><input type="checkbox" id="selAll" /></label>
@@ -99,6 +121,22 @@
       <div id="rows"></div>
     </div>
   </section>
+
+  <!-- Shown when a sync run finishes, so a run left in the background doesn't
+       end silently and get mistaken for still-running. -->
+  <div id="doneOverlay" class="overlay hidden">
+    <div class="donecard">
+      <div id="doneIcon" class="doneicon">✓</div>
+      <h3 id="doneTitle">Sync finished</h3>
+      <p id="doneSub" class="muted"></p>
+      <div id="doneStats" class="donestats"></div>
+      <div id="doneList" class="donelist"></div>
+      <div class="doneactions">
+        <button id="doneRetryBtn" class="ghost hidden">Select the failed ones</button>
+        <button id="doneCloseBtn" class="primary">Close</button>
+      </div>
+    </div>
+  </div>
 
   <script src="renderer.js"></script>
 </body>

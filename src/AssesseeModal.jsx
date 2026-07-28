@@ -19,6 +19,14 @@ const STATE_CODES = {"1":"Andaman And Nicobar Islands","2":"Andhra Pradesh","3":
 
 const MONTHS = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
 
+/* Correlates a "fetch master data" request with the reply the extension streams
+   back, so a stale reply can't fill the form for a PAN the user has since
+   changed. Module-level, so two open modals can't mint the same ref — and a
+   plain counter beats the timestamp+random it replaces, which could collide
+   inside a single millisecond. */
+let clientRefSeq = 0;
+const nextClientRef = () => `cr-${++clientRefSeq}`;
+
 // The portal's 4th PAN character encodes the holder type.
 function entityFromPan(pan) {
   const p = (pan || "").toUpperCase();
@@ -114,11 +122,17 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
     return off;
   }, [applyMaster]);
 
+  /* Consent gates the FETCH, not just storage. Fetching hands the client's
+     e-filing password to the browser extension, which signs into the portal as
+     them and pulls their master data — that is the act needing authorisation.
+     Gating only the "save the password" step, as before, let the sensitive part
+     happen with nothing ticked. */
   const fetchMaster = async () => {
     if (fetching) return;
     if (!PAN_RE.test(pan)) { notify("Enter a valid PAN first.", "alert"); return; }
     if (!portalPassword.trim()) { notify("Enter the portal password to fetch.", "alert"); return; }
-    const ref = "cr-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+    if (!portalConsent) { notify("Tick the authorisation box before fetching from the portal.", "alert"); return; }
+    const ref = nextClientRef();
     clientRef.current = ref;
     setFetching(true);
     try {
@@ -131,6 +145,8 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
       setFetching(false);
     }
   };
+
+  const canFetch = PAN_RE.test(pan) && Boolean(portalPassword.trim()) && portalConsent && !fetching;
 
   const save = async () => {
     if (!valid || busy || savingRef.current) return;
@@ -149,7 +165,12 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         assesseeId = saved.id;
       }
 
-      // Store the portal password if one was entered this time.
+      /* Store the portal password if one was entered this time.
+         Only ONE notify survives — the toast is a single slot, so a warning
+         raised here used to be wiped out by the success message below and the
+         user was told "added" while the password was silently dropped. Every
+         outcome is folded into one message instead. */
+      let credNote = "";
       if (portalPassword.trim() && portalConsent) {
         try {
           await httpsCallable(functions, "savePortalCredential")({
@@ -159,13 +180,14 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
           });
         } catch (e) {
           console.error("savePortalCredential failed", e);
-          notify("Assessee saved, but the portal login couldn't be stored.", "alert");
+          credNote = " — but the portal login couldn't be stored";
         }
       } else if (portalPassword.trim() && !portalConsent) {
-        notify("Tick the consent box to store the portal password.", "alert");
+        credNote = " — portal login NOT saved (consent box not ticked)";
       }
 
-      notify(initial?.id ? `${rec.name} updated` : `${rec.name} added`);
+      const what = initial?.id ? `${rec.name} updated` : `${rec.name} added`;
+      notify(what + credNote, credNote ? "alert" : "check");
       onSaved?.(saved);
       onClose();
     } finally {
@@ -216,16 +238,42 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         <div className="form-grid" style={{marginBottom: 10}}>
           <FormField label="PAN" required>
             <TextInput value={form.pan} onChange={onPan} placeholder="ABCPS1234F" mono/>
-            {duplicate && <div style={{fontSize: 11.5, color: "var(--p-danger)", marginTop: 4}}>Already added as “{dupAssessee.name || dupAssessee.pan}”.</div>}
           </FormField>
           <FormField label="Portal password">
             <TextInput value={portalPassword} onChange={setPortalPassword} type="password" placeholder="••••••••"/>
           </FormField>
         </div>
-        <div className="row" style={{gap: 8, flexWrap: "wrap"}}>
-          <button className="btn btn-primary btn-sm" disabled={fetching} onClick={fetchMaster}>
+
+        {/* The authorisation gate sits ABOVE the button it governs — a consent
+            box below the action it permits is a box nobody reads. */}
+        {portalPassword.trim() && (
+          <label className="center" style={{gap: 8, marginBottom: 10, fontSize: 11.5, cursor: "pointer", alignItems: "flex-start"}}>
+            <input type="checkbox" checked={portalConsent} onChange={e => setPortalConsent(e.target.checked)} style={{marginTop: 2}}/>
+            <span className="muted">I confirm the assessee has authorised ProHippo to sign in to their income-tax portal account for compliance work, and to store the login encrypted for future one-click syncs.</span>
+          </label>
+        )}
+
+        <div className="row" style={{gap: 8, flexWrap: "wrap", alignItems: "center"}}>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={!canFetch}
+            style={{opacity: canFetch ? 1 : 0.5}}
+            title={
+              fetching ? "Fetching…"
+                : !PAN_RE.test(pan) ? "Enter a valid PAN first"
+                  : !portalPassword.trim() ? "Enter the portal password to fetch"
+                    : !portalConsent ? "Tick the authorisation box above before fetching"
+                      : "Sign in to the portal and pull this assessee's master data"
+            }
+            onClick={fetchMaster}
+          >
             <Icon name="download" size={13}/>{fetching ? "Fetching…" : "Fetch master data"}
           </button>
+          {portalPassword.trim() && !portalConsent && !fetching && (
+            <span className="center" style={{gap: 5, fontSize: 11.5, color: "#B07512"}}>
+              <Icon name="alert" size={12}/>Tick the box above to enable
+            </span>
+          )}
         </div>
         <div className="muted" style={{fontSize: 11, marginTop: 8}}>
           Fetches name, date of birth, address, mobile, email and jurisdiction / Assessing Officer. Anything the portal doesn't return, just fill in manually.
@@ -238,13 +286,35 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
             <button className="btn btn-ghost btn-xs" onClick={removePortalLogin}><Icon name="trash" size={12}/>Remove</button>
           </div>
         )}
-        {portalPassword.trim() && (
-          <label className="center" style={{gap: 8, marginTop: 12, fontSize: 11.5, cursor: "pointer", alignItems: "flex-start"}}>
-            <input type="checkbox" checked={portalConsent} onChange={e => setPortalConsent(e.target.checked)} style={{marginTop: 2}}/>
-            <span className="muted">I confirm the assessee has authorised storing their income-tax portal login for compliance work, and that ProHippo will store it encrypted. (Needed only to save the login for future one-click syncs.)</span>
-          </label>
-        )}
       </div>
+
+      {/* A blocked save needs to say WHO it clashes with, not just that it
+          clashes — otherwise someone who added this assessee minutes ago has no
+          way to tell it is the same record and tries again. */}
+      {duplicate && (
+        <div style={{padding: "12px 14px", background: "#FFF3F3", border: "1px solid var(--p-danger)", borderRadius: 12, marginBottom: 16}}>
+          <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
+            <div style={{width: 30, height: 30, borderRadius: 10, background: "white", color: "var(--p-danger)", display: "grid", placeItems: "center", flexShrink: 0}}>
+              <Icon name="alert" size={15}/>
+            </div>
+            <div style={{flex: 1, minWidth: 0}}>
+              <div style={{fontWeight: 800, fontSize: 13.5}}>This PAN is already on your list</div>
+              <div style={{fontSize: 12.5, marginTop: 4, lineHeight: 1.5}}>
+                <b>{dupAssessee.name || "—"}</b>
+                <span className="muted" style={{fontFamily: "ui-monospace, monospace"}}> · {dupAssessee.pan}</span>
+                {dupAssessee.status ? <span className="muted"> · {dupAssessee.status}</span> : null}
+                {dupAssessee.group ? <span className="muted"> · {dupAssessee.group}</span> : null}
+                {(dupAssessee.mobile || dupAssessee.email) && (
+                  <div className="muted" style={{marginTop: 2}}>{[dupAssessee.mobile, dupAssessee.email].filter(Boolean).join(" · ")}</div>
+                )}
+              </div>
+              <div className="muted" style={{fontSize: 11.5, marginTop: 7}}>
+                Close this and open that assessee to edit them. A PAN can only appear once — every notice, hearing and invoice hangs off it.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="form-grid">
         <FormField label={lbl("Name", "name")} required full><TextInput value={form.name} onChange={set("name")} placeholder="Assessee name"/></FormField>

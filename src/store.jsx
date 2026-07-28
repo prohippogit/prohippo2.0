@@ -685,6 +685,21 @@ export const openDocRequests = (data) =>
 export const draftDocRequests = (data) =>
   (data.docRequests || []).filter((r) => (r.status || "draft") === "draft");
 
+/* The date a notice is actually working towards. A hearing beats a compliance
+   deadline when both are set — that's the one that can't be moved. */
+export const noticeDeadline = (n) => n?.hearingDate || n?.responseDueDate || "";
+
+/* A notice is "live" while its deadline is still ahead. Used to decide whether
+   to shout about asking the client for documents. */
+export const noticeIsLive = (n) => {
+  const d = noticeDeadline(n);
+  return Boolean(d) && d >= todayISO();
+};
+
+// The document request already raised off a notice, if any.
+export const docRequestForNotice = (data, noticeId) =>
+  (noticeId ? (data.docRequests || []).find((r) => r.noticeId === noticeId) : null) || null;
+
 export function downloadCSV(filename, headers, rows) {
   const esc = (v) => {
     const s = String(v ?? "");

@@ -6,6 +6,7 @@ import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstan
 import { downloadLedgerPDF } from './ledgerPdf';
 import { MatterModal } from './Other';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
+import { AskDocsButton } from './askForDocuments';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
@@ -927,7 +928,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       {tab === "Notices" && (
         <div className="card" style={{padding: 0}}>
           <table className="tbl">
-            <thead><tr><th>DIN</th><th>AY</th><th>Section</th><th>Authority</th><th>Date</th><th>Status</th></tr></thead>
+            <thead><tr><th>DIN</th><th>AY</th><th>Section</th><th>Authority</th><th>Date</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {notices.map(n => (
                 <React.Fragment key={n.id}>
@@ -947,16 +948,17 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                     <td>{n.authority}</td>
                     <td className="muted">{n.date ? fmtDateLong(n.date) : "—"}</td>
                     <td><StatusPill status={n.status}/></td>
+                    <td>{!n.isOrder && <div className="center" style={{justifyContent: "flex-end"}}><AskDocsButton notice={n}/></div>}</td>
                   </tr>
                   {(n.responses || []).length > 0 && (
                     <tr>
                       <td></td>
-                      <td colSpan="5" style={{paddingTop: 0}}><ResponsesBlock responses={n.responses} plain/></td>
+                      <td colSpan="6" style={{paddingTop: 0}}><ResponsesBlock responses={n.responses} plain/></td>
                     </tr>
                   )}
                 </React.Fragment>
               ))}
-              {notices.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No notices for {titleCase(a.name)} yet.</td></tr>}
+              {notices.length === 0 && <tr><td colSpan="7" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No notices for {titleCase(a.name)} yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1618,6 +1620,13 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                           </button>
                         )}
                       </div>
+                      {/* Orders are decided — there is nothing left to ask the
+                          client for. Notices are what call for documents. */}
+                      {!appeal && !n.isOrder && (
+                        <div className="row" style={{justifyContent: "flex-end", marginTop: 8}}>
+                          <AskDocsButton notice={n}/>
+                        </div>
+                      )}
                       {appeal && apAtts.length > 0 && (
                         <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 8}}>
                           {apAtts.map((at, ai) => (

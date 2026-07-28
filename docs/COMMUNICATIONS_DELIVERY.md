@@ -144,16 +144,58 @@ Real WhatsApp delivery is phase 3.
 
 ## Where it plugs into the existing app
 
+### "Ask for documents" — the one action
+
+`<AskDocsButton notice={n}/>` (`src/askForDocuments.jsx`) is self-contained:
+drop it beside a notice anywhere and it handles the whole flow, composer
+included. It **never dead-ends** — whatever state the notice is in, pressing it
+gets you to a composer:
+
+| Notice state | What happens |
+|---|---|
+| A request already exists | Opens it, showing `received/total` — never a silent duplicate |
+| Lists documents | Composer, pre-filled |
+| Has a PDF but no list | Reads the PDF (`extractNoticeDocuments`), then composer |
+| Neither | Composer with the section's presets ready to click |
+
+It appears on notice tiles in proceedings, the Assessee → Notices tab, the
+Notices page, and the Dashboard's awaiting-review list. Orders are excluded —
+an order is decided, there is nothing left to ask the client for.
+
+The button turns **primary** and grows a deadline chip ("Due tomorrow",
+"3 days left") when the notice's hearing or compliance date is within a week.
+Same control everywhere, visually shouting only when it matters — rather than
+disappearing on notices you might still want it for.
+
+### Other entry points
+
 | Entry point | File | What happens |
 |---|---|---|
+| Notice review → "Save & ask client for documents" | `src/Notices.jsx` | Saves the notice and opens the composer over it — parse to sent with no stop in Communications |
 | Notice review → "Draft client document request" toggle | `src/Notices.jsx` | Creates a `docRequest` seeded from `notice.documents[]`, message pre-rendered so it is immediately sendable |
-| Notice review → "Prepare request" button | `src/Notices.jsx` | Opens the composer directly (saved notices only) |
 | Communications → "Document request" | `src/Other.jsx` | Composer with an assessee picker |
 | Assessee → Communications tab | `src/Assessees.jsx` | Per-client requests with progress, plus the message log |
 
-The AI parser already extracts `documents[]` from the notice PDF
-(`EXTRACTION_PROMPT` in `functions/index.js`), so in the common path the
-checklist arrives pre-filled and the practitioner only edits.
+### Two Gemini paths, two jobs
+
+Do not confuse these — they answer different questions about the same PDF:
+
+| Callable | Prompt | Returns | Used by |
+|---|---|---|---|
+| `parseNotice` | `EXTRACTION_PROMPT` | every field, incl. `documents[]` | the upload page, for a notice not yet on file |
+| `summarizePortalNotice` | `summaryPrompt` | additions/disallowances, order metadata | "Parse with AI" on a proceeding tile |
+| `extractNoticeDocuments` | `DOCUMENTS_PROMPT` | `documents[]` + due dates only | "Ask for documents" |
+
+`extractNoticeDocuments` is deliberately narrow. A portal notice already has its
+PAN, AY, section, DIN and dates **from the source system** — those are
+authoritative, and re-reading them with an AI can only make them worse. It
+extracts the one thing genuinely missing, and fills a date only where nothing is
+on file.
+
+> **Why it was needed at all:** `ingestPortalNotice` writes every portal-synced
+> notice with `documents: []`, because the portal's JSON carries no such list —
+> it exists only in the PDF's prose. Without this, the document request had
+> nothing to work from on exactly the notices that arrive automatically.
 
 `src/docRequestPresets.js` adds the items a notice never spells out but a
 practitioner always needs — ordered by the notice's section, and de-duplicated
@@ -278,8 +320,25 @@ hosting deploy.
 |---|---|---|
 | **0** | `docRequests` collection, `assesseeId` links, store CRUD, backfill | **done** |
 | **1** | Composer, drafts list, `sendClientMessage`, delivery webhook | **done** |
+| **A** | `extractNoticeDocuments`, universal "Ask for documents" button, save-&-ask from notice review | **done** |
+| **B** | Dashboard "needs documents" strip; auto-extract on portal sync; request progress on the notice tile | planned |
 | **2** | Checklist PDF via jsPDF, attached to the email; notice PDF attachment | planned |
 | **3** | WhatsApp Cloud API, client upload link, scheduled reminders | planned |
+
+### Phase B notes
+
+- **Auto-extract on sync** means extending `onPortalOrderWritten` (orders only
+  today) to pull the document list for notices as they land, so the checklist is
+  ready before anyone opens the proceeding.
+
+  > ⚠️ This needs a hard gate on `responseDueDate >= today`. Adding a new
+  > assessee pulls in years of notice history — see the comment on
+  > `awaitingNotices` in `store.jsx` — and parsing all of it would fire hundreds
+  > of Gemini calls per new client. Only parse what is still live.
+
+- **Dashboard "needs documents" strip**: notices with a deadline inside N days
+  and no request raised. Pure UI over data that already exists, and it flips the
+  app from "you remember to check" to "the app tells you what to chase".
 
 ### Phase 2 notes
 
@@ -313,6 +372,10 @@ Storage with the Admin SDK. Keep the total under ~10 MB.
 - **Shared sending domain and quota.** Client mail and login OTPs both go out
   from `prohippo.in` and draw on the same Resend allowance. A deliberate
   cost trade-off, not an oversight — see "On the sending domain" above.
+- **Escape closes both modals.** The composer opened from a proceeding card or
+  the awaiting-notices dialog is a modal inside a modal, and `Modal` puts its
+  Escape handler on `window` — so one press closes both. Harmless, but fixing it
+  properly needs a modal stack, which is more than this change warranted.
 - **wa.me URL length.** A long checklist produces a long URL. WhatsApp handles
   it, but some browsers truncate around 2 000 characters. Phase 3's link + PDF
   approach removes this.

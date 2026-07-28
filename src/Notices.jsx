@@ -6,6 +6,7 @@ import { Icon, StatusPill, EmptyState, titleCase, fmtDateLong, daysFromNow } fro
 import { useData, awaitingNotices, todayISO, itemsFromNoticeDocuments, docRequestsOf } from './store';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
 import DocumentRequestComposer from './DocumentRequest';
+import { AskDocsButton } from './askForDocuments';
 import { renderDocRequest, defaultTitle } from './messageTemplates';
 
 // Open a notice's PDF stored in Firebase Storage (portal-synced notices).
@@ -128,6 +129,7 @@ export default function Notices({ onOpenNotice }) {
                   <td><StatusPill status={n.status}/></td>
                   <td onClick={e => e.stopPropagation()}>
                     <div className="center" style={{gap: 4, justifyContent: "flex-end"}}>
+                      {!n.isOrder && <AskDocsButton notice={n}/>}
                       {n.storagePath && (
                         <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={() => openStoragePdf(n.storagePath)}>
                           <Icon name="doc" size={12}/>PDF
@@ -290,7 +292,13 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
     status: "draft",
   }), [linked, notice?.id, edited]);
 
-  const save = async () => {
+  /* `thenCompose` opens the document-request composer over the saved notice
+     instead of drafting it and walking away — the composer is where Send email
+     / WhatsApp live, so this is the whole "notice in, request out" flow without
+     a trip to Communications. In that mode the draft is NOT created here: the
+     composer owns creation, otherwise the toggle and the composer would each
+     make one. */
+  const save = async ({ thenCompose = false } = {}) => {
     if (!valid) return;
     if (dupBlocking) {
       notify("This DIN is already recorded — choose an option in the duplicate notice above", "alert");
@@ -328,7 +336,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
       });
       done.push("Hearing created");
     }
-    if (requestDocs && rec.documents.length > 0) {
+    if (!thenCompose && requestDocs && rec.documents.length > 0) {
       // Render the message now so the draft is immediately sendable from
       // Communications without having to reopen the composer first.
       const seed = { ...requestSeed(noticeId), title: "" };
@@ -347,6 +355,10 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
     const dest = (createHearing && canCreateHearing) ? "hearings"
       : (createMatter && canCreateMatter) ? "matters"
       : null;
+    if (thenCompose) {
+      setComposeSeed({ seed: requestSeed(noticeId), closeAfter: true, dest });
+      return; // the composer opens over this page; leaving happens on its close
+    }
     onSaved(dest);
   };
 
@@ -478,7 +490,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
               <div className="center" style={{gap: 6}}>
                 <span className="pill pill-primary">{edited.documents.length} items</span>
                 {!isNew && linked && edited.documents.length > 0 && (
-                  <button className="btn btn-secondary btn-xs" onClick={() => setComposeSeed(requestSeed())}>
+                  <button className="btn btn-secondary btn-xs" onClick={() => setComposeSeed({ seed: requestSeed() })}>
                     <Icon name="mail" size={12}/>Prepare request
                   </button>
                 )}
@@ -543,10 +555,28 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
             </div>
             <div className="row" style={{gap: 8, marginTop: 18}}>
               <button className="btn btn-secondary" style={{flex: 1, justifyContent: "center"}} onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" disabled={!valid || dupBlocking} title={dupBlocking ? "This DIN is already recorded — choose an option in the duplicate warning above" : ""} style={{flex: 2, justifyContent: "center", opacity: (valid && !dupBlocking) ? 1 : 0.5}} onClick={save}>
+              <button
+                className={`btn ${edited.documents.length > 0 ? "btn-secondary" : "btn-primary"}`}
+                disabled={!valid || dupBlocking}
+                title={dupBlocking ? "This DIN is already recorded — choose an option in the duplicate warning above" : ""}
+                style={{flex: 2, justifyContent: "center", opacity: (valid && !dupBlocking) ? 1 : 0.5}}
+                onClick={() => save()}
+              >
                 <Icon name="check" size={14}/>{isNew ? "Save notice" : "Save changes"}
               </button>
             </div>
+            {/* Straight from a parsed notice to a message the client receives —
+                no stop in Communications to find the draft again. */}
+            {edited.documents.length > 0 && (
+              <button
+                className="btn btn-primary"
+                disabled={!valid || dupBlocking}
+                style={{width: "100%", justifyContent: "center", marginTop: 8, opacity: (valid && !dupBlocking) ? 1 : 0.5}}
+                onClick={() => save({ thenCompose: true })}
+              >
+                <Icon name="mail" size={14}/>Save &amp; ask client for documents
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -559,7 +589,17 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
         />
       )}
 
-      {composeSeed && <DocumentRequestComposer seed={composeSeed} onClose={() => setComposeSeed(null)}/>}
+      {composeSeed && (
+        <DocumentRequestComposer
+          seed={composeSeed.seed}
+          onClose={() => {
+            const after = composeSeed.closeAfter;
+            const dest = composeSeed.dest;
+            setComposeSeed(null);
+            if (after) onSaved(dest);
+          }}
+        />
+      )}
     </div>
   );
 }

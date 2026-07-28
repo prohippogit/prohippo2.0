@@ -11,7 +11,7 @@ import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { functions, storage } from './firebase';
 import { Icon, EmptyState, titleCase, fmtDateLong, fmtINR } from './shared';
 import { useData } from './store';
-import { appealableOrders, checklistFor, appealFee, FEE_SLABS, orderDocType, DOC_TYPE_LABEL } from './appeals';
+import { appealableOrders, checklistFor, appealFee, FEE_SLABS, PENALTY_FEE, orderDocType, DOC_TYPE_LABEL } from './appeals';
 
 // Open an order PDF held in Storage. Same helper the Notices and Assessees
 // pages keep locally — three copies, but importing across page modules to save
@@ -346,7 +346,8 @@ function Workspace({ x, allNotices, onOpenNotice }) {
   const [incomeText, setIncomeText] = React.useState(n.assessedIncome != null ? String(n.assessedIncome) : "");
 
   const income = incomeText.trim() === "" ? null : Number(incomeText.replace(/[^\d]/g, "")) || null;
-  const fee = appealFee(x.route, income);
+  const penalty = x.penalty;
+  const fee = appealFee(x.route, income, { penalty });
 
   const items = checklistFor(x, allNotices);
   const ticks = n.appealChecklist || {};
@@ -442,29 +443,55 @@ function Workspace({ x, allNotices, onOpenNotice }) {
             <span className="muted" style={{marginLeft: "auto", fontSize: 11.5}}>Major Head 0021 · ITNS 280</span>
           </div>
           <div className="row" style={{gap: 20, flexWrap: "wrap", alignItems: "flex-start"}}>
-            <div style={{minWidth: 160}}>
+            <div style={{minWidth: 190}}>
               <div style={{fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em"}}>{fee == null ? "—" : fmtINR(fee)}</div>
-              <div className="center" style={{gap: 6, marginTop: 6, justifyContent: "flex-start"}}>
-                <label className="muted" style={{fontSize: 12}}>Assessed income</label>
+
+              {penalty ? (
+                /* A penalty appeal is a flat fee, so the assessed income and the
+                   slab table are not just unnecessary — showing them invites
+                   someone to compute the wrong number. */
+                <div className="muted" style={{fontSize: 11.5, marginTop: 6, lineHeight: 1.5}}>
+                  Flat fee — appeal against a penalty order.<br/>
+                  Assessed income does not affect it.
+                </div>
+              ) : (
+                <>
+                  <div className="center" style={{gap: 6, marginTop: 6, justifyContent: "flex-start"}}>
+                    <label className="muted" style={{fontSize: 12}}>Assessed income</label>
+                    <input
+                      value={incomeText}
+                      onChange={(e) => setIncomeText(e.target.value)}
+                      onBlur={saveIncome}
+                      placeholder="e.g. 480000"
+                      inputMode="numeric"
+                      style={{width: 120, fontSize: 12.5, padding: "6px 9px", border: "1px solid var(--p-line-2)", borderRadius: 9, background: "white", color: "var(--p-text)"}}
+                    />
+                  </div>
+                  <div className="col" style={{gap: 3, marginTop: 10}}>
+                    {FEE_SLABS[x.route].map(([band, amt], i) => {
+                      const hit = income != null && slabHit(x.route, income, i);
+                      return (
+                        <div key={band} style={{fontSize: 11.5, color: hit ? "var(--p-primary-2)" : "var(--p-text-3)", fontWeight: hit ? 700 : 400}}>
+                          {band} → {amt}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Detection reads the order's type and text; the practitioner
+                  knows what it actually decided, and a wrong fee makes the
+                  appeal defective. So it is always overridable. */}
+              <label className="center" style={{gap: 7, marginTop: 12, fontSize: 11.5, cursor: "pointer", justifyContent: "flex-start", alignItems: "flex-start"}}>
                 <input
-                  value={incomeText}
-                  onChange={(e) => setIncomeText(e.target.value)}
-                  onBlur={saveIncome}
-                  placeholder="e.g. 480000"
-                  inputMode="numeric"
-                  style={{width: 120, fontSize: 12.5, padding: "6px 9px", border: "1px solid var(--p-line-2)", borderRadius: 9, background: "white", color: "var(--p-text)"}}
+                  type="checkbox"
+                  checked={penalty}
+                  onChange={(e) => updateNotice(n.id, { appealFeePenalty: e.target.checked })}
+                  style={{marginTop: 2}}
                 />
-              </div>
-              <div className="col" style={{gap: 3, marginTop: 10}}>
-                {FEE_SLABS[x.route].map(([band, amt], i) => {
-                  const hit = income != null && slabHit(x.route, income, i);
-                  return (
-                    <div key={band} style={{fontSize: 11.5, color: hit ? "var(--p-primary-2)" : "var(--p-text-3)", fontWeight: hit ? 700 : 400}}>
-                      {band} → {amt}
-                    </div>
-                  );
-                })}
-              </div>
+                <span className="muted">Appeal against a penalty order — flat {fmtINR(PENALTY_FEE[x.route])}</span>
+              </label>
             </div>
             <div className="col" style={{gap: 5, fontSize: 12.5, color: "var(--p-text-2)"}}>
               <div><span className="muted">PAN</span> {n.pan || "—"}</div>

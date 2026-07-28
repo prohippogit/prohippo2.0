@@ -4,6 +4,7 @@ import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFr
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 import { appealableOrders } from './appeals';
+import { AskDocsButton } from './askForDocuments';
 import { KeepBoard } from './Tasks';
 
 export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
@@ -341,6 +342,7 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
                     AY {n.ay || "—"}{n.din ? ` · DIN …${String(n.din).slice(-6)}` : ""}{n.date ? ` · ${fmtDate(n.date)}` : ""}
                   </div>
                 </div>
+                {!n.isOrder && <AskDocsButton notice={n}/>}
                 <button className="btn btn-ghost btn-xs" disabled={busy} title="Mark as read" onClick={() => markRead([n.id])}>
                   <Icon name="check" size={12}/>Read
                 </button>

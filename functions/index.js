@@ -885,6 +885,113 @@ exports.summarizePortalNotice = onCall(
   }
 );
 
+/* ---------- documents called for ----------------------------------------------
+ * Notices that arrive through the portal sync are written with `documents: []`
+ * (see ingestPortalNotice above) — the portal's JSON carries no such list, it is
+ * only in the PDF's prose. So the document request had nothing to work from on
+ * exactly the notices that arrive automatically.
+ *
+ * This reads the PDF and extracts ONLY the list of documents/details called for.
+ * Deliberately not the full EXTRACTION_PROMPT used for uploaded notices: for a
+ * portal notice the PAN, AY, section, DIN and dates already came from the source
+ * system and are authoritative. Re-reading them with an AI can only make them
+ * worse. Extract the one thing that is genuinely missing.
+ * ---------------------------------------------------------------------------- */
+
+const DOCUMENTS_PROMPT = `You are a chartered accountant reading ONE Indian Income-tax notice. Your only job is to list what the assessee has been asked to PRODUCE.
+
+Return, in "documents", one entry per document, record, explanation or detail the notice calls for. Rules:
+- Copy the substance of what is asked, in plain words a client would understand. Expand cross-references ("the details in Annexure A" → the actual items, if the annexure is in this PDF).
+- One asked-for thing per entry. If the notice asks for "bank statements and confirmations from creditors", that is TWO entries.
+- Include the year/period/party when the notice specifies one, e.g. "Bank statements of all accounts for FY 2016-17", "Confirmation from M/s ABC Traders with PAN".
+- Do NOT include procedural instructions that are not documents (how to respond, e-filing steps, consequences of non-compliance, the officer's contact details).
+- Do NOT invent standard items that this notice does not actually ask for. An empty list is correct if the notice calls for nothing.
+- Keep each entry under 160 characters. At most 25 entries.
+
+Also extract, ONLY if clearly printed:
+- "complianceDueDate": the date by which the response/documents must be filed, as YYYY-MM-DD.
+- "hearingDate": the date of hearing, as YYYY-MM-DD.
+Return null for either if not clearly printed. NEVER guess a date.`;
+
+const DOCUMENTS_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    documents: { type: "ARRAY", items: { type: "STRING" } },
+    complianceDueDate: { type: "STRING", nullable: true },
+    hearingDate: { type: "STRING", nullable: true },
+  },
+  required: ["documents"],
+};
+
+async function callGeminiDocuments(model, apiKey, files) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: DOCUMENTS_PROMPT }] }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: DOCUMENTS_SCHEMA, temperature: 0 },
+  };
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+  try { return JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
+}
+
+exports.extractNoticeDocuments = onCall(
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 120, memory: "512MiB", maxInstances: 5 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+    const { noticeId } = request.data || {};
+    if (!noticeId) throw new HttpsError("invalid-argument", "noticeId is required.");
+
+    const ref = db.doc(`users/${uid}/notices/${noticeId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Notice not found.");
+    const n = snap.data();
+    if (!n.storagePath) {
+      throw new HttpsError("failed-precondition", "This notice has no PDF to read — add the documents by hand.");
+    }
+
+    let buf;
+    try {
+      [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(n.storagePath).download();
+    } catch (e) {
+      throw new HttpsError("not-found", "Couldn't read the PDF from Storage: " + (e.message || e));
+    }
+    if (buf.length > MAX_TOTAL_BYTES) {
+      throw new HttpsError("invalid-argument", "PDF is too large to read (over 9 MB).");
+    }
+
+    let out;
+    try {
+      out = await callGeminiDocuments(PRIMARY_MODEL, geminiApiKey.value(), [{ mimeType: "application/pdf", data: buf.toString("base64") }]);
+    } catch (e) {
+      // Record the failure so the UI can say what happened rather than silently
+      // opening an empty checklist.
+      await ref.set({ documentsError: String((e && e.message) || e).slice(0, 200) }, { merge: true }).catch(() => {});
+      throw e;
+    }
+
+    const documents = Array.isArray(out.documents)
+      ? out.documents.map((d) => str(d).slice(0, 160)).filter(Boolean).slice(0, 25)
+      : [];
+
+    const patch = { documents, documentsAt: new Date().toISOString(), documentsError: "" };
+    // Dates are filled in only where nothing is on file. Anything the portal or
+    // the practitioner already recorded wins over the AI's read.
+    const due = normDate(out.complianceDueDate);
+    const hearing = normDate(out.hearingDate);
+    if (due && !n.responseDueDate) patch.responseDueDate = due;
+    if (hearing && !n.hearingDate) patch.hearingDate = hearing;
+
+    await ref.set(patch, { merge: true });
+    return { ok: true, documents, responseDueDate: patch.responseDueDate || n.responseDueDate || "", hearingDate: patch.hearingDate || n.hearingDate || "" };
+  }
+);
+
 // Auto-parse order PDFs as they land, so the real document type (order vs demand
 // notice vs computation sheet) and the order's own metadata — which drive appeal
 // detection and the Form 35 match — are known without anyone asking.

@@ -8,6 +8,7 @@ import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee } from './invoicePdf';
 import { downloadLedgerPDF, ledgerPDFDataUri, downloadReceiptPDF, receiptPDFDataUri } from './ledgerPdf';
+import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
 
 const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
 
@@ -1685,6 +1686,188 @@ function LinkMobileCard() {
   );
 }
 
+/* ---- Google Calendar ----
+   Connecting is a round trip through Google's consent screen, so this card is
+   mostly about being honest while the user is away and after they come back:
+   which account is syncing, when it last ran, and what to do when Google
+   withdraws access. */
+
+function CalendarSwitch({ name, sub, checked, onChange, disabled }) {
+  return (
+    <div className="between" style={{gap: 14, padding: "10px 0", borderTop: "1px solid var(--p-line-2)"}}>
+      <div>
+        <div style={{fontSize: 13.5, fontWeight: 650}}>{name}</div>
+        <div className="muted" style={{fontSize: 12}}>{sub}</div>
+      </div>
+      <Toggle checked={checked} onChange={onChange} label={name} disabled={disabled}/>
+    </div>
+  );
+}
+
+function GoogleCalendarCard() {
+  const { notify } = useData();
+  const { user } = useAuth();
+  const { cfg, loading, connected, needsReauth } = useCalendarConfig();
+  const { connect, syncNow, disconnect, setOption, feedLink } = useCalendarActions();
+
+  // Most practitioners sign in with the account they live in, so offer it —
+  // but plenty keep the firm diary somewhere else, so this stays editable.
+  // Settings only renders once the user is loaded, so the seed is never blank
+  // by accident.
+  const [email, setEmail] = React.useState(user?.email || "");
+  const [busy, setBusy] = React.useState("");
+  const [err, setErr] = React.useState("");
+  const [feed, setFeed] = React.useState("");
+
+  const run = async (label, fn) => {
+    setBusy(label);
+    setErr("");
+    try { await fn(); }
+    catch (e) { console.error(e); setErr(e?.message || "Something went wrong. Please try again."); }
+    finally { setBusy(""); }
+  };
+
+  const startConnect = () => run("connect", async () => {
+    const clean = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) throw new Error("Enter the Google account you want to sync.");
+    await connect(clean); // navigates away to Google
+  });
+
+  const doSync = () => run("sync", async () => {
+    const counts = await syncNow();
+    const touched = (counts.created || 0) + (counts.updated || 0);
+    notify(touched ? `Google Calendar updated — ${touched} event${touched === 1 ? "" : "s"}` : "Google Calendar already up to date");
+  });
+
+  const doDisconnect = () => {
+    if (!window.confirm("Disconnect Google Calendar? Events already in Google stay there — delete the “ProHippo — Hearings” calendar yourself if you want them gone.")) return;
+    run("disconnect", async () => { await disconnect(false); notify("Google Calendar disconnected"); });
+  };
+
+  const showFeed = () => run("feed", async () => setFeed(await feedLink(false)));
+  const rotateFeed = () => run("feed", async () => { setFeed(await feedLink(true)); notify("Old calendar link disabled"); });
+
+  const statusPill = loading ? <span className="pill pill-muted">Checking…</span>
+    : needsReauth ? <span className="pill" style={{background: "var(--p-coral)", color: "#B8463A"}}>Access expired</span>
+      : connected ? <span className="pill" style={{background: "var(--p-mint)", color: "#1B8C5C"}}>Connected</span>
+        : <span className="pill pill-muted">Not connected</span>;
+
+  return (
+    <div className="card">
+      <div className="between" style={{gap: 12, flexWrap: "wrap"}}>
+        <div className="center" style={{gap: 12}}>
+          <div style={{width: 42, height: 42, borderRadius: 12, background: "var(--p-card-tint)", color: "var(--p-primary)", display: "grid", placeItems: "center"}}>
+            <Icon name="calendar" size={18}/>
+          </div>
+          <div>
+            <div style={{fontWeight: 700, fontSize: 14}}>Google Calendar</div>
+            <div className="muted" style={{fontSize: 12}}>
+              {connected || needsReauth
+                ? `${cfg?.email || "—"} · calendar “${cfg?.calendarSummary || "ProHippo — Hearings"}”`
+                : "Push hearings and deadlines to your Google account"}
+            </div>
+          </div>
+        </div>
+        {statusPill}
+      </div>
+
+      {!loading && !connected && (
+        <div style={{marginTop: 14}}>
+          {needsReauth && (
+            <div style={{marginBottom: 10, padding: "8px 12px", borderRadius: 10, background: "var(--p-coral)", color: "#B8463A", fontSize: 12.5}}>
+              Google withdrew access, so syncing has stopped. Reconnect to start it again.
+            </div>
+          )}
+          <div className="muted" style={{fontSize: 11.5, fontWeight: 700, marginBottom: 6}}>GOOGLE ACCOUNT TO SYNC</div>
+          <div className="center" style={{gap: 8, flexWrap: "wrap"}}>
+            <div style={{flex: 1, minWidth: 200}}>
+              <TextInput value={email} onChange={setEmail} placeholder="you@yourfirm.in"/>
+            </div>
+            <button className="btn btn-primary" disabled={Boolean(busy)} onClick={startConnect}>
+              <Icon name="link" size={14}/>{busy === "connect" ? "Opening Google…" : needsReauth ? "Reconnect" : "Connect Google Calendar"}
+            </button>
+          </div>
+          <div className="muted" style={{fontSize: 12, marginTop: 8}}>
+            You'll approve this on Google's own screen — ProHippo never sees your password. A Google Workspace address works too.
+          </div>
+        </div>
+      )}
+
+      {connected && (
+        <div style={{marginTop: 8}}>
+          <CalendarSwitch
+            name="Sync automatically"
+            sub="Every hearing you add, edit or delete updates Google within seconds"
+            checked={cfg?.autoSync !== false}
+            onChange={(v) => setOption({ autoSync: v })}
+          />
+          <CalendarSwitch
+            name="Hearings"
+            sub="ITAT, CIT(A), scrutiny and penalty hearings, at their listed time"
+            checked={cfg?.syncHearings !== false}
+            onChange={(v) => setOption({ syncHearings: v })}
+          />
+          <CalendarSwitch
+            name="Deadlines"
+            sub="Appeal limitation and notice reply dates, as all-day events"
+            checked={cfg?.syncDeadlines !== false}
+            onChange={(v) => setOption({ syncDeadlines: v })}
+          />
+          <CalendarSwitch
+            name="Include client details in the event"
+            sub={cfg?.includeClientDetails === false
+              ? "Off — events read “ITAT hearing — AY 2017-18” with no client identity in Google"
+              : "On — event titles carry the client's name, and the description their PAN and ITA number"}
+            checked={cfg?.includeClientDetails !== false}
+            onChange={(v) => setOption({ includeClientDetails: v })}
+          />
+
+          <div className="between" style={{marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--p-line-2)", gap: 10, flexWrap: "wrap"}}>
+            <div className="muted" style={{fontSize: 12}}>
+              Last synced {relativeSyncTime(cfg?.lastSyncAt)}
+              {typeof cfg?.eventCount === "number" ? ` · ${cfg.eventCount} event${cfg.eventCount === 1 ? "" : "s"}` : ""}
+            </div>
+            <div className="row" style={{gap: 8}}>
+              <button className="btn btn-secondary btn-sm" disabled={Boolean(busy)} onClick={doSync}>
+                {busy === "sync" ? "Syncing…" : "Sync now"}
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{color: "var(--p-danger)"}} disabled={Boolean(busy)} onClick={doDisconnect}>
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cfg?.lastError && connected && (
+        <div className="muted" style={{marginTop: 8, fontSize: 12, color: "#B8463A"}}>Last sync problem: {cfg.lastError}</div>
+      )}
+      {err && <div style={{marginTop: 10, color: "#B8463A", fontSize: 12.5}}>{err}</div>}
+
+      {/* The no-OAuth path. Slower to refresh, but it needs no permission at all
+          and works in Apple Calendar and Outlook as well as Google. */}
+      <div style={{marginTop: 14, paddingTop: 12, borderTop: "1px dashed var(--p-line-2)"}}>
+        <div style={{fontSize: 13, fontWeight: 650}}>Subscribe from any calendar app</div>
+        <div className="muted" style={{fontSize: 12, marginTop: 2}}>
+          A read-only link for Google, Apple Calendar or Outlook. No sign-in needed — but calendar apps refresh it
+          slowly, often only once or twice a day.
+        </div>
+        {feed ? (
+          <div className="center" style={{gap: 8, marginTop: 8, flexWrap: "wrap"}}>
+            <input readOnly value={feed} onFocus={(e) => e.target.select()} style={{flex: 1, minWidth: 220, fontSize: 12, fontFamily: "ui-monospace, monospace"}}/>
+            <button className="btn btn-secondary btn-sm" onClick={() => { navigator.clipboard?.writeText(feed); notify("Calendar link copied"); }}>Copy</button>
+            <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={rotateFeed} title="Disable the old link and make a new one">Reset link</button>
+          </div>
+        ) : (
+          <button className="btn btn-secondary btn-sm" style={{marginTop: 8}} disabled={Boolean(busy)} onClick={showFeed}>
+            {busy === "feed" ? "Preparing…" : "Show my calendar link"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { data, profile, setProfile, loadSampleData, clearAllData, notify } = useData();
   const { user, signOutUser } = useAuth();
@@ -1718,7 +1901,6 @@ export function SettingsPage() {
   };
 
   const integrations = [
-    { t: "Google Calendar", d: "Sync hearings to your Google account", icon: "calendar" },
     { t: "Income-tax portal fetch", d: "Auto-fetch notices from the ITD portal", icon: "link" },
     { t: "WhatsApp Business Cloud", d: "Send notices and reminders in-app", icon: "whatsapp" },
     { t: "Transactional email", d: "Send emails from your own domain", icon: "mail" },
@@ -1771,6 +1953,7 @@ export function SettingsPage() {
       </div>
 
       <div className="card-title mb-3" style={{fontSize: 15}}>Integrations</div>
+      <div style={{marginBottom: 16}}><GoogleCalendarCard/></div>
       <div className="grid-split" style={{gap: 16}}>
         {integrations.map(i => (
           <div key={i.t} className="card">

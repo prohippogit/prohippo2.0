@@ -1,17 +1,20 @@
 /* ProHippo — Hearings calendar + list */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, titleCase, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, Toggle, titleCase, fmtDateLong, daysFromNow } from './shared';
 import { useData, downloadCSV, toISO, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
+import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
 
 const AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
 const MODES = ["Physical", "Video Conference", "e-Proceeding"];
 
 export function HearingModal({ initial, onClose }) {
   const { data, addHearing, updateHearing, notify } = useData();
+  const { connected: calendarOn } = useCalendarConfig();
   const [form, setForm] = React.useState({
     assessee: "", pan: "", ay: "", authority: "Scrutiny", bench: "", section: "",
     date: todayISO(), time: "11:00", mode: "Physical", status: "Upcoming", ita: "", staff: "",
+    gcalSkip: false,
     ...initial,
   });
   const [showAddAssessee, setShowAddAssessee] = React.useState(false);
@@ -72,6 +75,20 @@ export function HearingModal({ initial, onClose }) {
         <FormField label="ITA / Appeal No."><TextInput value={form.ita} onChange={set("ita")} placeholder="ITA No. …"/></FormField>
         <FormField label="Staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Assigned staff"/></FormField>
       </div>
+      {calendarOn && (
+        <div className="between" style={{marginTop: 14, padding: "10px 12px", borderRadius: 10, background: "var(--p-card-tint)", gap: 12}}>
+          <div className="center" style={{gap: 8}}>
+            <Icon name="calendar" size={14} className="muted"/>
+            <div style={{fontSize: 12.5}}>
+              {form.gcalSkip ? "Kept out of your Google Calendar" : "Will appear in your Google Calendar"}
+            </div>
+          </div>
+          <div className="center" style={{gap: 8}}>
+            <span className="muted" style={{fontSize: 12}}>Skip this one</span>
+            <Toggle checked={Boolean(form.gcalSkip)} onChange={set("gcalSkip")} label="Skip this hearing in Google Calendar"/>
+          </div>
+        </div>
+      )}
       {showAddAssessee && (
         <AssesseeModal
           onClose={() => setShowAddAssessee(false)}
@@ -360,7 +377,75 @@ function GroupedView({ hearings, groupBy, onOpenHearing }) {
   );
 }
 
-export default function Hearings({ onOpenHearing }) {
+/* The everyday calendar control, next to the calendar itself. Setup lives in
+   Settings; this is only ever "how are we doing, and push it again now". */
+function GoogleSyncChip({ onNav }) {
+  const { notify } = useData();
+  const { cfg, loading, connected, needsReauth } = useCalendarConfig();
+  const { syncNow } = useCalendarActions();
+  const [syncing, setSyncing] = React.useState(false);
+
+  // Nothing at all until we know — a chip that flickers "not connected" on
+  // every page load is worse than a beat of silence.
+  if (loading) return null;
+
+  const shell = {
+    display: "inline-flex", alignItems: "center", gap: 8,
+    background: "white", border: "1px solid var(--p-line)", borderRadius: 10,
+    padding: "6px 10px", fontSize: 12.5, fontWeight: 650, color: "var(--p-text-2)",
+  };
+
+  if (!connected && !needsReauth) {
+    return (
+      <button style={{...shell, cursor: "pointer"}} onClick={() => onNav && onNav("settings")}>
+        <Icon name="calendar" size={13} className="muted"/>
+        <span style={{color: "var(--p-primary-2)"}}>Connect Google Calendar</span>
+      </button>
+    );
+  }
+
+  if (needsReauth) {
+    return (
+      <button style={{...shell, borderColor: "var(--p-danger)", cursor: "pointer"}} onClick={() => onNav && onNav("settings")}>
+        <Icon name="alert" size={13} style={{color: "var(--p-danger)"}}/>
+        Google access expired
+        <span style={{color: "var(--p-primary-2)"}}>Reconnect</span>
+      </button>
+    );
+  }
+
+  const push = async () => {
+    setSyncing(true);
+    try {
+      const counts = await syncNow();
+      const touched = (counts.created || 0) + (counts.updated || 0);
+      notify(touched ? `Google Calendar updated — ${touched} event${touched === 1 ? "" : "s"}` : "Google Calendar already up to date");
+    } catch (e) {
+      console.error("sync now:", e);
+      notify(e?.message || "Couldn't reach Google Calendar", "alert");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div style={shell}>
+      <Icon name={syncing ? "clock" : "check"} size={13} style={{color: syncing ? "var(--p-text-3)" : "var(--p-success)"}}/>
+      {syncing ? "Syncing…" : `Google · synced ${relativeSyncTime(cfg?.lastSyncAt)}`}
+      <span style={{width: 1, height: 18, background: "var(--p-line)"}}/>
+      <button
+        className="btn btn-ghost btn-xs"
+        style={{color: "var(--p-primary-2)", padding: "2px 6px"}}
+        disabled={syncing}
+        onClick={push}
+      >
+        Sync now
+      </button>
+    </div>
+  );
+}
+
+export default function Hearings({ onOpenHearing, onNav }) {
   const { data } = useData();
   const [view, setView] = React.useState("Week");
   const [filterAuthority, setFilterAuthority] = React.useState("All");
@@ -386,6 +471,7 @@ export default function Hearings({ onOpenHearing }) {
           </div>
         </div>
         <div className="topbar-actions">
+          <GoogleSyncChip onNav={onNav}/>
           <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export CSV</button>
           <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>Add hearing</button>
         </div>

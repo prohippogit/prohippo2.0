@@ -112,8 +112,20 @@ export const StatusPill = ({ status }) => {
     "Decided": "success",
     "Pending": "warning",
     "Closed": "muted",
-    "Sent": "success",
+    "Sent": "info",
     "Draft": "muted",
+    // Delivery states reported by the Resend webhook. "Sent" only means we
+    // handed it over; "Delivered" is the client's server accepting it.
+    "Queued": "muted",
+    "Delayed": "warning",
+    "Delivered": "success",
+    "Opened": "success",
+    "Bounced": "danger",
+    "Complained": "danger",
+    "Failed": "danger",
+    // Hand-offs: we opened the app with the message ready, the user presses send.
+    "Opened in WhatsApp": "info",
+    "Opened in mail app": "info",
   };
   return <span className={`pill pill-${map[status] || "muted"}`}><span className="pill-dot" style={{background: "currentColor"}}/>{status}</span>;
 };

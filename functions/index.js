@@ -11,7 +11,7 @@
  * The Gemini API key is stored as a Firebase secret (GEMINI_API_KEY) and
  * never reaches the browser.
  */
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const crypto = require("crypto");
@@ -71,6 +71,10 @@ const otpPepper = defineSecret("OTP_PEPPER");
 // 2Factor API key for sending/verifying the login SMS OTP (AUTOGEN flow).
 // From the 2Factor CP panel → Account Summary.  firebase functions:secrets:set TWOFACTOR_API_KEY
 const twofactorApiKey = defineSecret("TWOFACTOR_API_KEY");
+// Signing secret for the Resend delivery webhook (Resend dashboard → Webhooks →
+// the endpoint's "Signing Secret", a whsec_… value).
+//   firebase functions:secrets:set RESEND_WEBHOOK_SECRET
+const resendWebhookSecret = defineSecret("RESEND_WEBHOOK_SECRET");
 
 // Model IDs are config, not code — swap them here if Google renames a model.
 // To list the models your key can use, run:
@@ -1497,3 +1501,294 @@ exports.revokeDeviceKey = onCall(DEVICE_OPTS, async (request) => {
   await db.collection("deviceSessions").doc(deviceDocId(key)).delete().catch(() => {});
   return { ok: true };
 });
+
+/* ============================================================
+   Client email delivery (document requests)
+
+   The app renders the message (src/messageTemplates.js) and stores it on the
+   request; this function only DELIVERS what was stored, so what the
+   practitioner previewed is exactly what the client receives.
+
+   Two things are deliberately not taken from the caller:
+     • the recipient — resolved server-side from the assessee record, so a
+       stolen session can't use this as an open relay to arbitrary addresses
+       without also writing to the practitioner's own assessee list;
+     • the From address — fixed below.
+   Reply-To is set to the practitioner's own email so client replies land in
+   their inbox, not in a black hole.
+   ============================================================ */
+
+/* Client mail goes out on the SAME verified domain as the login OTPs.
+ *
+ * Best practice is a separate subdomain (send.prohippo.in), so that a client
+ * marking a document request as spam can't dent the deliverability of the
+ * emails people need in order to sign in. Resend's free plan allows only ONE
+ * verified domain, though, and prohippo.in is already it — a second domain is a
+ * paid upgrade that isn't worth it at this volume.
+ *
+ * The risk of sharing is low here: these are solicited emails to the firm's own
+ * clients, who are expecting them, at a few per day. This is not cold outreach.
+ * If deliverability ever wobbles, moving to a subdomain is this one line plus a
+ * DNS verification.
+ */
+const CLIENT_EMAIL_FROM = "ProHippo <notices@prohippo.in>";
+
+// Per-user send caps. A practising firm sends a handful of these a day; these
+// bounds are far above normal use and exist purely so a bug or a stolen session
+// can't turn the account into a mail cannon.
+const MAIL_WINDOW_MS = 60 * 60 * 1000;
+const MAIL_MAX_PER_WINDOW = 50;
+
+const EMAIL_ADDR_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/* Reserve one send against the user's rolling hourly window. Throws if the
+   window is exhausted. Transactional so parallel sends can't both slip past
+   the cap on the same read. */
+async function reserveMailQuota(uid) {
+  const ref = db.collection("clientMailQuota").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const now = Date.now();
+    const d = snap.exists ? snap.data() : {};
+    const fresh = !d.windowStart || now - d.windowStart >= MAIL_WINDOW_MS;
+    const count = fresh ? 0 : (d.count || 0);
+    if (count >= MAIL_MAX_PER_WINDOW) {
+      const mins = Math.ceil((MAIL_WINDOW_MS - (now - d.windowStart)) / 60000);
+      throw new HttpsError(
+        "resource-exhausted",
+        `You've sent ${MAIL_MAX_PER_WINDOW} client emails in the last hour. Try again in about ${mins} minute${mins === 1 ? "" : "s"}.`
+      );
+    }
+    tx.set(ref, { windowStart: fresh ? now : d.windowStart, count: count + 1, lastSentAt: now }, { merge: true });
+  });
+}
+
+async function sendViaResend({ to, replyTo, subject, html, text }) {
+  const payload = {
+    from: CLIENT_EMAIL_FROM,
+    to: [to],
+    subject,
+    html,
+    text,
+  };
+  if (replyTo && EMAIL_ADDR_RE.test(replyTo)) payload.reply_to = replyTo;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey.value()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.text().catch(() => "");
+  if (!res.ok) {
+    console.error("Resend client send failed:", res.status, body.slice(0, 300));
+    throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again in a moment.");
+  }
+  try {
+    return JSON.parse(body).id || "";
+  } catch {
+    return "";
+  }
+}
+
+exports.sendClientMessage = onCall(
+  { region: REGIONS, secrets: [resendApiKey], maxInstances: 10 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+
+    const requestId = String(request.data?.requestId || "");
+    const channel = String(request.data?.channel || "email");
+    if (!requestId) throw new HttpsError("invalid-argument", "requestId is required.");
+    // WhatsApp is delivered from the browser as a wa.me hand-off for now; only
+    // email has a server-side sender. See docs/COMMUNICATIONS_DELIVERY.md.
+    if (channel !== "email") throw new HttpsError("invalid-argument", "Only the email channel is sent server-side.");
+
+    const reqRef = db.doc(`users/${uid}/docRequests/${requestId}`);
+    const reqSnap = await reqRef.get();
+    if (!reqSnap.exists) throw new HttpsError("not-found", "That document request no longer exists.");
+    const docReq = reqSnap.data();
+
+    const msg = docReq.message || {};
+    if (!msg.subject || !msg.emailHtml) {
+      throw new HttpsError("failed-precondition", "This request has no rendered message — open it and save it again.");
+    }
+
+    // Recipient comes from the assessee record, never from the caller.
+    if (!docReq.assesseeId) {
+      throw new HttpsError("failed-precondition", "This request isn't linked to an assessee.");
+    }
+    const aSnap = await db.doc(`users/${uid}/assessees/${docReq.assesseeId}`).get();
+    if (!aSnap.exists) throw new HttpsError("failed-precondition", "The assessee for this request no longer exists.");
+    const to = String(aSnap.data().email || "").trim();
+    if (!EMAIL_ADDR_RE.test(to)) {
+      throw new HttpsError("failed-precondition", "No valid email address on file for this assessee — add one on their profile.");
+    }
+
+    const profile = (await db.doc(`users/${uid}`).get()).data() || {};
+
+    await reserveMailQuota(uid);
+
+    let providerId = "";
+    let sendError = null;
+    try {
+      providerId = await sendViaResend({
+        to,
+        replyTo: profile.email || "",
+        subject: msg.subject,
+        html: msg.emailHtml,
+        text: msg.emailText || "",
+      });
+    } catch (e) {
+      sendError = e;
+    }
+
+    const now = new Date().toISOString();
+    // The communications row is the delivery log — one per send attempt,
+    // successful or not, so a failure is visible rather than silent.
+    const commRef = await db.collection(`users/${uid}/communications`).add({
+      channel: "Email",
+      to,
+      assesseeId: docReq.assesseeId,
+      assessee: docReq.assessee || "",
+      requestId,
+      subject: msg.subject,
+      body: msg.emailText || "",
+      template: "Document request",
+      status: sendError ? "Failed" : "Queued",
+      providerId,
+      time: now,
+      createdAt: now,
+    });
+
+    if (sendError) {
+      await reqRef.set({ status: "failed", lastError: String(sendError.message || sendError).slice(0, 200) }, { merge: true });
+      throw sendError;
+    }
+
+    // Index the provider's id so the webhook can find this row without a query.
+    if (providerId) {
+      await db.collection("emailEvents").doc(providerId).set({
+        uid, commId: commRef.id, requestId, createdAt: now,
+      });
+    }
+
+    await reqRef.set({
+      status: "sent",
+      sentAt: docReq.sentAt || now,
+      lastSentAt: now,
+      lastEmailId: providerId,
+      lastError: "",
+    }, { merge: true });
+
+    return { ok: true, to, providerId, communicationId: commRef.id };
+  }
+);
+
+/* ---------- Resend delivery webhook ----------
+   Turns "we handed it to Resend" into "the client's server accepted it" /
+   "it bounced" / "they opened it". That distinction is the whole point of
+   sending server-side rather than through a mailto: link.
+
+   Configure in the Resend dashboard → Webhooks, pointing at this function's
+   URL, subscribed to the email.* events. Resend signs with Svix; the
+   verification below is the Svix scheme implemented directly so the functions
+   package needs no new dependency. */
+
+const EMAIL_EVENT_STATUS = {
+  "email.sent": "Sent",
+  "email.delivered": "Delivered",
+  "email.delivery_delayed": "Delayed",
+  "email.opened": "Opened",
+  "email.clicked": "Opened",
+  "email.bounced": "Bounced",
+  "email.complained": "Complained",
+};
+
+// Events can arrive out of order (an "opened" before its "delivered"). Rank
+// them so a late-arriving earlier event never downgrades what we already know.
+const STATUS_RANK = {
+  Queued: 0, Sent: 1, Delayed: 2, Delivered: 3, Opened: 4,
+  Bounced: 5, Complained: 5, Failed: 5,
+};
+
+const WEBHOOK_TOLERANCE_MS = 5 * 60 * 1000;
+
+function verifySvixSignature(headers, rawBody) {
+  const id = headers["svix-id"];
+  const timestamp = headers["svix-timestamp"];
+  const signature = headers["svix-signature"];
+  if (!id || !timestamp || !signature) return false;
+
+  const ts = Number(timestamp) * 1000;
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > WEBHOOK_TOLERANCE_MS) return false;
+
+  const raw = resendWebhookSecret.value() || "";
+  const key = Buffer.from(raw.startsWith("whsec_") ? raw.slice(6) : raw, "base64");
+  const expected = crypto
+    .createHmac("sha256", key)
+    .update(`${id}.${timestamp}.${rawBody}`)
+    .digest("base64");
+
+  // The header carries a space-separated list of "v1,<sig>" — any one matching
+  // is a pass (Svix sends several during a secret rotation).
+  return String(signature).split(" ").some((part) => {
+    const sig = part.split(",")[1];
+    if (!sig) return false;
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  });
+}
+
+exports.resendWebhook = onRequest(
+  // Single region on purpose: Resend calls one fixed URL, and unlike the
+  // callables there is no older client pinned to us-central1.
+  { region: PRIMARY_REGION, secrets: [resendWebhookSecret], maxInstances: 10 },
+  async (req, res) => {
+    if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
+
+    const rawBody = req.rawBody ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
+    if (!verifySvixSignature(req.headers, rawBody)) {
+      console.warn("Resend webhook: signature verification failed");
+      res.status(401).send("Invalid signature");
+      return;
+    }
+
+    let event;
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      res.status(400).send("Bad JSON");
+      return;
+    }
+
+    const status = EMAIL_EVENT_STATUS[event?.type];
+    const emailId = event?.data?.email_id || event?.data?.id || "";
+    // 200 on anything we can't act on — an unknown event type or an id we never
+    // recorded is not an error worth making Resend retry for hours.
+    if (!status || !emailId) { res.status(200).send("ok"); return; }
+
+    try {
+      const idxSnap = await db.collection("emailEvents").doc(emailId).get();
+      if (!idxSnap.exists) { res.status(200).send("ok"); return; }
+      const { uid, commId } = idxSnap.data();
+
+      const commRef = db.doc(`users/${uid}/communications/${commId}`);
+      const commSnap = await commRef.get();
+      if (commSnap.exists) {
+        const current = commSnap.data().status || "Queued";
+        if ((STATUS_RANK[status] ?? 0) > (STATUS_RANK[current] ?? 0)) {
+          await commRef.set({ status, statusAt: new Date().toISOString() }, { merge: true });
+        }
+      }
+    } catch (e) {
+      // Log and still return 200: a retry storm won't fix a bad write here, and
+      // the send itself already succeeded.
+      console.error("Resend webhook handling failed:", e.message || e);
+    }
+    res.status(200).send("ok");
+  }
+);

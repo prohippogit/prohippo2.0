@@ -44,7 +44,7 @@ export const invoiceStatus = (inv) => {
 
 export const invoiceOutstanding = (inv) => Math.max(0, inv.amount - (inv.received || 0));
 
-const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "todos", "receipts", "groups"];
+const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "docRequests", "todos", "receipts", "groups"];
 
 const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
 export const nextColor = (assessees) => AVATAR_COLORS[assessees.length % AVATAR_COLORS.length];
@@ -101,19 +101,36 @@ export function buildSampleData() {
     { channel: "Email", to: "ca@nirvanainfotech.com", subject: "Income Tax Notice u/s 143(2) — submission of details", body: "", time: new Date(Date.now() - 86400000).toISOString(), template: "Reminder", status: "Sent" },
     { channel: "WhatsApp", to: "Mehul Patel & Sons HUF", subject: "CIT(A) appeal hearing — please confirm attendance", body: "", time: new Date(Date.now() - 3 * 86400000).toISOString(), template: "Hearing confirmation", status: "Sent" },
   ];
+  const docRequests = [
+    {
+      assessee: "Rajesh M. Shah", pan: "ABCPS1234F", ay: "2017-18", authority: "ITAT", section: "",
+      din: "ITBA/AST/F/142(1)/2026-27/103412",
+      title: "Documents required — ITAT appeal, AY 2017-18",
+      dueDate: daysAway(1),
+      items: [
+        "Copy of audited financial statements for AY 2017-18",
+        "Bank statements of all accounts for FY 2016-17",
+        "Confirmations from unsecured lenders with PAN & ITR copies",
+        "Source of cash deposits exceeding ₹2 lakh",
+        "Ledger copies for sundry creditors",
+        "Computation of income and ITR acknowledgement",
+      ].map((label, i) => ({ id: `sample-${i}`, label, note: "", required: true, status: "pending" })),
+      channels: ["email", "whatsapp"], status: "draft",
+    },
+  ];
   const todos = [
     { text: "Submit Form 35 for Patel HUF appeal", done: true },
     { text: "Draft reply for Nirvana Infotech u/s 143(2)", done: false, tag: "Due tomorrow", tagColor: "danger" },
     { text: "Send document request — Rajesh Shah (AY 17-18)", done: false, tag: "WhatsApp", tagColor: "info" },
     { text: "Reconcile receipts ₹85,000 from Shah Textiles", done: false, tag: "₹85,000", tagColor: "success" },
   ];
-  return { assessees, matters, hearings, notices, invoices, communications, todos, invoiceSeq: 124 };
+  return { assessees, matters, hearings, notices, invoices, communications, docRequests, todos, invoiceSeq: 124 };
 }
 
 /* ---------------- context ---------------- */
 
 const emptyData = () => ({
-  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], todos: [], receipts: [], groups: [],
+  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], docRequests: [], todos: [], receipts: [], groups: [],
   profile: { ownerName: "", firmName: "" },
   invoiceSeq: 120, receiptSeq: 0,
 });
@@ -207,13 +224,19 @@ export function DataProvider({ children }) {
          or null on failure. */
       removeAssessee: async (a) => {
         try {
+          /* Records written since the communications rework carry a hard
+             `assesseeId`; anything older is still only linked by the display
+             string, so both are matched here. */
+          const legacyContactMatch = (r) =>
+            r.to === a.name || (a.email && r.to === a.email) || (a.mobile && r.to === a.mobile);
           const linkedBy = {
             matters: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             hearings: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             notices: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             invoices: (r) => r.assessee === a.name,
             receipts: (r) => r.assessee === a.name,
-            communications: (r) => r.to === a.name || (a.email && r.to === a.email) || (a.mobile && r.to === a.mobile),
+            communications: (r) => (r.assesseeId ? r.assesseeId === a.id : legacyContactMatch(r)),
+            docRequests: (r) => (r.assesseeId ? r.assesseeId === a.id : r.assessee === a.name),
           };
           const refs = [doc(db, "users", uid, "assessees", a.id)];
           for (const [name, isLinked] of Object.entries(linkedBy)) {
@@ -232,7 +255,8 @@ export function DataProvider({ children }) {
       addMatter: addTo("matters"), updateMatter: updateIn("matters"), removeMatter: removeFrom("matters"),
       addHearing: addTo("hearings"), updateHearing: updateIn("hearings"), removeHearing: removeFrom("hearings"),
       addNotice: addTo("notices"), updateNotice: updateIn("notices"), removeNotice: removeFrom("notices"),
-      addCommunication: addTo("communications"),
+      addCommunication: addTo("communications"), updateCommunication: updateIn("communications"), removeCommunication: removeFrom("communications"),
+      addDocRequest: addTo("docRequests"), updateDocRequest: updateIn("docRequests"), removeDocRequest: removeFrom("docRequests"),
       addTodo: addTo("todos"), updateTodo: updateIn("todos"), removeTodo: removeFrom("todos"),
       addInvoice: async (rec) => {
         try {
@@ -355,14 +379,60 @@ export function DataProvider({ children }) {
           return toCreate.length;
         } catch (e) { fail(e); return null; }
       },
+      /* One-time reconcile: stamp `assesseeId` on communications and document
+         requests that predate the hard link (they were matched by display
+         string only, so a rename detached them). Idempotent — only ever fills
+         in a blank, never overwrites an existing id. */
+      backfillCommunicationLinks: async () => {
+        try {
+          const aSnap = await getDocs(colRef("assessees"));
+          const byContact = new Map();
+          aSnap.docs.forEach((d) => {
+            const a = d.data();
+            [a.name, a.email, a.mobile].forEach((k) => { if (k && !byContact.has(k)) byContact.set(k, d.id); });
+          });
+          let stamped = 0;
+          for (const name of ["communications", "docRequests"]) {
+            const snap = await getDocs(colRef(name));
+            const todo = [];
+            snap.docs.forEach((d) => {
+              const r = d.data();
+              if (r.assesseeId) return;
+              const id = byContact.get(name === "communications" ? r.to : r.assessee);
+              if (id) todo.push({ ref: d.ref, id });
+            });
+            for (let i = 0; i < todo.length; i += 450) {
+              const batch = writeBatch(db);
+              todo.slice(i, i + 450).forEach((t) => batch.update(t.ref, { assesseeId: t.id }));
+              await batch.commit();
+            }
+            stamped += todo.length;
+          }
+          return stamped;
+        } catch (e) { fail(e); return null; }
+      },
       loadSampleData: async () => {
         try {
           const sample = buildSampleData();
           const batch = writeBatch(db);
-          COLLECTIONS.forEach((name) => {
+          // Assessees go in first so every other sample record can carry the
+          // real `assesseeId`, exactly like records created through the app.
+          const idByContact = new Map();
+          (sample.assessees || []).forEach((rec, i) => {
+            const ref = doc(colRef("assessees"));
+            batch.set(ref, { createdAt: new Date(Date.now() + i).toISOString(), ...rec });
+            [rec.name, rec.email, rec.mobile].forEach((k) => { if (k && !idByContact.has(k)) idByContact.set(k, ref.id); });
+          });
+          COLLECTIONS.filter((n) => n !== "assessees").forEach((name) => {
             (sample[name] || []).forEach((rec, i) => {
               const ref = doc(colRef(name));
-              batch.set(ref, { createdAt: new Date(Date.now() + i).toISOString(), ...rec });
+              const linkKey = name === "communications" ? rec.to : rec.assessee;
+              const assesseeId = idByContact.get(linkKey);
+              batch.set(ref, {
+                createdAt: new Date(Date.now() + i).toISOString(),
+                ...(assesseeId ? { assesseeId } : null),
+                ...rec,
+              });
             });
           });
           batch.update(userRef(), { invoiceSeq: sample.invoiceSeq });
@@ -563,6 +633,57 @@ export const awaitingNotices = (data) => {
     return recent || future;
   });
 };
+
+/* ---------------- document requests & communications ---------------- */
+
+// Ids for checklist items. Stable per item so an item can be ticked off,
+// re-ordered or renamed without losing its received/waived state.
+export const newItemId = () =>
+  (globalThis.crypto?.randomUUID?.() || `it-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+
+export const newDocItem = (label = "") => ({ id: newItemId(), label, note: "", required: true, status: "pending" });
+
+// Turn a notice's plain-string `documents` array into checklist items.
+export const itemsFromNoticeDocuments = (documents) =>
+  (documents || []).map((d) => newDocItem(typeof d === "string" ? d : (d?.label || "")));
+
+/* How far along a request is. `pending` counts only what's still genuinely
+   outstanding — waived items are settled, not missing. */
+export const docRequestProgress = (req) => {
+  const items = req?.items || [];
+  const received = items.filter((i) => i.status === "received").length;
+  const waived = items.filter((i) => i.status === "waived").length;
+  const pending = items.length - received - waived;
+  return { total: items.length, received, waived, pending, done: items.length > 0 && pending === 0 };
+};
+
+/* The status a request should carry given its items — used after ticking an
+   item off so the list badge and the Assessee page agree without a manual step.
+   Draft/failed requests are left alone: nothing has gone out yet. */
+export const derivedRequestStatus = (req) => {
+  if (!req?.sentAt) return req?.status || "draft";
+  const { received, waived, done } = docRequestProgress(req);
+  if (done) return "complete";
+  if (received + waived > 0) return "partial";
+  return "sent";
+};
+
+// Records belonging to one assessee. Hard `assesseeId` first, falling back to
+// the display-string match that rows written before the link used.
+export const commsOf = (data, a) =>
+  (data.communications || []).filter((c) =>
+    c.assesseeId ? c.assesseeId === a.id : (c.to === a.name || (a.email && c.to === a.email) || (a.mobile && c.to === a.mobile))
+  );
+
+export const docRequestsOf = (data, a) =>
+  (data.docRequests || []).filter((r) => (r.assesseeId ? r.assesseeId === a.id : r.assessee === a.name));
+
+// Requests that have gone out and are still waiting on something.
+export const openDocRequests = (data) =>
+  (data.docRequests || []).filter((r) => r.sentAt && !docRequestProgress(r).done);
+
+export const draftDocRequests = (data) =>
+  (data.docRequests || []).filter((r) => (r.status || "draft") === "draft");
 
 export function downloadCSV(filename, headers, rows) {
   const esc = (v) => {

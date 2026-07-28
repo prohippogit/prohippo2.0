@@ -56,6 +56,27 @@ reordered without losing whether it has been received.
 Unchanged in shape, plus `assesseeId`, `requestId`, `providerId`, and real
 delivery statuses. Every existing row keeps working.
 
+### What the message tells the client
+
+Every request ends with a **"How to send them"** block asking for **PDF, under
+5 MB**, plus a hint that the phone's Scan option makes one.
+
+That is not a style preference. The Income-tax portal accepts PDF only, capped
+at 5 MB per file — a client who WhatsApps twelve photos has produced nothing
+filable, and someone in the firm then spends an evening converting them. Asking
+for the right format once, inside the request, is the whole saving.
+
+The email carries a **ProHippo logo in the footer**, under "Sent via", not in the
+header. The header belongs to the practitioner's firm: the client's relationship
+is with their CA, and leading with a third party's logo would both confuse the
+recipient about who is writing and make a solicited email look like marketing.
+Footer attribution is the standard pattern, and the brand still gets seen on
+every request.
+
+`LOGO_URL` in `messageTemplates.js` points at Firebase Hosting's default domain,
+which is always live. Point it at `prohippo.in` once that domain serves the app —
+a broken image in every client email is worse than a plainer URL.
+
 ### Why the message is stored, not re-rendered
 
 `src/messageTemplates.js` renders on the **client**, at draft time, and the

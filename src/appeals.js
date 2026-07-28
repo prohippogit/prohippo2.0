@@ -206,6 +206,7 @@ export function appealFor(notice) {
 
   return {
     route, reg, served, deadline, daysLeft, urgency,
+    penalty: isPenaltyAppeal(notice),
     limitLabel: operative ? operative.label : "",
     limitDays: operative ? operative.days : null,
     bases, operative, other,
@@ -245,7 +246,38 @@ export function appealableOrders(data, opts = {}) {
 
 export const citAppealFee = (inc) => inc == null ? null : inc <= 100000 ? 250 : inc <= 200000 ? 500 : 1000;
 export const itatAppealFee = (inc) => inc == null ? null : inc <= 100000 ? 500 : inc <= 200000 ? 1500 : Math.min(10000, Math.round(inc * 0.01));
-export const appealFee = (route, inc) => (route === "CIT(A)" ? citAppealFee(inc) : itatAppealFee(inc));
+
+/* An appeal against a PENALTY order carries a FLAT fee. The income slabs above
+   are for appeals against an assessment of total income; a penalty appeal is
+   not one, so assessed income is irrelevant to what it costs. */
+export const PENALTY_FEE = { "CIT(A)": 250, "ITAT": 500 };
+
+/* Is this an appeal against a penalty?
+ *
+ * Two shapes qualify, and the second is easy to get wrong:
+ *   - the order on file IS a penalty order → first appeal to CIT(A);
+ *   - the order on file is a CIT(A) order that DECIDED a penalty appeal → the
+ *     onward ITAT appeal is still a penalty appeal, but its own docType is
+ *     "appealOrder", so a naive check quotes the 1%-of-income slab instead of
+ *     ₹500. Detected from the order's own text and parsed section.
+ *
+ * `appealFeePenalty` on the notice overrides the detection either way: the
+ * practitioner knows what the order decided, and a wrong fee makes the appeal
+ * defective. */
+export function isPenaltyAppeal(n) {
+  if (typeof n.appealFeePenalty === "boolean") return n.appealFeePenalty;
+  const dt = orderDocType(n);
+  if (dt === "penaltyOrder") return true;
+  if (dt === "appealOrder") {
+    const parsedSection = String((n.parsed && n.parsed.orderSection) || "");
+    return PENALTY_RE.test(nameOf(n)) || PENALTY_RE.test(parsedSection);
+  }
+  return false;
+}
+
+export const appealFee = (route, inc, opts = {}) =>
+  (opts.penalty ? (PENALTY_FEE[route] ?? null)
+    : route === "CIT(A)" ? citAppealFee(inc) : itatAppealFee(inc));
 
 export const FEE_SLABS = {
   "CIT(A)": [["≤ ₹1,00,000", "₹250"], ["₹1L – ₹2L", "₹500"], ["> ₹2,00,000", "₹1,000"]],

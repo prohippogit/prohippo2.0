@@ -42,12 +42,13 @@ function send(channel, payload) {
 
 // ---- IPC handlers ----------------------------------------------------------
 
-ipcMain.handle("auth:requestOtp", async (_e, { email }) => {
-  return fb.requestEmailOtp(email);
+// channel: "email" | "sms" — both already supported by the backend callables.
+ipcMain.handle("auth:requestOtp", async (_e, { channel, target }) => {
+  return fb.requestOtp(channel || "email", target);
 });
 
-ipcMain.handle("auth:verifyOtp", async (_e, { email, code }) => {
-  return fb.verifyEmailOtp(email, code);
+ipcMain.handle("auth:verifyOtp", async (_e, { channel, target, code }) => {
+  return fb.verifyOtp(channel || "email", target, code);
 });
 
 ipcMain.handle("auth:google", async () => {

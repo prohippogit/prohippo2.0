@@ -6,8 +6,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("connector", {
-  requestOtp: (email) => ipcRenderer.invoke("auth:requestOtp", { email }),
-  verifyOtp: (email, code) => ipcRenderer.invoke("auth:verifyOtp", { email, code }),
+  // channel: "email" | "sms"; target is the address or 10-digit mobile.
+  requestOtp: (channel, target) => ipcRenderer.invoke("auth:requestOtp", { channel, target }),
+  verifyOtp: (channel, target, code) => ipcRenderer.invoke("auth:verifyOtp", { channel, target, code }),
   signInWithGoogle: () => ipcRenderer.invoke("auth:google"),
   // Resolves to the user when this device is remembered, or null.
   trySilentSignIn: () => ipcRenderer.invoke("auth:silent"),

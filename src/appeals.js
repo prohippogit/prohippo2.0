@@ -10,10 +10,21 @@
  *
  * Limitation law encoded here (verify against the Act before relying on it —
  * these are kept as data precisely so they can be updated in one place):
- *   - CIT(A): 30 days from date of service of the order / demand notice.
- *   - ITAT (1961 Act): 60 days from communication of the CIT(A) order.
- *   - ITAT (2025 Act, appeals for AY 2026-27 onward): 2 months from the END
- *     OF THE MONTH in which the CIT(A) order is communicated.
+ *   - CIT(A), 1961 Act: 30 days from date of service of the order / demand notice.
+ *   - CIT(A), 2025 Act: 1 month from the END OF THE MONTH of service.
+ *   - ITAT, 1961 Act:   60 days from communication of the order.
+ *   - ITAT, 2025 Act:   2 months from the END OF THE MONTH of communication.
+ *
+ * WHICH REGIME APPLIES is decided by WHEN THE ORDER WAS COMMUNICATED, not by
+ * the assessment year. Limitation is procedural: an order communicated after
+ * the 2025 Act commenced runs on that Act's clock even though the assessment it
+ * decides may relate to AY 2017-18. This engine used to key the choice off the
+ * AY, which left a June-2026 order counting 60 days from the date of service.
+ *
+ * BOTH computations are always returned, never just the operative one. A
+ * limitation date shown LATER than the true one is the error that costs an
+ * appeal, so the UI presents the pair, marks which is being relied on, and lets
+ * the practitioner override the communicated date to force either.
  */
 
 const DAY = 86400000;
@@ -23,11 +34,18 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
 const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 export const daysUntil = (iso) => (iso ? Math.round((parseISO(iso) - todayStart()) / DAY) : null);
 
-// Last day of the month that falls `months` after the given date's month.
-const endOfMonthPlus = (iso, months) => {
+/* Last day of the month that falls `months` after the given date's month —
+   i.e. the clock starts on the first day AFTER the month of communication.
+   24 Jun 2026 + 2 months → 31 Aug 2026. Exported so the UI shows the same
+   number the engine used; it used to keep a second copy of this arithmetic. */
+export const endOfMonthPlus = (iso, months) => {
   const d = parseISO(iso);
   return toISO(new Date(d.getFullYear(), d.getMonth() + 1 + months, 0));
 };
+
+// The day the Income-tax Act, 2025 took effect. An order communicated on or
+// after this date is appealed on its clock.
+export const ACT_2025_FROM = "2026-04-01";
 
 // Each order type's onward appeal forum. Orders whose authority isn't a key
 // here (e.g. an ITAT order → High Court, out of scope) are not surfaced.
@@ -85,14 +103,28 @@ export const DOC_TYPE_LABEL = {
 
 export const ayStartYear = (ay) => { const m = /^(\d{4})/.exec(String(ay || "")); return m ? +m[1] : null; };
 
-// AY 2026-27 and earlier appeals stay under the 1961 Act (old forms); AY
-// 2027-28 onward fall under the 2025 Act (new forms, new ITAT computation).
-export function regimeForAy(ay) {
+const ACT_1961 = { act: "Act 1961", newAct: false, citForm: "Form 35", itatForm: "Form 36" };
+const ACT_2025 = { act: "Act 2025", newAct: true, citForm: "Form 99", itatForm: "Form 115" };
+
+/* Which Act governs this appeal.
+ *
+ * Decided by the date the order was communicated — that is when the right of
+ * appeal arises, and limitation is procedural. The assessment year is only a
+ * fallback for orders with no date on file at all, and even then it is a weak
+ * signal: an AY 2017-18 order can perfectly well be communicated in 2026.
+ *
+ * The old AY-only rule disagreed with itself — the engine switched at AY
+ * 2027-28 while the on-screen note claimed AY 2026-27 — and neither matched
+ * what a practitioner actually files. */
+export function regimeFor({ ay, communicatedOn } = {}) {
+  if (communicatedOn) return communicatedOn >= ACT_2025_FROM ? ACT_2025 : ACT_1961;
   const y = ayStartYear(ay);
-  const newAct = y != null && y >= 2027;
-  return newAct
-    ? { act: "Act 2025", newAct: true, citForm: "Form 99", itatForm: "Form 115" }
-    : { act: "Act 1961", newAct: false, citForm: "Form 35", itatForm: "Form 36" };
+  return y != null && y >= 2026 ? ACT_2025 : ACT_1961;
+}
+
+// Kept for callers that only hold an assessment year.
+export function regimeForAy(ay) {
+  return regimeFor({ ay });
 }
 
 // Does a filed Form 35 appeal correspond to this assessment/penalty order?
@@ -136,30 +168,35 @@ export function isAppealed(notice, allNotices, matters) {
   return false;
 }
 
+/* The two ways the same order's limitation can be counted. Both are always
+   worked out so the UI can show them together — see the header note on why a
+   single unexplained date is not acceptable here. */
+function limitationBases(route, served) {
+  const noun = route === "CIT(A)" ? "service" : "communication";
+  if (!served) return [];
+  if (route === "CIT(A)") {
+    return [
+      { act: "Act 1961", newAct: false, date: toISO(addDays(parseISO(served), 30)), label: `30 days from date of ${noun}`, days: 30 },
+      { act: "Act 2025", newAct: true, date: endOfMonthPlus(served, 1), label: `1 month from the end of the month of ${noun}`, days: null },
+    ];
+  }
+  return [
+    { act: "Act 1961", newAct: false, date: toISO(addDays(parseISO(served), 60)), label: `60 days from ${noun} of the order`, days: 60 },
+    { act: "Act 2025", newAct: true, date: endOfMonthPlus(served, 2), label: `2 months from the end of the month of ${noun}`, days: null },
+  ];
+}
+
 // Compute the appeal position for one order: forum, regime, deadline, urgency.
 export function appealFor(notice) {
   const route = APPEAL_ROUTE[notice.authority];
   if (!route) return null;
-  const reg = regimeForAy(notice.ay);
   const served = notice.appealServedDate || notice.date || "";
+  const reg = regimeFor({ ay: notice.ay, communicatedOn: served });
 
-  let deadline = "";
-  let limitLabel = "";
-  let limitDays = null;
-  if (served) {
-    if (route === "CIT(A)") {
-      limitDays = 30;
-      deadline = toISO(addDays(parseISO(served), 30));
-      limitLabel = "30 days from date of service";
-    } else if (reg.newAct) {
-      deadline = endOfMonthPlus(served, 2);
-      limitLabel = "2 months from the end of the month of communication";
-    } else {
-      limitDays = 60;
-      deadline = toISO(addDays(parseISO(served), 60));
-      limitLabel = "60 days from communication of the order";
-    }
-  }
+  const bases = limitationBases(route, served);
+  const operative = bases.find((b) => b.newAct === reg.newAct) || null;
+  const other = bases.find((b) => b.newAct !== reg.newAct) || null;
+  const deadline = operative ? operative.date : "";
 
   const daysLeft = daysUntil(deadline);
   const urgency = daysLeft == null ? "none"
@@ -169,7 +206,12 @@ export function appealFor(notice) {
 
   return {
     route, reg, served, deadline, daysLeft, urgency,
-    limitLabel, limitDays,
+    limitLabel: operative ? operative.label : "",
+    limitDays: operative ? operative.days : null,
+    bases, operative, other,
+    // True when the two Acts give different answers — worth showing loudly,
+    // because that gap is exactly where an appeal gets filed a week too late.
+    basesDiffer: Boolean(operative && other && operative.date !== other.date),
     form: route === "CIT(A)" ? reg.citForm : reg.itatForm,
     servedField: route === "CIT(A)" ? "served" : "communicated",
   };

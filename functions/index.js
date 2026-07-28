@@ -1220,12 +1220,27 @@ function safeEqualHex(a, b) {
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
+/* Brand mark for the sign-in email.
+ *
+ * Served from Firebase Hosting's default domain, which is always live — the
+ * custom domain may or may not be pointed at Hosting, and a broken image on a
+ * sign-in email is worse than a plainer URL. Kept in step with LOGO_URL in
+ * src/messageTemplates.js.
+ *
+ * Note this sits at the TOP here, unlike the client document request where it
+ * is a footer credit. This email really is from ProHippo; that one is from the
+ * practitioner's firm, and leading it with our logo would confuse their client
+ * about who is writing. */
+const LOGO_URL = "https://prohippo2.web.app/prohippo-logo.png";
+
 function otpEmailHtml(code) {
   return `<!doctype html><html><body style="margin:0;background:#F7F6FB;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F6FB;padding:32px 16px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background:#ffffff;border:1px solid #ECE9F5;border-radius:16px;padding:32px;">
-        <tr><td style="font-weight:800;font-size:20px;color:#2A1B4A;letter-spacing:-0.02em;">ProHippo</td></tr>
+        <tr><td>
+          <img src="${LOGO_URL}" alt="ProHippo" width="89" height="44" style="display:block;border:0;outline:none;width:89px;height:44px;"/>
+        </td></tr>
         <tr><td style="padding-top:20px;font-size:14px;color:#6B6480;line-height:1.5;">Use this code to sign in to your ProHippo account:</td></tr>
         <tr><td style="padding:22px 0;">
           <div style="font-size:34px;font-weight:800;letter-spacing:10px;color:#2A1B4A;background:#F3F0FB;border-radius:12px;padding:16px 0;text-align:center;">${code}</div>

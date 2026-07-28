@@ -34,6 +34,25 @@ export const defaultTitle = (req) => {
 // Only items still outstanding are worth asking for again.
 const askableItems = (req) => (req.items || []).filter((i) => i.status !== "received" && i.status !== "waived");
 
+/* How the client should send things back.
+ *
+ * This is not a stylistic preference — the Income-tax portal accepts PDF only,
+ * capped at 5 MB per file. A client who WhatsApps twelve photos has produced
+ * nothing filable, and someone in the firm then spends an evening converting
+ * them. Asking for the right format once, in the request itself, is the whole
+ * saving. The phone-scan hint matters too: most clients own a scanner and don't
+ * know it. */
+const HOW_TO_SEND_TEXT =
+  "Please send each document as a PDF file, under 5 MB. The Income-tax portal accepts PDFs only, so photos can't be filed as they are — if you only have photos, your phone can turn them into a PDF (the Scan option in Files, Notes or Google Drive).";
+
+/* Brand mark shown at the foot of the email.
+ *
+ * Served from Firebase Hosting's default domain, which is always live — the
+ * custom domain may or may not be pointed at Hosting, and a broken image in
+ * every client email is a worse outcome than a slightly plainer URL. Change
+ * this one constant if prohippo.in is serving the app. */
+const LOGO_URL = "https://prohippo2.web.app/prohippo-logo.png";
+
 const signOff = (profile) => {
   const who = (profile?.ownerName || "").trim();
   const firm = (profile?.firmName || "").trim();
@@ -79,7 +98,10 @@ function renderText(req, assessee, profile, { forWhatsApp }) {
   }
 
   lines.push("");
-  lines.push("You can simply reply to this message with photos or scans.");
+  lines.push(forWhatsApp ? `*How to send them*` : "How to send them");
+  lines.push(HOW_TO_SEND_TEXT);
+  lines.push("");
+  lines.push(forWhatsApp ? "You can reply to this message with the PDFs attached." : "Just reply to this email with the PDFs attached.");
   const sig = signOff(profile);
   if (sig) {
     lines.push("");
@@ -125,12 +147,30 @@ function renderHtml(req, assessee, profile) {
           </div>
         </td></tr>` : ""}
         ${req.note ? `<tr><td style="padding-top:18px;font-size:13.5px;color:#6B6480;line-height:1.6;">${esc(req.note).replace(/\n/g, "<br>")}</td></tr>` : ""}
-        <tr><td style="padding-top:20px;font-size:13.5px;color:#6B6480;line-height:1.6;">
-          You can simply reply to this email with photos or scans attached.
+        <tr><td style="padding-top:20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F0FB;border-radius:10px;padding:14px 16px;">
+            <tr><td style="font-size:13px;font-weight:800;color:#2A1B4A;padding-bottom:6px;">How to send them</td></tr>
+            <tr><td style="font-size:13px;color:#6B6480;line-height:1.6;">
+              Please send each document as a <b style="color:#2A1B4A;">PDF file, under 5&nbsp;MB</b>. The Income-tax portal accepts PDFs only, so photos can't be filed as they are — if you only have photos, your phone can turn them into a PDF (the <b style="color:#2A1B4A;">Scan</b> option in Files, Notes or Google&nbsp;Drive).
+            </td></tr>
+            <tr><td style="font-size:13px;color:#6B6480;line-height:1.6;padding-top:8px;">
+              Just reply to this email with the PDFs attached.
+            </td></tr>
+          </table>
         </td></tr>
         ${signOff(profile) ? `<tr><td style="padding-top:22px;font-size:13.5px;color:#2A1B4A;line-height:1.6;">${esc(signOff(profile)).replace(/\n/g, "<br>")}</td></tr>` : ""}
-        <tr><td style="padding-top:22px;border-top:1px solid #ECE9F5;font-size:11px;color:#9A93AD;line-height:1.5;">
-          Sent via ProHippo on behalf of ${esc(firm || "your tax practitioner")}. Reply to this email to reach them directly.
+        <tr><td style="padding-top:22px;border-top:1px solid #ECE9F5;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="font-size:11px;color:#9A93AD;line-height:1.5;padding-right:8px;vertical-align:middle;">Sent via</td>
+            <td style="vertical-align:middle;">
+              <a href="https://prohippo.in" style="text-decoration:none;">
+                <img src="${LOGO_URL}" alt="ProHippo" width="73" height="36" style="display:block;border:0;outline:none;width:73px;height:36px;"/>
+              </a>
+            </td>
+          </tr></table>
+          <div style="padding-top:8px;font-size:11px;color:#9A93AD;line-height:1.5;">
+            on behalf of ${esc(firm || "your tax practitioner")}. Reply to this email to reach them directly.
+          </div>
         </td></tr>
       </table>
     </td></tr>

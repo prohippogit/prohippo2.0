@@ -6,9 +6,24 @@
  * pre-filled Form 35/36 (→ 99/115) worksheet. Fully deterministic — no AI.
  */
 import React from 'react';
+import { httpsCallable } from 'firebase/functions';
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { functions, storage } from './firebase';
 import { Icon, EmptyState, titleCase, fmtDateLong, fmtINR } from './shared';
 import { useData } from './store';
-import { appealableOrders, checklistFor, appealFee, FEE_SLABS } from './appeals';
+import { appealableOrders, checklistFor, appealFee, FEE_SLABS, orderDocType, DOC_TYPE_LABEL } from './appeals';
+
+// Open an order PDF held in Storage. Same helper the Notices and Assessees
+// pages keep locally — three copies, but importing across page modules to save
+// eight lines would tangle them together for no real gain.
+async function openStoragePdf(path) {
+  if (!path) return;
+  try {
+    window.open(await getDownloadURL(storageRef(storage, path)), "_blank", "noopener");
+  } catch (e) {
+    console.error("open order pdf", e);
+  }
+}
 
 const URG = {
   red: { bg: "var(--p-coral)", fg: "var(--p-danger)", pill: "danger", lbl: "days left" },
@@ -19,14 +34,24 @@ const URG = {
 };
 
 const STYLE = `
-.ap-grid { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (max-width: 900px) { .ap-grid { grid-template-columns: 1fr; } }
-.ap-order { text-align: left; width: 100%; background: var(--p-card); border: 1px solid var(--p-line); border-left: 4px solid var(--p-text-3); border-radius: var(--radius); padding: 13px 14px; box-shadow: var(--p-shadow-sm); cursor: pointer; transition: box-shadow .15s, transform .15s, border-color .15s; }
-.ap-order:hover { box-shadow: var(--p-shadow); transform: translateY(-1px); }
-.ap-order.sel { border-color: var(--p-primary-3); box-shadow: var(--p-shadow); background: var(--p-card-tint); }
-.ap-count { text-align: center; padding: 14px 18px; border-radius: var(--radius); min-width: 120px; }
-.ap-count .big { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; }
-.ap-count .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; font-weight: 700; }
+/* One full-width row per order: a large countdown on the left, the order it
+   arises from in the middle, and the detail expanding underneath on click. */
+.ap-row { background: var(--p-card); border: 1px solid var(--p-line); border-radius: var(--radius); box-shadow: var(--p-shadow-sm); overflow: hidden; transition: box-shadow .15s, border-color .15s; }
+.ap-row.open { border-color: var(--p-primary-3); box-shadow: var(--p-shadow); }
+.ap-rowhead { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 16px; align-items: center; width: 100%; text-align: left; background: none; border: 0; padding: 14px 16px; cursor: pointer; font: inherit; color: inherit; }
+.ap-rowhead:hover { background: var(--p-card-tint); }
+@media (max-width: 720px) {
+  .ap-rowhead { grid-template-columns: 74px minmax(0, 1fr); gap: 12px; }
+  .ap-rowhead .ap-due { grid-column: 2; text-align: left; }
+}
+.ap-count { text-align: center; padding: 12px 8px; border-radius: 14px; }
+.ap-count .big { font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ap-count .lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; font-weight: 800; }
+.ap-name { font-weight: 800; font-size: 15px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.ap-meta { font-size: 12px; margin-top: 3px; color: var(--p-text-3); overflow-wrap: anywhere; }
+.ap-tags { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+.ap-due { text-align: right; font-size: 12.5px; white-space: nowrap; }
+.ap-body { border-top: 1px solid var(--p-line-2); padding: 16px; background: var(--p-card-tint); }
 .ap-frow { display: grid; grid-template-columns: 190px 1fr; border-top: 1px solid var(--p-line-2); font-size: 12.5px; }
 @media (max-width: 540px) { .ap-frow { grid-template-columns: 128px 1fr; } }
 .ap-frow .k { padding: 7px 11px; color: var(--p-text-3); background: var(--p-card-tint); border-right: 1px solid var(--p-line-2); }
@@ -34,11 +59,12 @@ const STYLE = `
 .ap-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .ap-toolbar .search { flex: 1; min-width: 200px; }
 .ap-sort { font-family: inherit; font-size: 12.5px; color: var(--p-text-2); background: var(--p-card); border: 1px solid var(--p-line-2); border-radius: 10px; padding: 8px 10px; }
-.ap-head { display: flex; align-items: baseline; gap: 10px; }
-.ap-head .ap-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14.5px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
-.ap-head .pill { flex-shrink: 0; white-space: nowrap; }
-.ap-sub { font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ap-subject { overflow-wrap: anywhere; min-width: 0; }
+/* The two limitation computations, shown side by side — see appeals.js. */
+.ap-basis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+@media (max-width: 620px) { .ap-basis { grid-template-columns: 1fr; } }
+.ap-basis .b { padding: 9px 11px; border-radius: 11px; border: 1px solid var(--p-line-2); background: white; }
+.ap-basis .b.on { border-color: var(--p-primary-3); background: var(--p-lavender-2); }
 `;
 
 const SORTS = {
@@ -57,7 +83,9 @@ function matchesQuery(o, q) {
 
 export default function Appeals({ onOpenNotice }) {
   const { data } = useData();
-  const [selId, setSelId] = React.useState(null);
+  // Which row is expanded. Nothing is open on arrival: the list is the page, and
+  // auto-opening the first row buries the rest under a long detail panel.
+  const [openId, setOpenId] = React.useState(null);
   const [query, setQuery] = React.useState("");
   const [sortBy, setSortBy] = React.useState("deadline");
   const [forum, setForum] = React.useState("All");
@@ -79,8 +107,6 @@ export default function Appeals({ onOpenNotice }) {
       .sort(SORTS[sortBy].fn),
     [orders, forum, q, sortBy]
   );
-
-  const selected = view.find((o) => o.notice.id === selId) || view[0] || null;
 
   const soon = orders.filter((o) => o.daysLeft != null && o.daysLeft >= 0 && o.daysLeft <= 15).length;
   const lapsed = orders.filter((o) => o.daysLeft != null && o.daysLeft < 0).length;
@@ -139,54 +165,173 @@ export default function Appeals({ onOpenNotice }) {
           />
         </div>
       ) : (
-        <div className="ap-grid">
-          <div className="col" style={{gap: 12}}>
-            <div className="between" style={{padding: "2px 2px"}}>
-              <span className="muted" style={{fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em"}}>
-                {view.length} order{view.length !== 1 ? "s" : ""} · {SORTS[sortBy].label.split(" — ")[0]}
-              </span>
-            </div>
-            {view.map((o) => (
-              <OrderCard key={o.notice.id} o={o} selected={selected?.notice.id === o.notice.id} onClick={() => setSelId(o.notice.id)}/>
-            ))}
-            {!showAll && hiddenOlder > 0 && (
-              <button className="btn btn-ghost btn-sm" style={{alignSelf: "flex-start"}} onClick={() => setShowAll(true)}>
-                Show {hiddenOlder} older order{hiddenOlder !== 1 ? "s" : ""} (beyond 365 days)
-              </button>
-            )}
+        <div className="col" style={{gap: 10}}>
+          <div className="between" style={{padding: "2px 2px"}}>
+            <span className="muted" style={{fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em"}}>
+              {view.length} order{view.length !== 1 ? "s" : ""} · {SORTS[sortBy].label.split(" — ")[0]}
+            </span>
           </div>
-          {selected && <Workspace key={selected.notice.id} x={selected} allNotices={data.notices} onOpenNotice={onOpenNotice}/>}
+          {view.map((o) => (
+            <OrderRow
+              key={o.notice.id}
+              o={o}
+              open={openId === o.notice.id}
+              onToggle={() => setOpenId(openId === o.notice.id ? null : o.notice.id)}
+              allNotices={data.notices}
+              onOpenNotice={onOpenNotice}
+            />
+          ))}
+          {!showAll && hiddenOlder > 0 && (
+            <button className="btn btn-ghost btn-sm" style={{alignSelf: "flex-start"}} onClick={() => setShowAll(true)}>
+              Show {hiddenOlder} older order{hiddenOlder !== 1 ? "s" : ""} (beyond 365 days)
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function OrderCard({ o, selected, onClick }) {
+/* A single order in the list. The head is always visible; the workspace mounts
+   only while expanded, so a long list stays cheap. */
+function OrderRow({ o, open, onToggle, allNotices, onOpenNotice }) {
   const u = URG[o.urgency];
   const n = o.notice;
-  const pillTxt = o.daysLeft == null ? "no date"
-    : o.daysLeft < 0 ? `${Math.abs(o.daysLeft)}d over` : `${o.daysLeft}d left`;
+  const docType = orderDocType(n);
   return (
-    <button
-      type="button"
-      className={`ap-order ${selected ? "sel" : ""}`}
-      style={{borderLeftColor: u.fg}}
-      onClick={onClick}
-    >
-      <div className="ap-head">
-        <span className="ap-name">{titleCase(n.assessee || "—")}</span>
-        <span className={`pill pill-${u.pill}`}><span className="pill-dot" style={{background: "currentColor"}}/>{pillTxt}</span>
+    <div className={`ap-row ${open ? "open" : ""}`}>
+      <button type="button" className="ap-rowhead" onClick={onToggle} aria-expanded={open}>
+        <div className="ap-count" style={{background: u.bg, color: u.fg}}>
+          <div className="big">{o.daysLeft == null ? "—" : Math.abs(o.daysLeft)}</div>
+          <div className="lbl">{u.lbl || "no date"}</div>
+        </div>
+
+        <div style={{minWidth: 0}}>
+          <div className="ap-name">{titleCase(n.assessee || "—")}</div>
+          {/* Which order this appeal is against — the thing the old card left
+              the practitioner guessing at. */}
+          <div className="ap-meta">
+            {[
+              DOC_TYPE_LABEL[docType] || "Order",
+              n.date ? fmtDateLong(n.date) : null,
+              n.section ? `u/s ${n.section}` : null,
+              `AY ${n.ay || "—"}`,
+            ].filter(Boolean).join(" · ")}
+          </div>
+          <div className="ap-tags">
+            <span className="pill pill-primary">Appeal to {o.route}</span>
+            <span className="pill pill-muted">{o.reg.act} · {o.form}</span>
+            {o.basesDiffer && (
+              <span className="pill pill-warning" title="The 1961 and 2025 Acts give different last dates for this order">
+                <Icon name="alert" size={10}/>two possible dates
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="ap-due">
+          {o.deadline
+            ? <><span className="muted">due </span><b style={{fontVariantNumeric: "tabular-nums"}}>{fmtDateLong(o.deadline)}</b></>
+            : <span className="muted">no date on file</span>}
+          <div className="muted" style={{marginTop: 4, display: "flex", gap: 5, alignItems: "center", justifyContent: "flex-end"}}>
+            {open ? "Hide details" : "Show details"}
+            <span style={{display: "flex", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s"}}>
+              <Icon name="chevron-down" size={13}/>
+            </span>
+          </div>
+        </div>
+      </button>
+
+      {open && (
+        <div className="ap-body">
+          <Workspace x={o} allNotices={allNotices} onOpenNotice={onOpenNotice}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* The order the appeal is against: what it is, what it decided, what it costs.
+   Everything here already existed on the notice — the aiSummary in particular
+   is written by summarizePortalNotice and was simply never shown on this page,
+   so the practitioner had to leave and open the PDF to know what they were
+   appealing. */
+function OrderCard({ n }) {
+  const { notify } = useData();
+  const [busy, setBusy] = React.useState(false);
+  const docType = orderDocType(n);
+  const summary = n.aiSummary || null;
+  const points = (summary && summary.items) || [];
+  const demand = n.parsed && n.parsed.disputedDemand;
+
+  const summarise = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await httpsCallable(functions, "summarizePortalNotice", { timeout: 120000 })({ noticeId: n.id });
+      notify("Order summarised");
+    } catch (e) {
+      console.error("summarizePortalNotice", e);
+      notify(e?.message?.slice(0, 140) || "Couldn't read the order PDF", "alert");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="center" style={{gap: 9, marginBottom: 13, justifyContent: "flex-start", flexWrap: "wrap"}}>
+        <span style={{width: 28, height: 28, borderRadius: 9, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", display: "grid", placeItems: "center"}}><Icon name="gavel" size={15}/></span>
+        <div className="card-title" style={{fontSize: 14}}>Order appealed against</div>
+        <span className="pill pill-muted" style={{marginLeft: "auto"}}>{DOC_TYPE_LABEL[docType] || "Order"}</span>
       </div>
-      <div className="ap-sub muted">
-        AY {n.ay || "—"} · {n.subject || `Order u/s ${n.section || "—"}`}
+
+      <div className="col" style={{gap: 5, fontSize: 12.5, color: "var(--p-text-2)"}}>
+        <Row k="Date of order" v={n.date ? fmtDateLong(n.date) : "—"}/>
+        <Row k="Passed under section" v={n.section ? `u/s ${n.section}` : "—"}/>
+        <Row k="DIN" v={n.din || "—"}/>
+        {n.assessedIncome != null && <Row k="Total income assessed" v={fmtINR(n.assessedIncome)} strong/>}
+        {demand ? <Row k="Demand raised" v={fmtINR(demand)} strong/> : null}
       </div>
-      <div className="center" style={{gap: 8, marginTop: 10, flexWrap: "wrap", justifyContent: "flex-start"}}>
-        <span className="pill pill-primary">Appeal to {o.route}</span>
-        <span className="pill pill-muted">{o.reg.act} · {o.form}</span>
-        {o.deadline && <span className="muted" style={{marginLeft: "auto", fontSize: 11.5, fontVariantNumeric: "tabular-nums"}}>due {fmtDateLong(o.deadline)}</span>}
-      </div>
-    </button>
+
+      {(n.subject || n.fileName) && (
+        <div className="muted ap-subject" style={{fontSize: 11.5, marginTop: 9, lineHeight: 1.5}}>
+          {n.subject || n.fileName}
+        </div>
+      )}
+
+      {summary && (summary.summary || points.length > 0) ? (
+        <div style={{marginTop: 12, padding: "11px 13px", background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", borderRadius: 11}}>
+          <div className="center" style={{gap: 7, justifyContent: "flex-start", marginBottom: points.length ? 7 : 0}}>
+            <Icon name="sparkle" size={12}/>
+            <span style={{fontWeight: 700, fontSize: 12.5}}>{summary.summary || "What this order holds"}</span>
+          </div>
+          {points.length > 0 && (
+            <ul style={{margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6, color: "var(--p-text-2)"}}>
+              {points.map((it, i) => <li key={i}>{it}</li>)}
+            </ul>
+          )}
+          <div className="muted" style={{fontSize: 10.5, marginTop: 8, fontStyle: "italic"}}>
+            Read from the PDF by AI — verify against the order before drafting grounds.
+          </div>
+        </div>
+      ) : n.storagePath ? (
+        <div className="center" style={{gap: 9, marginTop: 12, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 11, justifyContent: "flex-start"}}>
+          <div style={{flex: 1, fontSize: 12.5}} className="muted">
+            No summary yet — read the order to see the additions and findings it turns on.
+          </div>
+          <button className="btn btn-secondary btn-xs" disabled={busy} onClick={summarise}>
+            <Icon name="sparkle" size={12}/>{busy ? "Reading…" : "Summarise order"}
+          </button>
+        </div>
+      ) : null}
+
+      {n.storagePath && (
+        <button className="btn btn-secondary btn-sm" style={{marginTop: 12}} onClick={() => openStoragePdf(n.storagePath)}>
+          <Icon name="doc" size={13}/>Open the order PDF
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -221,21 +366,10 @@ function Workspace({ x, allNotices, onOpenNotice }) {
   const dismiss = () => { updateNotice(n.id, { appealStatus: "dismissed" }); notify("Dismissed from the appeals list"); };
 
   return (
-    <div className="card" style={{padding: 0, overflow: "hidden"}}>
-      <div style={{padding: "18px 20px", background: "var(--p-card-tint)", borderBottom: "1px solid var(--p-line)"}}>
-        <div className="between" style={{gap: 10, alignItems: "flex-start"}}>
-          <div style={{fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em"}}>{titleCase(n.assessee || "—")}</div>
-          <span className="pill pill-primary">Appeal to {x.route}</span>
-        </div>
-        <div className="muted" style={{fontSize: 12.5, marginTop: 4, display: "flex", gap: 14, flexWrap: "wrap"}}>
-          <span>PAN <b style={{color: "var(--p-text-2)"}}>{n.pan || "—"}</b></span>
-          <span>AY <b style={{color: "var(--p-text-2)"}}>{n.ay || "—"}</b></span>
-          <span className="ap-subject">{n.subject || `Order u/s ${n.section || "—"}`}</span>
-          {n.din && <span>DIN …{String(n.din).slice(-6)}</span>}
-        </div>
-      </div>
+    <div className="col" style={{gap: 16}}>
 
-      <div className="col" style={{gap: 16, padding: "18px 20px 22px"}}>
+        {/* What is being appealed, and what it decided */}
+        <OrderCard n={n}/>
 
         {/* Deadline */}
         <div className="card" style={{background: "var(--p-card-tint)"}}>
@@ -253,11 +387,35 @@ function Workspace({ x, allNotices, onOpenNotice }) {
               <Row k={`Order ${x.servedField}`} v={x.served ? fmtDateLong(x.served) : "—"}/>
               <Row k="Limitation" v={x.limitLabel || "—"}/>
               <Row k="Last date to file" v={x.deadline ? fmtDateLong(x.deadline) : "—"} strong/>
-              {x.route === "ITAT" && !reg.newAct && x.served && (
-                <div style={{fontSize: 11.5, color: "var(--p-text-3)", marginTop: 8, fontStyle: "italic"}}>
-                  For AY 2026-27+ (Act 2025) this becomes 2 months from the end of the month of communication → {fmtDateLong(endOfMonth2(x.served))}.
-                </div>
+
+              {/* Both computations, always — a limitation date shown later than
+                  the true one is what costs an appeal, so neither is hidden. */}
+              {x.bases.length > 0 && (
+                <>
+                  <div className="ap-basis">
+                    {x.bases.map((b) => {
+                      const on = b.newAct === reg.newAct;
+                      return (
+                        <div key={b.act} className={`b ${on ? "on" : ""}`}>
+                          <div className="between" style={{gap: 8}}>
+                            <span style={{fontSize: 11, fontWeight: 800, color: on ? "var(--p-primary-2)" : "var(--p-text-3)"}}>{b.act}</span>
+                            {on && <span className="pill pill-primary" style={{fontSize: 9.5}}>applied</span>}
+                          </div>
+                          <div style={{fontSize: 13, fontWeight: 800, marginTop: 3, fontVariantNumeric: "tabular-nums", color: on ? "var(--p-text)" : "var(--p-text-3)"}}>
+                            {fmtDateLong(b.date)}
+                          </div>
+                          <div className="muted" style={{fontSize: 10.5, marginTop: 2, lineHeight: 1.45}}>{b.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="muted" style={{fontSize: 11, marginTop: 8, lineHeight: 1.5}}>
+                    The 2025 Act applies to orders communicated on or after 1 Apr 2026, whatever the assessment year.
+                    {x.basesDiffer && <> The two Acts differ by {Math.abs(Math.round((new Date(x.bases[1].date) - new Date(x.bases[0].date)) / 86400000))} days here — <b>verify which governs before relying on the later date.</b></>}
+                  </div>
+                </>
               )}
+
               {x.urgency === "lapsed" && (
                 <div style={{fontSize: 12, color: "var(--p-danger)", fontWeight: 600, marginTop: 8}}>
                   Limitation lapsed — a condonation-of-delay application is required.
@@ -382,11 +540,10 @@ function Workspace({ x, allNotices, onOpenNotice }) {
 
         {/* Actions */}
         <div className="row" style={{gap: 10, flexWrap: "wrap"}}>
-          {onOpenNotice && <button className="btn btn-secondary" onClick={() => onOpenNotice(n)}><Icon name="doc" size={14}/>Open the order</button>}
+          {onOpenNotice && <button className="btn btn-secondary" onClick={() => onOpenNotice(n)}><Icon name="edit" size={14}/>Open the order record</button>}
           <button className="btn btn-secondary" onClick={markFiled}><Icon name="check" size={14}/>Mark appeal filed</button>
           <button className="btn btn-ghost" onClick={dismiss}>Dismiss</button>
         </div>
-      </div>
     </div>
   );
 }
@@ -398,13 +555,6 @@ function Row({ k, v, strong }) {
       <span style={{fontWeight: strong ? 800 : 600, color: "var(--p-text)", fontVariantNumeric: "tabular-nums", textAlign: "right"}}>{v}</span>
     </div>
   );
-}
-
-// last day of month, 2 months on — the Act-2025 ITAT computation (for the note).
-function endOfMonth2(iso) {
-  const d = new Date(iso + "T00:00:00");
-  const e = new Date(d.getFullYear(), d.getMonth() + 3, 0);
-  return `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`;
 }
 
 function slabHit(route, inc, i) {

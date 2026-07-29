@@ -10,7 +10,7 @@ import React from "react";
 import { orderBy, limit, where } from "firebase/firestore";
 import { Icon, fmtDateLong, fmtDateTime, Modal, FormField, TextInput, SelectInput, EmptyState, Avatar } from "../shared";
 import { useCollection } from "./useCollection";
-import { adminUpdateAccount, adminSetRole, adminLookupUser, STATUS_PILL, STATUS_LABEL } from "./adminApi";
+import { adminUpdateAccount, adminSetRole, adminLookupUser, STATUS_PILL, STATUS_LABEL, fmtInrMicroShort, VENDOR_LABEL } from "./adminApi";
 
 const STATUSES = ["trial", "active", "past_due", "cancelled", "suspended"];
 const PLANS = ["", "solo", "practice", "firm"];
@@ -113,6 +113,41 @@ function AccountDetail({ account, onClose, notify }) {
       <div className="muted mb-5" style={{ fontSize: 11.5 }}>
         Counts only — this console has no access to the practice's client records.
         {account.countersAt && ` Last counted ${fmtDateTime(account.countersAt)}.`}
+      </div>
+
+      {/* What this practice costs to serve. Login OTPs are deliberately absent:
+          they are sent before anyone is authenticated, so they belong to
+          acquisition rather than to any one account. */}
+      <div className="mb-5" style={{ padding: "12px 14px", borderRadius: 12, background: "var(--p-card-tint)", border: "1px solid var(--p-line)" }}>
+        <div className="between mb-2">
+          <div style={{ fontWeight: 700, fontSize: 13 }}>API cost to serve</div>
+          <div className="muted" style={{ fontSize: 11.5 }}>
+            {account.spend?.recomputedAt ? `Recomputed ${fmtDateTime(account.spend.recomputedAt)}` : "Live"}
+          </div>
+        </div>
+        <div className="row" style={{ gap: 22, flexWrap: "wrap" }}>
+          <div>
+            <div className="muted" style={{ fontSize: 11 }}>Last 30 days</div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>{fmtInrMicroShort(account.spend?.last30InrMicro)}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 11 }}>This month</div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>{fmtInrMicroShort(account.spend?.mtdInrMicro)}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 11 }}>Lifetime</div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>{fmtInrMicroShort(account.spend?.lifetimeInrMicro)}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 11 }}>Calls (30d)</div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>{account.spend?.last30Calls ?? "—"}</div>
+          </div>
+        </div>
+        {!account.spend && (
+          <div className="muted mt-2" style={{ fontSize: 11.5 }}>
+            No metered API calls yet. Only {Object.values(VENDOR_LABEL).slice(0, 3).join(", ")} usage is attributed to an account.
+          </div>
+        )}
       </div>
 
       {account.referral?.code && (
@@ -264,7 +299,7 @@ export default function AdminCustomers({ notify, openId, setOpenId }) {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Practice</th><th>Status</th><th>Plan</th><th>Assessees</th><th>Referral</th><th>Joined</th><th>Last seen</th>
+                <th>Practice</th><th>Status</th><th>Plan</th><th>Assessees</th><th>API cost 30d</th><th>Referral</th><th>Joined</th><th>Last seen</th>
               </tr>
             </thead>
             <tbody>
@@ -282,6 +317,7 @@ export default function AdminCustomers({ notify, openId, setOpenId }) {
                   <td><StatusPill status={a.status} /></td>
                   <td className="semi" style={{ textTransform: "capitalize" }}>{a.plan || "—"}</td>
                   <td>{a.counters?.assessees ?? "—"}</td>
+                  <td className="strong">{a.spend?.last30InrMicro ? fmtInrMicroShort(a.spend.last30InrMicro) : <span className="muted">—</span>}</td>
                   <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{a.referral?.code || <span className="muted">—</span>}</td>
                   <td className="muted">{a.createdAt ? fmtDateLong(a.createdAt) : "—"}</td>
                   <td className="muted">{a.lastSeenAt ? fmtDateLong(a.lastSeenAt) : "—"}</td>

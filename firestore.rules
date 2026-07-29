@@ -34,6 +34,14 @@ service cloud.firestore {
     match /adminAudit/{entryId}     { allow read: if isAdmin(); allow write: if false; }
     match /growthDaily/{day}        { allow read: if isAdmin(); allow write: if false; }
 
+    // Cost metering. `spend` holds token counts, latency and rupees — never a
+    // prompt, a response, a phone number or an email address, because anything
+    // in here is something support can read.
+    match /spend/{callId}           { allow read: if isAdmin(); allow write: if false; }
+    match /spendDaily/{day}         { allow read: if isAdmin(); allow write: if false; }
+    match /usageDaily/{key}         { allow read: if isAdmin(); allow write: if false; }
+    match /manualCosts/{month}      { allow read: if isAdmin(); allow write: if false; }
+
     // Plan catalogue — every signed-in user sees pricing; only functions edit it.
     match /plans/{planId} {
       allow read: if request.auth != null;

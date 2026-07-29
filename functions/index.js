@@ -20,6 +20,12 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
 
+/* Cost meter. Every paid outbound call — Gemini, 2Factor, Resend — records the
+   same shape through this, so the admin console can answer "what did this
+   customer cost me" as one sum rather than three vendor dashboards added up by
+   hand. Rates live in functions/pricing.js; see docs/COST_TRACKING.md. */
+const recordSpend = require("./spend").makeMeter({ db });
+
 /* ---------- where these functions run ----------------------------------------
  * Firestore for this project lives in asia-south1 (Mumbai) — but these functions
  * were originally pinned to us-central1 (Iowa), Google's default. That split them
@@ -140,7 +146,42 @@ const RESPONSE_SCHEMA = {
   required: ["documents"],
 };
 
-async function callGemini(model, apiKey, files) {
+/* `meta` carries who to bill the call to: { uid, feature, attempt }. It is the
+   only reason these wrappers changed shape — the Gemini request itself is
+   untouched. `usageMetadata` comes back in the same response body we were
+   already parsing and was previously thrown away. */
+async function callGemini(model, apiKey, files, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const out = await callGeminiInner(model, apiKey, files, (u) => { usage = u; });
+    ok = true;
+    return out;
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    // A response that arrived and then failed validation still consumed tokens
+    // and still cost money — record it, or the dashboard undercounts precisely
+    // when things are going wrong.
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      feature: meta.feature || "parseNotice",
+      attempt: meta.attempt || 1,
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
+  }
+}
+
+async function callGeminiInner(model, apiKey, files, onUsage) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
     contents: [
@@ -178,6 +219,7 @@ async function callGemini(model, apiKey, files) {
   }
 
   const json = await res.json();
+  onUsage?.(json?.usageMetadata);
   const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
   if (!text) throw new HttpsError("internal", "Gemini returned an empty response.");
   try {
@@ -242,20 +284,45 @@ function classifyDocType(name, section, authority) {
   if (authority === "Scrutiny" || /assessment order|order\s*u\/?s\s*1(4[3479]|53)|\b14[3479]\b|\b144\b/i.test(t)) return "assessmentOrder";
   return "order";
 }
-async function callGeminiSummary(model, apiKey, files, authority) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: summaryPrompt(authority) }] }],
-    generationConfig: { responseMimeType: "application/json", responseSchema: SUMMARY_SCHEMA, temperature: 0 },
-  };
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+async function callGeminiSummary(model, apiKey, files, authority, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const body = {
+      contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: summaryPrompt(authority) }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: SUMMARY_SCHEMA, temperature: 0 },
+    };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    usage = json?.usageMetadata;
+    const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+    let out;
+    try { out = JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
+    ok = true;
+    return out;
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      feature: "summarizeNotice",
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
   }
-  const json = await res.json();
-  const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
-  try { return JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
 }
 
 /* ---------- deterministic validation & normalisation ---------- */
@@ -341,6 +408,7 @@ exports.parseNotice = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in to use AI notice parsing.");
     }
+    const uid = request.auth.uid; // whose account this call is billed to
 
     // Accept the new multi-file shape { files: [{ mimeType, data }] }, and stay
     // backward-compatible with the original single-PDF shape { pdfBase64 }.
@@ -371,7 +439,7 @@ exports.parseNotice = onCall(
 
     const apiKey = geminiApiKey.value();
 
-    const primaryRaw = await callGemini(PRIMARY_MODEL, apiKey, files);
+    const primaryRaw = await callGemini(PRIMARY_MODEL, apiKey, files, { uid, feature: "parseNotice", attempt: 1 });
     let result = validate(primaryRaw);
     let modelUsed = PRIMARY_MODEL;
     let escalated = false;
@@ -379,7 +447,7 @@ exports.parseNotice = onCall(
     if (result.criticalMissing.length > 0) {
       escalated = true;
       try {
-        const strongRaw = await callGemini(ESCALATION_MODEL, apiKey, files);
+        const strongRaw = await callGemini(ESCALATION_MODEL, apiKey, files, { uid, feature: "parseNotice", attempt: 2 });
         const strong = validate(strongRaw);
         // Keep whichever attempt reads more of the critical fields.
         if (strong.criticalMissing.length <= result.criticalMissing.length) {
@@ -840,7 +908,7 @@ async function summariseNoticeDoc(ref, n, apiKey) {
   }
   const files = [{ mimeType: "application/pdf", data: buf.toString("base64") }];
 
-  const out = await callGeminiSummary(PRIMARY_MODEL, apiKey, files, n.authority);
+  const out = await callGeminiSummary(PRIMARY_MODEL, apiKey, files, n.authority, { uid });
   const docType = DOC_TYPE_ENUM.includes(out.docType) ? out.docType : undefined;
   const aiSummary = {
     summary: typeof out.summary === "string" ? out.summary.trim() : "",
@@ -923,20 +991,45 @@ const DOCUMENTS_SCHEMA = {
   required: ["documents"],
 };
 
-async function callGeminiDocuments(model, apiKey, files) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: DOCUMENTS_PROMPT }] }],
-    generationConfig: { responseMimeType: "application/json", responseSchema: DOCUMENTS_SCHEMA, temperature: 0 },
-  };
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+async function callGeminiDocuments(model, apiKey, files, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const body = {
+      contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: DOCUMENTS_PROMPT }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: DOCUMENTS_SCHEMA, temperature: 0 },
+    };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    usage = json?.usageMetadata;
+    const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+    let out;
+    try { out = JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
+    ok = true;
+    return out;
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      feature: "extractDocuments",
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
   }
-  const json = await res.json();
-  const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
-  try { return JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
 }
 
 exports.extractNoticeDocuments = onCall(
@@ -967,7 +1060,7 @@ exports.extractNoticeDocuments = onCall(
 
     let out;
     try {
-      out = await callGeminiDocuments(PRIMARY_MODEL, geminiApiKey.value(), [{ mimeType: "application/pdf", data: buf.toString("base64") }]);
+      out = await callGeminiDocuments(PRIMARY_MODEL, geminiApiKey.value(), [{ mimeType: "application/pdf", data: buf.toString("base64") }], { uid });
     } catch (e) {
       // Record the failure so the UI can say what happened rather than silently
       // opening an empty checklist.
@@ -1252,45 +1345,98 @@ function otpEmailHtml(code) {
   </table></body></html>`;
 }
 
+/* Login OTPs are metered with uid: null — deliberately. This fires before
+   anyone is authenticated, and for someone who never completes signup there is
+   no account to attribute it to even in principle. The console shows these as
+   "Login & signup", which is customer-acquisition cost rather than
+   cost-to-serve; folding them into a customer's bill would make both numbers
+   lie. */
 async function sendEmailOtp(email, code) {
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendApiKey.value()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: OTP_EMAIL_FROM,
-      to: [email],
-      subject: `${code} is your ProHippo sign-in code`,
-      html: otpEmailHtml(code),
-      text: `${code} is your ProHippo sign-in code. It expires in 10 minutes. If you didn't request it, ignore this email.`,
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    console.error("Resend send failed:", res.status, detail.slice(0, 300));
-    throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again in a moment.");
+  const started = Date.now();
+  let ok = false;
+  let errorCode = null;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey.value()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: OTP_EMAIL_FROM,
+        to: [email],
+        subject: `${code} is your ProHippo sign-in code`,
+        html: otpEmailHtml(code),
+        text: `${code} is your ProHippo sign-in code. It expires in 10 minutes. If you didn't request it, ignore this email.`,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error("Resend send failed:", res.status, detail.slice(0, 300));
+      errorCode = `http_${res.status}`;
+      throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again in a moment.");
+    }
+    ok = true;
+  } catch (e) {
+    errorCode = errorCode || String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    // A rejected send is not billed, so only a successful one carries units.
+    await recordSpend({
+      uid: null,
+      vendor: "resend",
+      sku: "email-otp",
+      feature: "login",
+      units: ok ? 1 : 0,
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
   }
 }
 
 // SMS channel via 2Factor AUTOGEN: 2Factor generates + sends the OTP using the
 // DLT-approved template, and returns a session id we keep for verification.
 async function sendSmsOtp(phoneTen) {
-  const url = `https://2factor.in/API/V1/${twofactorApiKey.value()}/SMS/${phoneTen}/AUTOGEN/${TWOFACTOR_TEMPLATE}`;
-  let json;
+  const started = Date.now();
+  let ok = false;
+  let errorCode = null;
   try {
-    const res = await fetch(url);
-    json = await res.json();
+    const url = `https://2factor.in/API/V1/${twofactorApiKey.value()}/SMS/${phoneTen}/AUTOGEN/${TWOFACTOR_TEMPLATE}`;
+    let json;
+    try {
+      const res = await fetch(url);
+      json = await res.json();
+    } catch (e) {
+      console.error("2Factor AUTOGEN request failed:", e.message || e);
+      errorCode = "network";
+      throw new HttpsError("unavailable", "We couldn't send the SMS right now. Please try again in a moment.");
+    }
+    if (!json || json.Status !== "Success" || !json.Details) {
+      console.error("2Factor AUTOGEN error:", JSON.stringify(json).slice(0, 300));
+      errorCode = String(json?.Details || "rejected").slice(0, 80);
+      throw new HttpsError("unavailable", "We couldn't send the SMS right now. Please try again in a moment.");
+    }
+    ok = true;
+    return json.Details; // session id
   } catch (e) {
-    console.error("2Factor AUTOGEN request failed:", e.message || e);
-    throw new HttpsError("unavailable", "We couldn't send the SMS right now. Please try again in a moment.");
+    errorCode = errorCode || String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    // AUTOGEN is the billed call — one credit per message. checkSmsOtp/VERIFY
+    // is free and is deliberately NOT metered; counting it would double every
+    // SMS figure in the console.
+    await recordSpend({
+      uid: null,
+      vendor: "2factor",
+      sku: "sms-otp",
+      feature: "login",
+      units: ok ? 1 : 0,
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
   }
-  if (!json || json.Status !== "Success" || !json.Details) {
-    console.error("2Factor AUTOGEN error:", JSON.stringify(json).slice(0, 300));
-    throw new HttpsError("unavailable", "We couldn't send the SMS right now. Please try again in a moment.");
-  }
-  return json.Details; // session id
 }
 
 // Ask 2Factor whether the entered code matches the session's OTP.
@@ -1685,33 +1831,57 @@ async function reserveMailQuota(uid) {
   });
 }
 
-async function sendViaResend({ to, replyTo, subject, html, text }) {
-  const payload = {
-    from: CLIENT_EMAIL_FROM,
-    to: [to],
-    subject,
-    html,
-    text,
-  };
-  if (replyTo && EMAIL_ADDR_RE.test(replyTo)) payload.reply_to = replyTo;
-
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendApiKey.value()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  const body = await res.text().catch(() => "");
-  if (!res.ok) {
-    console.error("Resend client send failed:", res.status, body.slice(0, 300));
-    throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again in a moment.");
-  }
+/* Unlike the login OTP, this one HAS an owner — a practitioner emailing their
+   own client — so it is billed to their account and shows up in their row in
+   the Customers table. */
+async function sendViaResend({ to, replyTo, subject, html, text, uid }) {
+  const started = Date.now();
+  let ok = false;
+  let errorCode = null;
   try {
-    return JSON.parse(body).id || "";
-  } catch {
-    return "";
+    const payload = {
+      from: CLIENT_EMAIL_FROM,
+      to: [to],
+      subject,
+      html,
+      text,
+    };
+    if (replyTo && EMAIL_ADDR_RE.test(replyTo)) payload.reply_to = replyTo;
+
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey.value()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.text().catch(() => "");
+    if (!res.ok) {
+      console.error("Resend client send failed:", res.status, body.slice(0, 300));
+      errorCode = `http_${res.status}`;
+      throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again in a moment.");
+    }
+    ok = true;
+    try {
+      return JSON.parse(body).id || "";
+    } catch {
+      return "";
+    }
+  } catch (e) {
+    errorCode = errorCode || String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: uid || null,
+      vendor: "resend",
+      sku: "email-client",
+      feature: "clientMessage",
+      units: ok ? 1 : 0,
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
   }
 }
 
@@ -1762,6 +1932,7 @@ exports.sendClientMessage = onCall(
         subject: msg.subject,
         html: msg.emailHtml,
         text: msg.emailText || "",
+        uid,
       });
     } catch (e) {
       sendError = e;
@@ -1943,3 +2114,8 @@ Object.assign(
    Setup: docs/ADMIN_PANEL.md */
 Object.assign(exports, require("./admin").build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db }));
 Object.assign(exports, require("./referrals").build({ REGIONS, db }));
+
+/* ---------- Cost reporting ----------
+   Reads the rollups the meter above writes. Rates live in functions/pricing.js
+   — one file, one place. Setup: docs/COST_TRACKING.md */
+Object.assign(exports, require("./costs").build({ REGIONS, db }));

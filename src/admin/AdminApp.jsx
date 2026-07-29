@@ -17,12 +17,14 @@ import { useAdminClaim } from "./useAdminClaim";
 import AdminOverview from "./AdminOverview";
 import AdminCustomers from "./AdminCustomers";
 import AdminReferrals from "./AdminReferrals";
+import AdminCosts from "./AdminCosts";
 import AdminAudit from "./AdminAudit";
 
 const NAV = [
   { id: "overview", label: "Overview", icon: "dashboard" },
   { id: "customers", label: "Customers", icon: "users" },
   { id: "referrals", label: "Referral codes", icon: "tag" },
+  { id: "costs", label: "Costs", icon: "wallet" },
   { id: "audit", label: "Audit log", icon: "shield" },
 ];
 
@@ -99,6 +101,7 @@ export default function AdminApp() {
       content = <AdminCustomers notify={notify} openId={openAccountId} setOpenId={setOpenAccountId} />;
       break;
     case "referrals": content = <AdminReferrals notify={notify} />; break;
+    case "costs": content = <AdminCosts notify={notify} onOpenAccount={openAccount} />; break;
     case "audit": content = <AdminAudit />; break;
     default: content = <AdminOverview onOpenAccount={openAccount} />;
   }

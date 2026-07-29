@@ -22,6 +22,41 @@ export const adminCreateReferralCode = call("adminCreateReferralCode");
 export const adminUpdateReferralCode = call("adminUpdateReferralCode");
 export const adminReverseRedemption = call("adminReverseRedemption");
 
+/* Costs */
+export const adminCostSummary = call("adminCostSummary");
+export const adminSetManualCost = call("adminSetManualCost");
+export const adminRecentFailures = call("adminRecentFailures");
+
+/* Cost is stored as integer micro-rupees — a single Gemini call is a fraction
+   of a paisa, and floats accumulate error over a month of them. Rupees are for
+   display only. */
+export const inrFromMicro = (m) => (m || 0) / 1e6;
+export const fmtInrMicro = (m, decimals = 2) =>
+  "₹" + inrFromMicro(m).toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+/* Table cells and totals read better without paise once the numbers grow. */
+export const fmtInrMicroShort = (m) => {
+  const v = inrFromMicro(m);
+  if (v === 0) return "₹0";
+  if (v < 1) return "₹" + v.toFixed(3);
+  if (v < 1000) return "₹" + v.toFixed(2);
+  return "₹" + Math.round(v).toLocaleString("en-IN");
+};
+
+export const VENDOR_LABEL = {
+  gemini: "Gemini",
+  "2factor": "2Factor SMS",
+  resend: "Resend email",
+  firebase: "Firebase (manual)",
+};
+
+export const FEATURE_LABEL = {
+  parseNotice: "Notice parsing",
+  summarizeNotice: "Order summaries",
+  extractDocuments: "Document extraction",
+  clientMessage: "Client messages",
+  login: "Login & signup",
+};
+
 /* Shared formatting — the console shows money the way the invoices do. */
 export const fromPaise = (p) => Math.round((p || 0) / 100);
 export const fmtPaise = (p) => "₹" + new Intl.NumberFormat("en-IN").format(fromPaise(p));

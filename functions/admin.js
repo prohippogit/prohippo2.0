@@ -269,6 +269,30 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db }) 
      ============================================================ */
 
   /*
+   * An account's API spend over the last 30 days and month-to-date, summed from
+   * the per-day documents the cost meter writes. Read by document id — 30 keyed
+   * reads, no query and no index.
+   */
+  async function recomputeSpend(uid) {
+    const ids = [];
+    for (let i = 0; i < 31; i++) ids.push(dayKey(Date.now() - i * 86400000));
+    const snaps = await db.getAll(...ids.map((d) => db.doc(`usageDaily/${uid}_${d}`)));
+
+    const thisMonth = dayKey(Date.now()).slice(0, 7);
+    let last30 = 0;
+    let mtd = 0;
+    let calls = 0;
+    for (const s of snaps) {
+      if (!s.exists) continue;
+      const d = s.data();
+      last30 += d.totalInrMicro || 0;
+      calls += d.calls || 0;
+      if ((d.date || "").startsWith(thisMonth)) mtd += d.totalInrMicro || 0;
+    }
+    return { last30InrMicro: last30, mtdInrMicro: mtd, last30Calls: calls, recomputedAt: nowISO() };
+  }
+
+  /*
    * Refreshes per-account usage counters and advances referral funnel stages.
    *
    * Activation is computed HERE rather than reported by the client: "this
@@ -295,7 +319,12 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db }) 
             counters[name] = doc.data().counters?.[name] || 0;
           }
         }
-        await doc.ref.set({ counters, countersAt: nowISO() }, { merge: true });
+        /* Recompute spend from usageDaily rather than trusting the live
+           increments. Those exist so the console is current within the day;
+           this is what handles the month boundary — without it, mtd would keep
+           climbing from January forever. */
+        const spend = await recomputeSpend(uid);
+        await doc.ref.set({ counters, countersAt: nowISO(), spend }, { merge: true });
 
         // Activation: the account has real work in it, not just a signup.
         const referral = doc.data().referral;

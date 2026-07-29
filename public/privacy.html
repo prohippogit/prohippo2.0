@@ -50,7 +50,7 @@ footer nav a:hover{color:var(--v)}
 
 <div class="wrap">
   <h1>Privacy Policy</h1>
-  <div class="upd">Last updated: 21 July 2026</div>
+  <div class="upd">Last updated: 29 July 2026</div>
 
   <p><strong>ProHippo</strong> (“ProHippo”, “we”, “us”, “our”) is a practice-management application for chartered accountants, tax practitioners and other professionals, operated by <strong>MEHTAJI BIZCON LLP</strong> (LLPIN AAV-0638), a Limited Liability Partnership incorporated in India. This Privacy Policy explains what information we collect, how we use and protect it, and the choices you have. It applies to the ProHippo web application, browser extension and website at prohippo.in.</p>
 
@@ -62,6 +62,7 @@ footer nav a:hover{color:var(--v)}
     <li><strong>Practice data you enter</strong> — details of your clients/assessees (such as name, PAN, contact details, address), and records of matters, hearings, notices, invoices and communications that you create.</li>
     <li><strong>Documents</strong> — notice, order and other PDFs that you upload or sync into the app.</li>
     <li><strong>Income-tax portal login credentials</strong> — if you choose to use the portal-sync feature, the User ID and password you save so the app can log in to the Government of India Income-tax e-filing portal on your instruction. These are stored in encrypted form (see Section 4).</li>
+    <li><strong>Google Calendar authorisation</strong> — if you connect Google Calendar, the address of the Google account you chose and an authorisation token allowing ProHippo to write to the calendar it creates for you. The token is stored in encrypted form and is never exposed to your browser.</li>
     <li><strong>Technical and usage data</strong> — standard log and device information (such as browser type and timestamps) used to operate and secure the service.</li>
   </ul>
 
@@ -84,41 +85,47 @@ footer nav a:hover{color:var(--v)}
   <h2>5. AI processing</h2>
   <p>To extract details (such as section, assessment year, dates and amounts) from documents you upload, the document is processed using Google’s Gemini API. This processing is used only to return the extracted fields to you within the app. AI-generated output is provided for convenience and must be verified by you; it is not a substitute for professional judgement.</p>
 
-  <h2>6. Sharing with third parties</h2>
+  <h2>6. Google Calendar sync</h2>
+  <p>If you choose to connect Google Calendar, ProHippo creates a single new calendar named “ProHippo — Hearings” in your Google account and writes your own hearing and deadline entries into it. We request only the <code>calendar.app.created</code> permission, which limits our access to calendars ProHippo itself creates — we cannot read, change or delete your personal calendars, or any event we did not create.</p>
+  <p>Sync is one-way: information flows from ProHippo to Google, and changes you make in Google are never written back into your practice records. Where you have switched on “Include client details”, event titles and descriptions carry assessee names, PAN and case numbers; switching it off limits events to the authority and assessment year. Google’s handling of this information is governed by Google’s own privacy policy.</p>
+  <p>You can disconnect at any time from Settings, or revoke access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Disconnecting revokes our access and deletes the stored authorisation; events already created remain in your calendar until you delete that calendar yourself.</p>
+  <p>ProHippo’s use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>7. Sharing with third parties</h2>
   <p>We share information only with service providers that help us operate ProHippo, and only as needed:</p>
   <ul>
-    <li><strong>Google</strong> — hosting (Firebase/Google Cloud), authentication, and document processing (Gemini API);</li>
+    <li><strong>Google</strong> — hosting (Firebase/Google Cloud), authentication, document processing (Gemini API), and, if you connect it, Google Calendar;</li>
     <li><strong>Meta Platforms / WhatsApp</strong> — where you use messaging features to contact your clients who have consented to be contacted;</li>
     <li><strong>Legal</strong> — where required by law, regulation, or valid legal process.</li>
   </ul>
 
-  <h2>7. Data retention</h2>
+  <h2>8. Data retention</h2>
   <p>We retain your data for as long as your account is active or as needed to provide the service. You may delete individual records at any time within the app, clear all of your practice data from Settings, or request deletion of your account (see our <a href="/data-deletion">Data Deletion</a> page). We will delete or anonymise data within a reasonable period, except where retention is required by law.</p>
 
-  <h2>8. Your rights</h2>
+  <h2>9. Your rights</h2>
   <p>Subject to applicable law (including India’s Digital Personal Data Protection Act, 2023), you may request access to, correction of, or deletion of your personal data, and may withdraw consent. To exercise these rights, contact us at <a href="mailto:info@prohippo.in">info@prohippo.in</a>.</p>
 
-  <h2>9. Security</h2>
+  <h2>10. Security</h2>
   <p>We use industry-standard measures including encryption in transit (HTTPS), encryption of stored credentials, access controls and least-privilege server functions. No system is perfectly secure, but we work to protect your information and to promptly address issues.</p>
 
-  <h2>10. WhatsApp &amp; communications consent</h2>
+  <h2>11. WhatsApp &amp; communications consent</h2>
   <p>ProHippo lets professionals message their clients. You may only send messages to recipients who have consented to be contacted, and you are responsible for obtaining that consent. Messaging is subject to WhatsApp’s and Meta’s policies.</p>
 
-  <h2>11. Children</h2>
+  <h2>12. Children</h2>
   <p>ProHippo is intended for professionals and is not directed to individuals under 18. We do not knowingly collect personal data from children.</p>
 
-  <h2>12. Changes to this policy</h2>
+  <h2>13. Changes to this policy</h2>
   <p>We may update this policy from time to time. Material changes will be reflected by updating the “Last updated” date above and, where appropriate, by notice within the app.</p>
 
   <div class="box">
-    <h2 style="margin-top:0">13. Grievance Officer</h2>
+    <h2 style="margin-top:0">14. Grievance Officer</h2>
     <p style="margin-bottom:0">In accordance with the Information Technology Act, 2000, the Digital Personal Data Protection Act, 2023 and rules thereunder, you may contact our Grievance Officer for any privacy concern or complaint:</p>
     <p style="margin:8px 0 0"><strong>Grievance Officer</strong>, MEHTAJI BIZCON LLP<br/>
     Email: <a href="mailto:info@prohippo.in">info@prohippo.in</a><br/>
     Address: 1210, City Centre 2, B/s. Heer Party Plot, Nr. Shukanmall Cross Road, Science City Road, Sola, Ahmedabad, Gujarat – 360060, India</p>
   </div>
 
-  <h2>14. Contact &amp; governing law</h2>
+  <h2>15. Contact &amp; governing law</h2>
   <p>For any questions about this policy, email <a href="mailto:info@prohippo.in">info@prohippo.in</a>. This policy is governed by the laws of India, and the courts at Ahmedabad, Gujarat shall have jurisdiction.</p>
 
   <footer>

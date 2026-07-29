@@ -4,10 +4,20 @@ ProHippo pushes hearings and deadlines into a calendar it creates inside the
 practitioner's own Google account. One-way: ProHippo is the record of truth, and
 an event dragged in Google never moves a hearing here.
 
-Four one-time steps: create a Google OAuth client, store two secrets, deploy, and
-start Google's verification review. **Start the verification (Step 5) the same
-day you start everything else** — it takes one to three weeks and is the only
-part you cannot hurry.
+Three one-time steps: create a Google OAuth client, store two secrets, deploy.
+
+**No OAuth verification review is required.** Google classifies
+`calendar.app.created` as a **non-sensitive** scope — it appears under "Your
+non-sensitive scopes" on the Data access page, and the sensitive and restricted
+tables stay empty. That means no scope review, no 100-user cap, and no
+"unverified app" warning on the consent screen. This is the payoff for choosing
+the narrow scope: `calendar` and `calendar.events` are both sensitive and would
+have gated launch behind a one-to-three-week review.
+
+A separate **brand** verification still shows as pending on the Branding and
+Audience pages. That one only governs whether your logo and app name are
+displayed on the consent screen — it is cosmetic, and it does not limit who can
+connect or what the sync can do. Submit it when convenient.
 
 ---
 
@@ -49,9 +59,10 @@ access** the scopes. If `calendar.app.created` is not in the scope picker, use
 > ProHippo to calendars it created itself — a bug in the sync engine cannot reach
 > a personal diary — and it is a materially faster verification review.
 
-The privacy policy page must exist, be reachable, and **say what ProHippo does
-with Google Calendar data** — reviewers check for the specific scope, not just
-that a policy exists.
+The privacy policy should still say what ProHippo does with Google Calendar
+data, and affirm the Limited Use requirements of the Google API Services User
+Data Policy. That obligation applies to any Google API data, verification review
+or not.
 
 **Publishing status must end up "In production", not "Testing."** This is not
 cosmetic: with External user type in Testing, Google expires refresh tokens after
@@ -59,9 +70,10 @@ cosmetic: with External user type in Testing, Google expires refresh tokens afte
 reconcile would die every Monday. Production with an unverified-app warning is
 strictly better than Testing here.
 
-Verification also requires proving you own the domain in
-[Google Search Console](https://search.google.com/search-console) with the same
-account. For `prohippo.in` the DNS TXT method covers the whole domain at once.
+Brand verification, if and when you submit it, requires proving you own the
+domain in [Google Search Console](https://search.google.com/search-console) with
+the same account. For `prohippo.in` the DNS TXT method covers the whole domain
+at once.
 
 ## Step 3 — Create the OAuth client
 
@@ -112,22 +124,15 @@ The first deploy of `nightlyCalendarReconcile` needs the Cloud Scheduler API. If
 the deploy stops asking for it, run `gcloud services enable
 cloudscheduler.googleapis.com` and deploy again.
 
-## Step 5 — Submit for verification
+## Step 5 — Brand verification (optional, cosmetic)
 
-**OAuth consent screen → Publish app → Prepare for verification.**
+**Google Auth Platform → Verification centre.**
 
-Until this is approved:
+This is the only review left, and it is not a gate: it decides whether your logo
+and app name are shown on the consent screen. Nothing about who can connect, the
+user cap, or what the sync can do depends on it. Submit it when convenient.
 
-- consent shows an "unverified app" warning users must click through, and
-- **only 100 accounts total** can ever connect.
-
-Google asks for a demo video showing the consent screen and what the app does
-with the data, plus a justification for the scope. The honest one-liner: *"We
-create one calendar in the user's account and write their own hearing schedule
-into it; we read nothing else."*
-
-While verification is pending, the **calendar subscription link** in Settings
-works for everyone with no OAuth at all — see below.
+Needs domain ownership in Search Console (above) and a reachable privacy policy.
 
 ---
 

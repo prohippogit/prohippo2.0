@@ -50,7 +50,13 @@ const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
 /* Narrow by design: "See and change only the calendars ProHippo creates."
    Full calendar access would let a bug here touch a personal diary, and it
-   reads far worse on the consent screen. */
+   reads far worse on the consent screen.
+
+   It also turned out to be the difference between shipping and waiting: Google
+   classifies calendar.app.created as NON-sensitive, so it needs no verification
+   review, carries no 100-user cap and shows no "unverified app" warning.
+   `calendar` and `calendar.events` are both sensitive. Widening this string
+   would quietly put all three of those back. */
 const SCOPE = "https://www.googleapis.com/auth/calendar.app.created openid email";
 
 const CALENDAR_SUMMARY = "ProHippo — Hearings";

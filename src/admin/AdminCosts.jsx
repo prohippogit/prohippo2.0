@@ -238,6 +238,66 @@ export default function AdminCosts({ notify, onOpenAccount }) {
         </div>
       )}
 
+      {/* Resend Free costs nothing per message and then stops. The number that
+          matters is volume against the allowance, and it has to be visible
+          before the cliff rather than on the invoice after it. */}
+      {data && (
+        <div className="grid mb-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">Email allowance</div>
+                <div className="card-sub">Resend {data.rates.resendPlan.name} · resets monthly</div>
+              </div>
+            </div>
+            {(() => {
+              const used = data.allowances.emailsThisMonth;
+              const inc = data.allowances.emailIncluded;
+              const pct = Math.min(100, Math.round((used / inc) * 100));
+              const tone = pct >= 90 ? "danger" : pct >= 70 ? "warning" : "success";
+              return (
+                <>
+                  <div className="between mb-2" style={{ alignItems: "baseline" }}>
+                    <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em" }}>{used.toLocaleString("en-IN")}</span>
+                    <span className="muted" style={{ fontSize: 12.5 }}>of {inc.toLocaleString("en-IN")} free</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 4, background: "var(--p-line-2)", overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: `var(--p-${tone})`, borderRadius: 4 }} />
+                  </div>
+                  <div className="muted mt-2" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+                    {pct >= 70
+                      ? `${pct}% used — the next step is Resend Pro at $20/month for 50,000.`
+                      : `Also capped at ${data.allowances.emailDailyLimit}/day on Free. Marginal cost of a message today is ₹0.`}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title">SMS this month</div>
+                <div className="card-sub">Prepaid credits · ₹{data.rates.smsInrPerSend} each</div>
+              </div>
+            </div>
+            <div className="between mb-2" style={{ alignItems: "baseline" }}>
+              <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em" }}>
+                {data.allowances.smsThisMonth.toLocaleString("en-IN")}
+              </span>
+              <span className="muted" style={{ fontSize: 12.5 }}>
+                {fmtInrMicroShort(data.allowances.smsThisMonth * data.rates.smsInrPerSend * 1e6)}
+              </span>
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+              Last pack: {data.rates.smsPack.credits.toLocaleString("en-IN")} credits for ₹
+              {data.rates.smsPack.paidInr.toLocaleString("en-IN")} incl. GST. Only sends are billed —
+              verification is free.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid mb-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
         <div className="card">
           <div className="card-head"><div className="card-title">By vendor</div></div>
@@ -330,20 +390,28 @@ export default function AdminCosts({ notify, onOpenAccount }) {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="card-title">Rates in force</div></div>
+          <div className="card-head"><div className="card-title">Rates in force</div><div className="card-sub">All figures exclusive of GST</div></div>
           {data && (
             <div style={{ fontSize: 12.5 }}>
               <div className="between mb-2"><span className="muted">Version</span><b>{data.rates.version}</b></div>
               <div className="between mb-2"><span className="muted">USD → INR</span><b>{data.rates.usdInr}</b></div>
-              <div className="between mb-2"><span className="muted">SMS per send</span><b>₹{data.rates.smsInrPerSend}</b></div>
-              <div className="between mb-3"><span className="muted">Email per send</span><b>${data.rates.emailUsdPerSend}</b></div>
               {Object.entries(data.rates.gemini).map(([model, r]) => (
                 <div className="between mb-2" key={model}>
                   <span className="muted" style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}>{model}</span>
-                  <b>${r.inUsdPerMTok} / ${r.outUsdPerMTok} per Mtok</b>
+                  <b>${r.inUsdPerMTok} in / ${r.outUsdPerMTok} out per Mtok</b>
                 </div>
               ))}
-              <div className="muted mt-3" style={{ fontSize: 11.5, lineHeight: 1.5 }}>{data.rates.freeTierNote}</div>
+              <div className="between mb-2">
+                <span className="muted">SMS per send</span>
+                <b>₹{data.rates.smsInrPerSend}</b>
+              </div>
+              <div className="between mb-3">
+                <span className="muted">Email plan</span>
+                <b style={{ textTransform: "capitalize" }}>Resend {data.rates.resendPlan.name} — ₹0 / message</b>
+              </div>
+              {data.rates.notes.map((n, i) => (
+                <div className="muted mt-2" key={i} style={{ fontSize: 11.5, lineHeight: 1.5 }}>{n}</div>
+              ))}
               <div className="muted mt-2" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
                 Reconcile against the real invoices monthly — a hand-kept rate table drifts.
               </div>

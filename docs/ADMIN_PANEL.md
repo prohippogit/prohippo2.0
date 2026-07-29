@@ -96,12 +96,29 @@ node scripts/grant-admin.mjs you@example.com
 Sign out, sign back in, open `/admin`. Every admin after the first is granted
 from the console itself — **Customers → open an account → Make admin**.
 
-### c. Backfill existing customers
+### c. Backfill existing customers — do this, don't wait
 
-`accounts/{uid}` is created by the trigger the next time `users/{uid}` is
-written. Every session writes a `lastSeenAt` stamp, so existing customers appear
-in the console the next time they open the app — no migration to run. To force
-it sooner, touch each profile document from a script.
+`accounts/{uid}` is created by the mirror trigger when `users/{uid}` is written.
+Every profile that existed *before* the trigger was deployed has therefore never
+produced an account row, so **a freshly deployed console opens onto an empty
+Customers table.** Nothing is broken; there is simply nothing there yet.
+
+Each session does stamp `lastSeenAt`, so those users would trickle in as they
+next open the app — but that could be days, and an empty console looks exactly
+like a broken one. Run the backfill instead:
+
+```bash
+node scripts/backfill-accounts.mjs --dry-run   # see what it would do
+node scripts/backfill-accounts.mjs
+```
+
+It walks every existing profile, creates the account row, and counts each
+practice's collections so the numbers are right immediately rather than after
+the 02:30 IST rollup.
+
+Safe to re-run: it merges, and it seeds `plan` / `status` / `trialEndsAt` only
+when creating a row. A second run will never knock a paying customer back onto
+a trial.
 
 ---
 

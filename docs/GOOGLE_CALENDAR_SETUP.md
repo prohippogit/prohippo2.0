@@ -28,9 +28,10 @@ part you cannot hurry.
 | App name | ProHippo |
 | User support email | your address |
 | App logo | upload the ProHippo mark (required for verification) |
-| Application home page | https://prohippo2.web.app |
-| Privacy policy link | https://prohippo2.web.app/privacy |
-| Authorised domain | prohippo2.web.app |
+| Application home page | https://prohippo.in |
+| Privacy policy link | https://prohippo.in/privacy |
+| Application Terms of Service link | https://prohippo.in/terms |
+| Authorised domain | prohippo.in (keep prohippo2.firebaseapp.com alongside it) |
 | Developer contact | your address |
 
 On the **Scopes** step click **Add or remove scopes**, and add exactly one:
@@ -39,12 +40,28 @@ On the **Scopes** step click **Add or remove scopes**, and add exactly one:
 https://www.googleapis.com/auth/calendar.app.created
 ```
 
+The console has moved these settings: **Google Auth Platform → Branding** holds
+the app details, **Audience** the user type and publishing status, and **Data
+access** the scopes. If `calendar.app.created` is not in the scope picker, use
+**Manually add scopes** at the bottom of the panel.
+
 > Do **not** add `calendar` or `calendar.events`. The narrow scope is what limits
 > ProHippo to calendars it created itself — a bug in the sync engine cannot reach
 > a personal diary — and it is a materially faster verification review.
 
-The privacy policy page must exist and be reachable before verification; Google
-checks it.
+The privacy policy page must exist, be reachable, and **say what ProHippo does
+with Google Calendar data** — reviewers check for the specific scope, not just
+that a policy exists.
+
+**Publishing status must end up "In production", not "Testing."** This is not
+cosmetic: with External user type in Testing, Google expires refresh tokens after
+**7 days**, so every practitioner would have to reconnect weekly and the nightly
+reconcile would die every Monday. Production with an unverified-app warning is
+strictly better than Testing here.
+
+Verification also requires proving you own the domain in
+[Google Search Console](https://search.google.com/search-console) with the same
+account. For `prohippo.in` the DNS TXT method covers the whole domain at once.
 
 ## Step 3 — Create the OAuth client
 
@@ -52,7 +69,8 @@ checks it.
 
 - Application type: **Web application**
 - Name: `ProHippo web`
-- Authorised redirect URI — exactly this, no trailing slash:
+- Authorised redirect URI — exactly this, no trailing slash. `cloudfunctions.net`
+  is a Google-owned domain and does not need to be an authorised domain:
 
 ```
 https://asia-south1-prohippo2.cloudfunctions.net/calendarAuthCallback
@@ -70,7 +88,7 @@ Copy the **Client ID** and **Client secret** off the dialog that appears.
 In **Cloud Shell** (https://shell.cloud.google.com):
 
 ```
-cd ~/prohippo2.0 && git fetch origin && git checkout -f claude/google-calendar-sync-2wfs3k && git reset --hard origin/claude/google-calendar-sync-2wfs3k
+cd ~/prohippo2.0 && git fetch origin && git checkout -f claude/keen-ride-FlIY1 && git reset --hard origin/claude/keen-ride-FlIY1
 ```
 
 Set the two secrets (each command waits for you to paste the value):
@@ -139,6 +157,18 @@ works for everyone with no OAuth at all — see below.
 `googleTokens` and `calendarAuthStates` are top-level collections, so the
 existing catch-all `allow read, write: if false` in `firestore.rules` already
 denies clients — no rules change was needed, same as `portalCreds`.
+
+### Which domain the user comes back to
+
+ProHippo answers on `prohippo.in` and on Firebase's default `web.app` /
+`firebaseapp.com` addresses at the same time. The consent flow therefore records
+the origin the user set off from and returns them to that one, rather than to a
+single hardcoded address — connect from `prohippo.in` and you land back on
+`prohippo.in`. The origin is checked against `ALLOWED_ORIGINS` in
+`functions/googleCalendar.js` before use; an unrecognised value falls back to
+`APP_ORIGIN`, because an OAuth callback that redirects anywhere it is told is an
+open redirect. **Add any new domain to that set**, or users on it will be handed
+off mid-flow.
 
 ### Why event IDs are derived, not stored
 

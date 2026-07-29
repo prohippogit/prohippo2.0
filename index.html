@@ -22,6 +22,29 @@
     <meta property="og:description" content="Practice-management software for Indian chartered accountants and tax practitioners: income-tax notices, hearings, appeal deadlines, clients and billing in one place." />
     <meta property="og:image" content="https://prohippo.in/prohippo-logo.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!--
+      Machine-readable description of the product. Lives in <head>, so unlike
+      the fallback markup in #root it survives React mounting — which matters
+      for anything that renders the page before reading it, Google's OAuth
+      brand review included.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ProHippo",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://prohippo.in/",
+        "logo": "https://prohippo.in/prohippo-logo.png",
+        "description": "ProHippo is practice-management software for chartered accountants and tax practitioners in India. It tracks income-tax notices issued by the Income Tax Department, the hearings and reply dates they carry, and the limitation deadline for filing an appeal against an order, alongside client records, document requests and billing.",
+        "publisher": {
+          "@type": "Organization",
+          "name": "MEHTAJI BIZCON LLP",
+          "url": "https://prohippo.in/about"
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>

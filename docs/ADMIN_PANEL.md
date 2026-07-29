@@ -1,7 +1,16 @@
 # Admin console & referral system
 
-The console lives at **`/admin`** inside the same app. It is lazily imported, so
-none of it ships in the bundle a practitioner downloads.
+The console lives at **https://prohippo.in/admin**, inside the same app. It is
+lazily imported, so none of it ships in the bundle a practitioner downloads.
+
+**Getting there day to day:** an "Admin console" item appears at the bottom of
+the sidebar — but only for accounts carrying the admin claim, so a practitioner
+is never shown a door they can't open. Everyone else has no link, no hint, and
+no route that resolves to anything but the normal app. Typing the URL works too.
+
+The sidebar reads the claim off the cached ID token rather than forcing a
+refresh, so a newly granted admin sees the link from their next sign-in. `/admin`
+itself always re-checks against a fresh token.
 
 This is Phase 1 (accounts + admin shell) and Phase 2 (referral codes end to end).
 Plans, entitlement enforcement and Razorpay billing are Phase 3–4 and are *not*

@@ -47,11 +47,11 @@ const HOW_TO_SEND_TEXT =
 
 /* Brand mark shown at the foot of the email.
  *
- * Served from Firebase Hosting's default domain, which is always live — the
- * custom domain may or may not be pointed at Hosting, and a broken image in
- * every client email is a worse outcome than a slightly plainer URL. Change
- * this one constant if prohippo.in is serving the app. */
-const LOGO_URL = "https://prohippo2.web.app/prohippo-logo.png";
+ * Served from prohippo.in — the address the product actually goes by, and the
+ * one a recipient checking the sender will recognise. Firebase's default
+ * domains stay live behind it, so prohippo2.web.app remains a working fallback
+ * if the custom domain is ever detached from Hosting. */
+const LOGO_URL = "https://prohippo.in/prohippo-logo.png";
 
 const signOff = (profile) => {
   const who = (profile?.ownerName || "").trim();

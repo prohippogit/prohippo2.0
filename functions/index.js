@@ -1231,7 +1231,7 @@ function safeEqualHex(a, b) {
  * is a footer credit. This email really is from ProHippo; that one is from the
  * practitioner's firm, and leading it with our logo would confuse their client
  * about who is writing. */
-const LOGO_URL = "https://prohippo2.web.app/prohippo-logo.png";
+const LOGO_URL = "https://prohippo.in/prohippo-logo.png";
 
 function otpEmailHtml(code) {
   return `<!doctype html><html><body style="margin:0;background:#F7F6FB;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">

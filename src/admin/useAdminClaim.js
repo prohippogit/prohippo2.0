@@ -14,7 +14,14 @@
 import React from "react";
 import { useAuth } from "../auth";
 
-export function useAdminClaim() {
+/*
+ * `force` refreshes the ID token before reading it. The console needs that —
+ * a claim granted a minute ago must not be invisible for the next hour. The
+ * practitioner's sidebar does not: it only decides whether to show a link, and
+ * making every user on every page load pay for a token refresh to answer a
+ * question that is "no" for almost all of them is a poor trade.
+ */
+export function useAdminClaim({ force = true } = {}) {
   const { user } = useAuth();
   // null = not looked up yet for this user.
   const [claim, setClaim] = React.useState(null);
@@ -23,13 +30,13 @@ export function useAdminClaim() {
     if (!user) return undefined;
     let cancelled = false;
     user
-      .getIdTokenResult(true)
+      .getIdTokenResult(force)
       .then((res) => { if (!cancelled) setClaim(res.claims?.admin === true); })
       .catch(() => { if (!cancelled) setClaim(false); });
     // Clearing on teardown means a second account signing in never inherits
     // the first one's verdict for a frame.
     return () => { cancelled = true; setClaim(null); };
-  }, [user]);
+  }, [user, force]);
 
   return { checking: !!user && claim === null, isAdmin: claim === true };
 }

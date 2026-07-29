@@ -3,6 +3,7 @@ import React from "react";
 import { Icon } from "./shared";
 import { useAuth } from "./auth";
 import { useData } from "./store";
+import { pendingReferral, validateReferralCode, redeemReferralCode, normaliseCode } from "./referral";
 
 export default function Onboarding() {
   const { user, signOutUser } = useAuth();
@@ -14,6 +15,30 @@ export default function Onboarding() {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState(null);
 
+  // A code carried in from ?ref= is pre-filled and checked straight away, so
+  // someone arriving on a partner's link never has to type anything.
+  const [referral, setReferral] = React.useState(() => pendingReferral()?.code || "");
+  // The code the server has been asked about — set on blur, on Enter, and once
+  // at mount for a code that arrived in the URL.
+  const [checking, setChecking] = React.useState(() => normaliseCode(pendingReferral()?.code || ""));
+  const [refState, setRefState] = React.useState(null); // { ok, label } | { ok:false, message }
+
+  React.useEffect(() => {
+    if (checking.length < 4) return undefined;
+    let cancelled = false;
+    validateReferralCode(checking)
+      .then((res) => { if (!cancelled) setRefState(res); })
+      .catch((e) => { if (!cancelled) setRefState({ ok: false, message: e.message || "Could not check that code." }); });
+    return () => { cancelled = true; };
+  }, [checking]);
+
+  const checkReferral = (raw) => {
+    const code = normaliseCode(raw);
+    setChecking(code);
+    if (code.length < 4) setRefState(null);
+  };
+  const refChecking = checking.length >= 4 && !refState;
+
   const valid = ownerName.trim().length > 1;
 
   const finish = async () => {
@@ -22,6 +47,16 @@ export default function Onboarding() {
     setError(null);
     try {
       await createProfile({ ownerName, firmName, phone });
+      // Attribution is best-effort and never blocks the signup: a code that has
+      // just been paused shouldn't leave someone stuck on this screen.
+      const code = normaliseCode(referral);
+      if (code.length >= 4) {
+        try {
+          await redeemReferralCode(code);
+        } catch (e) {
+          console.warn("referral not applied:", e.message || e);
+        }
+      }
       if (withSample) await loadSampleData();
       // DataProvider's profile listener flips the app into the dashboard.
     } catch (e) {
@@ -59,6 +94,29 @@ export default function Onboarding() {
             <div className="field">
               <label>Mobile number <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
               <input value={phone} type="tel" inputMode="numeric" placeholder="e.g. +91 98250 11234" onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") finish(); }} />
+            </div>
+
+            <div className="field">
+              <label>Referral or promo code <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+              <input
+                value={referral}
+                placeholder="e.g. AHMCA25"
+                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", textTransform: "uppercase" }}
+                onChange={(e) => { setReferral(e.target.value.toUpperCase()); setChecking(""); setRefState(null); }}
+                onBlur={(e) => checkReferral(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") checkReferral(e.target.value); }}
+              />
+              {refChecking && <div className="muted" style={{ fontSize: 12 }}>Checking…</div>}
+              {!refChecking && refState?.ok && (
+                <div className="center" style={{ gap: 6, fontSize: 12, color: "var(--p-success)", fontWeight: 600 }}>
+                  <Icon name="check" size={13} stroke={3} />
+                  {refState.label} applied
+                  {refState.ownerName ? ` — thanks to ${refState.ownerName}` : ""}
+                </div>
+              )}
+              {!refChecking && refState && !refState.ok && (
+                <div style={{ fontSize: 12, color: "var(--p-danger)" }}>{refState.message}</div>
+              )}
             </div>
 
             <div

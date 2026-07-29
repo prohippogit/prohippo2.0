@@ -1,16 +1,48 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Admin console access is a CUSTOM CLAIM minted by Cloud Functions
+    // (scripts/grant-admin.mjs for the first one, adminSetRole after that).
+    // Nothing a client can write can grant it.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
     // Each signed-in user can read/write ONLY their own practice data,
     // stored under users/{their-uid}/... — at any nesting depth (e.g. the
     // per-assessee portalProceedings / portalNotices subcollections).
+    //
+    // Admins get NO access here, on purpose. This subtree holds the
+    // practitioner's clients' PANs, notices and assessment records; the admin
+    // console works off the `accounts` mirror below, which carries identity
+    // and billing but never client data.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
       match /{document=**} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
-    // Everything else is denied by default.
+
+    // ---- Admin console -------------------------------------------------
+    // Read-only from the browser, so the console can use live snapshots.
+    // Every write goes through an audited callable running under the Admin
+    // SDK, which bypasses these rules — so `allow write: if false` here costs
+    // nothing and stops a compromised admin session doing unlogged damage.
+    match /accounts/{accountId}     { allow read: if isAdmin(); allow write: if false; }
+    match /referralCodes/{code}     { allow read: if isAdmin(); allow write: if false; }
+    match /referralRedemptions/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /adminAudit/{entryId}     { allow read: if isAdmin(); allow write: if false; }
+    match /growthDaily/{day}        { allow read: if isAdmin(); allow write: if false; }
+
+    // Plan catalogue — every signed-in user sees pricing; only functions edit it.
+    match /plans/{planId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Everything else is denied by default. That includes otpChallenges,
+    // deviceSessions, portalCreds, googleTokens, referralVisits and
+    // rateLimits, which only Admin-SDK functions ever touch.
     match /{document=**} {
       allow read, write: if false;
     }

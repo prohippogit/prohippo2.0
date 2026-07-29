@@ -1231,7 +1231,7 @@ function safeEqualHex(a, b) {
  * is a footer credit. This email really is from ProHippo; that one is from the
  * practitioner's firm, and leading it with our logo would confuse their client
  * about who is writing. */
-const LOGO_URL = "https://prohippo2.web.app/prohippo-logo.png";
+const LOGO_URL = "https://prohippo.in/prohippo-logo.png";
 
 function otpEmailHtml(code) {
   return `<!doctype html><html><body style="margin:0;background:#F7F6FB;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
@@ -1933,3 +1933,13 @@ Object.assign(
     decryptSecret,
   })
 );
+
+/* ---------- Admin console + referral/growth system ----------
+   Two modules sharing functions/adminCore.js. They own the top-level
+   `accounts`, `referralCodes`, `referralRedemptions` and `adminAudit`
+   collections — the same Admin-SDK-only trust boundary as otpChallenges and
+   deviceSessions above, except admins are additionally granted READ from the
+   browser (see firestore.rules) so the console can use live snapshots.
+   Setup: docs/ADMIN_PANEL.md */
+Object.assign(exports, require("./admin").build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db }));
+Object.assign(exports, require("./referrals").build({ REGIONS, db }));

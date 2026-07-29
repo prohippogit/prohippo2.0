@@ -2,6 +2,7 @@ import { Icon } from './shared';
 import { useData } from './store';
 import { useAuth } from './auth';
 import { appealableOrders } from './appeals';
+import { useAdminClaim } from './admin/useAdminClaim';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -23,6 +24,10 @@ const NAV_BOTTOM = [
 export default function Sidebar({ active, onNav, open }) {
   const { data } = useData();
   const { user, signOutUser } = useAuth();
+  /* Read the claim off the cached token rather than forcing a refresh — this
+     only decides whether one link is drawn. A claim granted in the last hour
+     shows up on the next sign-in, and /admin re-checks properly on arrival. */
+  const { isAdmin } = useAdminClaim({ force: false });
   const badges = {
     assessees: data.assessees.length || null,
     appeals: appealableOrders(data).length || null,
@@ -53,6 +58,16 @@ export default function Sidebar({ active, onNav, open }) {
 
       <div className="sidebar-bottom">
         <div className="nav" style={{marginBottom: 14}}>
+          {/* Only rendered for accounts carrying the admin claim, so a
+              practitioner is never shown a door they can't open. It is a full
+              page navigation, not an onNav route — /admin is a separate shell
+              with its own lazily loaded bundle. */}
+          {isAdmin && (
+            <div className="nav-item" onClick={() => { window.location.href = "/admin"; }}>
+              <Icon name="shield" size={18} className="nav-icon"/>
+              <span>Admin console</span>
+            </div>
+          )}
           {NAV_BOTTOM.map(item => (
             <div
               key={item.id}

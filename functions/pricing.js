@@ -20,49 +20,84 @@
  *      accumulate error over a month of calls. `costMicro` is millionths of one
  *      unit of `currency`.
  *
- * ============================================================================
- * THE RATES BELOW ARE PLACEHOLDERS AND ARE ALMOST CERTAINLY NOT WHAT YOU PAY.
+ * ----------------------------------------------------------------------------
+ * TAX TREATMENT: ALL RATES BELOW ARE EXCLUSIVE OF GST.
  *
- * Before trusting a single number in the admin console, put the real figures in
- * from each vendor's own pricing page / invoice, then set RATES_VERIFIED = true
- * and bump RATE_VERSION. Until you do, the Costs page shows an "unverified
- * rates" banner over every total — a wrong number you know is wrong is
- * survivable; one you believe is not.
+ * The 2Factor pack was ₹2,596 for 10,000 SMS — ₹2,200 plus 18% GST. The rate
+ * used is ₹0.22, the ex-GST figure, because MEHTAJI BIZCON LLP is registered
+ * and takes input tax credit on that invoice: the GST is recovered, so it is
+ * not a cost. The USD vendors are quoted ex-tax already, which keeps all three
+ * consistent.
  *
- *   Gemini    https://ai.google.dev/pricing
- *   2Factor   your 2Factor dashboard — the per-SMS credit price you bought at
- *   Resend    https://resend.com/pricing
- * ============================================================================
+ * If you are NOT claiming input credit, set SMS_INR_PER_SEND to 0.2596 (the
+ * cash-out figure) and bump RATE_VERSION. Do not mix the two.
+ * ----------------------------------------------------------------------------
  */
 "use strict";
 
-const RATE_VERSION = "2026-07-placeholder";
-const RATES_VERIFIED = false;
+const RATE_VERSION = "2026-07-B";
 
-// Used to convert USD-billed vendors into the rupees the business thinks in.
-// Frozen onto every record — see rule 2.
-const USD_INR = 87.0;
+/* Confirmed against the vendors' own pricing pages on 2026-07-29:
+ *   Gemini 3.1 Flash-Lite  https://ai.google.dev/pricing
+ *   2Factor                the 10,000-SMS pack invoice
+ *   Resend                 https://resend.com/pricing
+ * The one gap is ESCALATION_MODEL — see GEMINI_RATES below. */
+const RATES_VERIFIED = true;
 
-/* Gemini bills per million tokens, separately for input and output. Images and
-   PDF pages arrive already counted inside promptTokenCount, so no separate
-   per-page rate is needed. */
+/* Set this to the rate your card is actually settling at. It is frozen onto
+   every record, so changing it never rewrites history. */
+const USD_INR = 88.0;
+
+/*
+ * Gemini bills per million tokens, input and output separately. Images and PDF
+ * pages arrive already counted inside promptTokenCount, so there is no separate
+ * per-page rate.
+ *
+ * NOTE ON OUTPUT: Google's output price is "including thinking tokens", and the
+ * API reports those separately as `thoughtsTokenCount`. The meter adds them to
+ * candidatesTokenCount — counting only the visible answer would under-report
+ * every call.
+ *
+ * gemini-3.1-flash (ESCALATION_MODEL in index.js) is deliberately ABSENT: its
+ * price has not been confirmed, and inventing one would be worse than leaving
+ * it out. Calls to it are counted as unpriced and shown on the Costs page as
+ * "N calls had no rate", which is a visible gap rather than a silent ₹0.
+ */
 const GEMINI_RATES = {
-  "gemini-3.1-flash-lite": { inUsdPerMTok: 0.10, outUsdPerMTok: 0.40 },
-  "gemini-3.1-flash": { inUsdPerMTok: 0.30, outUsdPerMTok: 2.50 },
+  // Paid tier, text/image/video input. Audio input is $0.50 — not used here.
+  "gemini-3.1-flash-lite": { inUsdPerMTok: 0.25, outUsdPerMTok: 1.50 },
 };
 
-// 2Factor sells SMS credits in rupees. Only AUTOGEN sends a message — VERIFY is
-// free, and metering it would double every SMS number in the console.
-const SMS_INR_PER_SEND = 0.20;
+/* 2Factor: prepaid credits, one per SMS sent. Only AUTOGEN sends a message —
+   VERIFY is free, and metering it would double every SMS figure. */
+const SMS_INR_PER_SEND = 0.22;
+const SMS_PACK = { credits: 10000, paidInr: 2596, paidExGstInr: 2200 };
 
-// Resend bills per email above a monthly free allowance. See freeTierNote below
-// for why the console reports gross of that allowance.
-const EMAIL_USD_PER_SEND = 0.0004;
-const EMAIL_FREE_PER_MONTH = 3000;
+/*
+ * Resend is a SUBSCRIPTION, not a per-unit charge, and ProHippo is on Free.
+ *
+ * That makes the marginal cost of one more email exactly zero — the Free plan
+ * has no overage billing, it just stops you at 100/day and 3,000/month. Pricing
+ * each email at some notional per-unit rate would invent a cost that is not
+ * being incurred.
+ *
+ * What matters instead is the CLIFF: at 3,000/month the next step is Pro at
+ * $20/month. The Costs page therefore reports email VOLUME against the
+ * allowance rather than a rupee figure, so the jump is visible before it
+ * arrives rather than on the invoice after.
+ *
+ * When you move to Pro: set plan to "pro", and enter the $20 in
+ * Costs → Monthly invoice. Overage beyond 50,000 is $0.90 per 1,000.
+ */
+const RESEND_PLAN = {
+  name: "free",
+  monthlyUsd: 0,
+  includedPerMonth: 3000,
+  dailyLimit: 100,
+  overageUsdPer1000: 0, // Free does not bill overage; it rate-limits instead
+};
 
-/* Vendors and the SKUs each can bill. The console groups by these, so a typo
-   here becomes a silently missing row rather than an error — hence the
-   allowlist and the `unknown` fallbacks. */
+/* Vendors and the SKUs each can bill. The console groups by these. */
 const VENDORS = ["gemini", "2factor", "resend", "firebase"];
 const SKUS = {
   gemini: Object.keys(GEMINI_RATES),
@@ -103,9 +138,16 @@ function priceSms(units) {
   return { costMicro: toMicro(SMS_INR_PER_SEND * n), currency: "INR", priced: true };
 }
 
+/*
+ * Email marginal cost. Zero on the Free plan by definition — the monthly fee is
+ * a subscription, not a per-message charge, and is entered under Monthly
+ * invoice. On Pro, only genuine overage beyond the included volume costs
+ * anything per message.
+ */
 function priceEmail(units) {
   const n = Math.max(0, Number(units ?? 1));
-  return { costMicro: toMicro(EMAIL_USD_PER_SEND * n), currency: "USD", priced: true };
+  const per = (RESEND_PLAN.overageUsdPer1000 || 0) / 1000;
+  return { costMicro: toMicro(per * n), currency: "USD", priced: true };
 }
 
 /* Convert into the reporting currency at a rate the caller then stores. */
@@ -140,9 +182,11 @@ function priceCall({ vendor, sku, promptTokens, outputTokens, units }) {
 /* Display helpers, shared with the client through adminApi. */
 const inrFromMicro = (micro) => (micro || 0) / 1e6;
 
-const freeTierNote =
-  `Email costs are reported gross of Resend's first ${EMAIL_FREE_PER_MONTH.toLocaleString("en-IN")} ` +
-  `messages a month, which are free. Below that volume the real invoice is lower than the figure shown.`;
+const notes = [
+  `Rates are exclusive of GST. SMS is ₹${SMS_INR_PER_SEND} (the ₹${SMS_PACK.paidExGstInr}/${SMS_PACK.credits.toLocaleString("en-IN")} pack rate) — ₹${(SMS_PACK.paidInr / SMS_PACK.credits).toFixed(4)} including GST, which is recovered as input credit.`,
+  `Email marginal cost is ₹0: Resend Free includes ${RESEND_PLAN.includedPerMonth.toLocaleString("en-IN")} messages a month with no overage billing. Watch the volume, not the rupees — the next step is Pro at $20/month.`,
+  `Gemini output pricing includes thinking tokens, so thoughtsTokenCount is counted alongside the visible answer.`,
+];
 
 module.exports = {
   RATE_VERSION,
@@ -150,8 +194,8 @@ module.exports = {
   USD_INR,
   GEMINI_RATES,
   SMS_INR_PER_SEND,
-  EMAIL_USD_PER_SEND,
-  EMAIL_FREE_PER_MONTH,
+  SMS_PACK,
+  RESEND_PLAN,
   VENDORS,
   SKUS,
   VENDOR_LABEL,
@@ -161,5 +205,5 @@ module.exports = {
   priceCall,
   toInrMicro,
   inrFromMicro,
-  freeTierNote,
+  notes,
 };

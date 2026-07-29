@@ -22,37 +22,65 @@ Deliberately **not** metered: `checkSmsOtp` (2Factor VERIFY) is free, and
 counting it would double every SMS figure in the console. Google OAuth, the
 Calendar API and the income-tax portal cost nothing.
 
-## 2. Rates — read this before trusting a number
+## 2. Rates in force
 
-**Every rate lives in `functions/pricing.js` and nowhere else.**
+Confirmed against the vendors' own pages on 2026-07-29 and set in
+`functions/pricing.js` (`RATE_VERSION = "2026-07-B"`).
 
-The values shipped are **placeholders**. Until you replace them, the Costs page
-shows an amber "these rates have not been verified" banner over every total — a
-figure you know is wrong is survivable; one you believe is not.
+| | Rate | Source |
+|---|---|---|
+| `gemini-3.1-flash-lite` | $0.25 / M input tokens (text, image, video)<br>$1.50 / M output tokens | ai.google.dev/pricing, paid tier |
+| 2Factor SMS | ₹0.22 per send | ₹2,200 for 10,000 credits |
+| Resend email | **₹0 marginal** | Free plan, 3,000/month |
+| Firebase | entered by hand | monthly invoice |
+| USD → INR | 88.0 | set to your settlement rate |
 
-To make it real:
+### All rates are exclusive of GST
 
-1. Put the current prices into `functions/pricing.js` from
-   [Gemini](https://ai.google.dev/pricing), your 2Factor dashboard (the per-SMS
-   credit price you actually bought at), and [Resend](https://resend.com/pricing)
-2. Set `USD_INR` to a rate you're happy with
-3. Set `RATES_VERIFIED = true` and bump `RATE_VERSION`
-4. Deploy
+The 2Factor pack cost ₹2,596 — ₹2,200 plus 18% GST. The rate used is **₹0.22**,
+the ex-GST figure, because the LLP is registered and takes input credit on that
+invoice: the GST is recovered, so it is not a cost. The USD vendors quote ex-tax
+already, which keeps all three consistent.
 
-### Three rules the pricing module exists to enforce
+If you are *not* claiming input credit, set `SMS_INR_PER_SEND` to `0.2596` and
+bump `RATE_VERSION`. Do not mix the two.
 
-**Cost is computed at write time and frozen.** A spend record stores the rupees
-it cost, not just the tokens it used, plus the `RATE_VERSION` that priced it.
-Vendors change prices; last quarter's numbers must not quietly change when they
-do.
+### Email is a subscription, not a per-unit charge
 
-**The FX rate is frozen too.** Gemini and Resend bill in USD, 2Factor bills in
-INR, the business runs in INR. Convert at read time and every historical report
-moves with the rupee.
+Resend Free has no overage billing — it stops you at 100/day and 3,000/month.
+So the marginal cost of one more email is genuinely **zero**, and pricing each
+message at some notional rate would invent a cost you are not incurring.
 
-**Money is integer micro-units.** A single flash-lite call costs a small
-fraction of a cent — paise cannot hold it, and floats accumulate error over a
-month of calls. `costMicroInr` is millionths of a rupee.
+What matters is the **cliff**: at 3,000/month the next step is Pro at $20/month
+for 50,000, then $0.90 per 1,000 beyond that. The Costs page therefore shows an
+**email allowance meter** — volume against the 3,000, amber at 70%, red at 90% —
+so the jump is visible before it arrives rather than on the invoice after.
+
+When you move to Pro: set `RESEND_PLAN.name` to `"pro"`, `includedPerMonth` to
+`50000`, `overageUsdPer1000` to `0.90`, and enter the $20 under
+**Costs → Monthly invoice**.
+
+### Thinking tokens are counted
+
+Google's output price is *"including thinking tokens"*, and the API reports
+those separately as `thoughtsTokenCount`. The meter adds them to
+`candidatesTokenCount` — counting only the visible answer would under-report
+every call.
+
+### One gap: the escalation model
+
+`ESCALATION_MODEL = "gemini-3.1-flash"` (`functions/index.js:83`) has **no rate
+in the table**, deliberately — its price was not on the pricing page that was
+checked, and inventing one would be worse than leaving it out. Calls to it are
+recorded with `priced: false` and surface on the Costs page as *"N calls had no
+rate in the price table"*. A visible gap beats a confident wrong total.
+
+**That counter is also worth watching for a second reason.** If it shows calls,
+escalation is happening and you need the rate. If it stays at zero while notices
+are being parsed, escalation is either never triggering or failing — the code
+catches an escalation error and falls back to the first-pass result
+(`functions/index.js:393`), so a model id that no longer exists would degrade
+parse quality silently.
 
 ## 3. Where the data goes
 

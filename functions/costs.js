@@ -71,6 +71,11 @@ exports.build = function build({ REGIONS, db }) {
     const byVendor = {};
     const bySku = {};
     const byFeature = {};
+    // Same breakdown but restricted to the calendar month, because plan
+    // allowances (Resend's 3,000 free emails) reset monthly, not on a rolling
+    // window. Reporting a 30-day count against a monthly allowance would be
+    // wrong in both directions depending on the date.
+    const mtdBySku = {};
     let windowInrMicro = 0;
     let mtdInrMicro = 0;
     let todayInrMicro = 0;
@@ -99,6 +104,7 @@ exports.build = function build({ REGIONS, db }) {
       if (monthKey(d.date) === thisMonth) {
         mtdInrMicro += inr;
         daysElapsedThisMonth++;
+        mergeBuckets(mtdBySku, d.bySku);
       }
     }
     series.sort((a, b) => a.date.localeCompare(b.date));
@@ -137,14 +143,28 @@ exports.build = function build({ REGIONS, db }) {
         byVendor: manualThis?.byVendor || {},
         lastMonthByVendor: lastManual.exists ? lastManual.data().byVendor || {} : {},
       },
+      /* Plan allowances. Resend Free costs nothing per message but stops at
+         3,000 a month — so the number that matters there is VOLUME, not
+         rupees, and it needs to be visible before the cliff rather than on the
+         invoice after it. */
+      allowances: {
+        emailsThisMonth:
+          (mtdBySku["email-otp"]?.calls || 0) + (mtdBySku["email-client"]?.calls || 0),
+        emailIncluded: pricing.RESEND_PLAN.includedPerMonth,
+        emailPlan: pricing.RESEND_PLAN.name,
+        emailDailyLimit: pricing.RESEND_PLAN.dailyLimit,
+        smsThisMonth: mtdBySku["sms-otp"]?.calls || 0,
+        smsPackCredits: pricing.SMS_PACK.credits,
+      },
       rates: {
         version: pricing.RATE_VERSION,
         verified: pricing.RATES_VERIFIED,
         usdInr: pricing.USD_INR,
-        freeTierNote: pricing.freeTierNote,
+        notes: pricing.notes,
         gemini: pricing.GEMINI_RATES,
         smsInrPerSend: pricing.SMS_INR_PER_SEND,
-        emailUsdPerSend: pricing.EMAIL_USD_PER_SEND,
+        smsPack: pricing.SMS_PACK,
+        resendPlan: pricing.RESEND_PLAN,
       },
       at: nowISO(),
     };

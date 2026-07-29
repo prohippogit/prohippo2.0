@@ -17,6 +17,8 @@ const {
   GEMINI_RATES,
   USD_INR,
   SMS_INR_PER_SEND,
+  SMS_PACK,
+  RESEND_PLAN,
 } = require("./pricing.js");
 const { safeKey, dayKey } = require("./spend.js").helpers;
 const { mergeBuckets, monthKey } = require("./costs.js").helpers;
@@ -48,11 +50,18 @@ test("an unknown model is flagged, not silently free", () => {
   assert.equal(out.priced, false, "priced:false is what surfaces it in the console");
 });
 
-test("the escalation model costs more than the primary", () => {
-  // If this ever flips, the escalation path stops being worth measuring.
-  const lite = priceGemini("gemini-3.1-flash-lite", 100000, 10000).costMicro;
-  const full = priceGemini("gemini-3.1-flash", 100000, 10000).costMicro;
-  assert.ok(full > lite, "escalation should be the expensive path");
+test("flash-lite is priced at the published paid-tier rate", () => {
+  const r = GEMINI_RATES["gemini-3.1-flash-lite"];
+  assert.equal(r.inUsdPerMTok, 0.25, "text/image/video input, paid tier");
+  assert.equal(r.outUsdPerMTok, 1.50, "output, including thinking tokens");
+});
+
+test("the escalation model is unpriced until its rate is confirmed", () => {
+  // Deliberate. Inventing a number for gemini-3.1-flash would be worse than
+  // the console showing "N calls had no rate" — a visible gap beats a
+  // confident wrong total.
+  const out = priceGemini("gemini-3.1-flash", 100000, 10000);
+  assert.equal(out.priced, false);
 });
 
 test("zero tokens costs zero", () => {
@@ -67,13 +76,30 @@ test("SMS is priced in rupees and needs no conversion", () => {
   assert.equal(out.costMicro, Math.round(SMS_INR_PER_SEND * 1e6));
 });
 
+test("the SMS rate is the ex-GST pack rate, and the pack maths holds", () => {
+  // ₹2,200 for 10,000 credits = ₹0.22. GST is recovered as input credit, so it
+  // is not a cost — mixing the two figures would overstate SMS by 18%.
+  assert.equal(SMS_PACK.paidExGstInr / SMS_PACK.credits, SMS_INR_PER_SEND);
+  assert.equal(Math.round(SMS_PACK.paidExGstInr * 1.18), SMS_PACK.paidInr, "2200 + 18% = 2596");
+});
+
 test("a failed send bills zero units", () => {
   assert.equal(priceSms(0).costMicro, 0);
   assert.equal(priceEmail(0).costMicro, 0);
 });
 
-test("email is priced in USD", () => {
+test("an email on the free plan has zero marginal cost", () => {
+  // Resend Free is a subscription with no overage billing — it rate-limits
+  // instead. Pricing each message at some notional rate would invent a cost
+  // that is not being incurred.
+  assert.equal(RESEND_PLAN.name, "free");
+  assert.equal(priceEmail(1).costMicro, 0);
+  assert.equal(priceEmail(2500).costMicro, 0);
+});
+
+test("email is still denominated in USD, for when the plan changes", () => {
   assert.equal(priceEmail(1).currency, "USD");
+  assert.equal(priceEmail(1).priced, true, "zero cost is a real answer, not a missing rate");
 });
 
 /* ---------------- currency ---------------- */

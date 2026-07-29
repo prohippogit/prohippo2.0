@@ -173,7 +173,10 @@ async function callGemini(model, apiKey, files, meta = {}) {
       feature: meta.feature || "parseNotice",
       attempt: meta.attempt || 1,
       promptTokens: usage?.promptTokenCount || 0,
-      outputTokens: usage?.candidatesTokenCount || 0,
+      // Google's output price is "including thinking tokens", and the API
+      // reports those separately — counting only the visible answer would
+      // under-report every call.
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
       ms: Date.now() - started,
       ok,
       errorCode,
@@ -317,7 +320,10 @@ async function callGeminiSummary(model, apiKey, files, authority, meta = {}) {
       sku: model,
       feature: "summarizeNotice",
       promptTokens: usage?.promptTokenCount || 0,
-      outputTokens: usage?.candidatesTokenCount || 0,
+      // Google's output price is "including thinking tokens", and the API
+      // reports those separately — counting only the visible answer would
+      // under-report every call.
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
       ms: Date.now() - started,
       ok,
       errorCode,
@@ -1024,7 +1030,10 @@ async function callGeminiDocuments(model, apiKey, files, meta = {}) {
       sku: model,
       feature: "extractDocuments",
       promptTokens: usage?.promptTokenCount || 0,
-      outputTokens: usage?.candidatesTokenCount || 0,
+      // Google's output price is "including thinking tokens", and the API
+      // reports those separately — counting only the visible answer would
+      // under-report every call.
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
       ms: Date.now() - started,
       ok,
       errorCode,

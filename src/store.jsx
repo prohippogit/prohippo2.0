@@ -189,6 +189,22 @@ export function DataProvider({ children }) {
     return () => { unsubProfile(); unsubs.forEach((u) => u()); };
   }, [uid, colRef]);
 
+  /* Stamp the session so the admin console can tell a live practice from a
+     dormant one. Fire-and-forget: it is a signal, not a record, and a failed
+     write is not worth a toast. The account mirror trigger copies it across to
+     accounts/{uid}.
+
+     Gated on the profile already existing — a merge write here before
+     onboarding would bring users/{uid} into being with nothing but a
+     timestamp, and the profile gate reads "document exists" as "already
+     onboarded". */
+  const stamped = React.useRef(null);
+  React.useEffect(() => {
+    if (!uid || !profile || stamped.current === uid) return;
+    stamped.current = uid;
+    setDoc(doc(db, "users", uid), { lastSeenAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+  }, [uid, profile]);
+
   const api = React.useMemo(() => {
     const notify = (msg, icon = "check") => setToast({ msg, icon });
     const fail = (e) => { console.error(e); notify("Couldn't save — check your connection", "alert"); };

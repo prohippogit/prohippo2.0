@@ -1933,3 +1933,13 @@ Object.assign(
     decryptSecret,
   })
 );
+
+/* ---------- Admin console + referral/growth system ----------
+   Two modules sharing functions/adminCore.js. They own the top-level
+   `accounts`, `referralCodes`, `referralRedemptions` and `adminAudit`
+   collections — the same Admin-SDK-only trust boundary as otpChallenges and
+   deviceSessions above, except admins are additionally granted READ from the
+   browser (see firestore.rules) so the console can use live snapshots.
+   Setup: docs/ADMIN_PANEL.md */
+Object.assign(exports, require("./admin").build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db }));
+Object.assign(exports, require("./referrals").build({ REGIONS, db }));

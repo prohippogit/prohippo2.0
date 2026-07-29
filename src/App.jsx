@@ -195,10 +195,34 @@ function AuthGate() {
   );
 }
 
+/* The admin console. Lazily imported so it never lands in the bundle a
+   practitioner downloads — and it deliberately does NOT mount DataProvider:
+   the console has no business subscribing to anyone's practice data, including
+   the signed-in admin's own. */
+const AdminApp = React.lazy(() => import('./admin/AdminApp'));
+
+function AdminGate() {
+  const { user, loading } = useAuth();
+  if (loading) return <Splash label="Signing you in…"/>;
+  // Same sign-in screen as the app; a non-admin who gets through it lands on
+  // AdminApp's "no admin access" wall.
+  if (!user) return <Login onBack={() => { window.location.href = "/"; }}/>;
+  return (
+    <React.Suspense fallback={<Splash label="Opening the admin console…"/>}>
+      <AdminApp/>
+    </React.Suspense>
+  );
+}
+
 export default function App() {
+  // Hosting rewrites every path to index.html (firebase.json), so routing is
+  // ours to do. One split is all the app needs: the console, or the product.
+  const path = typeof window === "undefined" ? "" : window.location.pathname;
+  const isAdmin = path === "/admin" || path.startsWith("/admin/");
+
   return (
     <AuthProvider>
-      <AuthGate/>
+      {isAdmin ? <AdminGate/> : <AuthGate/>}
     </AuthProvider>
   );
 }

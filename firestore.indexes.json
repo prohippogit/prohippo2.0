@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "//": "adminOverview counts trials that lapsed without converting: an equality filter on status plus a range on trialEndsAt, which Firestore cannot serve from single-field indexes.",
+      "collectionGroup": "accounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "trialEndsAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

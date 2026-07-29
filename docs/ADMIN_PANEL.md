@@ -27,12 +27,21 @@ there, and no callable in `functions/admin.js` reads it. The console shows
 
 ## 2. First-time setup
 
-### a. Deploy
+### a. Deploy — backend first, then the site
+
+`.github/workflows/firebase-deploy.yml` deploys **hosting only** when a pull
+request merges. Rules, indexes and functions are not in it, so they have to go
+out by hand:
 
 ```bash
-firebase deploy --only firestore:rules,firestore:indexes,functions
-npm run build && firebase deploy --only hosting
+firebase deploy --only firestore:rules,firestore:indexes,functions --project prohippo2
 ```
+
+**Order matters.** Deploy the backend from the feature branch *before* merging.
+Merge first and the new front-end goes live against a backend that has no
+`accounts` collection and no callables — `/admin` loads to a wall of
+permission-denied, and anyone typing a referral code during signup gets an
+error. (Their signup still completes: attribution is best-effort by design.)
 
 New functions in this change:
 
@@ -55,14 +64,24 @@ The first admin has to come from outside the system. There is deliberately no
 self-service endpoint: one that can make its caller an admin is a
 privilege-escalation hole no amount of validation redeems.
 
-```bash
-# Firebase console → Project settings → Service accounts → Generate new private
-# key. Save it OUTSIDE the repo.
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json
+The script uses Application Default Credentials, so in Google Cloud Shell (or
+anywhere you've run `gcloud auth application-default login`) there is nothing to
+download:
 
+```bash
+npm --prefix functions install
 node scripts/grant-admin.mjs you@example.com     # grant
 node scripts/grant-admin.mjs you@example.com --revoke
 node scripts/grant-admin.mjs --list
+```
+
+If ADC isn't available, fall back to a service account key — Firebase console →
+Project settings → Service accounts → Generate new private key, saved **outside**
+the repo:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json
+node scripts/grant-admin.mjs you@example.com
 ```
 
 Sign out, sign back in, open `/admin`. Every admin after the first is granted

@@ -9,16 +9,22 @@
  * one admin, grant the rest from the console itself (Customers → Make admin).
  *
  * Usage:
- *   1. Firebase console → Project settings → Service accounts → Generate new
- *      private key. Save it OUTSIDE the repo (it is a root credential).
- *   2. export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json
- *   3. node scripts/grant-admin.mjs you@example.com
- *      node scripts/grant-admin.mjs you@example.com --revoke
- *      node scripts/grant-admin.mjs --list
+ *   node scripts/grant-admin.mjs you@example.com
+ *   node scripts/grant-admin.mjs you@example.com --revoke
+ *   node scripts/grant-admin.mjs --list
+ *   node scripts/grant-admin.mjs you@example.com --project=other-project
  *
- * Requires firebase-admin, which the functions directory already has:
- *   node --experimental-default-type=module or just run from the repo root —
- *   the import below resolves through functions/node_modules.
+ * Credentials — it uses Application Default Credentials, so either works:
+ *   • Google Cloud Shell, or anywhere you have run
+ *       gcloud auth application-default login
+ *     Nothing to download; this is the safer option.
+ *   • A service account key, if ADC isn't available:
+ *       export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+ *     (Firebase console → Project settings → Service accounts → Generate new
+ *     private key. Save it OUTSIDE the repo — it is a root credential.)
+ *
+ * Requires firebase-admin, which the functions directory already has, so run
+ * `npm --prefix functions install` first if you haven't.
  */
 import { createRequire } from "node:module";
 import process from "node:process";
@@ -29,27 +35,37 @@ let admin;
 try {
   admin = require("firebase-admin");
 } catch {
-  console.error("firebase-admin not found. Run `npm install` inside functions/ first.");
+  console.error("firebase-admin not found. Run `npm --prefix functions install` first.");
   process.exit(1);
 }
-
-if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.error(
-    "GOOGLE_APPLICATION_CREDENTIALS is not set.\n" +
-    "Download a service account key from Firebase console → Project settings →\n" +
-    "Service accounts, save it outside the repo, then:\n\n" +
-    "  export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json\n"
-  );
-  process.exit(1);
-}
-
-admin.initializeApp({ credential: admin.credential.applicationDefault() });
-const auth = admin.auth();
 
 const args = process.argv.slice(2);
 const revoke = args.includes("--revoke");
 const list = args.includes("--list");
+const projectArg = args.find((a) => a.startsWith("--project="))?.split("=")[1];
 const email = args.find((a) => !a.startsWith("--"));
+
+// The Admin SDK can usually infer the project, but not from user-type ADC —
+// so be explicit, and fail loudly rather than writing to the wrong project.
+const projectId =
+  projectArg ||
+  process.env.GOOGLE_CLOUD_PROJECT ||
+  process.env.GCLOUD_PROJECT ||
+  process.env.FIREBASE_PROJECT ||
+  "prohippo2";
+
+try {
+  admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId });
+} catch (e) {
+  console.error(
+    `Could not authenticate against ${projectId}: ${e.message || e}\n\n` +
+    "Either run\n  gcloud auth application-default login\n" +
+    "or point GOOGLE_APPLICATION_CREDENTIALS at a service account key.\n"
+  );
+  process.exit(1);
+}
+const auth = admin.auth();
+console.log(`Project: ${projectId}`);
 
 async function listAdmins() {
   const admins = [];

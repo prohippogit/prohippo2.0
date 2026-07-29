@@ -12,12 +12,57 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="ProHippo" />
     <title>ProHippo — Practice OS for Income-Tax Professionals</title>
+    <meta name="description" content="ProHippo is practice-management software for Indian chartered accountants and tax practitioners. Track income-tax notices, hearings, appeal deadlines, clients and billing in one place." />
+    <meta name="application-name" content="ProHippo" />
+    <link rel="canonical" href="https://prohippo.in/" />
+    <meta property="og:site_name" content="ProHippo" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://prohippo.in/" />
+    <meta property="og:title" content="ProHippo — Practice OS for Income-Tax Professionals" />
+    <meta property="og:description" content="Practice-management software for Indian chartered accountants and tax practitioners: income-tax notices, hearings, appeal deadlines, clients and billing in one place." />
+    <meta property="og:image" content="https://prohippo.in/prohippo-logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      The app is client-rendered, so #root used to be empty in the served HTML —
+      anything reading the page without running JavaScript saw a blank document.
+      Google's OAuth brand review does exactly that, and rejected the homepage
+      twice: "does not explain the purpose of your app" and "the app name
+      'ProHippo' does not match the app name on your homepage". Both were the
+      same problem — there was no name and no prose to find.
+
+      React's createRoot().render() clears this container on mount, so what
+      follows is only ever seen before the bundle lands. It doubles as a first
+      paint that says something, instead of a white screen.
+    -->
+    <div id="root">
+      <div style="min-height:100vh;display:grid;place-items:center;padding:32px;background:#F2EFFF;font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;color:#14132B;text-align:center">
+        <div style="max-width:34rem">
+          <img src="/prohippo-logo.png" alt="ProHippo" width="180" style="max-width:60%;height:auto"/>
+          <h1 style="font-size:1.4rem;font-weight:800;letter-spacing:-0.02em;margin:20px 0 10px">ProHippo — practice management for income-tax professionals</h1>
+          <p style="margin:0;color:#4A4866;line-height:1.6">
+            ProHippo is used by chartered accountants and tax practitioners in India to run an income-tax
+            practice: it tracks notices issued by the Income Tax Department, the hearings and reply dates
+            they carry, and the limitation deadline for filing an appeal against an order — alongside
+            client records, document requests and billing.
+          </p>
+          <p style="margin:14px 0 0;color:#8A88A6;font-size:0.9rem">
+            Operated by MEHTAJI BIZCON LLP ·
+            <a href="/about" style="color:#4F46BE">About</a> ·
+            <a href="/privacy" style="color:#4F46BE">Privacy</a> ·
+            <a href="/terms" style="color:#4F46BE">Terms</a> ·
+            <a href="/contact" style="color:#4F46BE">Contact</a>
+          </p>
+          <noscript>
+            <p style="margin:18px 0 0;color:#B8463A">ProHippo needs JavaScript enabled to sign in and run.</p>
+          </noscript>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

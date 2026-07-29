@@ -77,7 +77,12 @@ export function useCalendarActions() {
     // via the calendarAuthCallback function with ?calendar=… set.
     connect: async (email) => {
       const call = httpsCallable(functions, "calendarAuthUrl");
-      const res = await call({ email: String(email || "").trim().toLowerCase() });
+      // Send the domain we're on so Google returns the user here, rather than
+      // to whichever address the backend happens to consider canonical.
+      const res = await call({
+        email: String(email || "").trim().toLowerCase(),
+        origin: window.location.origin,
+      });
       const url = res.data?.url;
       if (!url) throw new Error("Could not start Google sign-in. Please try again.");
       window.location.assign(url);

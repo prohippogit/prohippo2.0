@@ -62,7 +62,25 @@ const CALENDAR_DESCRIPTION =
 const TZ = "Asia/Kolkata";
 const TZ_OFFSET = "+05:30";
 
-const APP_ORIGIN = "https://prohippo2.web.app";
+/* The practice's own address, used for the "Open in ProHippo" link inside every
+   event. Firebase's default domains stay live alongside it, which is why the
+   OAuth return address is not this constant — see ALLOWED_ORIGINS. */
+const APP_ORIGIN = "https://prohippo.in";
+
+/* Where the user is sent back to after Google's consent screen. Whichever of
+   these domains they STARTED on is where they return, so someone who connects
+   from prohippo.in is not silently handed off to a Firebase URL halfway through.
+   An allowlist rather than trusting the value: an open redirect on the OAuth
+   callback would be a genuine hole. */
+const ALLOWED_ORIGINS = new Set([
+  "https://prohippo.in",
+  "https://www.prohippo.in",
+  "https://prohippo2.web.app",
+  "https://prohippo2.firebaseapp.com",
+  "http://localhost:5173", // vite dev
+]);
+
+const safeOrigin = (value) => (ALLOWED_ORIGINS.has(clean(value)) ? clean(value) : APP_ORIGIN);
 
 // A consent link the user never used is a loose end, not a state to keep.
 const AUTH_STATE_TTL_MS = 15 * 60 * 1000;
@@ -495,7 +513,13 @@ module.exports.build = function build(ctx) {
     if (!EMAIL_RE.test(email)) throw new HttpsError("invalid-argument", "Enter the Google account you want to sync.");
 
     const state = crypto.randomBytes(24).toString("hex");
-    await authStateRef(state).set({ uid, email, createdAt: Date.now() });
+    // Remember where they set off from so the callback can put them back there.
+    await authStateRef(state).set({
+      uid,
+      email,
+      origin: safeOrigin(request.data?.origin),
+      createdAt: Date.now(),
+    });
 
     const url = new URL(AUTH_ENDPOINT);
     url.searchParams.set("client_id", googleClientId.value());
@@ -595,8 +619,8 @@ module.exports.build = function build(ctx) {
 
   /* ---------------- OAuth callback ---------------- */
 
-  const redirect = (res, params) => {
-    const url = new URL(APP_ORIGIN);
+  const redirect = (res, origin, params) => {
+    const url = new URL(safeOrigin(origin));
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
     res.redirect(303, url.toString());
   };
@@ -612,18 +636,20 @@ module.exports.build = function build(ctx) {
 
       const stateSnap = state ? await authStateRef(state).get() : null;
       if (!stateSnap || !stateSnap.exists) {
-        redirect(res, { calendar: "error", reason: "This sign-in link has expired. Please try connecting again." });
+        // No state means no record of where they came from, so this one lone
+        // case has to fall back to the default origin.
+        redirect(res, APP_ORIGIN, { calendar: "error", reason: "This sign-in link has expired. Please try connecting again." });
         return;
       }
-      const { uid, email: requested, createdAt } = stateSnap.data();
+      const { uid, email: requested, createdAt, origin } = stateSnap.data();
       await authStateRef(state).delete().catch(() => {});
 
       if (Date.now() - (createdAt || 0) > AUTH_STATE_TTL_MS) {
-        redirect(res, { calendar: "error", reason: "This sign-in link has expired. Please try connecting again." });
+        redirect(res, origin, { calendar: "error", reason: "This sign-in link has expired. Please try connecting again." });
         return;
       }
       if (denied || !code) {
-        redirect(res, { calendar: "cancelled" });
+        redirect(res, origin, { calendar: "cancelled" });
         return;
       }
 
@@ -641,11 +667,11 @@ module.exports.build = function build(ctx) {
         // one on a machine with five Googles signed in and you would otherwise
         // never find out.
         if (granted.email && granted.email !== requested) {
-          redirect(res, { calendar: "mismatch", granted: granted.email, requested });
+          redirect(res, origin, { calendar: "mismatch", granted: granted.email, requested });
           return;
         }
         if (!tokens.refresh_token) {
-          redirect(res, { calendar: "error", reason: "Google didn't return a renewable token. Remove ProHippo at myaccount.google.com/permissions and connect again." });
+          redirect(res, origin, { calendar: "error", reason: "Google didn't return a renewable token. Remove ProHippo at myaccount.google.com/permissions and connect again." });
           return;
         }
 
@@ -673,10 +699,10 @@ module.exports.build = function build(ctx) {
           { merge: true }
         );
 
-        redirect(res, { calendar: "connected" });
+        redirect(res, origin, { calendar: "connected" });
       } catch (e) {
         console.error("calendarAuthCallback failed:", e.message || e);
-        redirect(res, { calendar: "error", reason: String(e.message || e).slice(0, 200) });
+        redirect(res, origin, { calendar: "error", reason: String(e.message || e).slice(0, 200) });
       }
     }
   );

@@ -24,7 +24,12 @@ import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 //   - knownResponseIds: replies already recorded → skip re-downloading them
 //   - knownActiveProcs: proceedingReqIds we hold as Active → the extension spots
 //                       which ones left FYA (just closed) to grab their order
-function buildSyncKnowns(notices, pan, matters) {
+//   - knownAckNums:     returns already on file → a filed return never changes,
+//                       so one fetch of its JSON and ITR-V is enough
+//   - knownOrderRefs:   CPC references already downloaded AND unlocked → an
+//                       order we hold but couldn't decrypt is deliberately not
+//                       "known", because a later sync is how it gets fixed
+function buildSyncKnowns(notices, pan, matters, returns) {
   const knownDins = new Set();
   const knownResponseIds = new Set();
   const procNotices = {};        // proceedingReqId -> Set<DIN>
@@ -46,7 +51,16 @@ function buildSyncKnowns(notices, pan, matters) {
   const knownActiveProcs = (matters || [])
     .filter((m) => m.pan === pan && m.status === "Active" && m.proceedingReqId)
     .map((m) => String(m.proceedingReqId));
-  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs };
+  const knownAckNums = [];
+  const knownOrderRefs = [];
+  (returns || []).forEach((r) => {
+    if (r.pan !== pan) return;
+    if (r.ackNum) knownAckNums.push(String(r.ackNum));
+    (r.orders || []).forEach((o) => {
+      if (o && o.commRefNo && o.storagePath && !o.locked) knownOrderRefs.push(String(o.commRefNo));
+    });
+  });
+  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs, knownAckNums, knownOrderRefs };
 }
 
 // Pause between assessees in a bulk sync. The extension emits "sync-done" only
@@ -59,6 +73,7 @@ const SYNC_SCOPES = [
   { value: "eproc", label: "e-Proceedings only (fast)", btn: "Sync e-Proceedings" },
   { value: "all", label: "Full sync — everything", btn: "Full sync" },
   { value: "appeals", label: "First appeals (Form 35) only", btn: "Sync Form 35" },
+  { value: "returns", label: "Filed returns & CPC orders only", btn: "Sync returns" },
 ];
 import CheekyHippoProgress from './cheekyHippo/CheekyHippoProgress.jsx';
 
@@ -504,9 +519,9 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       try {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
         // Bulk sync uses the fast e-Proceedings-only scope for every assessee.
-        const { knownDins, knownByProc, knownResponseIds, knownActiveProcs } = buildSyncKnowns(data.notices, a.pan, data.matters);
+        const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns);
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
-        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope: "eproc", knownDins, knownByProc, knownResponseIds, knownActiveProcs, background: true });
+        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope: "eproc", ...knowns, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
         doneResolver.current = null;
         await new Promise((r) => setTimeout(r, BULK_GAP_MS)); // small gap between logins
@@ -749,6 +764,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
   const hearings = upcomingHearings(data).filter(h => h.pan === a.pan);
   const allHearings = data.hearings.filter(h => h.pan === a.pan).sort((x, y) => y.date.localeCompare(x.date));
   const notices = data.notices.filter(n => n.pan === a.pan);
+  const returns = (data.returns || []).filter(r => r.pan === a.pan);
   const matters = data.matters.filter(m => m.pan === a.pan);
   const invoices = data.invoices.filter(i => i.assessee === a.name);
   const comms = commsOf(data, a);
@@ -759,6 +775,97 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
   const receivedFY = invoices.filter(i => fyOf(i.date) === fy).reduce((sum, i) => sum + (i.received || 0), 0);
 
   const waLink = a.mobile ? `https://wa.me/${a.mobile.replace(/\D/g, "")}` : null;
+
+  /* ---- Returns tab: portal fetches + the Computation generator -------------
+     These live here rather than in PortalCard because PortalCard only exists on
+     the Overview tab: a returns sync started from the Returns tab would stream
+     its data into an unmounted listener and quietly vanish. AssesseeDetail stays
+     mounted whichever tab is open. */
+  const [returnsBusy, setReturnsBusy] = React.useState(null); // the AY being worked on, or "sync"
+
+  React.useEffect(() => {
+    const off = onSyncData(async (payload) => {
+      if (!payload || payload.assesseeId !== a.id) return;
+      if (payload.kind !== "return" && payload.kind !== "returnForm") return;
+      try {
+        await ingestPortalSyncMessage(payload);
+      } catch (e) {
+        console.error("return ingest failed", e);
+        notify("Couldn't save a return from the portal.", "alert");
+      } finally {
+        if (payload.kind === "returnForm") setReturnsBusy(null);
+      }
+    });
+    return off;
+  }, [a.id, notify]);
+
+  // Open the portal with a narrow scope. `formRequest` is only read by the
+  // "returnForm" scope, which fetches exactly one year's ITR form PDF.
+  const runReturnsFetch = async (scope, formRequest, busyKey) => {
+    if (!a.portalCredSet) { notify("Add this assessee's portal login first.", "alert"); return; }
+    if (!(await detectExtension())) { notify("Install the ProHippo Sync extension to fetch from the portal.", "alert"); return; }
+    setReturnsBusy(busyKey);
+    try {
+      const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
+      const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns);
+      await openPortalLogin({
+        portalUserId: cred.portalUserId, portalPassword: cred.portalPassword,
+        assesseeId: a.id, mode: "sync", scope, formRequest, ...knowns,
+      });
+      notify(scope === "returnForm" ? "Fetching the ITR form — watch the new tab…" : "Fetching returns — watch the new tab…");
+    } catch (e) {
+      console.error(e);
+      notify(e?.message?.slice(0, 120) || "Couldn't reach the portal.", "alert");
+      setReturnsBusy(null);
+    }
+    // The "returns" scope has no single completion signal to wait on — each year
+    // streams in on its own and the table updates live — so the button is
+    // released as soon as the portal tab is on its way.
+    if (scope !== "returnForm") setTimeout(() => setReturnsBusy(null), 2000);
+  };
+
+  /* Computation of Total Income for one assessment year.
+     The mapping and the HTML are built here, in the browser, from the ITR JSON
+     we already hold — deterministic, no AI, no guesswork (docs/computation-spec.md
+     §1). Only the HTML→PDF step is a server call, because a faithful render of
+     the house design needs a real browser engine. */
+  const generateComputationFor = async (r) => {
+    if (!r.jsonPath) { notify("The ITR JSON for this year hasn't been synced yet.", "alert"); return; }
+    setReturnsBusy(r.ay);
+    try {
+      const url = await getDownloadURL(storageRef(storage, r.jsonPath));
+      const itrJson = await (await fetch(url)).json();
+      const { buildComputation, UnsupportedFormError } = await import("./computation/index.js");
+
+      let built;
+      try {
+        built = buildComputation(itrJson, { assessee: a, profile: data.profile });
+      } catch (err) {
+        if (err instanceof UnsupportedFormError) { notify(err.message, "alert"); return; }
+        throw err;
+      }
+
+      const { data: res } = await httpsCallable(functions, "renderComputationPdf")({
+        assesseeId: a.id, ay: r.ay, html: built.html,
+      });
+      if (!res?.storagePath) throw new Error("The renderer returned no document.");
+      await openStoragePdf(res.storagePath);
+
+      // §8: a computation that couldn't account for every figure in the return
+      // still generates — the PDF says so itself — but the practitioner is told
+      // here too, because this is the screen they are looking at.
+      if (built.doc.unmapped.length) {
+        notify(`Computation ready — ${built.doc.unmapped.length} figure(s) need review, listed in the PDF.`, "alert");
+      } else {
+        notify(`Computation of Income ready for A.Y. ${r.ay}.`);
+      }
+    } catch (e) {
+      console.error("computation", e);
+      notify(e?.message?.slice(0, 140) || "Couldn't generate the computation.", "alert");
+    } finally {
+      setReturnsBusy(null);
+    }
+  };
 
   const doDelete = async () => {
     if (!window.confirm(`Delete ${titleCase(a.name)}? Their matters, hearings, notices, invoices and messages will also be removed. This cannot be undone.`)) return;
@@ -814,7 +921,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       </div>
 
       <div className="utabs" style={{marginTop: 22}}>
-        {["Overview","Matters","Hearings","Notices","Invoices","Communications","Notes"].map(t => (
+        {["Overview","Returns","Matters","Hearings","Notices","Invoices","Communications","Notes"].map(t => (
           <div key={t} className={`utab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</div>
         ))}
       </div>
@@ -898,6 +1005,17 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
             </div>
           </div>
         </div>
+      )}
+
+      {tab === "Returns" && (
+        <ReturnsView
+          returns={returns}
+          assessee={a}
+          busyKey={returnsBusy}
+          onSync={() => runReturnsFetch("returns", null, "sync")}
+          onFetchForm={(r) => runReturnsFetch("returnForm", { ackNum: r.ackNum, ay: r.ay }, r.ay)}
+          onGenerateComputation={(r) => generateComputationFor(r)}
+        />
       )}
 
       {tab === "Matters" && (
@@ -1172,10 +1290,10 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
       // Incremental sync: tell the extension what's already on file so it only
       // fetches genuinely new data (see buildSyncKnowns). Empty for "open" mode.
-      const { knownDins, knownByProc, knownResponseIds, knownActiveProcs } = mode === "sync"
-        ? buildSyncKnowns(appData.notices, a.pan, appData.matters)
-        : { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [] };
-      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs });
+      const knowns = mode === "sync"
+        ? buildSyncKnowns(appData.notices, a.pan, appData.matters, appData.returns)
+        : {};
+      await openPortalLogin({ portalUserId: data.portalUserId, portalPassword: data.portalPassword, assesseeId: a.id, mode, scope, ...knowns });
       notify(mode === "sync" ? "Syncing from the portal — watch the new tab…" : "Opening the portal — logging you in…");
     } catch (e) {
       console.error(e);
@@ -1278,6 +1396,11 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
         catch (e) { console.error("appeal ingest failed", e); }
         return;
       }
+
+      // "return" and "returnForm" are deliberately NOT handled here. This card
+      // only exists on the Overview tab, and a returns sync started from the
+      // Returns tab would stream into an unmounted listener. AssesseeDetail owns
+      // those two kinds instead, because it stays mounted whichever tab is open.
 
       // Approach (a) probe: the API was reached fast but its JSON shape still
       // needs a one-time mapping calibration. No data to save — just show the
@@ -1399,6 +1522,214 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
 
 // Accent colour per proceeding type — used for the row's left stripe and the
 // modal header so scrutiny / appeal / penalty proceedings read apart at a glance.
+/* ---------------- Returns: filed ITRs, intimations and s.154 orders ------- */
+
+// Why an order has no PDF behind it. These read as short, plain sentences
+// because they appear inline in the table where a download chip would be, and
+// the practitioner needs to know whether it's their problem to fix.
+const LOCK_REASON_TEXT = {
+  "no-password": "Add the date of birth / incorporation to unlock",
+  "wrong-password": "The date on file doesn't unlock this PDF",
+  "request-only": "The portal only sends this one by e-mail for A.Y. 2016-17 and earlier",
+  unavailable: "The portal didn't return this document",
+  "": "Locked",
+};
+
+// The portal reports the filing type as a single letter.
+const FILING_TYPE = { O: "Original", R: "Revised", D: "Defective", U: "Updated", C: "Condoned" };
+
+// A rupee figure the portal sends as a string, which may be "", "null" or "0".
+// Anything that isn't a real number renders as an em dash — a blank cell and a
+// genuine nil are different things in a tax record.
+function portalAmount(v) {
+  const n = Number(v);
+  if (v == null || v === "" || v === "null" || Number.isNaN(n)) return null;
+  return n;
+}
+
+function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputation, busyKey }) {
+  const [openAy, setOpenAy] = React.useState(null);
+  const rows = [...(returns || [])].sort((x, y) => String(y.ay || "").localeCompare(String(x.ay || "")));
+
+  if (!rows.length) {
+    return (
+      <div className="card">
+        <EmptyState
+          icon="doc"
+          title={`No filed returns for ${titleCase(assessee.name)} yet`}
+          sub="Run a full sync — or Sync returns — to pull every assessment year's ITR, its JSON, and any intimation u/s 143(1) or rectification order u/s 154."
+        />
+        <div className="center" style={{justifyContent: "center", marginTop: 4}}>
+          <button className="btn btn-primary btn-sm" disabled={!assessee.portalCredSet || Boolean(busyKey)} onClick={onSync}>
+            <Icon name="refresh" size={14}/>Sync returns
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="col" style={{gap: 14}}>
+      <div className="between">
+        <div className="muted" style={{fontSize: 12.5}}>
+          {rows.length} assessment year{rows.length > 1 ? "s" : ""} on file
+        </div>
+        <button className="btn btn-secondary btn-sm" disabled={!assessee.portalCredSet || Boolean(busyKey)} onClick={onSync}>
+          <Icon name="refresh" size={14}/>Sync returns
+        </button>
+      </div>
+
+      <div className="card" style={{padding: 0}}>
+        <table className="tbl">
+          <thead><tr><th>A.Y.</th><th>Form</th><th>Filed</th><th>Status</th><th>Demand / Refund</th><th>Documents</th><th></th></tr></thead>
+          <tbody>
+            {rows.map((r) => {
+              const demand = portalAmount(r.computedDemndAmt) ?? portalAmount(r.demandAmt);
+              const refund = portalAmount(r.computedRefndAmt) ?? portalAmount(r.refundAmt);
+              const open = openAy === r.ay;
+              const busy = busyKey === r.ay;
+              return (
+                <React.Fragment key={r.id || r.ay}>
+                  <tr style={open ? {borderBottom: "none"} : undefined}>
+                    <td className="strong">{r.ay}</td>
+                    <td>
+                      <span className="pill pill-muted">{r.form || `Form ${r.formTypeCd || "?"}`}</span>
+                      {r.filingTypeCd && r.filingTypeCd !== "O" && (
+                        <span className="pill" style={{marginLeft: 5}}>{FILING_TYPE[r.filingTypeCd] || r.filingTypeCd}</span>
+                      )}
+                    </td>
+                    <td className="muted">
+                      <div>{r.filedOn ? fmtDateLong(r.filedOn) : "—"}</div>
+                      <div style={{fontSize: 11}}>{r.verified ? `e-verified · ${r.verifiedMode || ""}` : "Not verified"}</div>
+                    </td>
+                    <td style={{maxWidth: 260}}>
+                      <div style={{fontSize: 12.5}}>{r.statusDesc || "—"}</div>
+                    </td>
+                    <td>
+                      {demand ? <div style={{color: "#B23B3B", fontWeight: 700}}>{fmtINR(demand)} demand</div> : null}
+                      {refund ? <div style={{color: "#13795C", fontWeight: 700}}>{fmtINR(refund)} refund</div> : null}
+                      {!demand && !refund ? <span className="muted">—</span> : null}
+                    </td>
+                    <td>
+                      <div className="center" style={{gap: 5, justifyContent: "flex-start", flexWrap: "wrap"}}>
+                        {r.jsonPath && (
+                          <button className="btn btn-ghost btn-xs" title="The ITR JSON exactly as filed" onClick={() => openStoragePdf(r.jsonPath)}>
+                            <Icon name="doc" size={11}/>JSON
+                          </button>
+                        )}
+                        {r.ackPdfPath && (
+                          <button className="btn btn-ghost btn-xs" title="ITR-V / Acknowledgement" onClick={() => openStoragePdf(r.ackPdfPath)}>
+                            <Icon name="doc" size={11}/>ITR-V
+                          </button>
+                        )}
+                        {r.formPdfPath ? (
+                          <button className="btn btn-ghost btn-xs" title="The full ITR form" onClick={() => openStoragePdf(r.formPdfPath)}>
+                            <Icon name="doc" size={11}/>Form
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            title="Fetch the full ITR form from the portal — around 11 MB, so it isn't pulled on every sync"
+                            disabled={!assessee.portalCredSet || Boolean(busyKey)}
+                            onClick={() => onFetchForm(r)}
+                          >
+                            <Icon name="download" size={11}/>Get form
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="center" style={{gap: 6, justifyContent: "flex-end"}}>
+                        <button
+                          className="btn btn-primary btn-xs"
+                          disabled={!r.jsonPath || busy}
+                          title={r.jsonPath ? "Generate a Computation of Total Income from the filed return" : "The ITR JSON for this year hasn't been synced yet"}
+                          onClick={() => onGenerateComputation(r)}
+                        >
+                          <Icon name="doc" size={11}/>{busy ? "Generating…" : "Computation"}
+                        </button>
+                        <button className="icon-btn" style={{width: 26, height: 26}} onClick={() => setOpenAy(open ? null : r.ay)} title={open ? "Hide detail" : "Show the CPC timeline and orders"}>
+                          <Icon name={open ? "chevron-up" : "chevron-down"} size={13}/>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {open && (
+                    <tr>
+                      <td colSpan="7" style={{paddingTop: 0}}>
+                        <div className="row" style={{gap: 18, alignItems: "flex-start", flexWrap: "wrap", paddingBottom: 8}}>
+                          <div style={{flex: "1 1 320px", minWidth: 280}}>
+                            <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>
+                              Intimations &amp; orders
+                            </div>
+                            {(r.orders || []).length === 0 && <div className="muted" style={{fontSize: 12.5}}>Nothing issued by CPC for this year.</div>}
+                            <div className="col" style={{gap: 8}}>
+                              {(r.orders || []).map((o) => (
+                                <div key={o.commRefNo} style={{border: "1px solid var(--p-line)", borderRadius: 10, padding: "8px 10px"}}>
+                                  <div className="between" style={{gap: 8}}>
+                                    <div>
+                                      <span className="pill pill-primary">u/s {o.section}</span>
+                                      <span className="muted" style={{marginLeft: 8, fontFamily: "ui-monospace, monospace", fontSize: 11}}>{o.commRefNo}</span>
+                                    </div>
+                                    {o.storagePath && !o.locked ? (
+                                      <button className="btn btn-ghost btn-xs" onClick={() => openStoragePdf(o.storagePath)}>
+                                        <Icon name="doc" size={11}/>PDF
+                                      </button>
+                                    ) : (
+                                      <span className="muted" style={{fontSize: 11}}>
+                                        {LOCK_REASON_TEXT[o.lockReason] || LOCK_REASON_TEXT[""]}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="muted" style={{fontSize: 12, marginTop: 4}}>{o.statusDesc}</div>
+                                  {o.orderDate && <div className="muted" style={{fontSize: 11, marginTop: 2}}>Order dated {fmtDateLong(o.orderDate)}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div style={{flex: "1 1 260px", minWidth: 240}}>
+                            <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>
+                              CPC timeline
+                            </div>
+                            <div className="col" style={{gap: 4}}>
+                              {(r.timeline || []).map((e, i) => (
+                                <div key={i} className="between" style={{gap: 10, fontSize: 12}}>
+                                  <span>{e.statusDesc}</span>
+                                  <span className="muted" style={{whiteSpace: "nowrap"}}>{e.activityDt ? fmtDate(e.activityDt) : ""}</span>
+                                </div>
+                              ))}
+                              {(r.timeline || []).length === 0 && <div className="muted" style={{fontSize: 12.5}}>No activity recorded.</div>}
+                            </div>
+                            <div className="muted" style={{fontSize: 11, marginTop: 10, fontFamily: "ui-monospace, monospace"}}>
+                              Ack. {r.ackNum}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {rows.some((r) => (r.orders || []).some((o) => o.locked && o.lockReason === "no-password")) && !assessee.dob && (
+        <div className="card" style={{background: "var(--p-amber)", border: "none"}}>
+          <div style={{fontSize: 12.5}}>
+            <b>Some order PDFs are still locked.</b> CPC protects every intimation and s.154 order with the PAN in lower case
+            followed by the date of birth / incorporation as DDMMYYYY. Add that date on the Edit screen and re-run the sync —
+            they'll be unlocked automatically from then on.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TYPE_ACCENT = {
   Scrutiny: { bar: "#F39C12", tint: "var(--p-amber)", fg: "#B07512" },
   "CIT(A)": { bar: "#C13388", tint: "var(--p-pink)", fg: "#C13388" },

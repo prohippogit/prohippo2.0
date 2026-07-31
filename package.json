@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"test/**/*.test.mjs\" \"src/**/*.test.mjs\"",
+    "preview:computation": "node scripts/preview-computation.mjs"
   },
   "dependencies": {
+    "@neslinesli93/qpdf-wasm": "^0.3.0",
     "firebase": "^12.16.0",
     "gsap": "^3.15.0",
     "jspdf": "^4.2.1",

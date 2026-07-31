@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Scratch output from npm run preview:computation — may contain client figures.
+.tmp/

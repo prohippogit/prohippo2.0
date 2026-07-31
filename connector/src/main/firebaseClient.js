@@ -218,6 +218,8 @@ async function listPortalAssessees() {
       group: a.group || "",
       staff: a.staff || "",
       status: a.status || "",
+      // Needed by the returns pass to unlock CPC order PDFs (pdfUnlock.js).
+      dob: a.dob || "",
       lastSyncedAt: a.portalNoticeSyncedAt || "",
     };
   });
@@ -236,6 +238,10 @@ async function listPortalAssessees() {
 //   knownActiveProcs proceedingReqIds we hold as Active — lets "eproc" scope
 //                    spot which ones just left FYA (i.e. closed) without
 //                    scanning the whole FYI list
+//   knownAckNums     acknowledgement numbers of returns already on file — a
+//                    filed return never changes, so one fetch each is enough
+//   knownOrderRefs   CPC commRefNos already downloaded, so a re-sync only pulls
+//                    an intimation or rectification order that is genuinely new
 //
 // Reads Firestore directly with the signed-in user's token; firestore.rules
 // already scopes users/{uid}/** to the owner. Both queries are single-field
@@ -245,12 +251,13 @@ async function getSyncKnowns(pan) {
   const user = currentUser();
   if (!user) throw new Error("Sign in first.");
   const p = String(pan || "").toUpperCase().trim();
-  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [] };
+  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [], knownAckNums: [], knownOrderRefs: [] };
   if (!p) return empty;
 
-  const [noticeSnap, matterSnap] = await Promise.all([
+  const [noticeSnap, matterSnap, returnSnap] = await Promise.all([
     getDocs(query(collection(firestore, `users/${user.uid}/notices`), where("pan", "==", p))),
     getDocs(query(collection(firestore, `users/${user.uid}/matters`), where("pan", "==", p))),
+    getDocs(query(collection(firestore, `users/${user.uid}/returns`), where("pan", "==", p))),
   ]);
 
   const knownDins = new Set();
@@ -282,11 +289,27 @@ async function getSyncKnowns(pan) {
     if (m.status === "Active" && m.proceedingReqId) knownActiveProcs.push(String(m.proceedingReqId));
   });
 
+  // A return only gets re-fetched when it is new; an order only when its CPC
+  // reference has never been seen. An order we hold but could not unlock is
+  // deliberately NOT counted as known — a later sync, once the date of birth is
+  // on file, is exactly how it gets fixed.
+  const knownAckNums = [];
+  const knownOrderRefs = [];
+  returnSnap.forEach((d) => {
+    const r = d.data() || {};
+    if (r.ackNum) knownAckNums.push(String(r.ackNum));
+    for (const o of r.orders || []) {
+      if (o && o.commRefNo && o.storagePath && !o.locked) knownOrderRefs.push(String(o.commRefNo));
+    }
+  });
+
   return {
     knownDins: [...knownDins],
     knownByProc,
     knownResponseIds: [...knownResponseIds],
     knownActiveProcs,
+    knownAckNums,
+    knownOrderRefs,
   };
 }
 

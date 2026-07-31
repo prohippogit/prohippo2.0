@@ -226,6 +226,10 @@ async function loadAssessees() {
     label: a.name || a.pan,
     group: a.group || "",
     staff: a.staff || "",
+    // Date of birth / incorporation. Carried purely so the returns pass can
+    // build the password CPC locks its intimation and s.154 order PDFs with —
+    // PAN in lower case + DDMMYYYY. See pdfUnlock.js.
+    dob: a.dob || "",
     lastSyncedAt: a.lastSyncedAt || "",
   }));
   selected.clear();

@@ -76,6 +76,49 @@ async function ingestSyncMessage(payload) {
     return { kind: "response", data };
   }
 
+  if (payload.kind === "return") {
+    const r = payload.return || {};
+    const uid = fb.uid();
+    const base = `users/${uid}/assessees/${assesseeId}/returns/${safe(r.ay || "unknown")}`;
+
+    // The ITR JSON is the practitioner's ask AND the input the Computation of
+    // Income generator reads, so it is stored as a first-class document rather
+    // than being flattened into fields.
+    let jsonPath = null;
+    if (r.itrJson) {
+      jsonPath = `${base}/itr.json`;
+      const b64 = Buffer.from(JSON.stringify(r.itrJson), "utf8").toString("base64");
+      await fb.uploadBase64(jsonPath, b64, "application/json");
+    }
+
+    let ackPdfPath = null;
+    if (r.ackPdfBase64) {
+      ackPdfPath = `${base}/acknowledgement.pdf`;
+      await fb.uploadBase64(ackPdfPath, r.ackPdfBase64, "application/pdf");
+    }
+
+    const orders = [];
+    for (const o of r.orders || []) {
+      let storagePath = null;
+      if (o.contentBase64) {
+        storagePath = `${base}/order-${safe(o.commRefNo)}.pdf`;
+        await fb.uploadBase64(storagePath, o.contentBase64, "application/pdf");
+      }
+      const meta = { ...o };
+      delete meta.contentBase64;
+      orders.push({ ...meta, storagePath });
+    }
+
+    const meta = { ...r };
+    delete meta.itrJson;
+    delete meta.ackPdfBase64;
+    delete meta.orders;
+    const data = await fb.callable("ingestPortalReturn", {
+      assesseeId, return: meta, jsonPath, ackPdfPath, orders,
+    });
+    return { kind: "return", data };
+  }
+
   if (payload.kind === "appealForm") {
     const ap = payload.appeal || {};
     const uid = fb.uid();

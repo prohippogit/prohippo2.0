@@ -1,0 +1,381 @@
+{
+ "meta": {
+  "form": "ITR5",
+  "assessmentYear": "2025-26",
+  "previousYear": "2024-25",
+  "schemaVersion": "Ver1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+ },
+ "assessee": {
+  "name": "M/s. SAMPLE FOODS",
+  "pan": "AAAFZ1234A",
+  "status": "Partnership Firm",
+  "address": "1-2-3, GROUND FLOOR, SAMPLE APARTMENT, OPP. SAMPLE LANDMARK,, SAMPLE ROAD, SAMPLE AREA, SAMPLE CITY, 380060",
+  "email": "sample.foods@example.com",
+  "mobile": "9800000001",
+  "residentialStatus": "Resident",
+  "dateOfFormation": "2015-11-04",
+  "facts": [
+   {
+    "label": "Residential status",
+    "value": "Resident"
+   },
+   {
+    "label": "Date of formation",
+    "value": "04 November 2015"
+   },
+   {
+    "label": "Return filed under",
+    "value": "Section 139(1) — on or before the due date"
+   },
+   {
+    "label": "GSTIN & turnover",
+    "value": "24AAAFZ1234A1Z5",
+    "value2": 8584873
+   },
+   {
+    "label": "Books u/s 44AA / audit u/s 44AB",
+    "value": "Maintained · Audited"
+   },
+   {
+    "label": "Tax audit particulars",
+    "value": "AUDITOR SAMPLE NAME, SAMPLE & CO\nFRN 0199999W · M. No. 099999\nReport dated 01 October 2025 · UDIN 25099999BMAAAA1234 · Ack. 900000000000001"
+   },
+   {
+    "label": "E-mail / mobile",
+    "value": "sample.foods@example.com\n+91 9800000001"
+   }
+  ],
+  "partners": [
+   {
+    "name": "PARTNER ONE SAMPLE",
+    "pan": "AAAPZ1111A",
+    "share": "33.33%",
+    "remuneration": 87053,
+    "interestRate": 12
+   },
+   {
+    "name": "PARTNER TWO SAMPLE",
+    "pan": "AAAPZ2222B",
+    "share": "33.33%",
+    "remuneration": 87053,
+    "interestRate": 12
+   },
+   {
+    "name": "PARTNER THREE SAMPLE",
+    "pan": "AAAPZ3333C",
+    "share": "33.33%",
+    "remuneration": 87052,
+    "interestRate": 12
+   }
+  ],
+  "constitutionTitle": "Constitution of the Firm — Partners"
+ },
+ "sections": [
+  {
+   "id": "BP",
+   "letter": "A",
+   "title": "Profits and Gains of Business or Profession",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Add: Depreciation debited to P&L as per the Companies Act",
+     "amount": 89629
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Depreciation allowable u/s 32 of the Act",
+     "amount": 89814,
+     "ref": "Sch. DEP"
+    },
+    {
+     "kind": "total",
+     "label": "Loss from Business or Profession",
+     "amount": 185,
+     "isLoss": true
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "OS",
+   "letter": "B",
+   "title": "Income from Other Sources",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Dividend income",
+     "amount": 45,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "total",
+     "label": "Income from Other Sources",
+     "amount": 45
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "TI",
+   "letter": "C",
+   "title": "Computation of Total Income",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "head",
+     "label": "Income from Salaries",
+     "amount": 0,
+     "ref": "Sch. S"
+    },
+    {
+     "kind": "head",
+     "label": "Income from House Property",
+     "amount": 0,
+     "ref": "Sch. HP"
+    },
+    {
+     "kind": "head",
+     "label": "Profits and Gains of Business or Profession",
+     "amount": 0,
+     "ref": "Sch. BP"
+    },
+    {
+     "kind": "head",
+     "label": "Capital Gains",
+     "amount": 0,
+     "ref": "Sch. CG"
+    },
+    {
+     "kind": "head",
+     "label": "Income from Other Sources",
+     "amount": 45,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total of Heads of Income",
+     "amount": 45
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Set-off of current year business loss u/s 71",
+     "amount": 45,
+     "ref": "Sch. CYLA"
+    },
+    {
+     "kind": "sub",
+     "label": "Balance after set-off of current year loss",
+     "amount": 0
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Total Income",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Deductions under Chapter VI-A",
+     "amount": 0,
+     "ref": "Sch. VI-A"
+    },
+    {
+     "kind": "total",
+     "label": "Total Income (rounded off u/s 288A)",
+     "amount": 0
+    }
+   ],
+   "footnote": "Total income in words: ",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAX",
+   "letter": "D",
+   "title": "Computation of Tax Liability",
+   "tone": "gold",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Tax on Total Income @ 30% (firm)",
+     "amount": 0,
+     "ref": "Para C, Sch. I"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Surcharge",
+     "amount": 0,
+     "note": "Total income does not exceed ₹ 1 crore"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Health & Education Cess @ 4%",
+     "amount": 0
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Tax Liability",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Relief u/s 90 / 90A / 91",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Total Tax and Interest Payable",
+     "amount": 0
+    }
+   ],
+   "footnote": "Adjusted total income u/s 115JC is 0, which does not exceed the threshold of ₹ 20,00,000 prescribed under section 115JEE; Alternate Minimum Tax is accordingly Nil and no AMT credit arises.",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAXES_PAID",
+   "letter": "E",
+   "title": "Taxes Paid & Prepaid Taxes",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Tax Deducted at Source — TAN of Deductor",
+     "amount": null,
+     "cols": {
+      "ref": "Gross Receipt"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAB00001A",
+     "amount": 117,
+     "note": "Payments by an e-commerce operator · Sec. 194-O · 10 entries",
+     "cols": {
+      "ref": "18,897"
+     }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Tax Deducted at Source",
+     "amount": 117,
+     "ref": "Sch. TDS 2"
+    },
+    {
+     "kind": "sub",
+     "label": "Advance Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Self-Assessment Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax Collected at Source",
+     "amount": 1202,
+     "ref": "Sch. TCS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Taxes Paid",
+     "amount": 1319
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Total Tax and Interest Payable",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Refund Due",
+     "amount": 1320
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "CFL",
+   "letter": "F",
+   "title": "Losses Carried Forward to Subsequent Years",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Assessment Year / Nature of loss",
+     "amount": null,
+     "cols": {
+      "ref": "Nature"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "A.Y. 2025-26 · loss of the current year",
+     "amount": 140,
+     "cols": {
+      "ref": "Business Loss"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Unabsorbed depreciation carried forward",
+     "amount": 140,
+     "note": "Carried forward under s.32(2), without any time limit",
+     "cols": {
+      "ref": "u/s 32(2)"
+     }
+    },
+    {
+     "kind": "total",
+     "label": "Total Loss Carried Forward",
+     "amount": 140
+    }
+   ],
+   "footnote": "The unabsorbed depreciation shown is the same amount as the business loss above, carried in Schedule UD of the return, and not a further loss. The loss for the year arises from the difference between depreciation charged in the accounts and the allowance u/s 32.",
+   "omitIfAllNil": true
+  }
+ ],
+ "refund": {
+  "amount": 1320,
+  "bank": {
+   "name": "SAMPLE BANK OF INDIA",
+   "accountNo": "10000000001",
+   "type": "CA",
+   "ifsc": "SBIN0000001"
+  }
+ },
+ "payable": null,
+ "notes": [
+  {
+   "severity": "info",
+   "text": "This computation has been prepared from the ITR-5 return data (JSON) for A.Y. 2025-26 and the figures correspond to Part A-P&L, Schedule BP, Schedule OS, Schedule CYLA/BFLA and Part B-TI / Part B-TTI of the return."
+  },
+  {
+   "severity": "info",
+   "text": "The refund of 1,320 exceeds the taxes paid less the liability by 1; the difference is interest u/s 244A as determined in the return."
+  },
+  {
+   "severity": "attention",
+   "text": "TDS in Schedule TDS-2 is tagged to the head \"Business or Profession\" whereas the corresponding receipts have been offered under Other Sources — the head of income tagged in the TDS schedule may be aligned to avoid a mismatch in credit at CPC."
+  }
+ ],
+ "signatory": {
+  "name": "PARTNER ONE SAMPLE",
+  "capacity": "Designated Partner",
+  "pan": "AAAPZ1111A",
+  "place": "SAMPLE CITY",
+  "date": "2025-10-08"
+ },
+ "unmapped": []
+}

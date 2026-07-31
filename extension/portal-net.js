@@ -204,9 +204,12 @@
    * `sn: <serviceName>` + credentials, with no UI navigation or token capture.
    */
   async function apiCall(opts) {
-    const { path, serviceName, method, payload } = opts;
+    const { path, serviceName, method, payload, extraHeaders } = opts;
     const headers = { "Content-Type": "application/json", "Accept": "application/json" };
     if (serviceName) headers["sn"] = serviceName; // == serviceName, by design
+    // A few services read a value from a header rather than the body — the ITR
+    // form preview wants `ackNum` up there.
+    Object.assign(headers, extraHeaders || {});
     const t0 = performance.now();
     try {
       const resp = await origFetch.call(window, ORIGIN + (path || GET_ENTITY_PATH), {
@@ -268,6 +271,63 @@
     }
   }
 
+  // POST a JSON body and pull a PDF out of whatever comes back.
+  //
+  // The filed-returns endpoints are inconsistent about how they hand one over:
+  // /iec/document/intimation streams a genuine application/pdf, but
+  // /returns/pdf and /returns/preview/{ay} return a Java-serialised
+  // Object[]{HashMap<headers>, byte[]} envelope mislabelled as
+  // application/json, with the PDF sitting raw inside it. Rather than parse
+  // Java's serialisation format we scan for the PDF itself — %PDF- to the final
+  // %%EOF — which survives the envelope changing under us, as it eventually
+  // will. A portal error has no %PDF- anywhere in it, so the marker's absence
+  // is exactly how we tell failure from success.
+  async function postBinary(opts) {
+    const t0 = performance.now();
+    try {
+      const headers = { "Content-Type": "application/json", "Accept": "application/pdf" };
+      if (opts.serviceName) headers["sn"] = opts.serviceName;
+      Object.assign(headers, opts.extraHeaders || {});
+      const resp = await origFetch.call(window, ORIGIN + opts.path, {
+        method: "POST", credentials: "include", headers,
+        body: opts.payload != null ? JSON.stringify(opts.payload) : undefined,
+      });
+      const ms = Math.round(performance.now() - t0);
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+
+      // Find "%PDF-" without decoding the buffer as text — a form preview is
+      // 11 MB and a TextDecoder pass over that is pure waste.
+      const MARK = [0x25, 0x50, 0x44, 0x46, 0x2d]; // %PDF-
+      let start = -1;
+      for (let i = 0; i + MARK.length <= bytes.length; i++) {
+        let hit = true;
+        for (let j = 0; j < MARK.length; j++) if (bytes[i + j] !== MARK[j]) { hit = false; break; }
+        if (hit) { start = i; break; }
+      }
+      if (start < 0) {
+        const txt = new TextDecoder().decode(bytes.subarray(0, 4000));
+        let json = null; try { json = JSON.parse(txt); } catch { /* not json */ }
+        return { ok: false, status: resp.status, ms, json, text: json ? null : txt.slice(0, 300) };
+      }
+
+      // Trim anything the envelope appended after the last %%EOF.
+      const EOF = [0x25, 0x25, 0x45, 0x4f, 0x46]; // %%EOF
+      let end = bytes.length;
+      for (let i = bytes.length - EOF.length; i >= start; i--) {
+        let hit = true;
+        for (let j = 0; j < EOF.length; j++) if (bytes[i + j] !== EOF[j]) { hit = false; break; }
+        if (hit) { end = i + EOF.length; break; }
+      }
+
+      const pdf = bytes.subarray(start, end);
+      let bin = ""; const CH = 0x8000;
+      for (let i = 0; i < pdf.length; i += CH) bin += String.fromCharCode.apply(null, pdf.subarray(i, i + CH));
+      return { ok: true, status: resp.status, ms, base64: btoa(bin), contentType: "application/pdf", bytes: pdf.length };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message || err), ms: Math.round(performance.now() - t0) };
+    }
+  }
+
   // Convenience: the paginated e-Proceedings list for one status flag.
   function fetchProceedings(opts) {
     const pan = String(opts.pan || "").toUpperCase();
@@ -292,6 +352,7 @@
     else if (d.kind === "apicall") result = await apiCall(d);
     else if (d.kind === "getdoc") result = await getDoc(d);
     else if (d.kind === "postdoc") result = await postDoc(d);
+    else if (d.kind === "postbinary") result = await postBinary(d);
     else return;
     post("fetchResult", { id: d.id, result });
   });

@@ -21,16 +21,30 @@ const PATHS = {
   ITF_INVOKE: "/iec/itfweb/auth/invoke", // filed-form data
   PDFWEB: "/iec/pdfweb/pdf", // renders a filed form to PDF
   DOC_BASE: "/iec/document/",
+
+  // ---- Filed returns (the "View Filed Returns" page) ---------------------
+  // One call returns EVERY assessment year's return with its full CPC activity
+  // timeline, so there is no per-AY list call to make.
+  ITR_STATUS: "/iec/servicesapi/auth/getEntity", // sn: itrStatusService
+  ITR_DOWNLOAD_FILE: "/iec/itrweb/auth/v0.1/returns/downloadfile", // the ITR JSON
+  ITR_PDF: "/iec/itrweb/auth/v0.1/returns/pdf", // ITR-V / acknowledgement
+  ITR_PREVIEW: "/iec/itrweb/auth/v0.1/returns/preview/", // + AY — the full form
+  DOC_INTIMATION: "/iec/document/intimation", // 143(1) / 154 order PDF
 };
 const FORM = { formName: "FO-041_PCDNG" };
+const ITR_FORM = { formName: "FO-006-ITRST" }; // the filed-returns page's own form id
 
 // One JSON API call. Runs in the page. Port of portal-net.js apiCall().
-function apiCall(page, { path, serviceName, method, payload }) {
+//
+// extraHeaders covers the handful of services that read a value from a header
+// rather than the body (the ITR form preview wants `ackNum` up there).
+function apiCall(page, { path, serviceName, method, payload, extraHeaders }) {
   return page.evaluate(
-    async ({ path, serviceName, method, payload }) => {
+    async ({ path, serviceName, method, payload, extraHeaders }) => {
       const ORIGIN = window.location.origin;
       const headers = { "Content-Type": "application/json", Accept: "application/json" };
       if (serviceName) headers["sn"] = serviceName; // == serviceName, by design
+      Object.assign(headers, extraHeaders || {});
       try {
         const resp = await fetch(ORIGIN + path, {
           method: method || "POST",
@@ -46,7 +60,7 @@ function apiCall(page, { path, serviceName, method, payload }) {
         return { ok: false, error: String((err && err.message) || err) };
       }
     },
-    { path, serviceName, method, payload }
+    { path, serviceName, method, payload, extraHeaders }
   );
 }
 
@@ -127,6 +141,75 @@ function postDoc(page, { path, serviceName, payload }) {
   );
 }
 
+// POST a JSON body and pull a PDF out of whatever comes back.
+//
+// The filed-returns endpoints are not consistent about how they hand over a
+// document. /iec/document/intimation streams a genuine `application/pdf`, but
+// /returns/pdf and /returns/preview/{ay} return a Java-serialised
+// `Object[]{HashMap<headers>, byte[]}` envelope — mislabelled
+// `Content-Type: application/json`, with the PDF sitting raw inside it.
+//
+// Rather than parse Java's serialisation format, we scan the bytes for the PDF
+// itself: `%PDF-` to the final `%%EOF`. That works for both shapes and for the
+// envelope changing under us, which it eventually will.
+//
+// Returns { ok, base64, bytes } or { ok:false, status, json|text } — a portal
+// error comes back as real JSON with no `%PDF-` anywhere in it, so the absence
+// of the marker is exactly how we tell failure from success.
+function postBinary(page, { path, serviceName, payload, extraHeaders }) {
+  return page.evaluate(
+    async ({ path, serviceName, payload, extraHeaders }) => {
+      const ORIGIN = window.location.origin;
+      const headers = { "Content-Type": "application/json", Accept: "application/pdf" };
+      if (serviceName) headers["sn"] = serviceName;
+      Object.assign(headers, extraHeaders || {});
+      try {
+        const resp = await fetch(ORIGIN + path, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: payload != null ? JSON.stringify(payload) : undefined,
+        });
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+
+        // Locate "%PDF-" without decoding the whole buffer as text — these can
+        // be 11 MB and a TextDecoder pass over that is pure waste.
+        const MARK = [0x25, 0x50, 0x44, 0x46, 0x2d]; // %PDF-
+        let start = -1;
+        for (let i = 0; i + MARK.length <= bytes.length; i++) {
+          let hit = true;
+          for (let j = 0; j < MARK.length; j++) if (bytes[i + j] !== MARK[j]) { hit = false; break; }
+          if (hit) { start = i; break; }
+        }
+        if (start < 0) {
+          // No PDF in there — so it really is an error payload. Surface it.
+          const txt = new TextDecoder().decode(bytes.subarray(0, 4000));
+          let json = null; try { json = JSON.parse(txt); } catch { /* not json */ }
+          return { ok: false, status: resp.status, json, text: json ? null : txt.slice(0, 300) };
+        }
+
+        // Trim anything the envelope appended after the last %%EOF.
+        const EOF = [0x25, 0x25, 0x45, 0x4f, 0x46]; // %%EOF
+        let end = bytes.length;
+        for (let i = bytes.length - EOF.length; i >= start; i--) {
+          let hit = true;
+          for (let j = 0; j < EOF.length; j++) if (bytes[i + j] !== EOF[j]) { hit = false; break; }
+          if (hit) { end = i + EOF.length; break; }
+        }
+
+        const pdf = bytes.subarray(start, end);
+        let bin = "";
+        const CH = 0x8000;
+        for (let i = 0; i < pdf.length; i += CH) bin += String.fromCharCode.apply(null, pdf.subarray(i, i + CH));
+        return { ok: true, status: resp.status, base64: btoa(bin), contentType: "application/pdf", bytes: pdf.length };
+      } catch (err) {
+        return { ok: false, error: String((err && err.message) || err) };
+      }
+    },
+    { path, serviceName, payload, extraHeaders }
+  );
+}
+
 // The paginated e-Proceedings list for one status flag. Port of
 // portal-net.js fetchProceedings().
 function proceedings(page, { pan, statusFlag, pageSize, pageNo }) {
@@ -144,4 +227,4 @@ function proceedings(page, { pan, statusFlag, pageSize, pageNo }) {
   });
 }
 
-module.exports = { PATHS, FORM, apiCall, getDoc, postDoc, proceedings };
+module.exports = { PATHS, FORM, ITR_FORM, apiCall, getDoc, postDoc, postBinary, proceedings };

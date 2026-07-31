@@ -9,16 +9,19 @@
 // payload shapes the extension streamed.
 //
 // Scope:
-//   "all"     — FYA + FYI + notices/orders/replies (+ Form 35, pass 3).
+//   "all"     — FYA + FYI + notices/orders/replies (+ Form 35, pass 3, + filed
+//               returns and CPC orders, pass 4).
 //   "eproc"   — FYA only → diff → new notices/orders; synthetic closed rows for
 //               proceedings that just left FYA. No FYI scan.
 //   "appeals" — filed Form 35s only (pass 3).
+//   "returns" — filed ITRs + s.143(1) intimations and s.154 orders only (pass 4).
 "use strict";
 
 const { jsleep, PACE } = require("./pacing");
 const { PATHS, FORM, apiCall, getDoc, proceedings } = require("./portalApi");
 const { ingestSyncMessage } = require("./ingest");
 const { syncAppealForms } = require("./portalAppeals");
+const { syncReturns } = require("./portalReturns");
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -226,6 +229,11 @@ async function syncPortalData(page, job, scope, emit, summary) {
     return summary;
   }
 
+  if (scope === "returns") {
+    await syncReturns(page, job, pan, summary, emit);
+    return summary;
+  }
+
   const t = clock(job);
 
   emit("fetch", "Fetching e-Proceedings (FYA)…", "info", 24);
@@ -256,17 +264,24 @@ async function syncPortalData(page, job, scope, emit, summary) {
     }
   }
 
-  if (!rows.length) { emit("fetch", "Nothing in FYA — up to date"); return summary; }
+  // No e-Proceedings is the normal state for most assessees, not a reason to
+  // stop: a PAN with a clean compliance record still has filed returns and CPC
+  // intimations to pull in the "all" passes below.
+  if (!rows.length) {
+    emit("fetch", "Nothing in FYA — up to date");
+  } else {
+    emit("fetch", `${rows.length} proceeding(s) — saving…`, "info", 30);
+    await t.time("ingest", () => ingestSyncMessage({ assesseeId: job.assesseeId, kind: "proceedings", proceedings: rows }));
+    summary.proceedings = rows.length;
 
-  emit("fetch", `${rows.length} proceeding(s) — saving…`, "info", 30);
-  await t.time("ingest", () => ingestSyncMessage({ assesseeId: job.assesseeId, kind: "proceedings", proceedings: rows }));
-  summary.proceedings = rows.length;
-
-  await syncNotices(page, job, pan, rows, summary, emit);
+    await syncNotices(page, job, pan, rows, summary, emit);
+  }
 
   if (scope === "all") {
     try { await syncAppealForms(page, job, pan, summary, emit); }
     catch { /* appeals are best-effort; don't fail the whole sync */ }
+    try { await syncReturns(page, job, pan, summary, emit); }
+    catch { /* returns are best-effort too; a portal hiccup here is not a failed sync */ }
   }
   return summary;
 }

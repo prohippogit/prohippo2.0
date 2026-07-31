@@ -53,18 +53,24 @@ export async function detectExtension() {
 
 /** Ask the extension to open the portal and auto-login (mode "open" or "sync").
  *  scope selects how much a sync fetches:
- *   - "all"     — FYA + FYI + notices/orders/replies + Form 35 (first sync)
+ *   - "all"     — FYA + FYI + notices/orders/replies + Form 35 + filed returns
  *   - "eproc"   — FYA only, incremental; no FYI scan, no Form 35 (fast re-sync)
  *   - "appeals" — filed Form 35s only
+ *   - "returns" — filed ITRs + s.143(1) intimations and s.154 orders only
+ *   - "returnForm" — one fully rendered ITR form PDF, named by formRequest
+ *                    { ackNum, ay }. Kept out of every sync because it is
+ *                    10-12 MB per year and rarely opened.
  *  Incremental-sync hints let a re-sync skip work it's already done:
  *   - knownDins:         PDFs already held (DINs + docKeys) — don't re-download
  *   - knownByProc:       per-proceeding {n,o} counts — skip unchanged proceedings
  *   - knownResponseIds:  replies already recorded — don't re-download
  *   - knownActiveProcs:  proceedingReqIds we hold as Active — used in "eproc" to
  *                        spot ones that left FYA (just closed) and grab the order
+ *   - knownAckNums:      returns already on file — a filed return never changes
+ *   - knownOrderRefs:    CPC references already downloaded and unlocked
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], knownActiveProcs = [], background = false, clientRef = null }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs, background, clientRef }, 8000);
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], formRequest = null, background = false, clientRef = null }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs, knownAckNums, knownOrderRefs, formRequest, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

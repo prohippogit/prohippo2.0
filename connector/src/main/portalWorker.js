@@ -8,8 +8,9 @@
 //                    the login and awaited after it, so it costs no wall time.
 //   2. LOGIN         The User ID → [confirm] → Password → Dashboard state
 //                    machine, plus Dual Login and session-expiry handling.
-//   3. SCOPE + DIFF  "all" | "eproc" | "appeals", FYA/FYI tabs, diffed against
-//                    the knowns from step 1 so we fetch only what's new.
+//   3. SCOPE + DIFF  "all" | "eproc" | "appeals" | "returns", FYA/FYI tabs,
+//                    diffed against the knowns from step 1 so we fetch only
+//                    what's new.
 //   4. PDFs          Download only NEW documents, upload to Storage.
 //   5. INGEST        ingestPortalProceedings / Notice / Response / AppealForm.
 "use strict";
@@ -25,7 +26,7 @@ const { makeTimer } = require("./timing");
 async function runPanSync({ context, job, scope, emit }) {
   const page = await context.newPage();
 
-  const summary = { proceedings: 0, notices: 0, responses: 0, appeals: 0 };
+  const summary = { proceedings: 0, notices: 0, responses: 0, appeals: 0, returns: 0, orders: 0 };
   // Shared stopwatch. Hung off the job the same way `knowns`/`scope` are, so the
   // fetch layer can charge its phases without threading a new parameter through
   // every signature.

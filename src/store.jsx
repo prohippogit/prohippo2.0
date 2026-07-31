@@ -44,7 +44,7 @@ export const invoiceStatus = (inv) => {
 
 export const invoiceOutstanding = (inv) => Math.max(0, inv.amount - (inv.received || 0));
 
-const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "docRequests", "todos", "receipts", "groups"];
+const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "docRequests", "todos", "receipts", "groups", "returns"];
 
 const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
 export const nextColor = (assessees) => AVATAR_COLORS[assessees.length % AVATAR_COLORS.length];
@@ -130,7 +130,7 @@ export function buildSampleData() {
 /* ---------------- context ---------------- */
 
 const emptyData = () => ({
-  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], docRequests: [], todos: [], receipts: [], groups: [],
+  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], docRequests: [], todos: [], receipts: [], groups: [], returns: [],
   profile: { ownerName: "", firmName: "" },
   invoiceSeq: 120, receiptSeq: 0,
 });
@@ -249,6 +249,7 @@ export function DataProvider({ children }) {
             matters: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             hearings: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
             notices: (r) => (a.pan && r.pan === a.pan) || r.assessee === a.name,
+            returns: (r) => (a.pan && r.pan === a.pan) || r.assesseeId === a.id,
             invoices: (r) => r.assessee === a.name,
             receipts: (r) => r.assessee === a.name,
             communications: (r) => (r.assesseeId ? r.assesseeId === a.id : legacyContactMatch(r)),

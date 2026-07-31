@@ -88,6 +88,8 @@ async function runPool(jobs, onEvent, opts = {}) {
         if (r.notices) parts.push(`${r.notices} docs`);
         if (r.responses) parts.push(`${r.responses} replies`);
         if (r.appeals) parts.push(`${r.appeals} appeals`);
+        if (r.returns) parts.push(`${r.returns} returns`);
+        if (r.orders) parts.push(`${r.orders} CPC orders`);
         // Where the time actually went, per PAN. This is how the remaining
         // tuning calls (does the PDF bucket need moving to asia-south1? is the
         // per-document pacing earning its keep?) get settled with real numbers

@@ -106,8 +106,10 @@
     const apiCall = (opts) => send(Object.assign({ kind: "apicall" }, opts));
     const getDoc = (opts) => send(Object.assign({ kind: "getdoc" }, opts), 45000);
     const postDoc = (opts) => send(Object.assign({ kind: "postdoc" }, opts), opts.timeoutMs || 45000);
+    // The filed-returns documents can be 11 MB, so they get a longer leash.
+    const postBinary = (opts) => send(Object.assign({ kind: "postbinary" }, opts), opts.timeoutMs || 90000);
 
-    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings, apiCall, getDoc, postDoc };
+    return { caps, bestProceedingId, apiFetch, waitAuth, pan, proceedings, apiCall, getDoc, postDoc, postBinary };
   })();
 
   // Portal API endpoints + form, mirrored from portal-net.js.
@@ -118,7 +120,13 @@
   const SERVICES_GET_PATH = "/iec/servicesapi/auth/getEntity";
   const ITF_INVOKE_PATH = "/iec/itfweb/auth/invoke"; // filed-form data
   const PDFWEB_PATH = "/iec/pdfweb/pdf";             // renders a filed form to PDF
+  // Filed returns. itrStatusService returns EVERY assessment year in one call.
+  const ITR_DOWNLOAD_FILE_PATH = "/iec/itrweb/auth/v0.1/returns/downloadfile"; // the ITR JSON
+  const ITR_PDF_PATH = "/iec/itrweb/auth/v0.1/returns/pdf";                    // ITR-V / acknowledgement
+  const ITR_PREVIEW_PATH = "/iec/itrweb/auth/v0.1/returns/preview/";           // + AY — the full form
+  const DOC_INTIMATION_PATH = "/iec/document/intimation";                      // 143(1) / 154 order PDF
   const FORM = { formName: "FO-041_PCDNG" };
+  const ITR_FORM = { formName: "FO-006-ITRST" }; // the filed-returns page's own form id
 
   chrome.runtime.sendMessage({ type: "GET_PORTAL_CREDS" }, (resp) => {
     if (chrome.runtime.lastError || !resp || !resp.ok || !resp.creds) return; // not our tab
@@ -955,6 +963,196 @@
     }
   }
 
+  /* ---------- filed returns + CPC intimations / s.154 orders ----------
+   * Mirror of connector/src/main/portalReturns.js — keep the two in step.
+   *
+   * itrStatusService returns EVERY assessment year in one call, each with its
+   * acknowledgement number and its full CPC activity timeline, so there is no
+   * per-year list call. Everything after that is per-document.
+   *
+   * We deliberately do NOT fetch returns/preview/{ay} (the fully rendered ITR
+   * form) here: 10-12 MB per year, and the one document nobody opens routinely.
+   * The Returns tab fetches it on demand instead.
+   *
+   * ORDERS. Every activity row carries a commRefNo in its activityTxt blob, and
+   * that reference is the refno the document endpoint wants. The statuses that
+   * actually have a document behind them are the ones the portal's own bundle
+   * marks with a `dnlIntOrdr` action — ORDER_ACTIVITIES below. Codes in the 60s
+   * are s.143(1) intimations; the 70s (and 613) are s.154 rectification orders.
+   *
+   * These PDFs arrive encrypted (PAN lower-case + DDMMYYYY). We stream them out
+   * as-is and let the web app decrypt before upload — it has the assessee's date
+   * of birth and the qpdf-wasm module (src/pdfUnlock.js); a content script has
+   * neither.
+   */
+  const ORDER_ACTIVITIES = {
+    61: "143(1)", 62: "143(1)", 63: "143(1)", 64: "143(1)", 65: "143(1)",
+    71: "154", 72: "154", 73: "154", 74: "154", 75: "154", 613: "154",
+  };
+  // Before AY 2017-18 the portal will not serve an order directly — it opens a
+  // request form and emails it out, which we cannot complete unattended.
+  const DIRECT_DOWNLOAD_FROM_AY = 2017;
+  const MAX_RETURN_PDF_BYTES = 25 * 1024 * 1024;
+
+  // "Tue Nov 25 14:16:09 IST 2025" → "2025-11-25". Java's Date.toString(),
+  // which Date.parse cannot read on any engine because of the zone abbreviation.
+  const RET_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  function javaDate(s) {
+    const m = /^\w{3}\s+(\w{3})\s+(\d{1,2})\s+[\d:]+\s+\S+\s+(\d{4})$/.exec(String(s || "").trim());
+    if (!m) return "";
+    const mo = RET_MONTHS[m[1].toLowerCase()];
+    return mo ? `${m[3]}-${String(mo).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}` : "";
+  }
+  // Activity detail is a JSON *string* inside the row. Most rows have none, so a
+  // parse failure is an empty object, never an error.
+  function activityDetail(row) {
+    try {
+      const p = JSON.parse(row && row.activityTxt);
+      return p && typeof p === "object" ? p : {};
+    } catch { return {}; }
+  }
+
+  async function syncReturns(creds, badge, pan) {
+    badge.set("Fetching filed returns…");
+    const knownAcks = new Set((creds.knownAckNums || []).map((x) => String(x)));
+    const knownOrders = new Set((creds.knownOrderRefs || []).map((x) => String(x)));
+
+    const res = await NET.apiCall({
+      path: SERVICES_GET_PATH, serviceName: "itrStatusService",
+      payload: { header: ITR_FORM, serviceName: "itrStatusService", entityNum: pan },
+    });
+    const list = res && Array.isArray(res.json) ? res.json : [];
+    if (!list.length) { log("returns: none filed"); return; }
+    log("returns: " + list.length + " assessment year(s)");
+
+    for (const r of list) {
+      const ackNum = String((r && r.ackNum) || "").trim();
+      const ay = String((r && r.assmentYear) || "").trim();
+      if (!ackNum || !ay) continue;
+      const isNew = !knownAcks.has(ackNum);
+      badge.set("Return A.Y. " + ay + "…");
+
+      // The return itself is fetched once — a filed return never changes.
+      let itrJson = null;
+      let ackPdfBase64 = null;
+      if (isNew) {
+        const j = await NET.apiCall({ path: ITR_DOWNLOAD_FILE_PATH, serviceName: "NA", payload: { ackNum, loggedInUserId: pan } });
+        if (j && j.ok && j.json) itrJson = j.json;
+        await jsleep(120, 320);
+        const p = await NET.postBinary({ path: ITR_PDF_PATH, serviceName: "NA", payload: { ackNum, ay, loggedInUserId: pan } });
+        if (p && p.ok && p.bytes && p.bytes <= MAX_RETURN_PDF_BYTES) ackPdfBase64 = p.base64;
+        await jsleep(120, 320);
+      }
+
+      const orders = [];
+      for (const row of (r.itrPanDetlList || [])) {
+        const section = ORDER_ACTIVITIES[Number(row && row.itrActivityCd)];
+        if (!section) continue;
+        const detail = activityDetail(row);
+        const refNo = String(detail.commRefNo || "").trim();
+        if (!refNo || knownOrders.has(refNo)) continue;
+
+        const order = {
+          commRefNo: refNo, section,
+          statusDesc: row.statusDesc || "",
+          activityCd: String(row.itrActivityCd || ""),
+          orderDate: javaDate(detail.orderDt) || javaDate(detail.intimationDt) || "",
+          emailedOn: javaDate(detail.emailDt) || "",
+          demand: detail.computedDemndAmt != null ? String(detail.computedDemndAmt) : "",
+          refund: detail.computedRefndAmt != null ? String(detail.computedRefndAmt) : "",
+          contentBase64: null, locked: false, lockReason: "",
+        };
+
+        if (Number(ay) < DIRECT_DOWNLOAD_FROM_AY) {
+          // Record it so the year does not look empty, and say why the file is
+          // missing rather than showing nothing.
+          order.lockReason = "request-only";
+          orders.push(order);
+          continue;
+        }
+
+        const got = await NET.postBinary({ path: DOC_INTIMATION_PATH, serviceName: "NA", payload: { refno: refNo, year: ay, entityNum: pan } });
+        if (got && got.ok && got.bytes && got.bytes <= MAX_RETURN_PDF_BYTES) {
+          order.contentBase64 = got.base64;
+          order.bytes = got.bytes;
+        } else {
+          order.lockReason = "unavailable";
+        }
+        orders.push(order);
+        await jsleep(120, 320);
+      }
+
+      // A return we already hold, with no new order, is nothing to say.
+      if (!isNew && !orders.length) continue;
+
+      const ret = {
+        pan, ay, ackNum,
+        formTypeCd: r.formTypeCd || "",
+        filingTypeCd: r.filingTypeCd || "",
+        filedOn: r.ackDt || null,
+        efileStatus: r.efileStatus || "",
+        statusDesc: (r.itrPanDetlList && r.itrPanDetlList[0] && r.itrPanDetlList[0].statusDesc) || "",
+        verified: r.verStatus === "Y",
+        verifiedMode: r.verMode || "",
+        verifiedOn: r.verDt || null,
+        demandAmt: r.demandAmt || "",
+        refundAmt: r.refundAmt || "",
+        computedDemndAmt: r.computedDemndAmt || "",
+        computedRefndAmt: r.computedRefndAmt || "",
+        submitBy: r.submitBy || "",
+        timeline: (r.itrPanDetlList || []).map((row) => ({
+          activityCd: String(row.itrActivityCd || ""),
+          statusDesc: row.statusDesc || "",
+          activityDt: row.activityDt || null,
+        })),
+        itrJson: isNew ? itrJson : null,
+        ackPdfBase64,
+        orders,
+      };
+      log("returns: AY", ay, "ack", ackNum, "orders", orders.length);
+      chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "return", return: ret } }, () => {});
+      await jsleep(120, 320);
+    }
+  }
+
+  // The fully rendered ITR form for ONE year, fetched only when the Returns tab
+  // asks for it. This is the document deliberately left out of the sync: 10-12
+  // MB per year, and the one nobody opens routinely. Fetching it on a button
+  // means a practice pays for it only where it is actually wanted.
+  async function fetchReturnForm(creds, badge, pan) {
+    const req = creds.formRequest || {};
+    const ackNum = String(req.ackNum || "");
+    const ay = String(req.ay || "");
+    if (!ackNum || !ay) return;
+    badge.set("Fetching the ITR form for A.Y. " + ay + "…");
+    const got = await NET.postBinary({
+      path: ITR_PREVIEW_PATH + encodeURIComponent(ay),
+      serviceName: "NA",
+      payload: { ackNum, loggedInUserId: pan },
+      extraHeaders: { ackNum },
+      timeoutMs: 180000, // this one really is 11 MB
+    });
+    const ok = got && got.ok && got.bytes;
+    log("returnForm:", ay, ok ? got.bytes + " bytes" : "failed");
+    chrome.runtime.sendMessage({
+      type: "SYNC_DATA",
+      payload: {
+        assesseeId: creds.assesseeId, kind: "returnForm",
+        form: { ay, ackNum, contentBase64: ok ? got.base64 : null, bytes: ok ? got.bytes : 0 },
+      },
+    }, () => {});
+  }
+
+  // The extra passes a full sync runs beyond e-Proceedings. Guarded so the two
+  // call sites (proceedings found / none found) can never run them twice.
+  let fullExtrasDone = false;
+  async function syncFullExtras(creds, badge, pan) {
+    if (fullExtrasDone) return;
+    fullExtrasDone = true;
+    try { await syncAppealForms(creds, badge, pan); } catch (e) { log("appeals error", e); }
+    try { await syncReturns(creds, badge, pan); } catch (e) { log("returns error", e); }
+  }
+
   /* ---------- log out + close the tab once a sync is done ---------- */
   function requestCloseTab() { try { chrome.runtime.sendMessage({ type: "CLOSE_TAB" }, () => {}); } catch { /* noop */ } }
   function tryLogout() {
@@ -984,15 +1182,30 @@
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) { log("direct api: no valid PAN", pan); return false; }
 
     // Sync scope (from the app's dropdown):
-    //   "all"     — FYA + FYI + notices/orders/replies + Form 35 (first sync).
+    //   "all"     — FYA + FYI + notices/orders/replies + Form 35 + filed returns.
     //   "eproc"   — FYA only → diff → new notices/orders; no FYI scan, no Form 35.
     //   "appeals" — filed Form 35s only, nothing else.
+    //   "returns" — filed ITRs + s.143(1) intimations and s.154 orders only.
     const scope = creds.scope || "all";
 
     if (scope === "appeals") {
       log("scope=appeals — Form 35 only");
       badge.set("Fetching filed appeals (Form 35)…");
       try { await syncAppealForms(creds, badge, pan); } catch (e) { log("appeals error", e); }
+      await logoutAndClose(badge, creds);
+      return true;
+    }
+
+    if (scope === "returns") {
+      log("scope=returns — filed ITRs + CPC orders only");
+      try { await syncReturns(creds, badge, pan); } catch (e) { log("returns error", e); }
+      await logoutAndClose(badge, creds);
+      return true;
+    }
+
+    if (scope === "returnForm") {
+      log("scope=returnForm — one ITR form PDF on demand");
+      try { await fetchReturnForm(creds, badge, pan); } catch (e) { log("returnForm error", e); }
       await logoutAndClose(badge, creds);
       return true;
     }
@@ -1032,6 +1245,11 @@
     if (!rows.length) {
       // Nothing in FYA (and, for a full sync, nothing in FYI either).
       if (scope === "eproc") { log("eproc: FYA empty — nothing to do, logging out"); await logoutAndClose(badge, creds); return true; }
+      // A clean compliance record is the normal state for most assessees, and it
+      // says nothing about their filed returns — run the full-sync extras before
+      // handing back to the scrape fallback, or a PAN with no proceedings would
+      // never get its returns pulled at all.
+      if (scope === "all") await syncFullExtras(creds, badge, pan);
       log("direct api: no rows", { fya: fya && fya.status, err: fya && fya.error }); return false;
     }
 
@@ -1041,12 +1259,9 @@
     // Then pull each proceeding's notices/orders + PDFs (incremental).
     try { await syncNotices(creds, badge, pan, rows); }
     catch (e) { log("notices error", e); }
-    // CIT(A) appeals filed as Form 35 — only on a full sync; e-Proceedings-only
+    // Form 35 appeals and filed returns — only on a full sync; e-Proceedings-only
     // deliberately skips the (expensive) Form 35 render.
-    if (scope === "all") {
-      try { await syncAppealForms(creds, badge, pan); }
-      catch (e) { log("appeals error", e); }
-    }
+    if (scope === "all") await syncFullExtras(creds, badge, pan);
     // Done — log out and close the portal tab so no session is left open.
     await logoutAndClose(badge, creds);
     return true;

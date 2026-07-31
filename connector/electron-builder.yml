@@ -22,6 +22,12 @@ files:
   - google-oauth.json # written by CI from repo secrets (or your local dev copy)
   - "!**/*.map"
 
+# qpdf-wasm (used to strip the password off CPC intimation/order PDFs) locates
+# its .wasm by filesystem path. Emscripten's loader reads it with plain
+# readFileSync, which cannot see inside an asar archive — so keep it unpacked.
+asarUnpack:
+  - node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm
+
 # Stable asset names (no version) so the website can always link the same URL:
 #   https://github.com/prohippogit/prohippo2.0/releases/latest/download/ProHippo-Connector-mac.dmg
 #   https://github.com/prohippogit/prohippo2.0/releases/latest/download/ProHippo-Connector-win.exe

@@ -772,6 +772,14 @@ function formatAy(v) {
   return `${y}-${String((y + 1) % 100).padStart(2, "0")}`;
 }
 
+// The filed-returns service reports the form as a bare code ("5"), which means
+// nothing on screen. Anything outside 1-7 is left blank rather than guessed —
+// the raw code is kept alongside for the rare form we don't recognise.
+function itrFormName(v) {
+  const n = Number(String(v || "").trim());
+  return n >= 1 && n <= 7 ? `ITR-${n}` : "";
+}
+
 // Map proceeding name + section to the app's authority buckets.
 function deriveAuthority(proceedingName, section) {
   const n = (proceedingName || "").toLowerCase();
@@ -1138,6 +1146,135 @@ exports.onPortalOrderWritten = onDocumentWritten(
     }
   }
 );
+
+// Record one filed return for one assessment year, with its CPC intimations and
+// s.154 rectification orders.
+//
+// These live in their own `returns` collection rather than in `notices`. They
+// are not e-Proceedings: no DIN, no proceedingReqId, no reply thread, and no
+// appeal to track. Filing them under notices would inflate the Notices tab and
+// the "notices on file" count, and would put every 143(1) intimation through
+// the order-parsing trigger for no benefit.
+//
+// The document id is derived from PAN + AY, so a re-sync updates the year in
+// place instead of appending a second copy of the same return. Orders are
+// merged by CPC reference for the same reason — a sync that finds a newly
+// issued s.154 order must not drop the 143(1) intimation recorded last month.
+exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId, return: ret, jsonPath, ackPdfPath, orders } = request.data || {};
+  if (!assesseeId || !ret || typeof ret !== "object") {
+    throw new HttpsError("invalid-argument", "assesseeId and return are required.");
+  }
+  const ackNum = String(ret.ackNum || "").trim();
+  const ay = formatAy(ret.ay) || String(ret.ay || "");
+  if (!ackNum || !ay) return { ok: false, reason: "no-ack-or-ay" };
+
+  const aSnap = await db.doc(`users/${uid}/assessees/${assesseeId}`).get();
+  const a = aSnap.exists ? aSnap.data() : {};
+  const pan = (ret.pan || a.pan || "").toUpperCase();
+  const assesseeName = a.name || "";
+
+  const docId = "ret_" + crypto.createHash("sha1").update(`${pan}|${ay}`).digest("hex").slice(0, 20);
+  const ref = db.doc(`users/${uid}/returns/${docId}`);
+  const prev = await ref.get();
+  const existing = prev.exists ? prev.data() : {};
+
+  // Merge orders by CPC reference. A newly downloaded copy wins — that is how a
+  // PDF we previously stored still locked gets replaced once the date of birth
+  // is on file — but an entry we already hold is never dropped just because
+  // this sync didn't mention it.
+  const merged = new Map();
+  for (const o of existing.orders || []) if (o && o.commRefNo) merged.set(String(o.commRefNo), o);
+  for (const o of orders || []) {
+    if (!o || !o.commRefNo) continue;
+    const key = String(o.commRefNo);
+    const before = merged.get(key) || {};
+    merged.set(key, {
+      ...before,
+      commRefNo: key,
+      section: o.section || before.section || "",
+      statusDesc: o.statusDesc || before.statusDesc || "",
+      activityCd: o.activityCd || before.activityCd || "",
+      orderDate: parsePortalDate(o.orderDate) || before.orderDate || "",
+      emailedOn: parsePortalDate(o.emailedOn) || before.emailedOn || "",
+      demand: o.demand ?? before.demand ?? "",
+      refund: o.refund ?? before.refund ?? "",
+      // Only overwrite the file when this run actually produced one.
+      storagePath: o.storagePath || before.storagePath || null,
+      locked: o.storagePath ? Boolean(o.locked) : Boolean(before.locked),
+      lockReason: o.storagePath ? (o.lockReason || "") : (o.lockReason || before.lockReason || ""),
+    });
+  }
+  const orderList = [...merged.values()].sort((x, y) => String(y.orderDate || "").localeCompare(String(x.orderDate || "")));
+
+  const doc = {
+    pan,
+    assessee: assesseeName,
+    assesseeId,
+    ay,
+    ackNum,
+    formTypeCd: String(ret.formTypeCd || ""),
+    form: itrFormName(ret.formTypeCd),
+    filingTypeCd: String(ret.filingTypeCd || ""),
+    filedOn: parsePortalDate(ret.filedOn) || existing.filedOn || "",
+    efileStatus: String(ret.efileStatus || ""),
+    statusDesc: ret.statusDesc || "",
+    verified: Boolean(ret.verified),
+    verifiedMode: ret.verifiedMode || "",
+    verifiedOn: parsePortalDate(ret.verifiedOn) || existing.verifiedOn || "",
+    demandAmt: ret.demandAmt ?? "",
+    refundAmt: ret.refundAmt ?? "",
+    computedDemndAmt: ret.computedDemndAmt ?? "",
+    computedRefndAmt: ret.computedRefndAmt ?? "",
+    submitBy: ret.submitBy || "",
+    timeline: Array.isArray(ret.timeline)
+      ? ret.timeline.map((e) => ({
+        activityCd: String(e.activityCd || ""),
+        statusDesc: e.statusDesc || "",
+        activityDt: parsePortalDate(e.activityDt) || "",
+      }))
+      : existing.timeline || [],
+    orders: orderList,
+    // Never blank a file we already hold because this run skipped fetching it —
+    // the ITR JSON and acknowledgement are only pulled the first time a return
+    // is seen, so later syncs legitimately arrive with both fields null.
+    jsonPath: jsonPath || existing.jsonPath || null,
+    ackPdfPath: ackPdfPath || existing.ackPdfPath || null,
+    syncedAt: new Date().toISOString(),
+  };
+
+  await ref.set(doc, { merge: true });
+  return { ok: true, returnId: docId, orders: orderList.length };
+});
+
+// Attach a document to an already-recorded return. Used by the on-demand fetches
+// the Returns tab makes — the fully rendered ITR form PDF, and the generated
+// Computation of Income — neither of which belongs in every sync.
+exports.attachReturnDocument = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { assesseeId, ay, formPdfPath, computationPdfPath } = request.data || {};
+  if (!assesseeId || !ay) throw new HttpsError("invalid-argument", "assesseeId and ay are required.");
+
+  const aSnap = await db.doc(`users/${uid}/assessees/${assesseeId}`).get();
+  const pan = ((aSnap.exists ? aSnap.data() : {}).pan || "").toUpperCase();
+  const docId = "ret_" + crypto.createHash("sha1").update(`${pan}|${formatAy(ay) || ay}`).digest("hex").slice(0, 20);
+  const ref = db.doc(`users/${uid}/returns/${docId}`);
+  if (!(await ref.get()).exists) return { ok: false, reason: "no-return" };
+
+  const patch = {};
+  if (formPdfPath) patch.formPdfPath = formPdfPath;
+  if (computationPdfPath) {
+    patch.computationPdfPath = computationPdfPath;
+    patch.computationGeneratedAt = new Date().toISOString();
+  }
+  if (!Object.keys(patch).length) return { ok: false, reason: "nothing-to-attach" };
+
+  await ref.set(patch, { merge: true });
+  return { ok: true, returnId: docId };
+});
 
 // Record a response the assessee filed against a notice (remarks text + the
 // Storage paths of its attachment PDFs, uploaded client-side). Appended to the
@@ -2128,3 +2265,14 @@ Object.assign(exports, require("./referrals").build({ REGIONS, db }));
    Reads the rollups the meter above writes. Rates live in functions/pricing.js
    — one file, one place. Setup: docs/COST_TRACKING.md */
 Object.assign(exports, require("./costs").build({ REGIONS, db }));
+
+/* ---------- Computation of Income ----------
+   Turns the HTML the browser builds from a filed ITR JSON into a PDF, using
+   headless Chromium so the house design renders exactly as designed. The
+   mapping, the validation and the markup all happen client-side; this is a
+   renderer and nothing more. Spec: docs/computation-spec.md §13 */
+exports.renderComputationPdf = require("./computation").register({
+  region: REGIONS,
+  storageBucket: STORAGE_BUCKET,
+  db,
+});

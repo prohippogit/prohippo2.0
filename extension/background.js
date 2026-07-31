@@ -36,15 +36,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           portalPassword: creds.portalPassword,
           assesseeId: creds.assesseeId || null,
           mode: creds.mode || "open", // "open" | "sync" | "master"
-          scope: creds.scope || "all", // "all" | "eproc" | "appeals" — what a sync fetches
+          // "all" | "eproc" | "appeals" | "returns" | "returnForm"
+          scope: creds.scope || "all",
           background: Boolean(creds.background), // bulk/unwatched → fast logout pacing
           clientRef: creds.clientRef || null, // correlate a master fetch to a not-yet-saved assessee
+          // Which ITR form PDF to fetch, for scope "returnForm" only.
+          formRequest: (creds.formRequest && typeof creds.formRequest === "object") ? creds.formRequest : null,
           // Incremental-sync hints — MUST be carried through or the sync falls
           // back to re-fetching everything (see portalSync.openPortalLogin).
           knownDins: Array.isArray(creds.knownDins) ? creds.knownDins : [],
           knownByProc: (creds.knownByProc && typeof creds.knownByProc === "object") ? creds.knownByProc : {},
           knownResponseIds: Array.isArray(creds.knownResponseIds) ? creds.knownResponseIds : [],
           knownActiveProcs: Array.isArray(creds.knownActiveProcs) ? creds.knownActiveProcs : [],
+          knownAckNums: Array.isArray(creds.knownAckNums) ? creds.knownAckNums : [],
+          knownOrderRefs: Array.isArray(creds.knownOrderRefs) ? creds.knownOrderRefs : [],
           appTabId: appTabId != null ? appTabId : null,
           createdAt: Date.now(),
         },

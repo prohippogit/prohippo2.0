@@ -20,18 +20,34 @@ const admin = require("firebase-admin");
 const crypto = require("node:crypto");
 
 const { FONT_FACE_CSS } = require("./fonts/montserrat.js");
+const { PROHIPPO_LOGO_DATA_URI } = require("./assets/prohippoLogo.js");
 
 // The template leaves this marker where the @font-face rules belong; the fonts
 // live here rather than in the browser bundle so no user pays 42 KB of woff2 to
 // load a page they may never generate a computation from.
 const FONT_SLOT = "/*__COMPUTATION_FONT_FACE__*/";
 
-// Chromium's own header/footer templates are rendered outside the page, so they
-// do not inherit its styles and need their own inline CSS.
+// Chromium renders header/footer templates in their own isolated document: they
+// inherit none of the page's styles, cannot reach the network, and default to
+// zero font-size. So everything here is inline, absolute, and self-contained —
+// including the mark, which travels as a data URI.
+//
+// Left: the ProHippo attribution, on every page. Right: which document this is
+// and where you are in it. Font is the system sans rather than the embedded
+// Montserrat, because @font-face in a footer template is not reliably applied
+// across Chromium versions and a footer silently falling back mid-print is
+// worse than one that never claimed the face to begin with.
 const FOOTER = (name, ay) => `
-<div style="width:100%;font-family:'Segoe UI',sans-serif;font-size:7pt;color:#8A93A3;padding:0 11mm;text-align:center">
-  Computation of Total Income · ${escapeHtml(name)} · A.Y. ${escapeHtml(ay)} ·
-  Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+<div style="width:100%;padding:0 11mm;font-family:'Segoe UI',Arial,sans-serif;font-size:7pt;color:#8A93A3;
+            display:flex;align-items:center;justify-content:space-between;">
+  <span style="display:flex;align-items:center;gap:4px;white-space:nowrap;">
+    Generated from
+    <img src="${PROHIPPO_LOGO_DATA_URI}" alt="ProHippo" style="height:6.5mm;width:auto;display:block;">
+  </span>
+  <span style="white-space:nowrap;">
+    Computation of Total Income · ${escapeHtml(name)} · A.Y. ${escapeHtml(ay)} ·
+    Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+  </span>
 </div>`;
 
 function escapeHtml(s) {

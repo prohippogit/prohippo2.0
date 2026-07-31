@@ -282,8 +282,15 @@ acknowledgement. Print what the return says.
 
 font: Montserrat 400/500/600/700/800, embedded as woff2 (subset latin)
 radii: card 18px · header 26px · row 11px · total row 12px · pill 999px
-page:  A4, margins 12/11/16/11 mm, footer = name · A.Y. · Page n of m
+page:  A4, margins 12/11/16/11 mm
+foot:  left  "Generated from <ProHippo logo>", logo 6.5 mm tall
+       right name · A.Y. · Page n of m
 ```
+
+The footer appears on **every** page, attribution included. The logo is the full
+lockup, not the hippo alone; below about 6 mm its two lines of wordmark stop
+being legible, so if the footer ever needs to be shorter, switch to the mark
+plus a typeset "ProHippo" rather than shrinking the lockup.
 
 Header band: 120° gradient navy-900 → navy-700 → navy-500, with two decorative
 circles (gold at 22% opacity, white at 7%) bleeding off the right edge.
@@ -476,8 +483,17 @@ Montserrat subset as a base64 `@font-face`, no external references of any kind.
 
 1. Launches headless Chromium (`puppeteer-core` + `@sparticuz/chromium`).
 2. `setContent(html, { waitUntil: 'load' })` — nothing to fetch, so this is fast.
-3. `page.pdf({ format: 'A4', printBackground: true })` with the §6 margins and a
-   footer template of `name · A.Y. · Page n of m`.
+3. `page.pdf({ format: 'A4', printBackground: true })` with the §6 margins and
+   the §6 footer.
+
+   Chromium renders header/footer templates in an isolated document: no page
+   styles, no network, and font-size defaults to zero. Everything in the footer
+   is therefore inline and self-contained, and the ProHippo mark travels as a
+   base64 data URI (`functions/assets/prohippoLogo.js`). The footer uses the
+   system sans rather than the embedded Montserrat, because `@font-face` inside
+   a footer template is not reliably honoured across Chromium versions and a
+   footer that silently falls back mid-print is worse than one that never
+   claimed the face.
 4. Uploads to `users/{uid}/assessees/{id}/returns/{ay}/computation.pdf` and
    records the path on the return document.
 

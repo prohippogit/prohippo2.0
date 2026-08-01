@@ -970,15 +970,14 @@
    * acknowledgement number and its full CPC activity timeline, so there is no
    * per-year list call. Everything after that is per-document.
    *
-   * SIZE, AND WHY THE BIG ONE IS RATIONED. returns/preview/{ay} — the fully
+   * SIZE, AND WHY THE BIG ONE HAS A WINDOW. returns/preview/{ay} — the fully
    * rendered ITR form — is 10-12 MB per year against a few hundred KB for
-   * everything else. It IS synced, because a practitioner opening a client's
-   * file expects the return to be there. But a practice meeting this feature for
-   * the first time has every year of every client to backfill, so each run
-   * fetches at most MAX_FORM_PDFS_PER_SYNC of them per PAN, newest first; the
-   * rest arrive over the next few syncs, and any year can be pulled immediately
-   * from the Returns tab. This only converges because knownFormAcks is tracked
-   * apart from knownAckNums — see connector/src/main/portalReturns.js.
+   * everything else, and it is uploaded to Storage as well as downloaded. The
+   * sync pulls it only for the FORM_SYNC_RECENT_YEARS most recent assessment
+   * years; older years are one click away on the Returns tab ("Fetch form").
+   * Rationing the backfill across runs was tried first and was worse: it made
+   * every sync slow instead of one. See connector/src/main/portalReturns.js for
+   * the full reasoning — the two paths must stay in step.
    *
    * ORDERS. Every activity row carries a commRefNo in its activityTxt blob, and
    * that reference is the refno the document endpoint wants. The statuses that
@@ -999,10 +998,10 @@
   // request form and emails it out, which we cannot complete unattended.
   const DIRECT_DOWNLOAD_FROM_AY = 2017;
   const MAX_RETURN_PDF_BYTES = 25 * 1024 * 1024;
-  // Rendered ITR forms per PAN per run. Keep in step with the connector's
-  // MAX_FORM_PDFS_PER_SYNC — the two paths must behave identically or the same
-  // practice gets different results depending on which one it happened to use.
-  const MAX_FORM_PDFS_PER_SYNC = 3;
+  // Keep in step with the connector's FORM_SYNC_RECENT_YEARS — the two paths
+  // must behave identically or the same practice gets different results
+  // depending on which one it happened to use.
+  const FORM_SYNC_RECENT_YEARS = 2;
 
   // "Tue Nov 25 14:16:09 IST 2025" → "2025-11-25". Java's Date.toString(),
   // which Date.parse cannot read on any engine because of the zone abbreviation.
@@ -1043,27 +1042,30 @@
     if (!list.length) { log("returns: none filed"); return; }
     log("returns: " + list.length + " assessment year(s)");
 
-    // Newest year first, so a rationed run spends its budget on the years a
-    // practitioner is most likely to open next.
+    // Newest year first — the window is "the first N of these", read off the
+    // portal's own list rather than computed from the clock.
     list.sort((x, y) => Number((y && y.assmentYear) || 0) - Number((x && x.assmentYear) || 0));
-    let formBudget = MAX_FORM_PDFS_PER_SYNC;
-    let formsDeferred = 0;
+    let formsOnDemand = 0;
 
-    for (const r of list) {
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i] || {};
       const ackNum = String((r && r.ackNum) || "").trim();
       const ay = String((r && r.assmentYear) || "").trim();
       if (!ackNum || !ay) continue;
       const isNew = !knownAcks.has(ackNum);
       if (isNew) fetched += 1;
-      badge.set("Return A.Y. " + ay + "…");
+      // Only announce a year we are going to do something about — a line per
+      // year on a run with nothing to do makes an instant pass look slow.
+      if (isNew) badge.set("Return A.Y. " + ay + "…");
 
       // The return itself is fetched once — a filed return never changes.
       let itrJson = null;
       let ackPdfBase64 = null;
       let formPdfBase64 = null;
-      // Tracked on its own, so a year whose form was deferred last run is
-      // finished off on this one without re-fetching the JSON and ITR-V.
-      const needsForm = !knownFormPdfs.has(ackNum);
+      // Tracked on its own, so a year that has its JSON but not its form can be
+      // completed without re-fetching everything else.
+      const needsForm = !knownFormPdfs.has(ackNum) && i < FORM_SYNC_RECENT_YEARS;
+      if (!knownFormPdfs.has(ackNum) && !needsForm) formsOnDemand += 1;
       if (isNew) {
         const j = await NET.apiCall({ path: ITR_DOWNLOAD_FILE_PATH, serviceName: "NA", payload: { ackNum, loggedInUserId: pan } });
         if (j && j.ok && j.json) itrJson = j.json;
@@ -1076,8 +1078,7 @@
       // The filed return itself, fully rendered — the one rationed item (see the
       // note above). Outside the isNew branch on purpose: a year recorded on an
       // earlier run with its form deferred is completed here.
-      if (needsForm && formBudget > 0) {
-        formBudget -= 1;
+      if (needsForm) {
         fetched += 1;
         const f = await NET.postBinary({
           path: ITR_PREVIEW_PATH + encodeURIComponent(ay), serviceName: "NA",
@@ -1086,8 +1087,6 @@
         });
         if (f && f.ok && f.bytes && f.bytes <= MAX_RETURN_PDF_BYTES) formPdfBase64 = f.base64;
         await jsleep(120, 320);
-      } else if (needsForm) {
-        formsDeferred += 1;
       }
 
       const orders = [];
@@ -1166,16 +1165,15 @@
 
     // A run that changed nothing should say so — silence after a list call is
     // indistinguishable from a stall.
-    if (!fetched && !formsDeferred) {
+    if (!fetched) {
       log("returns: already up to date — " + list.length + " assessment year(s) on file");
       badge.set("Returns already up to date");
     }
 
-    // Say what was left, and that it was deliberate. A year whose return PDF is
-    // missing with no explanation reads as a failed sync.
-    if (formsDeferred) {
-      log("returns: " + formsDeferred + " form PDF(s) deferred to the next sync (10-12 MB each)");
-      badge.set(formsDeferred + " older return PDF(s) left for the next sync");
+    // Older years without a rendered form are a deliberate omission, not
+    // pending work — do not promise a later run that will never come.
+    if (formsOnDemand) {
+      log("returns: " + formsOnDemand + " older year(s) keep their form PDF off the sync — use Fetch form");
     }
   }
 

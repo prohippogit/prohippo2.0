@@ -98,7 +98,21 @@ async function runPool(jobs, onEvent, opts = {}) {
           const secs = (r.timing.totalMs / 1000).toFixed(1);
           emit("timing", `${secs}s total — ${r.timing.line}`, "info");
         }
-        emit("done", parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date", "success", 100);
+        /* Put the two heaviest phases on the visible "Done" line, not only in
+           the tooltip. "The sync feels slow" is unanswerable without them, and a
+           practitioner should not have to hover a row or open a console to find
+           out that eleven of thirteen seconds went on one 11 MB document. */
+        const heaviest = r.timing
+          ? Object.entries(r.timing.buckets)
+            .filter(([name]) => name !== "pacing")
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 2)
+            .filter(([, ms]) => ms >= 1000)
+            .map(([name, ms]) => `${name} ${(ms / 1000).toFixed(1)}s`)
+          : [];
+        const took = r.timing ? ` · ${(r.timing.totalMs / 1000).toFixed(1)}s` : "";
+        const where = heaviest.length ? ` (${heaviest.join(", ")})` : "";
+        emit("done", (parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date") + took + where, "success", 100);
       } catch (err) {
         results.push({ assesseeId: job.assesseeId, ok: false, error: String(err && err.message || err) });
         emit("error", String(err && err.message || err), "error");

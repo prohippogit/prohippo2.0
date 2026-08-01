@@ -15,6 +15,9 @@ import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 import { ingestPortalSyncMessage } from './portalIngest';
 import { downloadFromStorage } from './downloadFile';
 import { noticeFilename, returnOrderFilename, returnDocFilename } from './downloadNames';
+// The table only — the generator itself stays behind a dynamic import so it does
+// not ride in the main bundle.
+import { computationAvailability } from './computation/supported';
 import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 
 // Build the incremental-sync hints from what's already on file for one PAN, so
@@ -1615,6 +1618,7 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
               const refund = portalAmount(r.computedRefndAmt) ?? portalAmount(r.refundAmt);
               const open = openAy === r.ay;
               const busy = busyKey === r.ay;
+              const computation = computationAvailability(r.form, r.ay);
               return (
                 <React.Fragment key={r.id || r.ay}>
                   <tr style={open ? {borderBottom: "none"} : undefined}>
@@ -1667,14 +1671,25 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
                     </td>
                     <td>
                       <div className="center" style={{gap: 6, justifyContent: "flex-end"}}>
-                        <button
-                          className="btn btn-primary btn-xs"
-                          disabled={!r.jsonPath || busy}
-                          title={r.jsonPath ? "Generate a Computation of Total Income from the filed return" : "The ITR JSON for this year hasn't been synced yet"}
-                          onClick={() => onGenerateComputation(r)}
-                        >
-                          <Icon name="doc" size={11}/>{busy ? "Generating…" : "Computation"}
-                        </button>
+                        {/* A button that cannot produce anything is worse than no
+                            button: it invites a click, fails, and leaves the
+                            practitioner wondering whether the return is at fault.
+                            Where no mapper exists for this form and year, say so
+                            on the row and give the reason on hover. */}
+                        {computation.ok ? (
+                          <button
+                            className="btn btn-primary btn-xs"
+                            disabled={!r.jsonPath || busy}
+                            title={r.jsonPath ? "Generate a Computation of Total Income from the filed return" : "The ITR JSON for this year hasn't been synced yet"}
+                            onClick={() => onGenerateComputation(r)}
+                          >
+                            <Icon name="doc" size={11}/>{busy ? "Generating…" : "Computation"}
+                          </button>
+                        ) : (
+                          <span className="pill pill-muted" title={computation.reason}>
+                            Computation · coming soon
+                          </span>
+                        )}
                         <button className="icon-btn" style={{width: 26, height: 26}} onClick={() => setOpenAy(open ? null : r.ay)} title={open ? "Hide detail" : "Show the CPC timeline and orders"}>
                           <Icon name={open ? "chevron-up" : "chevron-down"} size={13}/>
                         </button>

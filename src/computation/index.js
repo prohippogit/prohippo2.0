@@ -55,6 +55,9 @@ export function buildComputation(json, ctx = {}) {
 }
 
 export { detect, validate, UnsupportedFormError, ValidationError };
-/* Which form-and-year combinations produce a document today. The Returns tab
-   reads this so an unsupported year says so plainly rather than failing. */
+
+/* Which form-and-year combinations produce a document today, as the mappers
+   themselves report it. The Returns tab does NOT read this — importing it would
+   pull every mapper into the main bundle — it reads ./supported.js, which a test
+   asserts against these. */
 export const SUPPORTED = { ITR2: itr2Years, ITR3: itr3Years, ITR5: itr5Years };

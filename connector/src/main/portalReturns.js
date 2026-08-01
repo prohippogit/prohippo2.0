@@ -211,6 +211,21 @@ async function syncReturns(page, job, pan, summary, emit) {
   }
   if (!list.length) { emit("returns", "No returns filed on the portal"); return; }
 
+  /* What this pass believes it already holds, recorded on the run itself.
+   *
+   * Every incremental decision below turns on these three sets, and when one of
+   * them comes back empty the pass looks exactly like a first sync — same
+   * downloads, same duration, no error anywhere. That failure is invisible from
+   * the outside and was diagnosed the hard way, by noticing that two runs
+   * reported identical counts. It is not going to be invisible twice: the
+   * numbers ride along in the timing tooltip, so "did it remember?" is a
+   * question the screen answers.
+   */
+  summary.returnsDiag =
+    `returns: ${list.length} listed, ${knownAcks.size} known, ` +
+    `${knownForms.size} with form, ${knownOrders.size} orders known` +
+    (lockedRefs.size ? `, ${lockedRefs.size} locked` : "");
+
   // Newest year first — the window below is "the first N of these", read off the
   // portal's own list rather than computed from the clock, so a practice syncing
   // in April and one syncing in March get the same answer.

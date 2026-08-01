@@ -1027,6 +1027,13 @@
     const knownAcks = new Set((creds.knownAckNums || []).map((x) => String(x)));
     const knownOrders = new Set((creds.knownOrderRefs || []).map((x) => String(x)));
     const knownFormPdfs = new Set((creds.knownFormAcks || []).map((x) => String(x)));
+    // Orders already downloaded that the app could not decrypt. The password is
+    // the PAN plus the assessee's date of birth and nothing else, so retrying
+    // one without that date on file re-downloads the same file every sync and
+    // fails the same way. canUnlockOrders is the app telling us whether it now
+    // has the date — it is the app that decrypts, not us.
+    const lockedRefs = new Set((creds.lockedOrderRefs || []).map((x) => String(x)));
+    let fetched = 0;
 
     const res = await NET.apiCall({
       path: SERVICES_GET_PATH, serviceName: "itrStatusService",
@@ -1047,6 +1054,7 @@
       const ay = String((r && r.assmentYear) || "").trim();
       if (!ackNum || !ay) continue;
       const isNew = !knownAcks.has(ackNum);
+      if (isNew) fetched += 1;
       badge.set("Return A.Y. " + ay + "…");
 
       // The return itself is fetched once — a filed return never changes.
@@ -1070,6 +1078,7 @@
       // earlier run with its form deferred is completed here.
       if (needsForm && formBudget > 0) {
         formBudget -= 1;
+        fetched += 1;
         const f = await NET.postBinary({
           path: ITR_PREVIEW_PATH + encodeURIComponent(ay), serviceName: "NA",
           payload: { ackNum, loggedInUserId: pan },
@@ -1088,6 +1097,7 @@
         const detail = activityDetail(row);
         const refNo = String(detail.commRefNo || "").trim();
         if (!refNo || knownOrders.has(refNo)) continue;
+        if (lockedRefs.has(refNo) && !creds.canUnlockOrders) continue;
 
         const order = {
           commRefNo: refNo, section,
@@ -1108,6 +1118,7 @@
           continue;
         }
 
+        fetched += 1;
         const got = await NET.postBinary({ path: DOC_INTIMATION_PATH, serviceName: "NA", payload: { refno: refNo, year: ay, entityNum: pan } });
         if (got && got.ok && got.bytes && got.bytes <= MAX_RETURN_PDF_BYTES) {
           order.contentBase64 = got.base64;
@@ -1151,6 +1162,13 @@
       log("returns: AY", ay, "ack", ackNum, "orders", orders.length);
       chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "return", return: ret } }, () => {});
       await jsleep(120, 320);
+    }
+
+    // A run that changed nothing should say so — silence after a list call is
+    // indistinguishable from a stall.
+    if (!fetched && !formsDeferred) {
+      log("returns: already up to date — " + list.length + " assessment year(s) on file");
+      badge.set("Returns already up to date");
     }
 
     // Say what was left, and that it was deliberate. A year whose return PDF is

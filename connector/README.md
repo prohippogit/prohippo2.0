@@ -93,7 +93,7 @@ Google sign-in uses — same uid, same data.
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.2.0` — with a **Check for updates** link beside it. Press it and the bar
+`v1.3.0` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

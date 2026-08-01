@@ -34,12 +34,19 @@ import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 //   - knownOrderRefs:   CPC references already downloaded AND unlocked → an
 //                       order we hold but couldn't decrypt is deliberately not
 //                       "known", because a later sync is how it gets fixed
+//   - lockedOrderRefs:  orders we hold but could NOT decrypt, plus canUnlockOrders
+//                       (does this assessee have a date of birth on file?). The
+//                       password is derived from that date and nothing else, so
+//                       retrying without one re-downloads the same file every
+//                       sync and fails identically. An order the portal will
+//                       never serve — pre-2017, "request-only" — counts as
+//                       finished and goes in knownOrderRefs instead.
 //   - knownFormAcks:    returns whose rendered ITR form PDF is already stored.
 //                       Separate from knownAckNums because that document is
 //                       ~11 MB and is rationed per sync run — the extension can
 //                       only finish a deferred year if it can tell "return on
 //                       file" from "return on file WITH its form"
-function buildSyncKnowns(notices, pan, matters, returns) {
+function buildSyncKnowns(notices, pan, matters, returns, dob) {
   const knownDins = new Set();
   const knownResponseIds = new Set();
   const procNotices = {};        // proceedingReqId -> Set<DIN>
@@ -63,16 +70,26 @@ function buildSyncKnowns(notices, pan, matters, returns) {
     .map((m) => String(m.proceedingReqId));
   const knownAckNums = [];
   const knownOrderRefs = [];
+  const lockedOrderRefs = [];
   const knownFormAcks = [];
   (returns || []).forEach((r) => {
     if (r.pan !== pan) return;
     if (r.ackNum) knownAckNums.push(String(r.ackNum));
     if (r.ackNum && r.formPdfPath) knownFormAcks.push(String(r.ackNum));
     (r.orders || []).forEach((o) => {
-      if (o && o.commRefNo && o.storagePath && !o.locked) knownOrderRefs.push(String(o.commRefNo));
+      if (!o || !o.commRefNo) return;
+      const ref = String(o.commRefNo);
+      // Finished, either way: we hold a readable PDF, or the portal will never
+      // give us one.
+      if ((o.storagePath && !o.locked) || o.lockReason === "request-only") knownOrderRefs.push(ref);
+      else if (o.storagePath && o.locked) lockedOrderRefs.push(ref);
     });
   });
-  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs, knownAckNums, knownOrderRefs, knownFormAcks };
+  return {
+    knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds],
+    knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, knownFormAcks,
+    canUnlockOrders: Boolean(dob),
+  };
 }
 
 // Pause between assessees in a bulk sync. The extension emits "sync-done" only
@@ -532,7 +549,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       try {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
         // Bulk sync uses the fast e-Proceedings-only scope for every assessee.
-        const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns);
+        const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns, a.dob);
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
         await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope: "eproc", ...knowns, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
@@ -820,7 +837,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
     setReturnsBusy(busyKey);
     try {
       const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-      const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns);
+      const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns, a.dob);
       await openPortalLogin({
         portalUserId: cred.portalUserId, portalPassword: cred.portalPassword,
         assesseeId: a.id, mode: "sync", scope, formRequest, ...knowns,

@@ -97,7 +97,7 @@ export function validate(doc, body) {
   // silent omission §8 exists to prevent.
   const WORKINGS = [
     ["SALARY", "Income from Salaries", null],
-    ["HP", "Income from House Property", null],
+    ["HP", "Income from House Property", "ScheduleCYLA.TotalCurYr.TotHPlossCurYr"],
     ["BP", "Profits and Gains of Business or Profession", "ScheduleCYLA.TotalCurYr.TotBusLoss"],
     ["CG", "Capital Gains", null],
     ["OS", "Income from Other Sources", null],

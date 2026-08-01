@@ -203,13 +203,17 @@ sequentially **after** empty sections are dropped, so there are never gaps.
 | `BP`         | Profits and Gains of Business or Profession     | non-nil, or a loss |
 | `CG`         | Capital Gains                                   | non-nil |
 | `OS`         | Income from Other Sources                       | non-nil |
+| `VIA`        | Deductions under Chapter VI-A                   | any deduction claimed |
 | `TI`         | Computation of Total Income                     | **always** |
 | `TAX`        | Computation of Tax Liability                    | **always** |
 | `TAXES_PAID` | Taxes Paid and Prepaid Taxes                    | **always** |
 | `CFL`        | Losses Carried Forward to Subsequent Years      | any non-nil c/f |
 
 The head-specific sections (SALARY…OS) are **workings** — they show how the
-figure in the `TI` section was arrived at. The `TI` section always lists all
+figure in the `TI` section was arrived at. `VIA` is a working too: it explains
+the single "Less: Deductions under Chapter VI-A" line in `TI`, and it sits
+before `TI` for the same reason the heads do — a reader arrives at the total
+having already seen everything that produced it. The `TI` section always lists all
 five heads, including nil ones, because a computation that silently omits a head
 looks incomplete to an assessing officer.
 
@@ -459,6 +463,47 @@ Recorded so nobody has to rediscover them.
 - `AnyOtherIncome` is itemised in `OthersInc.OthersIncDtls[]` with a
   user-entered nature string. Use that string as the row label.
 
+**Salary (`ScheduleS`, ITR-2/3)**
+- `Salarys.NatureOfSalary.OthersIncDtls[].NatureDesc` is a numeric code table
+  ("1", "4", "7") that we do **not** decode. The statutory captions —
+  salary u/s 17(1), perquisites u/s 17(2), profits in lieu u/s 17(3) — are
+  carried in their own fields and are what a computation states. Guessing that
+  "4" means House Rent Allowance would put an unverified label on a signed
+  document; the exempt allowances carry readable codes (`10(13A)`) and those
+  are printed as given.
+- `DeductionUS16` is the total; `DeductionUnderSection16ia` (standard deduction)
+  and `ProfessionalTaxUs16iii` are its parts and are shown separately.
+- `Section10_13A` carries the HRA working — actual HRA, rent paid, and the
+  eligible exemption. Shown as a note, because a reader checking an HRA claim
+  should not have to open the return.
+
+**Regime (`FilingStatus`)**
+- ITR-2/3 use `OptOutNewTaxRegime`. `"Y"` means the assessee has opted **out**
+  of the new regime and is taxed under the **old** one — the negative reads
+  backwards at a glance and must be stated on the face of the computation,
+  because every Chapter VI-A deduction below depends on it.
+- ITR-5 uses `OptOldRegimeCurrAY` with the opposite sense, and firms have no
+  such choice at all. Do not share one helper across the two.
+
+**Chapter VI-A (`ScheduleVIA`)**
+- Two parallel blocks: `UsrDeductUndChapVIA` is what the assessee **claimed**,
+  `DeductUndChapVIA` is what is **allowed** after the statutory caps. The
+  computation states the allowed figure and notes the claim where the two
+  differ — a s.80C claim of 2,28,513 restricted to 1,50,000 is exactly what a
+  reader wants to see, and showing only one of the two hides it.
+
+**Special rates (`ScheduleSI`)**
+- Drives the tax section's special-rate rows: each entry gives the section code,
+  the rate, the income and the tax. Read the rate from the return rather than
+  hardcoding it — the rates for s.111A and s.112A changed mid-year for
+  A.Y. 2025-26, and the return already says which applied.
+- `SecCode` values seen: `1A` = s.111A, `2A` = s.112A, `2A_BE` = s.112A at the
+  pre-change rate. An unrecognised code prints as itself.
+
+**Capital gains (`ScheduleCGFor23`, ITR-2/3)**
+- `BalanceCGTransferBE` / `…AE` split one figure across the mid-year rate
+  change. Label them by the rate `ScheduleSI` gives, not by a date we assert.
+
 **Capacity codes (`Verification.Declaration.Capacity`)**
 - `TR` = Trustee, `MP` = Managing Partner, `P` = Partner, `D` = Director,
   `KA` = Karta, `S` = Self.
@@ -471,7 +516,8 @@ Recorded so nobody has to rediscover them.
 test/fixtures/
   itr5-firm-business-loss-ay2025-26.json        // set-offs, unabsorbed dep, tax audit
   itr5-firm-house-property-loss-ay2025-26.json  // s.24(b) loss, b/f losses, 22 partners
-  itr3-…  itr4-…  itr2-…                         // add as forms are supported
+  itr2-salary-hp-capgains-ay2025-26.json        // salary, s.24(b) loss, s.111A/112A, VI-A caps
+  itr3-…  itr4-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
 ```
@@ -511,6 +557,19 @@ passes against the source JSON; `unmapped` is empty.
 Minimum coverage before a form is marked supported: one profit case, one loss
 case, one refund case, one tax-payable case.
 
+Where each form stands against that, so nobody reads a green test run as more
+than it is:
+
+| Form  | A.Y.    | profit | loss | refund | tax payable |
+|-------|---------|--------|------|--------|-------------|
+| ITR-5 | 2025-26 | ✓      | ✓    | ✓      | ✓           |
+| ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
+
+The ITR-2 tax-payable path is written and rendered (the banner and the "Tax
+Payable" closing row), but no real return exercising it has come through the
+sync yet, and a fabricated one would test our own assumption rather than the
+schema. Add the fixture when one arrives.
+
 ---
 
 ## 12. Edge cases to handle explicitly
@@ -518,7 +577,11 @@ case, one refund case, one tax-payable case.
 - Tax **payable** rather than refundable → amber banner, no bank block.
 - Nil / negative total income → tax section still renders, all rows nil.
 - Multiple GSTINs in `ScheduleGST` → list all, sum turnover.
-- Multiple TDS rows against the same TAN → separate rows, do not merge.
+- Multiple TDS rows against the same TAN → separate rows, unless they also share
+  a section, in which case they are one row carrying the count with the gross
+  and the credit summed. Merging across *sections* hides which receipt a credit
+  belongs to, which is exactly what a CPC mismatch query asks about; not merging
+  within one turns a deductor who paid quarterly into four near-identical lines.
 - Refund bank flagged `UseForRefund: 'true'` may be absent → fall back to the
   first account and add a note.
 - Assessee name already prefixed `M/s.` in the JSON → do not double-prefix.

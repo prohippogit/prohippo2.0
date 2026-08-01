@@ -65,10 +65,14 @@ async function getBrowser() {
     browserPromise = (async () => {
       const chromium = require("@sparticuz/chromium");
       const puppeteer = require("puppeteer-core");
+      // No WebGL, no canvas acceleration. This document is text, rules and
+      // gradients; the graphics stack it would otherwise start costs memory we
+      // would rather give to the page.
+      chromium.setGraphicsMode = false;
       return puppeteer.launch({
         args: chromium.args,
         executablePath: await chromium.executablePath(),
-        headless: true,
+        headless: chromium.headless,
       });
     })().catch((err) => { browserPromise = null; throw err; });
   }
@@ -78,9 +82,36 @@ async function getBrowser() {
   return browser;
 }
 
+/* Turn any failure into an HttpsError.
+ *
+ * This matters more than it looks. An unhandled throw inside a callable reaches
+ * the browser as `internal` with the message stripped — Firebase does that
+ * deliberately, so a stack trace cannot leak. The practitioner then sees
+ * "internal" and the person debugging it sees nothing at all.
+ *
+ * HttpsError messages ARE delivered, so anything we can say safely, we say. The
+ * full error still goes to the function log for the cases we cannot summarise.
+ */
+function renderFailure(err, stage) {
+  const detail = String((err && err.message) || err);
+  console.error(`renderComputationPdf failed at ${stage}:`, err);
+
+  if (/executablePath|ENOENT|spawn|Failed to launch|Target closed|Protocol error/i.test(detail)) {
+    return new HttpsError(
+      "internal",
+      `The PDF renderer could not start (${stage}). This is a deployment problem, not a problem with the return — ` +
+      `redeploy the functions and try again. Detail: ${detail.slice(0, 200)}`
+    );
+  }
+  if (/timeout|Navigation timeout/i.test(detail)) {
+    return new HttpsError("deadline-exceeded", `Rendering the computation took too long (${stage}). Please try again.`);
+  }
+  return new HttpsError("internal", `Couldn't render the computation (${stage}): ${detail.slice(0, 200)}`);
+}
+
 function register({ region, storageBucket, db }) {
   return onCall(
-    { region, memory: "1GiB", timeoutSeconds: 120, maxInstances: 5 },
+    { region, memory: "2GiB", timeoutSeconds: 180, maxInstances: 5 },
     async (request) => {
       const uid = request.auth?.uid;
       if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
@@ -99,7 +130,14 @@ function register({ region, storageBucket, db }) {
       const name = a.name || "";
       const pan = (a.pan || "").toUpperCase();
 
-      const page = await (await getBrowser()).newPage();
+      let browser;
+      try {
+        browser = await getBrowser();
+      } catch (err) {
+        throw renderFailure(err, "launching the renderer");
+      }
+
+      const page = await browser.newPage();
       let pdf;
       try {
         // Cut the page off from the network before it loads. The template is
@@ -123,19 +161,25 @@ function register({ region, storageBucket, db }) {
           footerTemplate: FOOTER(name, ay),
           margin: { top: "12mm", right: "11mm", bottom: "16mm", left: "11mm" },
         });
+      } catch (err) {
+        throw renderFailure(err, "rendering the page");
       } finally {
         await page.close().catch(() => {});
       }
 
       const storagePath = `users/${uid}/assessees/${assesseeId}/returns/${String(ay).replace(/[^A-Za-z0-9_-]/g, "")}/computation.pdf`;
-      await admin.storage().bucket(storageBucket).file(storagePath).save(Buffer.from(pdf), {
-        contentType: "application/pdf",
-        // attachment => a browser handed this URL saves the file rather than
-        // rendering it. The Returns tab fetches the blob and names it itself
-        // (src/downloadFile.js); this covers a URL opened outside the app.
-        contentDisposition: "attachment",
-        metadata: { cacheControl: "private, max-age=0" },
-      });
+      try {
+        await admin.storage().bucket(storageBucket).file(storagePath).save(Buffer.from(pdf), {
+          contentType: "application/pdf",
+          // attachment => a browser handed this URL saves the file rather than
+          // rendering it. The Returns tab fetches the blob and names it itself
+          // (src/downloadFile.js); this covers a URL opened outside the app.
+          contentDisposition: "attachment",
+          metadata: { cacheControl: "private, max-age=0" },
+        });
+      } catch (err) {
+        throw renderFailure(err, "saving the document");
+      }
 
       // Record it on the return, so the Returns tab can offer the generated
       // document again without re-rendering.

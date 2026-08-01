@@ -97,6 +97,12 @@ async function ingestSyncMessage(payload) {
       await fb.uploadBase64(ackPdfPath, r.ackPdfBase64, "application/pdf");
     }
 
+    let formPdfPath = null;
+    if (r.formPdfBase64) {
+      formPdfPath = `${base}/form.pdf`;
+      await fb.uploadBase64(formPdfPath, r.formPdfBase64, "application/pdf");
+    }
+
     const orders = [];
     for (const o of r.orders || []) {
       let storagePath = null;
@@ -112,9 +118,10 @@ async function ingestSyncMessage(payload) {
     const meta = { ...r };
     delete meta.itrJson;
     delete meta.ackPdfBase64;
+    delete meta.formPdfBase64;
     delete meta.orders;
     const data = await fb.callable("ingestPortalReturn", {
-      assesseeId, return: meta, jsonPath, ackPdfPath, orders,
+      assesseeId, return: meta, jsonPath, ackPdfPath, formPdfPath, orders,
     });
     return { kind: "return", data };
   }

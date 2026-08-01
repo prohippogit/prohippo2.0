@@ -101,11 +101,18 @@ Per return we store:
 | The ITR JSON, exactly as filed | `returns/downloadfile` | `returns/{ay}/itr.json` |
 | ITR-V / acknowledgement | `returns/pdf` | `returns/{ay}/acknowledgement.pdf` |
 | Intimation u/s 143(1), order u/s 154 | `document/intimation` | `returns/{ay}/order-{ref}.pdf` |
-| The full ITR form — **on demand only** | `returns/preview/{ay}` | `returns/{ay}/form.pdf` |
+| The filed return itself, fully rendered | `returns/preview/{ay}` | `returns/{ay}/form.pdf` |
 
-The form PDF is deliberately excluded from every sync: it is 10-12 MB per year
-and the one document nobody opens routinely. The Returns tab fetches it on a
-button instead.
+The rendered return is much the largest of these — 10-12 MB a year against a few
+hundred KB for everything else — and was first left to an on-demand button for
+that reason. It is now synced: a practitioner opening a client's file expects the
+return to be there, and waiting on a portal round trip to read a return you
+already filed is not a saving anyone asked for. Budget roughly **100 MB per
+assessee** across ten assessment years.
+
+Each document is fetched exactly once, when its acknowledgement number is first
+seen; a filed return never changes. Years synced before this change keep a
+**Fetch form** button on the Returns tab, and a fresh sync picks them up.
 
 Metadata goes to `users/{uid}/returns`, one document per PAN + assessment year,
 via `ingestPortalReturn`. These are **not** filed under `notices` — they are not

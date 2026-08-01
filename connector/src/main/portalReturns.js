@@ -10,13 +10,16 @@
 //
 //   returns/downloadfile          the ITR JSON, exactly as filed
 //   returns/pdf                   the ITR-V / acknowledgement
+//   returns/preview/{ay}          the filed return itself, fully rendered
 //   document/intimation           the s.143(1) intimation and any s.154
 //                                 rectification order, decrypted on the way in
 //
-// What we deliberately do NOT pull on a sync: `returns/preview/{ay}`, the fully
-// rendered ITR form. It is 10-12 MB per year — an order of magnitude more than
-// everything else here combined — and it is the one document nobody opens
-// routinely. The Returns tab fetches it on demand instead.
+// SIZE. The rendered return is 10-12 MB a year against a few hundred KB for
+// everything else, so it was first left to an on-demand button. It is synced
+// because a practitioner opening a client's file expects the return to be
+// there — waiting on a portal round trip to read a return you already filed is
+// not a saving anyone asked for. Each document is fetched exactly once, when
+// its acknowledgement is first seen; a filed return never changes.
 //
 // ORDERS. Every activity row carries a `commRefNo` inside its `activityTxt`
 // blob, and that reference is the `refno` the document endpoint wants. The
@@ -157,6 +160,7 @@ async function syncReturns(page, job, pan, summary, emit) {
     // ---- the return itself (only once, it never changes after filing) ------
     let itrJson = null;
     let ackPdf = null;
+    let formPdf = null;
     if (isNew) {
       const got = await t.time("itr-json", () => apiCall(page, {
         path: PATHS.ITR_DOWNLOAD_FILE, serviceName: "NA",
@@ -170,6 +174,22 @@ async function syncReturns(page, job, pan, summary, emit) {
         payload: { ackNum, ay, loggedInUserId: pan },
       }));
       if (pdf && pdf.ok && pdf.bytes && pdf.bytes <= MAX_PDF_BYTES) ackPdf = pdf;
+      await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+
+      // The filed return itself, fully rendered. This is by far the largest
+      // thing the sync fetches — 10-12 MB a year against a few hundred KB for
+      // everything else — and it was originally left to an on-demand button for
+      // exactly that reason. It is synced because a practitioner opening a
+      // client's file expects the return to be there, not to be fetched from
+      // the portal while they wait. Still capped: an implausibly large document
+      // is skipped rather than allowed to stall the sync.
+      const form = await t.time("itr-form", () => postBinary(page, {
+        path: PATHS.ITR_PREVIEW + encodeURIComponent(ay),
+        serviceName: "NA",
+        payload: { ackNum, loggedInUserId: pan },
+        extraHeaders: { ackNum: String(ackNum) },
+      }));
+      if (form && form.ok && form.bytes && form.bytes <= MAX_PDF_BYTES) formPdf = form;
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
     }
     addDob(dobFromItrJson(itrJson));
@@ -254,6 +274,7 @@ async function syncReturns(page, job, pan, summary, emit) {
         })),
         itrJson: isNew ? itrJson : null,
         ackPdfBase64: ackPdf ? ackPdf.base64 : null,
+        formPdfBase64: formPdf ? formPdf.base64 : null,
         orders,
       },
     }));

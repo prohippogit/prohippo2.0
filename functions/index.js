@@ -1163,7 +1163,7 @@ exports.onPortalOrderWritten = onDocumentWritten(
 exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
-  const { assesseeId, return: ret, jsonPath, ackPdfPath, orders } = request.data || {};
+  const { assesseeId, return: ret, jsonPath, ackPdfPath, formPdfPath, orders } = request.data || {};
   if (!assesseeId || !ret || typeof ret !== "object") {
     throw new HttpsError("invalid-argument", "assesseeId and return are required.");
   }
@@ -1242,6 +1242,7 @@ exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async
     // is seen, so later syncs legitimately arrive with both fields null.
     jsonPath: jsonPath || existing.jsonPath || null,
     ackPdfPath: ackPdfPath || existing.ackPdfPath || null,
+    formPdfPath: formPdfPath || existing.formPdfPath || null,
     syncedAt: new Date().toISOString(),
   };
 

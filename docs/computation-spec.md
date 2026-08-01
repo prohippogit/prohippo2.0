@@ -480,6 +480,24 @@ All fixtures **anonymised**: PAN, name, address, bank account, mobile, email,
 UDIN and audit acknowledgement replaced with syntactically valid dummies.
 Real client data never enters the repo.
 
+### Preparing a fixture from a real return
+
+```bash
+node scripts/prepare-itr-fixture.mjs --list                    # what's synced
+node scripts/prepare-itr-fixture.mjs --form=ITR3 --ay=2025-26  # describe + anonymise
+node scripts/prepare-itr-fixture.mjs --form=ITR3 --ay=2025-26 --summary-only
+```
+
+It picks the richest return of that form and year — a fixture exercising one
+head teaches a mapper less than one exercising five — prints the schedules and
+every non-zero figure largest-first, then writes an anonymised copy to
+`test/fixtures/`. It refuses to write if any original identifier survives, and
+reports any remaining name-shaped value so an uncatalogued field is added to its
+lists deliberately rather than discovered by a reader of the repository.
+
+`--summary-only` prints the schema without writing anything, which is the right
+first step: **state the mapping plan from that output before writing a mapper.**
+
 Anonymise **by field name, never by a list of values.** A hand-written list is
 exactly the sort of thing that covers seven of a firm's twenty-two partners and
 leaves the rest in the repo — which happened on the first pass at the second

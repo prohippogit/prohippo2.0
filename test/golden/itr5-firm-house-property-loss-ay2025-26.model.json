@@ -7,14 +7,14 @@
   "generatedAt": "2026-01-01T00:00:00.000Z"
  },
  "assessee": {
-  "name": "M/s. SAMPLE FOODS",
-  "pan": "AAAFZ1234A",
+  "name": "M/s. SAMPLE NAME 1",
+  "pan": "AAAFZ1004A",
   "status": "Partnership Firm",
-  "address": "1-2-3, GROUND FLOOR, SAMPLE APARTMENT, OPP. SAMPLE LANDMARK,, SAMPLE ROAD, SAMPLE AREA, SAMPLE CITY, 380060",
-  "email": "sample.foods@example.com",
+  "address": "11, SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 383315",
+  "email": "sample@example.com",
   "mobile": "9800000001",
   "residentialStatus": "Resident",
-  "dateOfFormation": "2015-11-04",
+  "dateOfFormation": "2017-09-13",
   "facts": [
    {
     "label": "Residential status",
@@ -22,7 +22,7 @@
    },
    {
     "label": "Date of formation",
-    "value": "04 November 2015"
+    "value": "13 September 2017"
    },
    {
     "label": "Return filed under",
@@ -30,42 +30,150 @@
    },
    {
     "label": "GSTIN & turnover",
-    "value": "24AAAFZ1234A1Z5",
-    "value2": 8584873
+    "value": "00XXXXX0000X0XX",
+    "value2": 531606
    },
    {
     "label": "Books u/s 44AA / audit u/s 44AB",
-    "value": "Maintained · Audited"
-   },
-   {
-    "label": "Tax audit particulars",
-    "value": "AUDITOR SAMPLE NAME, SAMPLE & CO\nFRN 0199999W · M. No. 099999\nReport dated 01 October 2025 · UDIN 25099999BMAAAA1234 · Ack. 900000000000001"
+    "value": "Not audited"
    },
    {
     "label": "E-mail / mobile",
-    "value": "sample.foods@example.com\n+91 9800000001"
+    "value": "sample@example.com\n+91 9800000001"
    }
   ],
   "partners": [
    {
-    "name": "PARTNER ONE SAMPLE",
-    "pan": "AAAPZ1111A",
-    "share": "33.33%",
-    "remuneration": 87053,
+    "name": "SAMPLE NAME 2",
+    "pan": "AAAPZ1007A",
+    "share": "5%",
+    "remuneration": 0,
     "interestRate": 12
    },
    {
-    "name": "PARTNER TWO SAMPLE",
-    "pan": "AAAPZ2222B",
-    "share": "33.33%",
-    "remuneration": 87053,
+    "name": "SAMPLE NAME 3 HUF",
+    "pan": "AAAHZ1002A",
+    "share": "5%",
+    "remuneration": 0,
     "interestRate": 12
    },
    {
-    "name": "PARTNER THREE SAMPLE",
-    "pan": "AAAPZ3333C",
-    "share": "33.33%",
-    "remuneration": 87052,
+    "name": "SAMPLE NAME 4",
+    "pan": "AAAPZ1016A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 5",
+    "pan": "AAAPZ1008A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 6",
+    "pan": "AAAPZ1018A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 7",
+    "pan": "AAAPZ1014A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 8",
+    "pan": "AAAPZ1019A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 9",
+    "pan": "AAAPZ1017A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 10",
+    "pan": "AAAPZ1013A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 11",
+    "pan": "AAAPZ1010A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 12 HUF",
+    "pan": "AAAPZ1006A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 13 HUF",
+    "pan": "AAAHZ1001A",
+    "share": "10%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 14 HUF",
+    "pan": "AAAHZ1003A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 15 HUF",
+    "pan": "AAAHZ1005A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 16",
+    "pan": "AAAPZ1009A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 17 HUF",
+    "pan": "AAAHZ1000A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 18",
+    "pan": "AAAPZ1011A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 19",
+    "pan": "AAAPZ1015A",
+    "share": "5%",
+    "remuneration": 0,
+    "interestRate": 12
+   },
+   {
+    "name": "SAMPLE NAME 20",
+    "pan": "AAAPZ1012A",
+    "share": "5%",
+    "remuneration": 0,
     "interestRate": 12
    }
   ],
@@ -73,26 +181,35 @@
  },
  "sections": [
   {
-   "id": "BP",
+   "id": "HP",
    "letter": "A",
-   "title": "Profits and Gains of Business or Profession",
+   "title": "Income from House Property",
    "tone": "navy",
    "rows": [
     {
      "kind": "sub",
-     "label": "Add: Depreciation debited to P&L as per the Companies Act",
-     "amount": 89629
+     "label": "Annual letable value of the property",
+     "amount": 531606,
+     "ref": "Sch. HP",
+     "note": "SAMPLE PLACE 19, SAMPLE PLACE 20 · let to SAMPLE NAME 21"
     },
     {
      "kind": "sub",
-     "label": "Less: Depreciation allowable u/s 32 of the Act",
-     "amount": 89814,
-     "ref": "Sch. DEP"
+     "label": "Less: Standard deduction u/s 24(a) @ 30% of the annual value",
+     "amount": 159482,
+     "ref": "Sec. 24(a)"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Interest on borrowed capital u/s 24(b)",
+     "amount": 573676,
+     "ref": "Sec. 24(b)",
+     "note": "Borrowed from SAMPLE NAME 22"
     },
     {
      "kind": "total",
-     "label": "Loss from Business or Profession",
-     "amount": 185,
+     "label": "Loss from House Property",
+     "amount": 201552,
      "isLoss": true
     }
    ],
@@ -107,14 +224,13 @@
    "rows": [
     {
      "kind": "sub",
-     "label": "Dividend income",
-     "amount": 45,
-     "ref": "Sch. OS"
+     "label": "Interest received from others",
+     "amount": 12351
     },
     {
      "kind": "total",
      "label": "Income from Other Sources",
-     "amount": 45
+     "amount": 12351
     }
    ],
    "footnote": "",
@@ -153,18 +269,18 @@
     {
      "kind": "head",
      "label": "Income from Other Sources",
-     "amount": 45,
+     "amount": 12351,
      "ref": "Sch. OS"
     },
     {
      "kind": "subtotal",
      "label": "Total of Heads of Income",
-     "amount": 45
+     "amount": 12351
     },
     {
      "kind": "sub",
-     "label": "Less: Set-off of current year business loss u/s 71",
-     "amount": 45,
+     "label": "Less: Set-off of current year house property loss u/s 71",
+     "amount": 12351,
      "ref": "Sch. CYLA"
     },
     {
@@ -255,17 +371,26 @@
     },
     {
      "kind": "sub",
-     "label": "AAAB00001A",
-     "amount": 117,
-     "note": "Payments by an e-commerce operator · Sec. 194-O · 10 entries",
+     "label": "AAAA00000A",
+     "amount": 53160,
+     "note": "Sec. 4-IB · 3 entries",
      "cols": {
-      "ref": "18,897"
+      "ref": "5,31,607"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAB00001A",
+     "amount": 1235,
+     "note": "Interest other than interest on securities · Sec. 194A",
+     "cols": {
+      "ref": "12,351"
      }
     },
     {
      "kind": "subtotal",
      "label": "Total Tax Deducted at Source",
-     "amount": 117,
+     "amount": 54395,
      "ref": "Sch. TDS 2"
     },
     {
@@ -283,13 +408,13 @@
     {
      "kind": "sub",
      "label": "Tax Collected at Source",
-     "amount": 1202,
+     "amount": 0,
      "ref": "Sch. TCS"
     },
     {
      "kind": "subtotal",
      "label": "Total Taxes Paid",
-     "amount": 1319
+     "amount": 54395
     },
     {
      "kind": "sub",
@@ -299,7 +424,7 @@
     {
      "kind": "total",
      "label": "Refund Due",
-     "amount": 1320
+     "amount": 54400
     }
    ],
    "footnote": "",
@@ -321,38 +446,53 @@
     },
     {
      "kind": "sub",
-     "label": "A.Y. 2025-26 · loss of the current year",
-     "amount": 140,
+     "label": "A.Y. 2019-20 · Return filed on 22 October 2019",
+     "amount": 949559,
      "cols": {
       "ref": "Business Loss"
      }
     },
     {
      "kind": "sub",
-     "label": "Unabsorbed depreciation carried forward",
-     "amount": 140,
-     "note": "Carried forward under s.32(2), without any time limit",
+     "label": "A.Y. 2020-21 · Return filed on 07 October 2020",
+     "amount": 1790595,
      "cols": {
-      "ref": "u/s 32(2)"
+      "ref": "Business Loss"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "A.Y. 2021-22 · Return filed on 13 December 2021",
+     "amount": 390674,
+     "cols": {
+      "ref": "Business Loss"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "A.Y. 2025-26 · loss of the current year",
+     "amount": 189201,
+     "cols": {
+      "ref": "House Property Loss"
      }
     },
     {
      "kind": "total",
      "label": "Total Loss Carried Forward",
-     "amount": 140
+     "amount": 3320029
     }
    ],
-   "footnote": "The unabsorbed depreciation shown is the same amount as the business loss above, carried in Schedule UD of the return, and not a further loss. The loss for the year arises from the difference between depreciation charged in the accounts and the allowance u/s 32.",
+   "footnote": "",
    "omitIfAllNil": true
   }
  ],
  "refund": {
-  "amount": 1320,
+  "amount": 54400,
   "bank": {
-   "name": "SAMPLE BANK OF INDIA",
-   "accountNo": "10000000001",
+   "name": "SAMPLE NAME 23",
+   "accountNo": "000000000000000",
    "type": "CA",
-   "ifsc": "SBIN0000001"
+   "ifsc": "XXXX0000000"
   }
  },
  "payable": null,
@@ -363,19 +503,15 @@
   },
   {
    "severity": "info",
-   "text": "The refund of 1,320 exceeds the taxes paid less the liability by 1; the difference is interest u/s 244A as determined in the return."
-  },
-  {
-   "severity": "attention",
-   "text": "TDS in Schedule TDS-2 is tagged to the head \"Business or Profession\" whereas the corresponding receipts have been offered under Other Sources — the head of income tagged in the TDS schedule may be aligned to avoid a mismatch in credit at CPC."
+   "text": "The refund of 54,400 exceeds the taxes paid less the liability by 5; the difference is interest u/s 244A as determined in the return."
   }
  ],
  "signatory": {
-  "name": "PARTNER ONE SAMPLE",
-  "capacity": "Designated Partner",
-  "pan": "AAAPZ1111A",
-  "place": "SAMPLE CITY",
-  "date": "2025-10-08"
+  "name": "SAMPLE NAME 2",
+  "capacity": "Managing Partner",
+  "pan": "AAAPZ1007A",
+  "place": "SAMPLE PLACE 4",
+  "date": "2025-09-13"
  },
  "unmapped": []
 }

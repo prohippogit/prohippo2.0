@@ -199,7 +199,7 @@ sequentially **after** empty sections are dropped, so there are never gaps.
 | id           | Title                                          | Include when |
 |--------------|------------------------------------------------|--------------|
 | `SALARY`     | Income from Salaries                            | non-nil |
-| `HP`         | Income from House Property                      | non-nil |
+| `HP`         | Income from House Property                      | non-nil, **or a loss** |
 | `BP`         | Profits and Gains of Business or Profession     | non-nil, or a loss |
 | `CG`         | Capital Gains                                   | non-nil |
 | `OS`         | Income from Other Sources                       | non-nil |
@@ -416,6 +416,22 @@ Recorded so nobody has to rediscover them.
   `DepreciationAllowITAct32.TotDeprAllowITAct`. Off-by-one rupee differences
   between the two are normal and must be carried, not "corrected".
 
+**House property (`ScheduleHP`)**
+- The head closes at a **loss** in a great many real returns, because the
+  interest allowed under s.24(b) commonly exceeds the annual value. That is not
+  an error state and the section must still be emitted — see `omitIfAllNil` and
+  §7's note on loss-making heads.
+- Statutory order is fixed: annual letable value, less rent not realised and
+  municipal taxes paid, then the two s.24 deductions — 30% under s.24(a) and
+  interest under s.24(b). Do not merge the two deductions into one line.
+- `Section24BDtls[].TotalLoanAmt` and `LoanOutstndngAmt` are the loan's
+  principal. They substantiate the interest; they are not figures in the
+  computation, and printing a crore-scale principal beside a lakh-scale
+  deduction reads as though it entered the total. Ignore-listed.
+- `AssessePercentShareProp` is a percentage. The return has already restricted
+  every figure to the assessee's share, so it is shown as a note when it is
+  anything other than 100%, not as an amount.
+
 **Set-offs**
 - Current-year set-off lives in `ScheduleCYLA`, brought-forward in
   `ScheduleBFLA`. Unabsorbed depreciation is *separate* from business loss —
@@ -423,6 +439,18 @@ Recorded so nobody has to rediscover them.
   as "brought forward business loss" is a substantive error.
 - `ScheduleCFL.TotalLossCFSummary` gives closing carry-forward. A loss can
   remain fully carried forward even where other set-offs occurred in the year.
+- Schedule CFL's per-year buckets are named for a layout ITD used years ago, not
+  for the assessment year they hold: on an A.Y. 2025-26 return
+  `LossCFCurrentAssmntYear` is A.Y. 2019-20, and the suffixed keys run on from
+  there. The mapping is therefore fixed per assessment year — which is what §9's
+  year-keyed mappers are for — and each bucket's own `DateOfFiling` corroborates
+  it and is printed so a reader can check.
+- The carry-forward total must cover **every** nature of loss the schedule
+  holds (business, house property, speculation, short- and long-term capital,
+  race horses), not merely the one the first fixture happened to contain.
+- The s.71 set-off line must name the head whose loss it is. Schedule CYLA
+  totals each head separately and so says outright which it was; describing a
+  house property loss as a "business loss" is a substantive error.
 
 **Other sources (`ScheduleOS.IncOthThanOwnRaceHorse`)**
 - Split interest into its sub-fields (`IntrstFrmSavingBank`,
@@ -441,8 +469,9 @@ Recorded so nobody has to rediscover them.
 
 ```
 test/fixtures/
-  itr5-firm-business-loss-ay2025-26.json     // set-offs, unabsorbed dep, tax audit
-  itr3-…  itr4-…  itr2-…                      // add as forms are supported
+  itr5-firm-business-loss-ay2025-26.json        // set-offs, unabsorbed dep, tax audit
+  itr5-firm-house-property-loss-ay2025-26.json  // s.24(b) loss, b/f losses, 22 partners
+  itr3-…  itr4-…  itr2-…                         // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
 ```
@@ -450,6 +479,13 @@ test/golden/
 All fixtures **anonymised**: PAN, name, address, bank account, mobile, email,
 UDIN and audit acknowledgement replaced with syntactically valid dummies.
 Real client data never enters the repo.
+
+Anonymise **by field name, never by a list of values.** A hand-written list is
+exactly the sort of thing that covers seven of a firm's twenty-two partners and
+leaves the rest in the repo — which happened on the first pass at the second
+fixture. Verify by walking the result's string *values* (not the serialised
+JSON, whose key names produce false positives) and asserting that no original
+identifier survives.
 
 Each fixture gets three tests: mapper produces the golden model; `validate()`
 passes against the source JSON; `unmapped` is empty.

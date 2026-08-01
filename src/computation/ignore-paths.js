@@ -63,6 +63,24 @@ const LEAF_PATTERNS = [
   /SubStatus$/,
   /\.IncomeTaxSec$/, // 11 = s.139(1); shown as a label, not a figure
   /NatureOfBusiness\[\d+\]\.Code$/,
+  // Schedule HP identifiers and particulars that are not figures.
+  //
+  // HPSNo and TenantSNo are row numbers in the property and tenant tables.
+  // AssessePercentShareProp is a percentage — it is surfaced in the property's
+  // own note when it is anything other than 100%, because a part-owned property
+  // is worth seeing, but it is not an amount.
+  //
+  // The loan's principal and outstanding balance are deliberately here too. A
+  // Computation of Total Income deducts the INTEREST under s.24(b); the
+  // principal is a balance-sheet particular that the return discloses to
+  // substantiate that interest, and printing a 2.9 crore loan alongside a 5.7
+  // lakh deduction would read as a figure entering the computation.
+  /ScheduleHP\.PropertyDetails\[\d+\]\.HPSNo$/,
+  /ScheduleHP\.PropertyDetails\[\d+\]\.TenantDetails\[\d+\]\.TenantSNo$/,
+  /ScheduleHP\.PropertyDetails\[\d+\]\.AssessePercentShareProp$/,
+  /Section24BDtls\[\d+\]\.TotalLoanAmt$/,
+  /Section24BDtls\[\d+\]\.LoanOutstndngAmt$/,
+
   // Schedule SI's rate table. Every return carries the full list of special
   // rates whether or not any income is taxed at them, so `SplRatePercent: 1`
   // means "1% is a rate that exists", not "1 rupee of income". The income

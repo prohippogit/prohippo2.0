@@ -836,8 +836,27 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
     if (!r.jsonPath) { notify("The ITR JSON for this year hasn't been synced yet.", "alert"); return; }
     setReturnsBusy(r.ay);
     try {
-      const url = await getDownloadURL(storageRef(storage, r.jsonPath));
-      const itrJson = await (await fetch(url)).json();
+      // Read the return we already hold. A browser refuses a cross-origin read
+      // of a Storage object unless the bucket's CORS policy allows this origin,
+      // and it reports that refusal as a bare "Failed to fetch" with no
+      // explanation — so name the cause here rather than passing the browser's
+      // word along. storage.cors.json in the repo root is the fix.
+      let itrJson;
+      try {
+        const url = await getDownloadURL(storageRef(storage, r.jsonPath));
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`the portal document could not be read (HTTP ${res.status})`);
+        itrJson = await res.json();
+      } catch (err) {
+        if (err instanceof TypeError) {
+          throw new Error(
+            "Couldn't read the filed return from storage. The storage bucket is not allowing this site to read files — " +
+            "apply storage.cors.json (see docs/PORTAL_SYNC_SETUP.md) and try again."
+          );
+        }
+        throw err;
+      }
+
       const { buildComputation, UnsupportedFormError } = await import("./computation/index.js");
 
       let built;

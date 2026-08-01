@@ -970,9 +970,15 @@
    * acknowledgement number and its full CPC activity timeline, so there is no
    * per-year list call. Everything after that is per-document.
    *
-   * We deliberately do NOT fetch returns/preview/{ay} (the fully rendered ITR
-   * form) here: 10-12 MB per year, and the one document nobody opens routinely.
-   * The Returns tab fetches it on demand instead.
+   * SIZE, AND WHY THE BIG ONE IS RATIONED. returns/preview/{ay} — the fully
+   * rendered ITR form — is 10-12 MB per year against a few hundred KB for
+   * everything else. It IS synced, because a practitioner opening a client's
+   * file expects the return to be there. But a practice meeting this feature for
+   * the first time has every year of every client to backfill, so each run
+   * fetches at most MAX_FORM_PDFS_PER_SYNC of them per PAN, newest first; the
+   * rest arrive over the next few syncs, and any year can be pulled immediately
+   * from the Returns tab. This only converges because knownFormAcks is tracked
+   * apart from knownAckNums — see connector/src/main/portalReturns.js.
    *
    * ORDERS. Every activity row carries a commRefNo in its activityTxt blob, and
    * that reference is the refno the document endpoint wants. The statuses that
@@ -993,6 +999,10 @@
   // request form and emails it out, which we cannot complete unattended.
   const DIRECT_DOWNLOAD_FROM_AY = 2017;
   const MAX_RETURN_PDF_BYTES = 25 * 1024 * 1024;
+  // Rendered ITR forms per PAN per run. Keep in step with the connector's
+  // MAX_FORM_PDFS_PER_SYNC — the two paths must behave identically or the same
+  // practice gets different results depending on which one it happened to use.
+  const MAX_FORM_PDFS_PER_SYNC = 3;
 
   // "Tue Nov 25 14:16:09 IST 2025" → "2025-11-25". Java's Date.toString(),
   // which Date.parse cannot read on any engine because of the zone abbreviation.
@@ -1016,6 +1026,7 @@
     badge.set("Fetching filed returns…");
     const knownAcks = new Set((creds.knownAckNums || []).map((x) => String(x)));
     const knownOrders = new Set((creds.knownOrderRefs || []).map((x) => String(x)));
+    const knownFormPdfs = new Set((creds.knownFormAcks || []).map((x) => String(x)));
 
     const res = await NET.apiCall({
       path: SERVICES_GET_PATH, serviceName: "itrStatusService",
@@ -1024,6 +1035,12 @@
     const list = res && Array.isArray(res.json) ? res.json : [];
     if (!list.length) { log("returns: none filed"); return; }
     log("returns: " + list.length + " assessment year(s)");
+
+    // Newest year first, so a rationed run spends its budget on the years a
+    // practitioner is most likely to open next.
+    list.sort((x, y) => Number((y && y.assmentYear) || 0) - Number((x && x.assmentYear) || 0));
+    let formBudget = MAX_FORM_PDFS_PER_SYNC;
+    let formsDeferred = 0;
 
     for (const r of list) {
       const ackNum = String((r && r.ackNum) || "").trim();
@@ -1036,6 +1053,9 @@
       let itrJson = null;
       let ackPdfBase64 = null;
       let formPdfBase64 = null;
+      // Tracked on its own, so a year whose form was deferred last run is
+      // finished off on this one without re-fetching the JSON and ITR-V.
+      const needsForm = !knownFormPdfs.has(ackNum);
       if (isNew) {
         const j = await NET.apiCall({ path: ITR_DOWNLOAD_FILE_PATH, serviceName: "NA", payload: { ackNum, loggedInUserId: pan } });
         if (j && j.ok && j.json) itrJson = j.json;
@@ -1043,11 +1063,13 @@
         const p = await NET.postBinary({ path: ITR_PDF_PATH, serviceName: "NA", payload: { ackNum, ay, loggedInUserId: pan } });
         if (p && p.ok && p.bytes && p.bytes <= MAX_RETURN_PDF_BYTES) ackPdfBase64 = p.base64;
         await jsleep(120, 320);
+      }
 
-        // The filed return itself, fully rendered. Much the largest thing this
-        // pass fetches (10-12 MB a year), but a practitioner opening a client's
-        // file expects the return to be there rather than a button that goes
-        // back to the portal for it.
+      // The filed return itself, fully rendered — the one rationed item (see the
+      // note above). Outside the isNew branch on purpose: a year recorded on an
+      // earlier run with its form deferred is completed here.
+      if (needsForm && formBudget > 0) {
+        formBudget -= 1;
         const f = await NET.postBinary({
           path: ITR_PREVIEW_PATH + encodeURIComponent(ay), serviceName: "NA",
           payload: { ackNum, loggedInUserId: pan },
@@ -1055,6 +1077,8 @@
         });
         if (f && f.ok && f.bytes && f.bytes <= MAX_RETURN_PDF_BYTES) formPdfBase64 = f.base64;
         await jsleep(120, 320);
+      } else if (needsForm) {
+        formsDeferred += 1;
       }
 
       const orders = [];
@@ -1095,8 +1119,9 @@
         await jsleep(120, 320);
       }
 
-      // A return we already hold, with no new order, is nothing to say.
-      if (!isNew && !orders.length) continue;
+      // A return we already hold, with no new order and no form to attach, is
+      // nothing to say.
+      if (!isNew && !orders.length && !formPdfBase64) continue;
 
       const ret = {
         pan, ay, ackNum,
@@ -1127,12 +1152,19 @@
       chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "return", return: ret } }, () => {});
       await jsleep(120, 320);
     }
+
+    // Say what was left, and that it was deliberate. A year whose return PDF is
+    // missing with no explanation reads as a failed sync.
+    if (formsDeferred) {
+      log("returns: " + formsDeferred + " form PDF(s) deferred to the next sync (10-12 MB each)");
+      badge.set(formsDeferred + " older return PDF(s) left for the next sync");
+    }
   }
 
-  // The fully rendered ITR form for ONE year, fetched only when the Returns tab
-  // asks for it. This is the document deliberately left out of the sync: 10-12
-  // MB per year, and the one nobody opens routinely. Fetching it on a button
-  // means a practice pays for it only where it is actually wanted.
+  // The fully rendered ITR form for ONE year, fetched when the Returns tab asks
+  // for it. The sync pulls these too, but rations them (see syncReturns), so
+  // this is how a practitioner gets a deferred year immediately instead of
+  // waiting for the next few syncs to work back through the history.
   async function fetchReturnForm(creds, badge, pan) {
     const req = creds.formRequest || {};
     const ackNum = String(req.ackNum || "");

@@ -114,6 +114,32 @@ Each document is fetched exactly once, when its acknowledgement number is first
 seen; a filed return never changes. Years synced before this change keep a
 **Fetch form** button on the Returns tab, and a fresh sync picks them up.
 
+### The rendered return is rationed — three per assessee per sync
+
+Everything above is incremental, so a routine full sync costs **one list call
+per PAN** and nothing else once a practice is caught up. The exception is the
+first sync after this feature reaches a device: every year of every client is
+new, and at 10-12 MB each that turns a routine sync into hours of portal
+traffic.
+
+So each run fetches at most **3** rendered returns per assessee, newest years
+first (`MAX_FORM_PDFS_PER_SYNC` in `connector/src/main/portalReturns.js` and
+`extension/portal-login.js` — the two must stay in step). The rest arrive over
+the following syncs, and any year can be pulled immediately with **Fetch form**.
+The sync log says how many it left and why, because a missing return PDF with no
+explanation reads as a failed sync.
+
+Nothing else is rationed: the JSON, the ITR-V and the CPC orders are small and
+are always fetched on first sight. In particular the **Computation** button
+reads the JSON, not the rendered form, so a deferred year can still produce a
+Computation of Total Income.
+
+This converges only because `knownFormAcks` is tracked separately from
+`knownAckNums` — a return can be on file with its form still missing, and the
+next sync has to be able to tell. Merge the two and the deferred years would
+never arrive: the first sync would record the return, and every later sync would
+skip it as "already known".
+
 Metadata goes to `users/{uid}/returns`, one document per PAN + assessment year,
 via `ingestPortalReturn`. These are **not** filed under `notices` — they are not
 e-Proceedings, have no DIN, carry no reply thread, and no appeal deadline is

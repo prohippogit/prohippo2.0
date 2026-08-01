@@ -34,6 +34,11 @@ import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 //   - knownOrderRefs:   CPC references already downloaded AND unlocked → an
 //                       order we hold but couldn't decrypt is deliberately not
 //                       "known", because a later sync is how it gets fixed
+//   - knownFormAcks:    returns whose rendered ITR form PDF is already stored.
+//                       Separate from knownAckNums because that document is
+//                       ~11 MB and is rationed per sync run — the extension can
+//                       only finish a deferred year if it can tell "return on
+//                       file" from "return on file WITH its form"
 function buildSyncKnowns(notices, pan, matters, returns) {
   const knownDins = new Set();
   const knownResponseIds = new Set();
@@ -58,14 +63,16 @@ function buildSyncKnowns(notices, pan, matters, returns) {
     .map((m) => String(m.proceedingReqId));
   const knownAckNums = [];
   const knownOrderRefs = [];
+  const knownFormAcks = [];
   (returns || []).forEach((r) => {
     if (r.pan !== pan) return;
     if (r.ackNum) knownAckNums.push(String(r.ackNum));
+    if (r.ackNum && r.formPdfPath) knownFormAcks.push(String(r.ackNum));
     (r.orders || []).forEach((o) => {
       if (o && o.commRefNo && o.storagePath && !o.locked) knownOrderRefs.push(String(o.commRefNo));
     });
   });
-  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs, knownAckNums, knownOrderRefs };
+  return { knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds], knownActiveProcs, knownAckNums, knownOrderRefs, knownFormAcks };
 }
 
 // Pause between assessees in a bulk sync. The extension emits "sync-done" only

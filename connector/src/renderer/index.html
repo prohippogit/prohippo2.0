@@ -12,7 +12,15 @@
       <img class="mark" src="assets/prohippo-mark.png" alt="ProHippo" />
       <div>
         <div class="title">ProHippo <span>Connector</span></div>
-        <div class="tag">Parallel, human-paced portal sync</div>
+        <!-- The build this device is running, and a way to ask whether there is
+             a newer one. Without the version on screen there is no way to tell
+             two machines apart when one of them is misbehaving. -->
+        <div class="tag">
+          Parallel, human-paced portal sync
+          <span class="dot">·</span>
+          <span id="appVer" class="ver">…</span>
+          <button id="checkUpdateBtn" class="linkbtn">Check for updates</button>
+        </div>
       </div>
     </div>
     <div class="who-wrap">

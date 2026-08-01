@@ -23,8 +23,15 @@ contextBridge.exposeInMainWorld("connector", {
     return () => ipcRenderer.removeListener("sync:event", handler);
   },
 
-  // --- auto-update ---
-  // States: "idle" | "manual" | "downloading" | "ready". See updater.js.
+  // --- version + auto-update ---
+  // { version, platform, packaged, canSelfInstall } — shown in the header so a
+  // practitioner can say which build they are on without opening anything.
+  appVersion: () => ipcRenderer.invoke("app:version"),
+  // "Check for updates", pressed by the user. The answer arrives on the
+  // update:state channel below, including "you are already current".
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  // States: "idle" | "checking" | "current" | "manual" | "downloading" |
+  //         "ready" | "checkFailed" | "unavailable". See updater.js.
   onUpdateState: (cb) => {
     const handler = (_e, evt) => cb(evt);
     ipcRenderer.on("update:state", handler);

@@ -14,12 +14,25 @@
 //   document/intimation           the s.143(1) intimation and any s.154
 //                                 rectification order, decrypted on the way in
 //
-// SIZE. The rendered return is 10-12 MB a year against a few hundred KB for
-// everything else, so it was first left to an on-demand button. It is synced
-// because a practitioner opening a client's file expects the return to be
-// there — waiting on a portal round trip to read a return you already filed is
-// not a saving anyone asked for. Each document is fetched exactly once, when
-// its acknowledgement is first seen; a filed return never changes.
+// SIZE, AND WHY THE BIG ONE IS RATIONED. The rendered return is 10-12 MB a year
+// against a few hundred KB for everything else, so it was first left to an
+// on-demand button. It is synced because a practitioner opening a client's file
+// expects the return to be there — waiting on a portal round trip to read a
+// return you already filed is not a saving anyone asked for.
+//
+// But a practice meeting this feature for the first time has every year of every
+// client to backfill, and doing that in one pass turns a routine full sync into
+// hours of portal traffic. So each run fetches at most MAX_FORM_PDFS_PER_SYNC of
+// them per PAN, newest years first; the rest come down over the next few syncs,
+// and any year can be pulled immediately from the Returns tab's "Fetch form"
+// button. Everything else in this pass — the JSON, the ITR-V, the orders — is
+// small and is never rationed.
+//
+// This only converges because `knownFormAcks` is tracked separately from
+// `knownAckNums`: a return can be on file with its form still missing, and a
+// later sync has to be able to tell. Merging the two would mean the first sync
+// records the return, every later sync skips it as "already known", and the
+// deferred years would never arrive.
 //
 // ORDERS. Every activity row carries a `commRefNo` inside its `activityTxt`
 // blob, and that reference is the `refno` the document endpoint wants. The
@@ -36,6 +49,12 @@ const { ingestSyncMessage } = require("./ingest");
 const { derivePassword, unlockPdf } = require("./pdfUnlock");
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
+
+// How many rendered ITR forms one sync will pull per PAN. Three keeps a full
+// sync roughly as quick as it was before returns joined it, while a practice
+// syncing weekly has a six-year history complete inside a month. Raise it to
+// backfill faster; the only cost is a longer first run.
+const MAX_FORM_PDFS_PER_SYNC = 3;
 
 // itrActivityCd → the section the resulting document is issued under. Taken
 // from the statuses the portal marks with a `dnlIntOrdr` download action.
@@ -125,6 +144,7 @@ async function syncReturns(page, job, pan, summary, emit) {
   const t = (job && job.timer) || NO_CLOCK;
   const knownAcks = new Set((job.knowns.knownAckNums || []).map((x) => String(x)));
   const knownOrders = new Set((job.knowns.knownOrderRefs || []).map((x) => String(x)));
+  const knownForms = new Set((job.knowns.knownFormAcks || []).map((x) => String(x)));
 
   emit("returns", "Fetching filed returns…", "info", 88);
 
@@ -140,6 +160,12 @@ async function syncReturns(page, job, pan, summary, emit) {
     return; // best-effort, like the appeals pass — never fail a whole sync here
   }
   if (!list.length) { emit("returns", "No returns filed on the portal"); return; }
+
+  // Newest year first, so a rationed run spends its budget on the years a
+  // practitioner is most likely to open next.
+  list.sort((x, y) => Number((y && y.assmentYear) || 0) - Number((x && x.assmentYear) || 0));
+  let formBudget = MAX_FORM_PDFS_PER_SYNC;
+  let formsDeferred = 0;
 
   // Date of birth / incorporation, for the order passwords. job.dob comes from
   // the assessee record; anything a return tells us is added as we go, so a
@@ -161,6 +187,9 @@ async function syncReturns(page, job, pan, summary, emit) {
     let itrJson = null;
     let ackPdf = null;
     let formPdf = null;
+    // The form is tracked on its own, so a year whose form was deferred last
+    // run is picked up on this one without re-fetching the JSON and ITR-V.
+    const needsForm = !knownForms.has(ackNum);
     if (isNew) {
       const got = await t.time("itr-json", () => apiCall(page, {
         path: PATHS.ITR_DOWNLOAD_FILE, serviceName: "NA",
@@ -175,14 +204,16 @@ async function syncReturns(page, job, pan, summary, emit) {
       }));
       if (pdf && pdf.ok && pdf.bytes && pdf.bytes <= MAX_PDF_BYTES) ackPdf = pdf;
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+    }
 
-      // The filed return itself, fully rendered. This is by far the largest
-      // thing the sync fetches — 10-12 MB a year against a few hundred KB for
-      // everything else — and it was originally left to an on-demand button for
-      // exactly that reason. It is synced because a practitioner opening a
-      // client's file expects the return to be there, not to be fetched from
-      // the portal while they wait. Still capped: an implausibly large document
-      // is skipped rather than allowed to stall the sync.
+    // The filed return itself, fully rendered — by far the largest thing this
+    // sync fetches, and the one item that is rationed (see the note at the top
+    // of this file). Outside the `isNew` branch on purpose: a year recorded on
+    // an earlier run with its form deferred is finished off here without
+    // re-fetching anything else. Also capped by size: an implausibly large
+    // document is skipped rather than allowed to stall the sync.
+    if (needsForm && formBudget > 0) {
+      formBudget -= 1;
       const form = await t.time("itr-form", () => postBinary(page, {
         path: PATHS.ITR_PREVIEW + encodeURIComponent(ay),
         serviceName: "NA",
@@ -191,6 +222,8 @@ async function syncReturns(page, job, pan, summary, emit) {
       }));
       if (form && form.ok && form.bytes && form.bytes <= MAX_PDF_BYTES) formPdf = form;
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+    } else if (needsForm) {
+      formsDeferred += 1;
     }
     addDob(dobFromItrJson(itrJson));
 
@@ -244,8 +277,9 @@ async function syncReturns(page, job, pan, summary, emit) {
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
     }
 
-    // A return we already hold with no new order is nothing to say.
-    if (!isNew && !orders.length) continue;
+    // A return we already hold, with no new order and no form to attach, is
+    // nothing to say.
+    if (!isNew && !orders.length && !formPdf) continue;
 
     await t.time("ingest", () => ingestSyncMessage({
       assesseeId: job.assesseeId,
@@ -280,6 +314,16 @@ async function syncReturns(page, job, pan, summary, emit) {
     }));
     if (isNew) summary.returns = (summary.returns || 0) + 1;
     await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+  }
+
+  // Say what was left, and that it is deliberate. A year whose return PDF is
+  // missing with no explanation reads as a failed sync.
+  if (formsDeferred) {
+    summary.formsDeferred = (summary.formsDeferred || 0) + formsDeferred;
+    emit(
+      "returns",
+      `${formsDeferred} older return PDF${formsDeferred > 1 ? "s" : ""} left for the next sync — they're 10-12 MB each. Any of them can be pulled now with "Fetch form".`
+    );
   }
 }
 

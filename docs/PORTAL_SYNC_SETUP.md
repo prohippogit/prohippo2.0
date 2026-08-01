@@ -180,3 +180,38 @@ Deploy adds two dependencies to `functions/` (`puppeteer-core`,
 ```
 firebase deploy --only functions
 ```
+
+
+## Storage CORS — required, once per project
+
+The app reads its own documents back out of Storage in the browser: the Returns
+tab fetches a PDF to save it under a proper filename, and the Computation
+generator reads the filed ITR JSON.
+
+A browser refuses a cross-origin read of a Storage object unless the **bucket's**
+CORS policy allows the site's origin, and it reports that refusal as a bare
+`Failed to fetch` with no explanation. Uploads and Cloud Functions are
+unaffected, so everything else looks healthy — which makes this a genuinely
+confusing failure to diagnose. Symptoms:
+
+- **Computation** shows "Failed to fetch".
+- Document buttons open a viewer tab instead of downloading, with a
+  `download: falling back to opening in a tab` warning in the console.
+
+`storage.cors.json` in the repo root is the policy. Apply it once:
+
+```bash
+gcloud storage buckets update gs://prohippo2.firebasestorage.app \
+  --cors-file=storage.cors.json
+```
+
+Check it took:
+
+```bash
+gcloud storage buckets describe gs://prohippo2.firebasestorage.app \
+  --format="default(cors_config)"
+```
+
+Add any new origin the app is served from to that file and re-apply. Note this
+is a property of the **bucket**, not of the code — a redeploy will not set it,
+and it survives every deploy once set.

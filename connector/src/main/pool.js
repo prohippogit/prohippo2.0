@@ -96,7 +96,11 @@ async function runPool(jobs, onEvent, opts = {}) {
         // from real practices instead of estimates.
         if (r.timing) {
           const secs = (r.timing.totalMs / 1000).toFixed(1);
-          emit("timing", `${secs}s total — ${r.timing.line}`, "info");
+          // The returns diagnostic rides with the timing, because the two
+          // questions are the same one: a pass that re-downloads what it
+          // already holds is slow BECAUSE it did not recognise it.
+          const diag = r.returnsDiag ? `\n${r.returnsDiag}` : "";
+          emit("timing", `${secs}s total — ${r.timing.line}${diag}`, "info");
         }
         /* Put the two heaviest phases on the visible "Done" line, not only in
            the tooltip. "The sync feels slow" is unanswerable without them, and a

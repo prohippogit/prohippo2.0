@@ -262,8 +262,11 @@ async function getSyncKnowns(pan) {
   const user = currentUser();
   if (!user) throw new Error("Sign in first.");
   const p = String(pan || "").toUpperCase().trim();
-  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [], knownAckNums: [], knownOrderRefs: [], lockedOrderRefs: [], knownFormAcks: [] };
-  if (!p) return empty;
+  // An assessee with no PAN cannot be diffed against anything, so the sync
+  // re-fetches its whole history — every run, for ever. That is a big enough
+  // consequence to be an error the caller reports rather than an empty object
+  // that looks like "nothing on file yet".
+  if (!p) throw new Error("This assessee has no PAN on record, so nothing can be matched against what is already on file.");
 
   const [noticeSnap, matterSnap, returnSnap] = await Promise.all([
     getDocs(query(collection(firestore, `users/${user.uid}/notices`), where("pan", "==", p))),

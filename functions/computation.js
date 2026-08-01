@@ -130,6 +130,10 @@ function register({ region, storageBucket, db }) {
       const storagePath = `users/${uid}/assessees/${assesseeId}/returns/${String(ay).replace(/[^A-Za-z0-9_-]/g, "")}/computation.pdf`;
       await admin.storage().bucket(storageBucket).file(storagePath).save(Buffer.from(pdf), {
         contentType: "application/pdf",
+        // attachment => a browser handed this URL saves the file rather than
+        // rendering it. The Returns tab fetches the blob and names it itself
+        // (src/downloadFile.js); this covers a URL opened outside the app.
+        contentDisposition: "attachment",
         metadata: { cacheControl: "private, max-age=0" },
       });
 

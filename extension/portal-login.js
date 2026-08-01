@@ -1002,10 +1002,11 @@
   // runs well past 25 MB, and the old cap silently discarded those after paying
   // to download them. Keep in step with the connector's MAX_FORM_BYTES.
   const MAX_FORM_BYTES = 80 * 1024 * 1024;
-  // Keep in step with the connector's FORM_SYNC_RECENT_YEARS — the two paths
-  // must behave identically or the same practice gets different results
-  // depending on which one it happened to use.
-  const FORM_SYNC_RECENT_YEARS = 2;
+  // Zero: the rendered return is never synced, only fetched on demand. It is
+  // 10-25 MB against a few hundred KB for everything else, and nothing in the
+  // app depends on it — the computation reads the JSON, proof of filing is the
+  // ITR-V. Keep in step with the connector's FORM_SYNC_RECENT_YEARS.
+  const FORM_SYNC_RECENT_YEARS = 0;
 
   // "Tue Nov 25 14:16:09 IST 2025" → "2025-11-25". Java's Date.toString(),
   // which Date.parse cannot read on any engine because of the zone abbreviation.

@@ -14,29 +14,34 @@
 //   document/intimation           the s.143(1) intimation and any s.154
 //                                 rectification order, decrypted on the way in
 //
-// SIZE, AND WHY THE BIG ONE HAS A WINDOW. The rendered return is 10-12 MB a year
-// against a few hundred KB for everything else — downloaded from the portal AND
-// uploaded to Storage, so it costs twice over on a residential line. Ten years
-// of history for one client is over 200 MB of traffic to fetch documents that a
-// practitioner opens perhaps once.
+// THE RENDERED FORM IS NOT SYNCED. It is fetched when somebody asks for it.
 //
-// An earlier version rationed it: a few per run, backfilling the whole history
-// over successive syncs. That was worse than it sounds. It made EVERY sync slow
-// rather than one, and gave no answer to "when does this stop?" — which is
-// exactly what a practitioner asks after the third slow run.
+// Of the four documents above, three are small — a few hundred KB between them —
+// and one is 10-25 MB: `returns/preview/{ay}`, the whole filed return rendered
+// for printing. It is paid twice, once down from the portal and once up to
+// Storage, on a practitioner's home connection. Measured on a real practice it
+// was 18-21 seconds per year, more than half of every sync that had any work in
+// it, and the largest single cost in the entire product.
 //
-// So the sync fetches the rendered form only for the FORM_SYNC_RECENT_YEARS most
-// recent assessment years. Those are the ones under assessment, under
-// rectification, or being compared against this year's filing. Once they are on
-// file the pass fetches nothing at all, run after run, and a full sync is back
-// to one list call per PAN. Older years are one click away on the Returns tab —
-// "Fetch form" pulls any single year on demand, which is the right shape for a
-// document that gets opened once a year.
+// Against that, what it is FOR: reading or printing the return as filed. It is
+// not what anything else depends on —
 //
-// Everything else here — the JSON, the ITR-V, the CPC orders — is small, is
-// fetched for every year, and is never deferred. The Computation of Total Income
-// reads the JSON, not the rendered form, so every year can produce a computation
-// whether or not its form PDF was synced.
+//   the Computation of Total Income reads the ITR JSON,
+//   every figure on the Returns tab comes from the status service,
+//   proof of filing is the ITR-V, which is 150 KB and always synced.
+//
+// So it is the one document worth waiting twenty seconds for at the moment you
+// actually want it, rather than for every client every night on the chance that
+// someone might. "Fetch form" on the Returns tab pulls a named year on demand.
+//
+// Two earlier attempts are recorded here because both looked reasonable and
+// both were wrong. Rationing the backfill (a few per run) made EVERY sync slow
+// instead of one, and could not answer "when does this stop?". Keeping a window
+// of the two most recent years still paid 40 seconds per client the first time
+// and — because the fetch was silently failing — every time after that too.
+//
+// Set FORM_SYNC_RECENT_YEARS above zero to sync the newest N years again. The
+// machinery is all still here; only the default changed.
 //
 // This all rests on `knownFormAcks` being tracked separately from
 // `knownAckNums`: a return can be on file with its form deliberately absent, and
@@ -69,16 +74,12 @@ const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_FORM_BYTES = 80 * 1024 * 1024;
 
 // How many of the most recent assessment years get their rendered form pulled by
-// a sync. Two covers the year under assessment and the one before it — the pair
-// a practitioner actually has open. Older years are fetched on demand.
+// a sync. Zero: none of them, ever. See the note at the top of this file — this
+// is the single largest cost in a sync and the least-used document in the app.
 //
-// Raising this makes the FIRST sync longer for every client and does not change
-// the steady state; it does not spread the cost over later runs, because there
-// is no backfill queue any more. If a practice wants its whole history on file,
-// the Returns tab's "Fetch form" button is the tool for that — it pulls one
-// named year while they wait for that year, rather than all years while they
-// wait for everything.
-const FORM_SYNC_RECENT_YEARS = 2;
+// Raising it costs roughly 20 seconds per year per client on the first sync of
+// each client, and nothing thereafter.
+const FORM_SYNC_RECENT_YEARS = 0;
 
 // itrActivityCd → the section the resulting document is issued under. Taken
 // from the statuses the portal marks with a `dnlIntOrdr` download action.
@@ -440,11 +441,13 @@ async function syncReturns(page, job, pan, summary, emit) {
     summary.formsFailed = (summary.formsFailed || 0) + formsFailed;
   }
 
+  // Not pending work — a standing decision. Said once, at the end, rather than
+  // once per year, and phrased so nobody waits for a later sync to do it.
   if (formsOnDemand) {
     summary.formsOnDemand = (summary.formsOnDemand || 0) + formsOnDemand;
     emit(
       "returns",
-      `${formsOnDemand} older year${formsOnDemand > 1 ? "s" : ""} kept their return PDF off the sync — 10-12 MB each. Use "Fetch form" on the Returns tab to pull one when it is wanted.`
+      `Return PDFs are fetched on demand — ${formsOnDemand} year${formsOnDemand > 1 ? "s" : ""} available through "Fetch form" on the Returns tab.`
     );
   }
 }

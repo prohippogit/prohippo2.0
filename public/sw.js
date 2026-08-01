@@ -1,6 +1,12 @@
 /* ProHippo service worker — app-shell caching for PWA/offline support.
-   Bump CACHE_VERSION to invalidate old caches on deploy. */
-const CACHE_VERSION = "prohippo-v3";
+   Bump CACHE_VERSION to invalidate old caches on deploy.
+
+   v4: static assets are served stale-while-revalidate, so a returning user runs
+   whatever JS is already cached and only picks up a new build on the RELOAD
+   after the one that fetched it. That is fine for a cosmetic change and not fine
+   for a behavioural one — it meant the download fix appeared not to work. Bump
+   this on any release whose behaviour users must get immediately. */
+const CACHE_VERSION = "prohippo-v4";
 const PRECACHE = [
   "/",
   "/manifest.webmanifest",

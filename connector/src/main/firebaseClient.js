@@ -262,7 +262,7 @@ async function getSyncKnowns(pan) {
   const user = currentUser();
   if (!user) throw new Error("Sign in first.");
   const p = String(pan || "").toUpperCase().trim();
-  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [], knownAckNums: [], knownOrderRefs: [], knownFormAcks: [] };
+  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [], knownAckNums: [], knownOrderRefs: [], lockedOrderRefs: [], knownFormAcks: [] };
   if (!p) return empty;
 
   const [noticeSnap, matterSnap, returnSnap] = await Promise.all([
@@ -300,19 +300,32 @@ async function getSyncKnowns(pan) {
     if (m.status === "Active" && m.proceedingReqId) knownActiveProcs.push(String(m.proceedingReqId));
   });
 
-  // A return only gets re-fetched when it is new; an order only when its CPC
-  // reference has never been seen. An order we hold but could not unlock is
-  // deliberately NOT counted as known — a later sync, once the date of birth is
-  // on file, is exactly how it gets fixed.
+  /* A return only gets re-fetched when it is new; an order only when there is
+     something a fetch could change.
+
+     "Known" therefore means finished, in either of two ways: we hold a readable
+     PDF, OR the portal will never give us one. Orders before A.Y. 2017-18 are
+     the second case — the portal routes those through a request-and-email flow
+     it will not serve to us, so `request-only` is a terminal state and asking
+     again every sync is pure cost.
+
+     An order we hold but could NOT unlock is a third case and is reported
+     separately: retrying it is the repair path once a date of birth is on file,
+     but retrying it when we still have no date of birth cannot succeed and just
+     re-downloads the same file every run. portalReturns.js decides. */
   const knownAckNums = [];
   const knownOrderRefs = [];
+  const lockedOrderRefs = [];
   const knownFormAcks = [];
   returnSnap.forEach((d) => {
     const r = d.data() || {};
     if (r.ackNum) knownAckNums.push(String(r.ackNum));
     if (r.ackNum && r.formPdfPath) knownFormAcks.push(String(r.ackNum));
     for (const o of r.orders || []) {
-      if (o && o.commRefNo && o.storagePath && !o.locked) knownOrderRefs.push(String(o.commRefNo));
+      if (!o || !o.commRefNo) continue;
+      const ref = String(o.commRefNo);
+      if ((o.storagePath && !o.locked) || o.lockReason === "request-only") knownOrderRefs.push(ref);
+      else if (o.storagePath && o.locked) lockedOrderRefs.push(ref);
     }
   });
 
@@ -323,6 +336,7 @@ async function getSyncKnowns(pan) {
     knownActiveProcs,
     knownAckNums,
     knownOrderRefs,
+    lockedOrderRefs,
     knownFormAcks,
   };
 }

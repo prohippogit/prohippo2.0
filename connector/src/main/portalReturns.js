@@ -145,6 +145,11 @@ async function syncReturns(page, job, pan, summary, emit) {
   const knownAcks = new Set((job.knowns.knownAckNums || []).map((x) => String(x)));
   const knownOrders = new Set((job.knowns.knownOrderRefs || []).map((x) => String(x)));
   const knownForms = new Set((job.knowns.knownFormAcks || []).map((x) => String(x)));
+  // Orders we hold but could not decrypt. Retrying one is the repair path once a
+  // date of birth is on file — and pure waste until then, because the password
+  // is derived from that date and nothing else.
+  const lockedRefs = new Set((job.knowns.lockedOrderRefs || []).map((x) => String(x)));
+  let fetched = 0; // anything this run actually pulled, for the closing line
 
   emit("returns", "Fetching filed returns…", "info", 88);
 
@@ -214,6 +219,7 @@ async function syncReturns(page, job, pan, summary, emit) {
     // document is skipped rather than allowed to stall the sync.
     if (needsForm && formBudget > 0) {
       formBudget -= 1;
+      fetched += 1;
       const form = await t.time("itr-form", () => postBinary(page, {
         path: PATHS.ITR_PREVIEW + encodeURIComponent(ay),
         serviceName: "NA",
@@ -235,6 +241,12 @@ async function syncReturns(page, job, pan, summary, emit) {
       const detail = activityDetail(row);
       const refNo = String(detail.commRefNo || "").trim();
       if (!refNo || knownOrders.has(refNo)) continue;
+
+      // Already downloaded, still encrypted, and we have no date of birth to
+      // build a password from: re-downloading it would end in exactly the same
+      // place. Leave it as it stands — the Returns tab already asks for the
+      // date of birth, and the next sync after that arrives will unlock it.
+      if (lockedRefs.has(refNo) && !dobCandidates.length) continue;
 
       const order = {
         commRefNo: refNo,
@@ -263,6 +275,7 @@ async function syncReturns(page, job, pan, summary, emit) {
         path: PATHS.DOC_INTIMATION, serviceName: "NA",
         payload: { refno: refNo, year: ay, entityNum: pan },
       }));
+      fetched += 1;
       if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) {
         const unlocked = await t.time("order-unlock", () => unlockOrder(got, dobCandidates, pan));
         order.contentBase64 = unlocked.base64;
@@ -313,7 +326,14 @@ async function syncReturns(page, job, pan, summary, emit) {
       },
     }));
     if (isNew) summary.returns = (summary.returns || 0) + 1;
+    if (isNew) fetched += 1;
     await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+  }
+
+  // A run that changed nothing should say so. Silence after a list call looks
+  // like a stall, which is how "the second sync is slow" starts.
+  if (!fetched && !formsDeferred) {
+    emit("returns", `Returns already up to date — ${list.length} assessment year${list.length > 1 ? "s" : ""} on file`);
   }
 
   // Say what was left, and that it is deliberate. A year whose return PDF is

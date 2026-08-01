@@ -56,6 +56,24 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$VERSION"
           echo "Building connector $VERSION"
 
+      # electron-builder downloads NSIS, winCodeSign and the Electron binary
+      # itself from GitHub releases at build time. Those downloads are the least
+      # reliable part of this workflow — a reset connection fails the job two
+      # seconds in, with nothing wrong with the app — so keep them across runs.
+      - name: Cache the electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('connector/package-lock.json', 'connector/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
         run: npm install
 
@@ -71,8 +89,25 @@ jobs:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
 
+      # Retried, for the same reason the cache above exists: the failure mode is
+      # "An existing connection was forcibly closed by the remote host" while
+      # fetching a build tool, which says nothing about whether this build would
+      # succeed. A cold cache plus a bad minute on GitHub's CDN should not cost a
+      # release. With the cache warm a retry usually has nothing left to fetch.
       - name: Build installer
-        run: npx electron-builder --publish never
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if npx electron-builder --publish never; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::electron-builder attempt $attempt failed — retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            fi
+          done
+          echo "::error::electron-builder failed three times. If every attempt shows a download error, it is GitHub's CDN; if it shows a build error, it is the app."
+          exit 1
 
       - name: Attach installer to the Release
         uses: softprops/action-gh-release@v2

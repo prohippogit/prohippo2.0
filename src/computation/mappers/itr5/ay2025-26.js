@@ -115,7 +115,93 @@ export function mapItr5Ay2025(body, ctx) {
     notes.push({ severity: "attention", text: `This computation is prepared from a return filed under ${filingSection(filingSectionCode)}.` });
   }
 
-  /* ---- A. Profits and gains of business or profession --------------------- */
+  /* ---- A. Income from house property --------------------------------------
+   *
+   * Statutory order, per property: annual letable value, less anything not
+   * realised and the municipal taxes actually paid, giving the annual value;
+   * then the two deductions s.24 allows — 30% of the annual value under
+   * s.24(a), and interest on borrowed capital under s.24(b).
+   *
+   * The interest is very often larger than the annual value, so this head
+   * closes at a LOSS in a great many real returns. That is not an error state:
+   * it sets off against other heads under s.71 and what remains is carried
+   * forward. A computation that omitted the head because its result was
+   * negative would be hiding the very thing the assessee needs to see.
+   */
+  const hpRows = [];
+  // peek, not claim. Claiming the whole subtree would consume every field in it
+  // and so hide a genuinely new one — which is the opposite of what §8 is for.
+  // Each figure below is read through src.num, which marks exactly that path.
+  const properties = src.peek("ScheduleHP.PropertyDetails") || [];
+  const many = properties.length > 1;
+  properties.forEach((prop, i) => {
+    const at = (field) => `ScheduleHP.PropertyDetails[${i}].Rentdetails.${field}`;
+    const rent = prop.Rentdetails || {};
+    const address = [prop.AddressDetailWithZipCode?.AddrDetail, prop.AddressDetailWithZipCode?.CityOrTownOrDistrict]
+      .map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+    const letOut = String(prop.ifLetOut || "").toUpperCase() === "Y";
+    const tenants = (prop.TenantDetails || []).map((t) => t.NameofTenant).filter(Boolean).join(", ");
+    // A part-owned property is worth stating: the return has already restricted
+    // the figures to the assessee's share, and a reader comparing this to the
+    // rent agreement needs to know why they differ.
+    const shareOfProperty = Number(prop.AssessePercentShareProp);
+    const share = Number.isFinite(shareOfProperty) && shareOfProperty !== 100
+      ? `${shareOfProperty}% share`
+      : "";
+
+    if (many) hpRows.push(columnHeader(`Property ${i + 1}${address ? ` — ${address}` : ""}`, { ref: "" }));
+
+    hpRows.push(sub(
+      letOut ? "Annual letable value of the property" : "Annual value of the property",
+      src.num(at("AnnualLetableValue")),
+      {
+        ref: i === 0 && !many ? "Sch. HP" : "",
+        note: [many ? "" : address, tenants && `let to ${tenants}`, share].filter(Boolean).join(" · "),
+      }
+    ));
+
+    const unrealised = src.num(at("RentNotRealized"));
+    if (unrealised) hpRows.push(sub("Less: Rent not realised", unrealised));
+    const localTaxes = src.num(at("LocalTaxes"));
+    if (localTaxes) hpRows.push(sub("Less: Municipal taxes paid", localTaxes));
+    if (src.num(at("TotalUnrealizedAndTax"))) hpRows.push(subtotal("Annual Value", src.num(at("AnnualOfPropOwned"))));
+
+    hpRows.push(sub("Less: Standard deduction u/s 24(a) @ 30% of the annual value",
+      src.num(at("ThirtyPercentOfBalance")), { ref: "Sec. 24(a)" }));
+
+    const interest = src.num(at("Section24B.TotalInterestUs24B")) || src.num(at("IntOnBorwCap"));
+    if (interest) {
+      const lenders = (rent.Section24B?.Section24BDtls || []).map((l) => l.BankOrInstnName).filter(Boolean);
+      hpRows.push(sub("Less: Interest on borrowed capital u/s 24(b)", interest, {
+        ref: "Sec. 24(b)",
+        note: lenders.length ? `Borrowed from ${lenders.join(", ")}` : undefined,
+      }));
+    }
+    const arrears = src.num(at("ArrearsUnrealizedRentRcvd"));
+    if (arrears) hpRows.push(sub("Add: Arrears / unrealised rent received u/s 25A (less 30%)", arrears, { ref: "Sec. 25A" }));
+
+    const own = src.num(at("IncomeOfHP"));
+    if (many) hpRows.push(subtotal(own < 0 ? `Loss from property ${i + 1}` : `Income from property ${i + 1}`, Math.abs(own), { isLoss: own < 0 }));
+
+    // Figures this property restates on the way to its own result, plus the
+    // per-lender interest that the schedule already totals for us.
+    src.restate([
+      at("BalanceALV"), at("AnnualOfPropOwned"), at("TotalDeduct"), at("IntOnBorwCap"),
+      ...(rent.Section24B?.Section24BDtls || []).map((_, li) => at(`Section24B.Section24BDtls[${li}].InterestUs24B`)),
+    ]);
+  });
+  src.num("ScheduleHP.PassThroghIncome");
+
+  const hpTotal = src.num("ScheduleHP.TotalIncomeChargeableUnHP");
+  if (hpRows.length) {
+    hpRows.push(total(
+      hpTotal < 0 ? "Loss from House Property" : "Income from House Property",
+      Math.abs(hpTotal),
+      { isLoss: hpTotal < 0 }
+    ));
+  }
+
+  /* ---- B. Profits and gains of business or profession --------------------- */
   //
   // The depreciation swap (§10): the P&L figure carries depreciation as per the
   // Companies Act, which is added back, and the s.32 allowance is deducted in
@@ -168,7 +254,7 @@ export function mapItr5Ay2025(body, ctx) {
     ),
   ];
 
-  /* ---- B. Income from other sources --------------------------------------- */
+  /* ---- C. Income from other sources --------------------------------------- */
   //
   // §10: split interest into its sub-fields rather than printing InterestGross
   // as one line. A reader needs to see savings-bank interest separately from a
@@ -205,7 +291,7 @@ export function mapItr5Ay2025(body, ctx) {
   if (osDeductions !== 0) osRows.push(sub("Less: Expenditure allowable u/s 57", osDeductions, { ref: "Sec. 57" }));
   osRows.push(total("Income from Other Sources", osNet));
 
-  /* ---- C. Computation of total income ------------------------------------- */
+  /* ---- D. Computation of total income ------------------------------------- */
   const tiSalary = 0; // ITR-5 has no salary head; stated at nil for completeness (§4)
   const tiHP = src.num("PartB-TI.IncomeFromHP");
   const tiBP = src.num("PartB-TI.ProfBusGain.TotProfBusGain");
@@ -219,6 +305,18 @@ export function mapItr5Ay2025(body, ctx) {
   const chapterVIA = src.num("PartB-TI.DeductionsUndSchVIADtl.TotDeductUndSchVIA");
   const ded10AA = src.num("PartB-TI.DeductionsUnder10Aor10AA");
   const totalIncome = src.num("PartB-TI.TotalIncome");
+
+  /* Which head's loss was set off this year. Schedule CYLA totals each head
+     separately, so the return says outright whether the s.71 set-off is a house
+     property loss, a business loss or both — calling a house property loss a
+     "business loss", as this did while only business income was mapped, is a
+     substantive error on the face of a signed document. */
+  const cylaTotals = [
+    ["house property loss", src.num("ScheduleCYLA.TotalCurYr.TotHPlossCurYr")],
+    ["business loss", src.num("ScheduleCYLA.TotalCurYr.TotBusLoss")],
+    ["loss from other sources", src.num("ScheduleCYLA.TotalCurYr.TotOthSrcLoss")],
+  ].filter(([, v]) => v !== 0).map(([label]) => label);
+  const cylaLossHeads = cylaTotals.length ? cylaTotals.join(" and ") : "loss";
 
   // The unabsorbed-depreciation trap (§10). Brought-forward business loss sets
   // off under s.72; unabsorbed depreciation under s.32(2), from Schedule UD, and
@@ -234,7 +332,7 @@ export function mapItr5Ay2025(body, ctx) {
     headRow("Capital Gains", "Sch. CG", tiCG),
     headRow("Income from Other Sources", "Sch. OS", tiOS),
     subtotal("Total of Heads of Income", totalOfHeads),
-    cyla !== 0 && sub("Less: Set-off of current year business loss u/s 71", cyla, { ref: "Sch. CYLA" }),
+    cyla !== 0 && sub(`Less: Set-off of current year ${cylaLossHeads} u/s 71`, cyla, { ref: "Sch. CYLA" }),
     cyla !== 0 && sub("Balance after set-off of current year loss", balanceAfterCyla),
     bfla !== 0 && sub(
       bflaFromUd
@@ -249,7 +347,7 @@ export function mapItr5Ay2025(body, ctx) {
     total("Total Income (rounded off u/s 288A)", totalIncome),
   ];
 
-  /* ---- D. Computation of tax liability ------------------------------------ */
+  /* ---- E. Computation of tax liability ------------------------------------ */
   const taxNormal = src.num("PartB_TTI.ComputationOfTaxLiability.TaxPayableOnTI.TaxAtNormalRates");
   const taxSpecial = src.num("PartB_TTI.ComputationOfTaxLiability.TaxPayableOnTI.TaxAtSpecialRates");
   const surcharge = src.num("PartB_TTI.ComputationOfTaxLiability.TaxPayableOnTI.TotalSurcharge");
@@ -282,7 +380,7 @@ export function mapItr5Ay2025(body, ctx) {
     : "";
   src.claim("ScheduleAMT");
 
-  /* ---- E. Taxes paid ------------------------------------------------------ */
+  /* ---- F. Taxes paid ------------------------------------------------------ */
   const tdsRows = [];
   const tdsList = src.claim("ScheduleTDS2.TDSOthThanSalaryDtls") || [];
   if (tdsList.length) tdsRows.push(columnHeader("Tax Deducted at Source — TAN of Deductor", { ref: "Gross Receipt" }));
@@ -345,15 +443,69 @@ export function mapItr5Ay2025(body, ctx) {
     });
   }
 
-  /* ---- F. Losses carried forward ------------------------------------------ */
+  /* ---- G. Losses carried forward ------------------------------------------ */
   const cflRows = [];
-  const cflTotal = src.num("ScheduleCFL.TotalLossCFSummary.LossSummaryDetail.BusLossOthThanSpecLossCF");
-  const cflCurrent = src.num("ScheduleCFL.CurrentAYloss.LossSummaryDetail.BusLossOthThanSpecLossCF");
   src.claim("ScheduleCFL");
+  const cfl = body.ScheduleCFL || {};
 
-  if (cflCurrent !== 0) {
-    cflRows.push(columnHeader("Assessment Year / Nature of loss", { ref: "Nature" }));
-    cflRows.push(sub(`A.Y. ${ctx.ay} · loss of the current year`, cflCurrent, { cols: { ref: "Business Loss" } }));
+  /* Schedule CFL's per-year buckets are named for how the form was laid out
+     years ago, not for the assessment year they hold — "LossCFCurrentAssmntYear"
+     is A.Y. 2019-20 on an A.Y. 2025-26 return, and the suffixed keys run on from
+     there. The mapping is fixed for this assessment year, which is precisely why
+     mappers are keyed by year (§9). Each bucket's own DateOfFiling corroborates
+     it, and is shown so a reader can check. */
+  const BROUGHT_FORWARD_YEARS = [
+    ["LossCFFromPrev2ndYearFromAY", "2017-18"],
+    ["LossCFFromPrevYrToAY", "2018-19"],
+    ["LossCFCurrentAssmntYear", "2019-20"],
+    ["LossCFCurrentAssmntYear2021", "2020-21"],
+    ["LossCFCurrentAssmntYear2022", "2021-22"],
+    ["LossCFCurrentAssmntYear2023", "2022-23"],
+    ["LossCFCurrentAssmntYear2024", "2023-24"],
+    ["LossCFCurrentAssmntYear2025", "2024-25"],
+  ];
+
+  const NATURES = [
+    ["BusLossOthThanSpecLossCF", "Business Loss"],
+    ["TotalHPPTILossCF", "House Property Loss"],
+    ["LossFrmSpecBusCF", "Speculation Loss"],
+    ["STCGLossCF", "Short-term Capital Loss"],
+    ["LTCGLossCF", "Long-term Capital Loss"],
+    ["OthSrcLossRaceHorseCF", "Loss from Owning Race Horses"],
+  ];
+
+  const cflTotals = cfl.TotalLossCFSummary?.LossSummaryDetail || {};
+  const cflTotal = NATURES.reduce((sum, [key]) => sum + Number(cflTotals[key] || 0), 0);
+
+  const brought = [];
+  for (const [key, ay] of BROUGHT_FORWARD_YEARS) {
+    const d = cfl[key]?.CarryFwdLossDetail;
+    if (!d) continue;
+    for (const [field, nature] of NATURES) {
+      const amt = Number(d[field] || 0);
+      if (amt !== 0) brought.push({ ay, nature, amt, filedOn: d.DateOfFiling || "" });
+    }
+  }
+
+  const current = [];
+  const currentDetail = cfl.CurrentAYloss?.LossSummaryDetail || {};
+  for (const [field, nature] of NATURES) {
+    const amt = Number(currentDetail[field] || 0);
+    if (amt !== 0) current.push({ nature, amt });
+  }
+
+  if (brought.length || current.length) {
+    cflRows.push(columnHeader("Assessment Year / Date of filing of return", { ref: "Nature" }));
+  }
+  for (const b of brought) {
+    cflRows.push(sub(
+      `A.Y. ${b.ay}${b.filedOn ? ` · Return filed on ${longDate(b.filedOn)}` : ""}`,
+      b.amt,
+      { cols: { ref: b.nature } }
+    ));
+  }
+  for (const c of current) {
+    cflRows.push(sub(`A.Y. ${ctx.ay} · loss of the current year`, c.amt, { cols: { ref: c.nature } }));
   }
   const udCarried = src.num("ITRScheduleUD.CurBalCFNY");
   src.claim("ITRScheduleUD");
@@ -363,7 +515,7 @@ export function mapItr5Ay2025(body, ctx) {
       cols: { ref: "u/s 32(2)" },
     }));
   }
-  if (cflRows.length) cflRows.push(total("Total Loss Carried Forward", cflTotal || cflCurrent));
+  if (cflRows.length) cflRows.push(total("Total Loss Carried Forward", cflTotal));
 
   /* Where the year's loss arises purely from the depreciation differential, the
      return reports the SAME figure twice — once in Schedule CFL as a business
@@ -372,7 +524,7 @@ export function mapItr5Ay2025(body, ctx) {
      document that gets signed is worse than ugly. We print both, because the
      return states both and §1 forbids us from suppressing either, and say what
      the relationship is. */
-  const cflFootnote = udCarried !== 0 && udCarried === (cflTotal || cflCurrent)
+  const cflFootnote = udCarried !== 0 && udCarried === cflTotal
     ? "The unabsorbed depreciation shown is the same amount as the business loss above, carried in Schedule UD of the return, and not a further loss. The loss for the year arises from the difference between depreciation charged in the accounts and the allowance u/s 32."
     : "";
 
@@ -434,6 +586,7 @@ export function mapItr5Ay2025(body, ctx) {
 
   /* ---- assemble ------------------------------------------------------------ */
   const sections = [
+    section("HP", "Income from House Property", hpRows, { tone: "navy" }),
     section("BP", "Profits and Gains of Business or Profession", bpRows, { tone: "navy" }),
     section("OS", "Income from Other Sources", osRows, { tone: "navy" }),
     section("TI", "Computation of Total Income", tiRows, {
@@ -495,6 +648,16 @@ export function mapItr5Ay2025(body, ctx) {
     "ScheduleCYLA.OthSrcExclRaceHorseLottery.IncCYLA.IncOfCurYrUnderThatHead",
     "ScheduleCYLA.OthSrcExclRaceHorseLottery.IncCYLA.BusLossSetoff",
     "PartB-TI.LossesOfCurrentYearCarriedFwd",
+    // The same, for a house property loss. Schedule CYLA states each head's
+    // set-off three times over — as the head's own total, as the amount set off,
+    // and as what remains — and the remainder is what Schedule CFL then carries.
+    "ScheduleCYLA.TotalCurYr.TotHPlossCurYr",
+    "ScheduleCYLA.TotalLossSetOff.TotHPlossCurYrSetoff",
+    "ScheduleCYLA.LossRemAftSetOff.BalHPlossCurYrAftSetoff",
+    "ScheduleCYLA.OthSrcExclRaceHorseLottery.IncCYLA.HPlossCurYrSetoff",
+    // §10: interest is itemised into its sub-fields, so the schedule's own
+    // total of them is the same money said once more.
+    "ScheduleOS.IncOthThanOwnRaceHorse.InterestGross",
     // Schedule OS restates its own total, and Part B-TI restates it again.
     "ScheduleOS.IncOthThanOwnRaceHorse.DividendOthThan22e",
     "ScheduleOS.IncOthThanOwnRaceHorse.BalanceNoRaceHorse",

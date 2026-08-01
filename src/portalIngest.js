@@ -15,6 +15,19 @@ import { doc as fsDoc, getDoc as fsGetDoc } from "firebase/firestore";
 import { functions, storage, auth, db } from "./firebase";
 import { derivePassword, unlockBase64 } from "./pdfUnlock";
 
+/* Metadata for every object we upload.
+ *
+ * Content-Disposition: attachment is what makes a browser SAVE the file rather
+ * than render it in a tab. The in-app buttons don't rely on this — they fetch
+ * the blob and name it themselves (downloadFile.js) — but a download URL opened
+ * outside the app has only this to go on, and a practitioner who pastes one
+ * into a browser should get a file, not a viewer.
+ */
+const attachment = (contentType) => ({
+  contentType: contentType || "application/pdf",
+  contentDisposition: "attachment",
+});
+
 /* The date of birth / incorporation for one assessee, remembered for the run.
    The returns pass streams one message per assessment year and every order in
    them needs the same date to build its password, so without this we would
@@ -62,7 +75,7 @@ export async function ingestPortalSyncMessage(payload) {
       const uid = auth.currentUser?.uid;
       const safeId = (n.din || `${n.proceedingReqId}-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, "");
       storagePath = `users/${uid}/assessees/${payload.assesseeId}/notices/${safeId}.pdf`;
-      await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64", { contentType: n.contentType || "application/pdf" });
+      await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64", attachment(n.contentType));
     }
     const meta = { ...n };
     delete meta.contentBase64;
@@ -99,7 +112,7 @@ export async function ingestPortalSyncMessage(payload) {
         // same object instead of leaving orphaned copies behind.
         const safe = `${(r.responseId || "resp")}-${ai}`.replace(/[^A-Za-z0-9_-]/g, "");
         storagePath = `users/${uid}/assessees/${payload.assesseeId}/responses/${safe}.pdf`;
-        await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", { contentType: at.contentType || "application/pdf" });
+        await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", attachment(at.contentType));
       }
       attachments.push({ storagePath, filename: at.filename || "attachment.pdf", label: at.label || "" });
       ai++;
@@ -134,13 +147,13 @@ export async function ingestPortalSyncMessage(payload) {
       let bin = "";
       const CH = 0x8000;
       for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
-      await uploadString(storageRef(storage, jsonPath), btoa(bin), "base64", { contentType: "application/json" });
+      await uploadString(storageRef(storage, jsonPath), btoa(bin), "base64", attachment("application/json"));
     }
 
     let ackPdfPath = null;
     if (r.ackPdfBase64) {
       ackPdfPath = `${base}/acknowledgement.pdf`;
-      await uploadString(storageRef(storage, ackPdfPath), r.ackPdfBase64, "base64", { contentType: "application/pdf" });
+      await uploadString(storageRef(storage, ackPdfPath), r.ackPdfBase64, "base64", attachment("application/pdf"));
     }
 
     const passwords = [];
@@ -164,7 +177,7 @@ export async function ingestPortalSyncMessage(payload) {
         else if (res.reason !== "not-encrypted") { locked = true; lockReason = res.reason; }
         const safe = String(o.commRefNo || "order").replace(/[^A-Za-z0-9_-]/g, "");
         storagePath = `${base}/order-${safe}.pdf`;
-        await uploadString(storageRef(storage, storagePath), content, "base64", { contentType: "application/pdf" });
+        await uploadString(storageRef(storage, storagePath), content, "base64", attachment("application/pdf"));
       }
       const meta = { ...o };
       delete meta.contentBase64;
@@ -189,7 +202,7 @@ export async function ingestPortalSyncMessage(payload) {
     const uid = auth.currentUser?.uid;
     const ay = String(f.ay || "unknown").replace(/[^A-Za-z0-9_-]/g, "");
     const formPdfPath = `users/${uid}/assessees/${payload.assesseeId}/returns/${ay}/form.pdf`;
-    await uploadString(storageRef(storage, formPdfPath), f.contentBase64, "base64", { contentType: "application/pdf" });
+    await uploadString(storageRef(storage, formPdfPath), f.contentBase64, "base64", attachment("application/pdf"));
     const res = await httpsCallable(functions, "attachReturnDocument")({
       assesseeId: payload.assesseeId, ay: f.ay, ackNum: f.ackNum, formPdfPath,
     });
@@ -208,7 +221,7 @@ export async function ingestPortalSyncMessage(payload) {
       if (at.contentBase64) {
         const safe = `${(ap.ackNum || "f35")}-${ai}`.replace(/[^A-Za-z0-9_-]/g, "");
         storagePath = `users/${uid}/assessees/${payload.assesseeId}/appeals/${safe}.pdf`;
-        await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", { contentType: at.contentType || "application/pdf" });
+        await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", attachment(at.contentType));
       }
       attachments.push({ storagePath, filename: at.filename || "appeal.pdf", label: at.label || "" });
       ai++;

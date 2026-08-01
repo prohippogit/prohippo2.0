@@ -7,21 +7,24 @@
  */
 import React from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { functions, storage } from './firebase';
+import { functions } from './firebase';
+import { downloadFromStorage } from './downloadFile';
+import { noticeFilename } from './downloadNames';
 import { Icon, EmptyState, titleCase, fmtDateLong, fmtINR } from './shared';
 import { useData } from './store';
 import { appealableOrders, checklistFor, appealFee, FEE_SLABS, PENALTY_FEE, orderDocType, DOC_TYPE_LABEL } from './appeals';
 
-// Open an order PDF held in Storage. Same helper the Notices and Assessees
-// pages keep locally — three copies, but importing across page modules to save
-// eight lines would tangle them together for no real gain.
-async function openStoragePdf(path) {
-  if (!path) return;
+// Save an order's PDF to the user's computer. This used to be a local copy of
+// the same eight lines the Notices and Assessees pages kept — deliberately
+// duplicated, because sharing them was not worth coupling the pages. Naming the
+// file properly changed that calculus: the naming rules have to agree across
+// every screen or the same order downloads under two different names.
+async function downloadOrder(notice) {
+  if (!notice?.storagePath) return;
   try {
-    window.open(await getDownloadURL(storageRef(storage, path)), "_blank", "noopener");
+    await downloadFromStorage(notice.storagePath, noticeFilename(notice, notice.assessee));
   } catch (e) {
-    console.error("open order pdf", e);
+    console.error("download order pdf", e);
   }
 }
 
@@ -327,8 +330,8 @@ function OrderCard({ n }) {
       ) : null}
 
       {n.storagePath && (
-        <button className="btn btn-secondary btn-sm" style={{marginTop: 12}} onClick={() => openStoragePdf(n.storagePath)}>
-          <Icon name="doc" size={13}/>Open the order PDF
+        <button className="btn btn-secondary btn-sm" style={{marginTop: 12}} onClick={() => downloadOrder(n)}>
+          <Icon name="doc" size={13}/>Download the order PDF
         </button>
       )}
     </div>

@@ -1,7 +1,7 @@
 /* ProHippo — Notices list + review/entry form */
 import React from 'react';
-import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { storage } from './firebase';
+import { downloadFromStorage } from './downloadFile';
+import { noticeFilename } from './downloadNames';
 import { Icon, StatusPill, EmptyState, titleCase, fmtDateLong, daysFromNow } from './shared';
 import { useData, awaitingNotices, todayISO, itemsFromNoticeDocuments, docRequestsOf } from './store';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
@@ -9,14 +9,14 @@ import DocumentRequestComposer from './DocumentRequest';
 import { AskDocsButton } from './askForDocuments';
 import { renderDocRequest, defaultTitle } from './messageTemplates';
 
-// Open a notice's PDF stored in Firebase Storage (portal-synced notices).
-async function openStoragePdf(storagePath) {
-  if (!storagePath) return;
+// Save a notice's PDF to the user's computer, named after the notice rather
+// than after the object's id in Storage. See downloadFile.js.
+async function downloadNotice(notice) {
+  if (!notice?.storagePath) return;
   try {
-    const url = await getDownloadURL(storageRef(storage, storagePath));
-    window.open(url, "_blank", "noopener");
+    await downloadFromStorage(notice.storagePath, noticeFilename(notice, notice.assessee));
   } catch (e) {
-    console.error("open notice pdf", e);
+    console.error("download notice pdf", e);
   }
 }
 
@@ -131,7 +131,7 @@ export default function Notices({ onOpenNotice }) {
                     <div className="center" style={{gap: 4, justifyContent: "flex-end"}}>
                       {!n.isOrder && <AskDocsButton notice={n}/>}
                       {n.storagePath && (
-                        <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={() => openStoragePdf(n.storagePath)}>
+                        <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={() => downloadNotice(n)}>
                           <Icon name="doc" size={12}/>PDF
                         </button>
                       )}
@@ -427,7 +427,7 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
           </div>
           <div className="center" style={{gap: 8}}>
             {edited.storagePath && (
-              <button className="btn btn-secondary btn-sm" title="Open the PDF synced from the portal" onClick={() => openStoragePdf(edited.storagePath)}>
+              <button className="btn btn-secondary btn-sm" title="Download the PDF synced from the portal" onClick={() => downloadNotice(edited)}>
                 <Icon name="doc" size={14}/>View portal PDF
               </button>
             )}

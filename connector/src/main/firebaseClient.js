@@ -185,6 +185,11 @@ async function uploadBase64(path, base64, contentType) {
   init();
   await uploadString(storageRef(storage, path), base64, "base64", {
     contentType: contentType || "application/pdf",
+    // attachment => a browser handed this object's download URL saves it rather
+    // than rendering it in a tab. The web app's own buttons fetch the blob and
+    // name it themselves (src/downloadFile.js), but a URL opened outside the app
+    // has only this header to go on.
+    contentDisposition: "attachment",
   });
   return path;
 }

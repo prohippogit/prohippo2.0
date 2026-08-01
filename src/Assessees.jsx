@@ -13,6 +13,8 @@ import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storag
 import { functions, storage, auth } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 import { ingestPortalSyncMessage } from './portalIngest';
+import { downloadFromStorage } from './downloadFile';
+import { noticeFilename, returnOrderFilename, returnDocFilename } from './downloadNames';
 import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
 
 // Build the incremental-sync hints from what's already on file for one PAN, so
@@ -89,14 +91,15 @@ function classifyNoticeSection(notice) {
   return null;
 }
 
-// Open a Storage-hosted notice/order PDF in a new tab.
-async function openStoragePdf(storagePath) {
+// Save a Storage-hosted document to the user's computer, named after what it
+// is rather than after its object id. See downloadFile.js — every screen shares
+// these naming rules so the same document never downloads under two names.
+async function downloadDoc(storagePath, filename) {
   if (!storagePath) return;
   try {
-    const url = await getDownloadURL(storageRef(storage, storagePath));
-    window.open(url, "_blank", "noopener");
+    await downloadFromStorage(storagePath, filename);
   } catch (e) {
-    console.error("open pdf", e);
+    console.error("download", storagePath, e);
   }
 }
 
@@ -133,7 +136,7 @@ function ResponsesBlock({ responses, plain }) {
             {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
               <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 6}}>
                 {rsp.attachments.filter((at) => at.storagePath).map((at, ci) => (
-                  <button key={ci} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                  <button key={ci} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); downloadDoc(at.storagePath, at.filename); }}>
                     <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 26)}
                   </button>
                 ))}
@@ -849,7 +852,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
         assesseeId: a.id, ay: r.ay, html: built.html,
       });
       if (!res?.storagePath) throw new Error("The renderer returned no document.");
-      await openStoragePdf(res.storagePath);
+      await downloadDoc(res.storagePath, returnDocFilename("computation", r, a.name));
 
       // §8: a computation that couldn't account for every figure in the return
       // still generates — the PDF says so itself — but the practitioner is told
@@ -1055,7 +1058,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                       <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
                         <span>{n.din || "—"}</span>
                         {n.storagePath && (
-                          <button className="btn btn-ghost btn-xs" title="Open notice / order PDF" onClick={() => openStoragePdf(n.storagePath)}>
+                          <button className="btn btn-ghost btn-xs" title="Download notice / order PDF" onClick={() => downloadDoc(n.storagePath, noticeFilename(n, a.name))}>
                             <Icon name="doc" size={11}/>PDF
                           </button>
                         )}
@@ -1345,7 +1348,10 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
             const uid = auth.currentUser?.uid;
             const safeId = (n.din || `${n.proceedingReqId}-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, "");
             storagePath = `users/${uid}/assessees/${a.id}/notices/${safeId}.pdf`;
-            await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64", { contentType: n.contentType || "application/pdf" });
+            await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64",
+              // attachment => a browser handed this URL saves it instead of
+              // rendering it. See downloadFile.js.
+              { contentType: n.contentType || "application/pdf", contentDisposition: "attachment" });
           }
           const meta = { ...n };
           delete meta.contentBase64;
@@ -1613,17 +1619,17 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
                     <td>
                       <div className="center" style={{gap: 5, justifyContent: "flex-start", flexWrap: "wrap"}}>
                         {r.jsonPath && (
-                          <button className="btn btn-ghost btn-xs" title="The ITR JSON exactly as filed" onClick={() => openStoragePdf(r.jsonPath)}>
+                          <button className="btn btn-ghost btn-xs" title="Download the ITR JSON exactly as filed" onClick={() => downloadDoc(r.jsonPath, returnDocFilename("json", r, assessee.name))}>
                             <Icon name="doc" size={11}/>JSON
                           </button>
                         )}
                         {r.ackPdfPath && (
-                          <button className="btn btn-ghost btn-xs" title="ITR-V / Acknowledgement" onClick={() => openStoragePdf(r.ackPdfPath)}>
+                          <button className="btn btn-ghost btn-xs" title="Download the ITR-V / Acknowledgement" onClick={() => downloadDoc(r.ackPdfPath, returnDocFilename("ack", r, assessee.name))}>
                             <Icon name="doc" size={11}/>ITR-V
                           </button>
                         )}
                         {r.formPdfPath ? (
-                          <button className="btn btn-ghost btn-xs" title="The full ITR form" onClick={() => openStoragePdf(r.formPdfPath)}>
+                          <button className="btn btn-ghost btn-xs" title="Download the full ITR form" onClick={() => downloadDoc(r.formPdfPath, returnDocFilename("form", r, assessee.name))}>
                             <Icon name="doc" size={11}/>Form
                           </button>
                         ) : (
@@ -1673,7 +1679,7 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
                                       <span className="muted" style={{marginLeft: 8, fontFamily: "ui-monospace, monospace", fontSize: 11}}>{o.commRefNo}</span>
                                     </div>
                                     {o.storagePath && !o.locked ? (
-                                      <button className="btn btn-ghost btn-xs" onClick={() => openStoragePdf(o.storagePath)}>
+                                      <button className="btn btn-ghost btn-xs" onClick={() => downloadDoc(o.storagePath, returnOrderFilename(o, r.ay, assessee.name))}>
                                         <Icon name="doc" size={11}/>PDF
                                       </button>
                                     ) : (
@@ -1946,7 +1952,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                           </button>
                         )}
                         {!appeal && n.storagePath && (
-                          <button className="btn btn-ghost btn-xs" title="Open the portal PDF" onClick={(e) => { e.stopPropagation(); openStoragePdf(n.storagePath); }}>
+                          <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={(e) => { e.stopPropagation(); downloadDoc(n.storagePath, noticeFilename(n, n.assessee)); }}>
                             <Icon name="doc" size={12}/>PDF
                           </button>
                         )}
@@ -1961,7 +1967,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                       {appeal && apAtts.length > 0 && (
                         <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 8}}>
                           {apAtts.map((at, ai) => (
-                            <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); openStoragePdf(at.storagePath); }}>
+                            <button key={ai} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); downloadDoc(at.storagePath, at.filename); }}>
                               <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 28)}
                             </button>
                           ))}

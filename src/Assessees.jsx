@@ -863,8 +863,10 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
         notify(`Computation of Income ready for A.Y. ${r.ay}.`);
       }
     } catch (e) {
+      // The renderer's own messages say which stage failed and what to do; they
+      // are worth showing whole rather than clipped to a toast-sized fragment.
       console.error("computation", e);
-      notify(e?.message?.slice(0, 140) || "Couldn't generate the computation.", "alert");
+      notify(e?.message?.slice(0, 300) || "Couldn't generate the computation.", "alert");
     } finally {
       setReturnsBusy(null);
     }
@@ -1635,11 +1637,11 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
                         ) : (
                           <button
                             className="btn btn-ghost btn-xs"
-                            title="Fetch the full ITR form from the portal — around 11 MB, so it isn't pulled on every sync"
+                            title="This year was synced before the ITR form was included. Opens the portal to fetch it — around 11 MB, so it takes a moment. A fresh sync picks it up automatically."
                             disabled={!assessee.portalCredSet || Boolean(busyKey)}
                             onClick={() => onFetchForm(r)}
                           >
-                            <Icon name="download" size={11}/>Get form
+                            <Icon name="download" size={11}/>Fetch form
                           </button>
                         )}
                       </div>

@@ -1035,12 +1035,25 @@
       // The return itself is fetched once — a filed return never changes.
       let itrJson = null;
       let ackPdfBase64 = null;
+      let formPdfBase64 = null;
       if (isNew) {
         const j = await NET.apiCall({ path: ITR_DOWNLOAD_FILE_PATH, serviceName: "NA", payload: { ackNum, loggedInUserId: pan } });
         if (j && j.ok && j.json) itrJson = j.json;
         await jsleep(120, 320);
         const p = await NET.postBinary({ path: ITR_PDF_PATH, serviceName: "NA", payload: { ackNum, ay, loggedInUserId: pan } });
         if (p && p.ok && p.bytes && p.bytes <= MAX_RETURN_PDF_BYTES) ackPdfBase64 = p.base64;
+        await jsleep(120, 320);
+
+        // The filed return itself, fully rendered. Much the largest thing this
+        // pass fetches (10-12 MB a year), but a practitioner opening a client's
+        // file expects the return to be there rather than a button that goes
+        // back to the portal for it.
+        const f = await NET.postBinary({
+          path: ITR_PREVIEW_PATH + encodeURIComponent(ay), serviceName: "NA",
+          payload: { ackNum, loggedInUserId: pan },
+          extraHeaders: { ackNum }, timeoutMs: 180000,
+        });
+        if (f && f.ok && f.bytes && f.bytes <= MAX_RETURN_PDF_BYTES) formPdfBase64 = f.base64;
         await jsleep(120, 320);
       }
 
@@ -1107,6 +1120,7 @@
         })),
         itrJson: isNew ? itrJson : null,
         ackPdfBase64,
+        formPdfBase64,
         orders,
       };
       log("returns: AY", ay, "ack", ackNum, "orders", orders.length);

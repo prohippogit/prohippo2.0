@@ -156,6 +156,12 @@ export async function ingestPortalSyncMessage(payload) {
       await uploadString(storageRef(storage, ackPdfPath), r.ackPdfBase64, "base64", attachment("application/pdf"));
     }
 
+    let formPdfPath = null;
+    if (r.formPdfBase64) {
+      formPdfPath = `${base}/form.pdf`;
+      await uploadString(storageRef(storage, formPdfPath), r.formPdfBase64, "base64", attachment("application/pdf"));
+    }
+
     const passwords = [];
     if ((r.orders || []).some((o) => o && o.contentBase64)) {
       const pan = r.pan || "";
@@ -187,9 +193,10 @@ export async function ingestPortalSyncMessage(payload) {
     const meta = { ...r };
     delete meta.itrJson;
     delete meta.ackPdfBase64;
+    delete meta.formPdfBase64;
     delete meta.orders;
     const res = await httpsCallable(functions, "ingestPortalReturn")({
-      assesseeId: payload.assesseeId, return: meta, jsonPath, ackPdfPath, orders,
+      assesseeId: payload.assesseeId, return: meta, jsonPath, ackPdfPath, formPdfPath, orders,
     });
     return { kind: "return", data: res.data };
   }

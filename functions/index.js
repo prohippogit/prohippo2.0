@@ -1243,6 +1243,14 @@ exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async
     jsonPath: jsonPath || existing.jsonPath || null,
     ackPdfPath: ackPdfPath || existing.ackPdfPath || null,
     formPdfPath: formPdfPath || existing.formPdfPath || null,
+    /* Why the rendered return is absent, when it is.
+     *
+     * A sync that fetched it and got something unusable used to record nothing,
+     * so the next sync tried again — twenty seconds a year, per client, for
+     * ever, with no trace anywhere of what went wrong. The reason is kept so the
+     * sync can stop asking and the practitioner can read it on the Returns tab.
+     * A successful fetch clears it. */
+    formPdfError: formPdfPath ? "" : String(ret.formPdfError || existing.formPdfError || ""),
     syncedAt: new Date().toISOString(),
   };
 

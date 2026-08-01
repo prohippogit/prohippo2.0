@@ -58,6 +58,16 @@ const { derivePassword, unlockPdf } = require("./pdfUnlock");
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
+/* The rendered return gets its own, larger ceiling.
+ *
+ * 25 MB was a sanity guard written for order PDFs, which are a few hundred KB.
+ * A rendered ITR-3 with every schedule can run well past it, and the guard
+ * silently DROPPED those — the sync spent twenty seconds downloading the file,
+ * threw it away for being large, recorded nothing, and did it again on the next
+ * run. Nothing in a practice's history is bigger than a big return, so the cap
+ * that matters here is "something has gone wrong", not "this is inconvenient". */
+const MAX_FORM_BYTES = 80 * 1024 * 1024;
+
 // How many of the most recent assessment years get their rendered form pulled by
 // a sync. Two covers the year under assessment and the one before it — the pair
 // a practitioner actually has open. Older years are fetched on demand.
@@ -231,6 +241,7 @@ async function syncReturns(page, job, pan, summary, emit) {
   // in April and one syncing in March get the same answer.
   list.sort((x, y) => Number((y && y.assmentYear) || 0) - Number((x && x.assmentYear) || 0));
   let formsOnDemand = 0;
+  let formsFailed = 0;
 
   // Date of birth / incorporation, for the order passwords. job.dob comes from
   // the assessee record; anything a return tells us is added as we go, so a
@@ -262,6 +273,7 @@ async function syncReturns(page, job, pan, summary, emit) {
     let itrJson = null;
     let ackPdf = null;
     let formPdf = null;
+    let formError = "";
     if (isNew) {
       const got = await t.time("itr-json", () => apiCall(page, {
         path: PATHS.ITR_DOWNLOAD_FILE, serviceName: "NA",
@@ -292,7 +304,22 @@ async function syncReturns(page, job, pan, summary, emit) {
         payload: { ackNum, loggedInUserId: pan },
         extraHeaders: { ackNum: String(ackNum) },
       }));
-      if (form && form.ok && form.bytes && form.bytes <= MAX_PDF_BYTES) formPdf = form;
+      if (form && form.ok && form.bytes && form.bytes <= MAX_FORM_BYTES) {
+        formPdf = form;
+      } else {
+        /* Say why, and record it.
+         *
+         * This is the failure that cost a practice four slow syncs in a row: the
+         * fetch came back unusable, the year kept no trace of it, and every later
+         * run paid twenty seconds to fail the same way. Recording the reason both
+         * stops the retry loop and puts the cause where somebody can read it —
+         * on the Returns tab, next to the button that fetches it by hand. */
+        formError = !form ? "no response from the portal"
+          : form.bytes > MAX_FORM_BYTES ? `the portal returned ${(form.bytes / 1048576).toFixed(1)} MB, past the ${MAX_FORM_BYTES / 1048576} MB limit`
+            : `the portal returned ${form.status || "no status"}${form.text ? ` — ${String(form.text).slice(0, 120)}` : ""}`;
+        formsFailed += 1;
+        emit("returns", `A.Y. ${ay} — couldn't fetch the return PDF: ${formError}`, "warn");
+      }
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
     }
     addDob(dobFromItrJson(itrJson));
@@ -354,9 +381,9 @@ async function syncReturns(page, job, pan, summary, emit) {
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
     }
 
-    // A return we already hold, with no new order and no form to attach, is
-    // nothing to say.
-    if (!isNew && !orders.length && !formPdf) continue;
+    // A return we already hold, with no new order and nothing to say about its
+    // form, is nothing to report.
+    if (!isNew && !orders.length && !formPdf && !formError) continue;
 
     // Hand the payload to the queue and carry on. The wait here is for the
     // PREVIOUS year's upload, which has had this year's fetch to finish in.
@@ -388,6 +415,7 @@ async function syncReturns(page, job, pan, summary, emit) {
         itrJson: isNew ? itrJson : null,
         ackPdfBase64: ackPdf ? ackPdf.base64 : null,
         formPdfBase64: formPdf ? formPdf.base64 : null,
+        formPdfError: formError || null,
         orders,
       },
     })));
@@ -408,6 +436,10 @@ async function syncReturns(page, job, pan, summary, emit) {
   // Older years without a rendered form are not pending work — they are a
   // deliberate omission, and saying "next sync" about them (as an earlier
   // version did) promises a run that will never come.
+  if (formsFailed) {
+    summary.formsFailed = (summary.formsFailed || 0) + formsFailed;
+  }
+
   if (formsOnDemand) {
     summary.formsOnDemand = (summary.formsOnDemand || 0) + formsOnDemand;
     emit(

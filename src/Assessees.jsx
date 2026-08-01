@@ -75,7 +75,9 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
   (returns || []).forEach((r) => {
     if (r.pan !== pan) return;
     if (r.ackNum) knownAckNums.push(String(r.ackNum));
-    if (r.ackNum && r.formPdfPath) knownFormAcks.push(String(r.ackNum));
+    // Either we hold it, or we tried and recorded why it failed. Both mean the
+    // sync should leave it alone; the Fetch form button is how it gets retried.
+    if (r.ackNum && (r.formPdfPath || r.formPdfError)) knownFormAcks.push(String(r.ackNum));
     (r.orders || []).forEach((o) => {
       if (!o || !o.commRefNo) return;
       const ref = String(o.commRefNo);
@@ -1684,11 +1686,19 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
                         ) : (
                           <button
                             className="btn btn-ghost btn-xs"
-                            title="This year was synced before the ITR form was included. Opens the portal to fetch it — around 11 MB, so it takes a moment. A fresh sync picks it up automatically."
+                            /* Two reasons this button is here, and they are not
+                               the same: the sync leaves older years alone by
+                               design, or it tried this one and the portal gave
+                               it something unusable. The second is worth saying
+                               out loud — it is the difference between "not yet"
+                               and "something is wrong". */
+                            title={r.formPdfError
+                              ? `The sync couldn't fetch this year's return PDF: ${r.formPdfError}. Click to try again from the portal.`
+                              : "The sync keeps only the two most recent years' return PDFs — they're 10-12 MB each. Click to fetch this one from the portal."}
                             disabled={!assessee.portalCredSet || Boolean(busyKey)}
                             onClick={() => onFetchForm(r)}
                           >
-                            <Icon name="download" size={11}/>Fetch form
+                            <Icon name="download" size={11}/>{r.formPdfError ? "Retry form" : "Fetch form"}
                           </button>
                         )}
                       </div>

@@ -323,7 +323,10 @@ async function getSyncKnowns(pan) {
   returnSnap.forEach((d) => {
     const r = d.data() || {};
     if (r.ackNum) knownAckNums.push(String(r.ackNum));
-    if (r.ackNum && r.formPdfPath) knownFormAcks.push(String(r.ackNum));
+    // "The sync should not fetch this again": either we hold it, or we tried
+    // and recorded why it did not work. Retrying a known failure every run is
+    // what made a caught-up practice's sync as slow as its first.
+    if (r.ackNum && (r.formPdfPath || r.formPdfError)) knownFormAcks.push(String(r.ackNum));
     for (const o of r.orders || []) {
       if (!o || !o.commRefNo) continue;
       const ref = String(o.commRefNo);

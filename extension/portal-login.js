@@ -998,6 +998,10 @@
   // request form and emails it out, which we cannot complete unattended.
   const DIRECT_DOWNLOAD_FROM_AY = 2017;
   const MAX_RETURN_PDF_BYTES = 25 * 1024 * 1024;
+  // The rendered return gets a larger ceiling than an order PDF: a full ITR-3
+  // runs well past 25 MB, and the old cap silently discarded those after paying
+  // to download them. Keep in step with the connector's MAX_FORM_BYTES.
+  const MAX_FORM_BYTES = 80 * 1024 * 1024;
   // Keep in step with the connector's FORM_SYNC_RECENT_YEARS — the two paths
   // must behave identically or the same practice gets different results
   // depending on which one it happened to use.
@@ -1062,6 +1066,7 @@
       let itrJson = null;
       let ackPdfBase64 = null;
       let formPdfBase64 = null;
+      let formError = "";
       // Tracked on its own, so a year that has its JSON but not its form can be
       // completed without re-fetching everything else.
       const needsForm = !knownFormPdfs.has(ackNum) && i < FORM_SYNC_RECENT_YEARS;
@@ -1085,7 +1090,16 @@
           payload: { ackNum, loggedInUserId: pan },
           extraHeaders: { ackNum }, timeoutMs: 180000,
         });
-        if (f && f.ok && f.bytes && f.bytes <= MAX_RETURN_PDF_BYTES) formPdfBase64 = f.base64;
+        if (f && f.ok && f.bytes && f.bytes <= MAX_FORM_BYTES) {
+          formPdfBase64 = f.base64;
+        } else {
+          // Record why rather than retrying it for ever on every sync — see
+          // connector/src/main/portalReturns.js for the full reasoning.
+          formError = !f ? "no response from the portal"
+            : f.bytes > MAX_FORM_BYTES ? "the portal returned " + (f.bytes / 1048576).toFixed(1) + " MB, past the " + (MAX_FORM_BYTES / 1048576) + " MB limit"
+              : "the portal returned " + (f.status || "no status");
+          log("returns: AY " + ay + " form fetch failed — " + formError);
+        }
         await jsleep(120, 320);
       }
 
@@ -1131,7 +1145,7 @@
 
       // A return we already hold, with no new order and no form to attach, is
       // nothing to say.
-      if (!isNew && !orders.length && !formPdfBase64) continue;
+      if (!isNew && !orders.length && !formPdfBase64 && !formError) continue;
 
       const ret = {
         pan, ay, ackNum,
@@ -1156,6 +1170,7 @@
         itrJson: isNew ? itrJson : null,
         ackPdfBase64,
         formPdfBase64,
+        formPdfError: formError || null,
         orders,
       };
       log("returns: AY", ay, "ack", ackNum, "orders", orders.length);

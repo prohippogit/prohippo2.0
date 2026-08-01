@@ -78,6 +78,9 @@ const LEAF_PATTERNS = [
   /ScheduleHP\.PropertyDetails\[\d+\]\.HPSNo$/,
   /ScheduleHP\.PropertyDetails\[\d+\]\.TenantDetails\[\d+\]\.TenantSNo$/,
   /ScheduleHP\.PropertyDetails\[\d+\]\.AssessePercentShareProp$/,
+  // ITR-2 spells the same field differently. Both are the assessee's percentage
+  // share of the property, not an amount.
+  /ScheduleHP\.PropertyDetails\[\d+\]\.AsseseeShareProperty$/,
   /Section24BDtls\[\d+\]\.TotalLoanAmt$/,
   /Section24BDtls\[\d+\]\.LoanOutstndngAmt$/,
 

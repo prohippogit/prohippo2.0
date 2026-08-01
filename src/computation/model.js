@@ -46,12 +46,21 @@ export const section = (id, title, rows, opts = {}) => ({
 /* The order sections are emitted in (§4). TI, TAX and TAXES_PAID are always
    present; the head-specific workings above them only appear when that head has
    something to show. */
-const SECTION_ORDER = ["SALARY", "HP", "BP", "CG", "OS", "TI", "TAX", "TAXES_PAID", "CFL"];
+const SECTION_ORDER = ["SALARY", "HP", "BP", "CG", "OS", "VIA", "TI", "TAX", "TAXES_PAID", "CFL"];
 const ALWAYS = new Set(["TI", "TAX", "TAXES_PAID"]);
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const isNil = (v) => v === null || v === undefined || Number(v) === 0;
+
+/* An id missing from SECTION_ORDER sorts LAST, not first. indexOf returns -1
+   for an unknown id, which would put a newly added section ahead of every head
+   — silently, and only visibly wrong to someone who knows what the order
+   should be. Sorting it to the end makes the omission obvious instead. */
+const order = (id) => {
+  const i = SECTION_ORDER.indexOf(id);
+  return i === -1 ? SECTION_ORDER.length : i;
+};
 
 /**
  * Drop empty sections, put the rest in spec order, and letter them A, B, C…
@@ -64,7 +73,7 @@ export function finalise(sections) {
   const kept = sections
     .filter(Boolean)
     .filter((s) => ALWAYS.has(s.id) || !s.omitIfAllNil || s.rows.some((r) => !isNil(r.amount)))
-    .sort((a, b) => SECTION_ORDER.indexOf(a.id) - SECTION_ORDER.indexOf(b.id));
+    .sort((a, b) => order(a.id) - order(b.id));
   kept.forEach((s, i) => { s.letter = LETTERS[i] || String(i + 1); });
   return kept;
 }

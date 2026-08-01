@@ -21,6 +21,12 @@ const PERSON_KEYS = new Set([
   "FatherName", "TradeName1", "TradeName2", "TradeName3", "NameOfEmployer", "EmployerName",
   "NameOfBusiness", "NameOfPerson", "NameOfDonee", "DoneeWithPan", "NameOfInstitution",
   "NameOfSecurity", "NameOfCompany", "TenantName", "LenderName", "NameOfDeductor",
+  // The TDS schedules name the same employer again under their own key.
+  "EmployerOrDeductorOrCollecterName", "DeductorName", "CollecterName",
+  "InsurerName",
+  // Schedule 112A names every scrip and fund sold. Not personal data, but a
+  // portfolio is not something to publish on a client's behalf either.
+  "ShareUnitName",
 ]);
 const PLACE_KEYS = new Set([
   "AddrDetail", "ResidenceNo", "ResidenceName", "RoadOrStreet", "LocalityOrArea",
@@ -31,6 +37,10 @@ const OPAQUE_KEYS = new Set([
   "Digest", "UDIN", "BankAccountNo", "IFSCCode", "AadhaarCardNo", "SWCreatedBy", "JSONCreatedBy",
   "LoanAccNoOfBankOrInstnRefNo", "EmailAddress", "AudFrmRegNo", "AuditorMemNo", "AudFrmAadhaar",
   "AccountNumber", "DematAccountNo", "PassportNo", "TAN", "TANOfEmployer",
+  // Account, policy and security identifiers — an NPS PRAN, an insurance
+  // policy number and an ISIN each point at a specific holding of a specific
+  // person, and none of them is a figure the mapper reads.
+  "PRANNum", "PolicyNo", "ISINCode", "IdentificationNo",
 ]);
 // NOT here on purpose: GSTINNo. A GSTIN embeds the PAN, so masking the whole
 // string destroys a shape the mapper displays; replacing the PAN inside it

@@ -534,16 +534,73 @@ $("doneRetryBtn").addEventListener("click", () => {
   syncSelectionUI();
 });
 
-// --- Update notice ------------------------------------------------------------
+// --- Version + update notice --------------------------------------------------
 // Driven by the main process (see updater.js). Windows downloads in the
 // background and installs on quit; macOS can't self-update unsigned, so there
 // the button just opens the .dmg download.
+
+// The build this device is running. Shown in the header from the moment the
+// window opens: a practitioner comparing two machines, or reporting something
+// that goes wrong, should not have to hunt for it.
+(async () => {
+  try {
+    const info = await window.connector.appVersion();
+    $("appVer").textContent = `v${info.version}`;
+    // In dev, or on a build without the updater, the check button would only
+    // ever say "unavailable" — so it isn't offered.
+    if (!info.packaged) $("checkUpdateBtn").classList.add("hidden");
+  } catch {
+    $("appVer").classList.add("hidden");
+  }
+})();
+
+$("checkUpdateBtn").addEventListener("click", async () => {
+  $("checkUpdateBtn").disabled = true;
+  try { await window.connector.checkForUpdates(); }
+  catch { /* the state event says what happened; a thrown invoke is not extra news */ }
+  // Left disabled until a state event answers, so the button cannot be pressed
+  // twice while a check is in flight. Every path below re-enables it.
+});
+
+// The state the bar is currently showing — read by the button handler below,
+// because "Restart now" and "Download" are the same button.
+let updateState = "idle";
+
 window.connector.onUpdateState((evt) => {
   const bar = $("updateBar");
   const msg = $("updateMsg");
   const btn = $("updateBtn");
+  const check = $("checkUpdateBtn");
   const version = evt.version ? ` (${evt.version})` : "";
+  updateState = evt.state;
 
+  // Anything other than "checking" is an answer, so the button comes back.
+  check.disabled = evt.state === "checking";
+
+  if (evt.state === "checking") {
+    msg.textContent = "Checking for a newer version…";
+    btn.classList.add("hidden");
+    bar.classList.remove("hidden");
+    return;
+  }
+  if (evt.state === "current") {
+    msg.textContent = `You're on the latest version${version}.`;
+    btn.classList.add("hidden");
+    bar.classList.remove("hidden");
+    // An answer nobody needs to act on shouldn't sit on screen for the rest of
+    // the session.
+    setTimeout(() => { if (msg.textContent.startsWith("You're on the latest")) bar.classList.add("hidden"); }, 6000);
+    return;
+  }
+  if (evt.state === "checkFailed" || evt.state === "unavailable") {
+    msg.textContent = evt.reason === "dev"
+      ? "Updates apply to the installed app, not a development build."
+      : "Couldn't check for updates just now. Your sync is unaffected — try again later.";
+    btn.textContent = "Open downloads";
+    btn.classList.remove("hidden");
+    bar.classList.remove("hidden");
+    return;
+  }
   if (evt.state === "manual") {
     msg.textContent = `A newer version of the Connector is available${version}.`;
     btn.textContent = "Download";
@@ -568,11 +625,19 @@ window.connector.onUpdateState((evt) => {
   bar.classList.add("hidden"); // "idle" — already current, or the check failed
 });
 
+/* What the bar's button does depends on which state put it there, and only ONE
+   state means "an update is downloaded and waiting". Calling install in any of
+   the others asks electron-updater to quit and replace the app with a file it
+   never downloaded — on Windows that closes the Connector mid-sync and installs
+   nothing. Everything except "ready" therefore opens the download page. */
 $("updateBtn").addEventListener("click", async () => {
-  $("updateBtn").disabled = true;
-  try { await window.connector.installUpdate(); }
-  catch { await window.connector.openDownloadPage().catch(() => {}); }
-  finally { $("updateBtn").disabled = false; }
+  const btn = $("updateBtn");
+  btn.disabled = true;
+  try {
+    if (updateState === "ready") await window.connector.installUpdate();
+    else await window.connector.openDownloadPage();
+  } catch { await window.connector.openDownloadPage().catch(() => {}); }
+  finally { btn.disabled = false; }
 });
 
 function friendly(err) {

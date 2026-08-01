@@ -50,6 +50,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           knownActiveProcs: Array.isArray(creds.knownActiveProcs) ? creds.knownActiveProcs : [],
           knownAckNums: Array.isArray(creds.knownAckNums) ? creds.knownAckNums : [],
           knownOrderRefs: Array.isArray(creds.knownOrderRefs) ? creds.knownOrderRefs : [],
+          knownFormAcks: Array.isArray(creds.knownFormAcks) ? creds.knownFormAcks : [],
           appTabId: appTabId != null ? appTabId : null,
           createdAt: Date.now(),
         },

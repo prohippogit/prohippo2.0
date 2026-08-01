@@ -49,21 +49,51 @@ function initUpdater(win) {
   };
 
   // Renderer actions. Registered even when updating is unavailable, so the UI
-  // never invokes a missing channel.
+  // never invokes a missing channel — ipcRenderer.invoke on an unregistered
+  // channel rejects, and a version label that throws is worse than none.
+  ipcMain.handle("app:version", async () => ({
+    version: app.getVersion(),
+    platform: process.platform,
+    packaged: app.isPackaged,
+    canSelfInstall: process.platform !== "darwin",
+  }));
+
   ipcMain.handle("update:openDownload", async () => {
     await shell.openExternal(process.platform === "darwin" ? MAC_DMG : RELEASES);
     return { ok: true };
   });
 
+  /* An automatic check that finds nothing says nothing — silence is right when
+     nobody asked. A check the user pressed a button for is the opposite: saying
+     nothing reads as a broken button, so the outcome is reported either way.
+     This flag is what tells the two apart in the shared event handlers below. */
+  let userAsked = false;
+
   // In dev there is no packaged app to replace and no embedded publish config;
-  // electron-updater would just throw about a missing dev-app-update.yml.
-  if (!app.isPackaged) return;
+  // electron-updater would just throw about a missing dev-app-update.yml. The
+  // channels are still registered, so the button reports why rather than failing.
+  const unavailable = (reason) => {
+    ipcMain.handle("update:check", async () => {
+      send("unavailable", { reason });
+      return { ok: false, reason };
+    });
+    ipcMain.handle("update:install", async () => {
+      await shell.openExternal(process.platform === "darwin" ? MAC_DMG : RELEASES);
+      return { ok: true, manual: true };
+    });
+  };
+
+  if (!app.isPackaged) {
+    unavailable("dev");
+    return;
+  }
 
   let autoUpdater;
   try {
     ({ autoUpdater } = require("electron-updater"));
   } catch (err) {
     console.warn("[updater] electron-updater unavailable:", (err && err.message) || err);
+    unavailable("no-updater");
     return;
   }
 
@@ -83,7 +113,24 @@ function initUpdater(win) {
     return { ok: true };
   });
 
+  // "Check for updates", pressed by the user. The result arrives through the
+  // same events as the automatic check; all this does is mark it as asked-for.
+  ipcMain.handle("update:check", async () => {
+    userAsked = true;
+    send("checking");
+    try {
+      await autoUpdater.checkForUpdates();
+      return { ok: true };
+    } catch (err) {
+      userAsked = false;
+      const reason = String((err && err.message) || err);
+      send("checkFailed", { reason });
+      return { ok: false, reason };
+    }
+  });
+
   autoUpdater.on("update-available", (info) => {
+    userAsked = false;
     const version = (info && info.version) || "";
     if (!canSelfInstall) {
       send("manual", { version });
@@ -104,13 +151,27 @@ function initUpdater(win) {
     send("ready", { version: (info && info.version) || "" });
   });
 
-  // Silence is correct for "already current" — no UI, no noise.
-  autoUpdater.on("update-not-available", () => send("idle"));
+  autoUpdater.on("update-not-available", () => {
+    // Silence is correct for the automatic check — no UI, no noise. For one the
+    // user pressed a button for, "you are on the latest version" IS the answer.
+    if (userAsked) {
+      userAsked = false;
+      send("current", { version: app.getVersion() });
+      return;
+    }
+    send("idle");
+  });
 
   autoUpdater.on("error", (err) => {
-    // Never surface a scary banner for this: a broken update check is not the
-    // user's problem and must not look like a sync failure.
+    // Never surface a scary banner for the automatic check: a failed update
+    // check is not the user's problem and must not look like a sync failure.
+    // A check they asked for is different — an unanswered button is worse.
     console.warn("[updater]", (err && err.message) || err);
+    if (userAsked) {
+      userAsked = false;
+      send("checkFailed", { reason: String((err && err.message) || err) });
+      return;
+    }
     send("idle");
   });
 

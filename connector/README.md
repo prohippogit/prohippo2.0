@@ -48,7 +48,7 @@ connector/
     firebaseClient.js  auth + httpsCallable wrappers
     credentials.js   getPortalCredential — in-memory only, never on disk
     deviceSession.js "remember this device" key, in the OS keychain
-    updater.js       auto-update (full on Windows, notify-only on macOS)
+    updater.js       version + auto-update (full on Windows, notify-only on macOS)
     timing.js        per-phase stopwatch reported per PAN
     pacing.js        rand / jsleep / PACE / POLL (ported timings)
     pool.js          worker pool: cap 5, randomised staggered launch
@@ -89,6 +89,28 @@ for your firm.
 
 The Google token is accepted by Firebase as the *same account* your web-app
 Google sign-in uses — same uid, same data.
+
+## Which build am I running?
+
+The version is in the header, next to "Parallel, human-paced portal sync" —
+`v1.1.0` — with a **Check for updates** link beside it. Press it and the bar
+below the header answers either way: a newer build, or "you're on the latest
+version". Silence would be indistinguishable from a broken button, so there
+isn't any.
+
+The app also checks by itself a few seconds after launch. That check says
+nothing when there is nothing to say — an unprompted "you're up to date" is
+noise nobody asked for.
+
+Windows downloads a new build in the background and installs it when the app
+quits. macOS cannot: Squirrel.Mac refuses to apply an update to an unsigned app,
+and these builds are deliberately unsigned until there is an Apple Developer ID.
+There the button opens the .dmg instead. See `src/main/updater.js`.
+
+The version shown is whatever `connector/package.json` carried at build time,
+and CI overwrites that from the release tag (`connector-vX.Y.Z`) — so the tag is
+the source of truth, and a release that doesn't bump it is never offered to
+anyone.
 
 ## Build installers
 

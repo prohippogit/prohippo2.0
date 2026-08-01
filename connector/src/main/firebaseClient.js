@@ -247,6 +247,12 @@ async function listPortalAssessees() {
 //                    filed return never changes, so one fetch each is enough
 //   knownOrderRefs   CPC commRefNos already downloaded, so a re-sync only pulls
 //                    an intimation or rectification order that is genuinely new
+//   knownFormAcks    returns whose rendered ITR form PDF is already stored. Kept
+//                    apart from knownAckNums because that document is ~11 MB
+//                    against a few hundred KB for everything else, so it is
+//                    rationed per run (see portalReturns.js) — which only
+//                    converges if a later sync can tell "return on file" from
+//                    "return on file WITH its form"
 //
 // Reads Firestore directly with the signed-in user's token; firestore.rules
 // already scopes users/{uid}/** to the owner. Both queries are single-field
@@ -256,7 +262,7 @@ async function getSyncKnowns(pan) {
   const user = currentUser();
   if (!user) throw new Error("Sign in first.");
   const p = String(pan || "").toUpperCase().trim();
-  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [], knownAckNums: [], knownOrderRefs: [] };
+  const empty = { knownDins: [], knownByProc: {}, knownResponseIds: [], knownActiveProcs: [], knownAckNums: [], knownOrderRefs: [], knownFormAcks: [] };
   if (!p) return empty;
 
   const [noticeSnap, matterSnap, returnSnap] = await Promise.all([
@@ -300,9 +306,11 @@ async function getSyncKnowns(pan) {
   // on file, is exactly how it gets fixed.
   const knownAckNums = [];
   const knownOrderRefs = [];
+  const knownFormAcks = [];
   returnSnap.forEach((d) => {
     const r = d.data() || {};
     if (r.ackNum) knownAckNums.push(String(r.ackNum));
+    if (r.ackNum && r.formPdfPath) knownFormAcks.push(String(r.ackNum));
     for (const o of r.orders || []) {
       if (o && o.commRefNo && o.storagePath && !o.locked) knownOrderRefs.push(String(o.commRefNo));
     }
@@ -315,6 +323,7 @@ async function getSyncKnowns(pan) {
     knownActiveProcs,
     knownAckNums,
     knownOrderRefs,
+    knownFormAcks,
   };
 }
 

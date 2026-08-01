@@ -68,9 +68,11 @@ export async function detectExtension() {
  *                        spot ones that left FYA (just closed) and grab the order
  *   - knownAckNums:      returns already on file — a filed return never changes
  *   - knownOrderRefs:    CPC references already downloaded and unlocked
+ *   - knownFormAcks:     returns whose rendered ITR form PDF is already stored —
+ *                        that one is ~11 MB, so it is rationed per sync run
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], formRequest = null, background = false, clientRef = null }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs, knownAckNums, knownOrderRefs, formRequest, background, clientRef }, 8000);
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs, knownAckNums, knownOrderRefs, knownFormAcks, formRequest, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

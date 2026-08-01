@@ -14,25 +14,33 @@
 //   document/intimation           the s.143(1) intimation and any s.154
 //                                 rectification order, decrypted on the way in
 //
-// SIZE, AND WHY THE BIG ONE IS RATIONED. The rendered return is 10-12 MB a year
-// against a few hundred KB for everything else, so it was first left to an
-// on-demand button. It is synced because a practitioner opening a client's file
-// expects the return to be there — waiting on a portal round trip to read a
-// return you already filed is not a saving anyone asked for.
+// SIZE, AND WHY THE BIG ONE HAS A WINDOW. The rendered return is 10-12 MB a year
+// against a few hundred KB for everything else — downloaded from the portal AND
+// uploaded to Storage, so it costs twice over on a residential line. Ten years
+// of history for one client is over 200 MB of traffic to fetch documents that a
+// practitioner opens perhaps once.
 //
-// But a practice meeting this feature for the first time has every year of every
-// client to backfill, and doing that in one pass turns a routine full sync into
-// hours of portal traffic. So each run fetches at most MAX_FORM_PDFS_PER_SYNC of
-// them per PAN, newest years first; the rest come down over the next few syncs,
-// and any year can be pulled immediately from the Returns tab's "Fetch form"
-// button. Everything else in this pass — the JSON, the ITR-V, the orders — is
-// small and is never rationed.
+// An earlier version rationed it: a few per run, backfilling the whole history
+// over successive syncs. That was worse than it sounds. It made EVERY sync slow
+// rather than one, and gave no answer to "when does this stop?" — which is
+// exactly what a practitioner asks after the third slow run.
 //
-// This only converges because `knownFormAcks` is tracked separately from
-// `knownAckNums`: a return can be on file with its form still missing, and a
-// later sync has to be able to tell. Merging the two would mean the first sync
-// records the return, every later sync skips it as "already known", and the
-// deferred years would never arrive.
+// So the sync fetches the rendered form only for the FORM_SYNC_RECENT_YEARS most
+// recent assessment years. Those are the ones under assessment, under
+// rectification, or being compared against this year's filing. Once they are on
+// file the pass fetches nothing at all, run after run, and a full sync is back
+// to one list call per PAN. Older years are one click away on the Returns tab —
+// "Fetch form" pulls any single year on demand, which is the right shape for a
+// document that gets opened once a year.
+//
+// Everything else here — the JSON, the ITR-V, the CPC orders — is small, is
+// fetched for every year, and is never deferred. The Computation of Total Income
+// reads the JSON, not the rendered form, so every year can produce a computation
+// whether or not its form PDF was synced.
+//
+// This all rests on `knownFormAcks` being tracked separately from
+// `knownAckNums`: a return can be on file with its form deliberately absent, and
+// the next sync must be able to tell that apart from a return it has never seen.
 //
 // ORDERS. Every activity row carries a `commRefNo` inside its `activityTxt`
 // blob, and that reference is the `refno` the document endpoint wants. The
@@ -50,11 +58,17 @@ const { derivePassword, unlockPdf } = require("./pdfUnlock");
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
-// How many rendered ITR forms one sync will pull per PAN. Three keeps a full
-// sync roughly as quick as it was before returns joined it, while a practice
-// syncing weekly has a six-year history complete inside a month. Raise it to
-// backfill faster; the only cost is a longer first run.
-const MAX_FORM_PDFS_PER_SYNC = 3;
+// How many of the most recent assessment years get their rendered form pulled by
+// a sync. Two covers the year under assessment and the one before it — the pair
+// a practitioner actually has open. Older years are fetched on demand.
+//
+// Raising this makes the FIRST sync longer for every client and does not change
+// the steady state; it does not spread the cost over later runs, because there
+// is no backfill queue any more. If a practice wants its whole history on file,
+// the Returns tab's "Fetch form" button is the tool for that — it pulls one
+// named year while they wait for that year, rather than all years while they
+// wait for everything.
+const FORM_SYNC_RECENT_YEARS = 2;
 
 // itrActivityCd → the section the resulting document is issued under. Taken
 // from the statuses the portal marks with a `dnlIntOrdr` download action.
@@ -166,11 +180,11 @@ async function syncReturns(page, job, pan, summary, emit) {
   }
   if (!list.length) { emit("returns", "No returns filed on the portal"); return; }
 
-  // Newest year first, so a rationed run spends its budget on the years a
-  // practitioner is most likely to open next.
+  // Newest year first — the window below is "the first N of these", read off the
+  // portal's own list rather than computed from the clock, so a practice syncing
+  // in April and one syncing in March get the same answer.
   list.sort((x, y) => Number((y && y.assmentYear) || 0) - Number((x && x.assmentYear) || 0));
-  let formBudget = MAX_FORM_PDFS_PER_SYNC;
-  let formsDeferred = 0;
+  let formsOnDemand = 0;
 
   // Date of birth / incorporation, for the order passwords. job.dob comes from
   // the assessee record; anything a return tells us is added as we go, so a
@@ -186,15 +200,22 @@ async function syncReturns(page, job, pan, summary, emit) {
     if (!ackNum || !ay) continue;
 
     const isNew = !knownAcks.has(ackNum);
-    emit("returns", `A.Y. ${ay}-${String((Number(ay) + 1) % 100).padStart(2, "0")} — ${i + 1}/${list.length}`, "info", 88);
+    // The form is tracked on its own, so a year that has its JSON but not its
+    // form can still be completed without re-fetching everything else.
+    const needsForm = !knownForms.has(ackNum) && i < FORM_SYNC_RECENT_YEARS;
+    if (!knownForms.has(ackNum) && !needsForm) formsOnDemand += 1;
+
+    // Only announce a year we are actually going to do something about. A line
+    // per year on a run with nothing to do is what makes an instant pass look
+    // like a slow one.
+    if (isNew || needsForm) {
+      emit("returns", `A.Y. ${ay}-${String((Number(ay) + 1) % 100).padStart(2, "0")} — ${i + 1}/${list.length}`, "info", 88);
+    }
 
     // ---- the return itself (only once, it never changes after filing) ------
     let itrJson = null;
     let ackPdf = null;
     let formPdf = null;
-    // The form is tracked on its own, so a year whose form was deferred last
-    // run is picked up on this one without re-fetching the JSON and ITR-V.
-    const needsForm = !knownForms.has(ackNum);
     if (isNew) {
       const got = await t.time("itr-json", () => apiCall(page, {
         path: PATHS.ITR_DOWNLOAD_FILE, serviceName: "NA",
@@ -217,8 +238,7 @@ async function syncReturns(page, job, pan, summary, emit) {
     // an earlier run with its form deferred is finished off here without
     // re-fetching anything else. Also capped by size: an implausibly large
     // document is skipped rather than allowed to stall the sync.
-    if (needsForm && formBudget > 0) {
-      formBudget -= 1;
+    if (needsForm) {
       fetched += 1;
       const form = await t.time("itr-form", () => postBinary(page, {
         path: PATHS.ITR_PREVIEW + encodeURIComponent(ay),
@@ -228,8 +248,6 @@ async function syncReturns(page, job, pan, summary, emit) {
       }));
       if (form && form.ok && form.bytes && form.bytes <= MAX_PDF_BYTES) formPdf = form;
       await t.time("pacing", () => jsleep(...PACE.betweenDocs));
-    } else if (needsForm) {
-      formsDeferred += 1;
     }
     addDob(dobFromItrJson(itrJson));
 
@@ -331,18 +349,19 @@ async function syncReturns(page, job, pan, summary, emit) {
   }
 
   // A run that changed nothing should say so. Silence after a list call looks
-  // like a stall, which is how "the second sync is slow" starts.
-  if (!fetched && !formsDeferred) {
+  // like a stall, which is how "the sync is slow" starts.
+  if (!fetched) {
     emit("returns", `Returns already up to date — ${list.length} assessment year${list.length > 1 ? "s" : ""} on file`);
   }
 
-  // Say what was left, and that it is deliberate. A year whose return PDF is
-  // missing with no explanation reads as a failed sync.
-  if (formsDeferred) {
-    summary.formsDeferred = (summary.formsDeferred || 0) + formsDeferred;
+  // Older years without a rendered form are not pending work — they are a
+  // deliberate omission, and saying "next sync" about them (as an earlier
+  // version did) promises a run that will never come.
+  if (formsOnDemand) {
+    summary.formsOnDemand = (summary.formsOnDemand || 0) + formsOnDemand;
     emit(
       "returns",
-      `${formsDeferred} older return PDF${formsDeferred > 1 ? "s" : ""} left for the next sync — they're 10-12 MB each. Any of them can be pulled now with "Fetch form".`
+      `${formsOnDemand} older year${formsOnDemand > 1 ? "s" : ""} kept their return PDF off the sync — 10-12 MB each. Use "Fetch form" on the Returns tab to pull one when it is wanted.`
     );
   }
 }

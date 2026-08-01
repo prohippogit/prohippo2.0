@@ -103,47 +103,61 @@ Per return we store:
 | Intimation u/s 143(1), order u/s 154 | `document/intimation` | `returns/{ay}/order-{ref}.pdf` |
 | The filed return itself, fully rendered | `returns/preview/{ay}` | `returns/{ay}/form.pdf` |
 
-The rendered return is much the largest of these — 10-12 MB a year against a few
-hundred KB for everything else — and was first left to an on-demand button for
-that reason. It is now synced: a practitioner opening a client's file expects the
-return to be there, and waiting on a portal round trip to read a return you
-already filed is not a saving anyone asked for. Budget roughly **100 MB per
-assessee** across ten assessment years.
+The first three are small — a few hundred KB between them. The rendered return
+is 10-12 MB a year, and is treated differently for that reason alone; see the
+next section.
 
 Each document is fetched exactly once, when its acknowledgement number is first
-seen; a filed return never changes. Years synced before this change keep a
-**Fetch form** button on the Returns tab, and a fresh sync picks them up.
+seen. A filed return never changes, so there is nothing a later sync could
+usefully re-read.
 
-### The rendered return is rationed — three per assessee per sync
+### The rendered return is synced for recent years only
 
 Everything above is incremental, so a routine full sync costs **one list call
-per PAN** and nothing else once a practice is caught up. The exception is the
-first sync after this feature reaches a device: every year of every client is
-new, and at 10-12 MB each that turns a routine sync into hours of portal
-traffic.
+per PAN** and nothing else once a practice is caught up. The exception was the
+rendered return: 10-12 MB per year, downloaded from the portal *and* uploaded to
+Storage, so ten years of history for one client is over 200 MB of traffic.
 
-So each run fetches at most **3** rendered returns per assessee, newest years
-first (`MAX_FORM_PDFS_PER_SYNC` in `connector/src/main/portalReturns.js` and
-`extension/portal-login.js` — the two must stay in step). The rest arrive over
-the following syncs, and any year can be pulled immediately with **Fetch form**.
-The sync log says how many it left and why, because a missing return PDF with no
-explanation reads as a failed sync.
+Rationing that backfill across runs was tried first (three per sync) and was
+worse than it sounds: it made **every** sync slow instead of one, and gave no
+answer to "when does this stop?".
 
-Nothing else is rationed: the JSON, the ITR-V and the CPC orders are small and
-are always fetched on first sight. In particular the **Computation** button
-reads the JSON, not the rendered form, so a deferred year can still produce a
-Computation of Total Income.
+The sync now fetches the rendered form for the **2 most recent assessment
+years** only — `FORM_SYNC_RECENT_YEARS` in `connector/src/main/portalReturns.js`
+and `extension/portal-login.js`, which must stay in step. Those are the years
+under assessment or rectification, or being compared against the current filing.
+Once they are on file the pass fetches nothing at all, and a full sync is one
+list call per PAN, run after run.
 
-This converges only because `knownFormAcks` is tracked separately from
-`knownAckNums` — a return can be on file with its form still missing, and the
-next sync has to be able to tell. Merge the two and the deferred years would
-never arrive: the first sync would record the return, and every later sync would
-skip it as "already known".
+Older years are **one click**: the Returns tab's **Fetch form** button pulls any
+single year on demand. That is the right shape for a document opened once a
+year, and the sync says how many years are in that state rather than implying
+they are pending.
 
-Metadata goes to `users/{uid}/returns`, one document per PAN + assessment year,
-via `ingestPortalReturn`. These are **not** filed under `notices` — they are not
-e-Proceedings, have no DIN, carry no reply thread, and no appeal deadline is
-derived from them.
+Nothing else is deferred: the JSON, the ITR-V and the CPC orders are small and
+are fetched for every year on first sight. The **Computation** button reads the
+JSON, not the rendered form, so every year can produce a Computation of Total
+Income whether or not its form PDF was synced.
+
+This rests on `knownFormAcks` being tracked separately from `knownAckNums` — a
+return can be on file with its form deliberately absent, and the next sync must
+tell that apart from a return it has never seen.
+
+### Orders that are never re-fetched
+
+Two states are terminal and count as "known", so no later sync asks again:
+
+| State | Why |
+|---|---|
+| stored and readable | there is nothing left to do |
+| `request-only` (before A.Y. 2017-18) | the portal will not serve it directly — it opens a request-and-email flow we cannot complete unattended |
+
+A third state, **stored but still encrypted**, is reported separately as
+`lockedOrderRefs`. Retrying it is the repair path once the assessee's date of
+birth is on file — and pure waste before that, because the password is derived
+from that date and nothing else. The browser path learns whether a retry could
+succeed from `canUnlockOrders`, since it is the app that decrypts, not the
+content script.
 
 ### Which activity codes carry a downloadable order
 

@@ -81,6 +81,14 @@ async function ingestSyncMessage(payload) {
     const uid = fb.uid();
     const base = `users/${uid}/assessees/${assesseeId}/returns/${safe(r.ay || "unknown")}`;
 
+    /* Every object below is independent — a different path, no ordering
+       between them — and one of them is the 11 MB rendered return. Uploading
+       them one after another meant a sync spent the sum of four uploads where
+       it could spend the longest of them. Storage is perfectly happy to take
+       them at once; the portal is not involved in any of this, so the
+       human-paced rhythm the rest of the sync keeps is untouched. */
+    const uploads = [];
+
     // The ITR JSON is the practitioner's ask AND the input the Computation of
     // Income generator reads, so it is stored as a first-class document rather
     // than being flattened into fields.
@@ -88,19 +96,19 @@ async function ingestSyncMessage(payload) {
     if (r.itrJson) {
       jsonPath = `${base}/itr.json`;
       const b64 = Buffer.from(JSON.stringify(r.itrJson), "utf8").toString("base64");
-      await fb.uploadBase64(jsonPath, b64, "application/json");
+      uploads.push(fb.uploadBase64(jsonPath, b64, "application/json"));
     }
 
     let ackPdfPath = null;
     if (r.ackPdfBase64) {
       ackPdfPath = `${base}/acknowledgement.pdf`;
-      await fb.uploadBase64(ackPdfPath, r.ackPdfBase64, "application/pdf");
+      uploads.push(fb.uploadBase64(ackPdfPath, r.ackPdfBase64, "application/pdf"));
     }
 
     let formPdfPath = null;
     if (r.formPdfBase64) {
       formPdfPath = `${base}/form.pdf`;
-      await fb.uploadBase64(formPdfPath, r.formPdfBase64, "application/pdf");
+      uploads.push(fb.uploadBase64(formPdfPath, r.formPdfBase64, "application/pdf"));
     }
 
     const orders = [];
@@ -108,12 +116,16 @@ async function ingestSyncMessage(payload) {
       let storagePath = null;
       if (o.contentBase64) {
         storagePath = `${base}/order-${safe(o.commRefNo)}.pdf`;
-        await fb.uploadBase64(storagePath, o.contentBase64, "application/pdf");
+        uploads.push(fb.uploadBase64(storagePath, o.contentBase64, "application/pdf"));
       }
       const meta = { ...o };
       delete meta.contentBase64;
       orders.push({ ...meta, storagePath });
     }
+
+    // The metadata records these paths, so it must not be written before the
+    // files behind them exist.
+    await Promise.all(uploads);
 
     const meta = { ...r };
     delete meta.itrJson;

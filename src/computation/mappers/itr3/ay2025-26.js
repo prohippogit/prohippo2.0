@@ -1,21 +1,26 @@
 /*
- * ITR-2, A.Y. 2025-26 → ComputationDocument.
+ * ITR-3, A.Y. 2025-26 → ComputationDocument.
  *
  * Read docs/computation-spec.md before changing anything here. §4 fixes the
  * section order, §5 the labels, §6 the treatment of nil and losses, §10 the
  * schema traps this mapper is written around.
  *
- * ITR-2 is filed by an individual or HUF with no business income, so it brings
- * three heads a firm's ITR-5 never exercises — salary, capital gains and the
- * regime choice under s.115BAC — and one thing that changes the whole shape of
- * the tax section: income taxed at special rates. For A.Y. 2025-26 the rates on
- * capital gains changed mid-year, so a single figure is split between the rate
- * that applied before the change and after it. The return states both, and both
- * are printed as stated: the workings read rates off Schedule SI rather than
- * asserting what the law was on any given date.
+ * ITR-3 is the widest of the individual returns: the same assessee may have
+ * salary, house property, a business or profession, capital gains and other
+ * sources, in any combination. So nothing here assumes a shape. The head
+ * workings come from ../individual/heads.js, which ITR-2 shares, and each one
+ * emits rows only for what the return actually carries; the business head, which
+ * ITR-2 has no schedule for, is in ./businessHead.js.
  *
- * The head workings themselves live in ../individual/heads.js, because ITR-3
- * carries the same schedules field for field and the two must not drift.
+ * Two things ITR-2 never has to deal with and this mapper does:
+ *
+ *   Agricultural income. Exempt, but aggregated with total income to fix the
+ *   rate, and then backed out through a rebate. Both movements are printed, or
+ *   the tax looks computed on the wrong figure.
+ *
+ *   Partnership. A partner's interest, salary, bonus and commission from a firm
+ *   are business income that no profit & loss account carries, while the share of
+ *   the firm's profit is exempt u/s 10(2A). Schedule IF names the firms.
  *
  * The rule that governs every line: this is a presentation layer. Every figure
  * printed is a figure the return states.
@@ -31,11 +36,14 @@ import {
   salaryRows, housePropertyRows, capitalGainsRows, otherSourcesRows,
   chapterVIA, taxRows, taxesPaidRows, refundOrPayable,
 } from "../individual/heads.js";
+import { businessRows } from "./businessHead.js";
+
+const inr = (v) => Number(v || 0).toLocaleString("en-IN");
 
 const headRow = (label, ref, amount) =>
   head(label, amount, { ref, isLoss: amount < 0 ? true : undefined, amount: amount < 0 ? -amount : amount });
 
-export function mapItr2Ay2025(body, ctx) {
+export function mapItr3Ay2025(body, ctx) {
   const src = reader(body);
   const notes = [];
 
@@ -48,7 +56,7 @@ export function mapItr2Ay2025(body, ctx) {
 
   src.claim("PartA_GEN1");
   src.claim("Verification");
-  src.claim("Form_ITR2");
+  src.claim("Form_ITR3");
   src.claim("CreationInfo");
 
   const verification = body.Verification || {};
@@ -66,8 +74,42 @@ export function mapItr2Ay2025(body, ctx) {
     { label: "Tax regime", value: regime },
     { label: "Due date", value: longDate(filing.ItrFilingDueDate) },
   ];
+
+  const businesses = (body.PartA_GEN2?.NatOfBus?.NatureOfBusiness || [])
+    .map((b) => b.TradeName1).filter(Boolean);
+  if (businesses.length) facts.push({ label: businesses.length > 1 ? "Businesses" : "Business", value: businesses.join("\n") });
+
+  const directorships = (filing.CompDirectorPrvYr?.CompDirectorPrvYrDtls || []).map((d) => d.NameOfCompany).filter(Boolean);
+  if (directorships.length) {
+    facts.push({ label: "Directorships", value: `Director in ${directorships.length} ${directorships.length > 1 ? "companies" : "company"}` });
+  }
+
+  // Tax audit is a fact about the return that changes its due date and who has
+  // to sign what, so it belongs in the particulars rather than in a footnote.
+  const audit = body.PartA_GEN2?.AuditInfo || {};
+  if (String(audit.LiableSec44ABflg || "").toUpperCase() === "Y") {
+    facts.push({ label: "Tax audit", value: "Accounts audited u/s 44AB" });
+  }
+
   const contact = personal.Address || {};
   facts.push({ label: "E-mail / mobile", value: [contact.EmailAddress, contact.MobileNo && `+91 ${contact.MobileNo}`].filter(Boolean).join("\n") });
+
+  /* Schedule IF — the firms the assessee is a partner in. The card is the same
+     one ITR-5 uses for a firm's partners, read the other way round. */
+  const firms = (src.claim("ScheduleIF.PartnerFirmDetails") || []).map((f) => ({
+    name: f.FirmName || "",
+    pan: f.FirmPAN || "",
+    detail: [
+      f.FirmPAN && `PAN ${f.FirmPAN}`,
+      f.ProfitSharePercent != null ? `Share ${f.ProfitSharePercent}%` : "",
+      Number(f.FirmCapBalOn31Mar) ? `Capital balance ${inr(f.FirmCapBalOn31Mar)}` : "",
+      String(f.IsLiableToAudit || "").toUpperCase() === "Y" ? "audited u/s 44AB" : "",
+    ].filter(Boolean).join(" · "),
+  }));
+  src.num("ScheduleIF.TotalProfitShareAmt");
+  src.num("ScheduleIF.TotalFirmCapBalOn31Mar");
+  // The same firms are listed a second time in the filing status block.
+  src.claim("PartA_GEN1.FilingStatus.PartnerInFirm");
 
   const assessee = {
     name,
@@ -79,24 +121,27 @@ export function mapItr2Ay2025(body, ctx) {
     residentialStatus: residentialStatus(filing.ResidentialStatus),
     dateOfFormation: personal.DOB || "",
     facts,
-    partners: [],
+    constitutionTitle: firms.length ? "Partner in firms" : "",
+    partners: firms,
   };
 
   if (isNonOrdinaryFiling(filingSectionCode)) {
     notes.push({ severity: "attention", text: `This computation is prepared from a return filed under ${filingSection(filingSectionCode)}.` });
   }
 
-  /* ---- A to E. the heads and Chapter VI-A ---------------------------------- */
+  /* ---- A to F. the heads and Chapter VI-A ---------------------------------- */
   const salary = salaryRows(src);
   const hp = housePropertyRows(src);
+  const bp = businessRows(src);
   const siRows = src.claim("ScheduleSI.SplCodeRateTax") || [];
   const cg = capitalGainsRows(src, siRows);
   const os = otherSourcesRows(src);
   const via = chapterVIA(src);
 
-  /* ---- F. Computation of total income -------------------------------------- */
+  /* ---- G. Computation of total income -------------------------------------- */
   const tiSalary = src.num("PartB-TI.Salaries");
   const tiHP = src.num("PartB-TI.IncomeFromHP");
+  const tiBP = src.num("PartB-TI.ProfBusGain.TotProfBusGain");
   const tiCG = src.num("PartB-TI.CapGain.TotalCapGains");
   const tiOS = src.num("PartB-TI.IncFromOS.TotIncFromOS");
   const totalOfHeads = src.num("PartB-TI.TotalTI");
@@ -104,13 +149,16 @@ export function mapItr2Ay2025(body, ctx) {
   const balanceAfterCyla = src.num("PartB-TI.BalanceAfterSetoffLosses");
   const bfla = src.num("PartB-TI.BroughtFwdLossesSetoff");
   const gti = src.num("PartB-TI.GrossTotalIncome");
-  const chapterVIATotal = src.num("PartB-TI.DeductionsUnderScheduleVIA");
+  const chapterVIATotal = src.num("PartB-TI.DeductionsUndSchVIADtl.TotDeductUndSchVIA");
+  const deduction10AA = src.num("PartB-TI.DeductionsUnder10Aor10AA");
   const totalIncome = src.num("PartB-TI.TotalIncome");
   const splRateIncome = src.num("PartB-TI.IncChargeableTaxSplRates");
+  const agriForRate = src.num("PartB-TI.NetAgricultureIncomeOrOtherIncomeForRate");
   const aggregateIncome = src.num("PartB-TI.AggregateIncome");
 
   const cylaHeads = [
     ["house property loss", src.num("ScheduleCYLA.TotalCurYr.TotHPlossCurYr")],
+    ["business loss", src.num("ScheduleCYLA.TotalCurYr.TotBusLossSetoff")],
     ["loss from other sources", src.num("ScheduleCYLA.TotalCurYr.TotOthSrcLossNoRaceHorse")],
   ].filter(([, v]) => v !== 0).map(([l]) => l);
   const cylaLabel = cylaHeads.length ? cylaHeads.join(" and ") : "loss";
@@ -118,9 +166,7 @@ export function mapItr2Ay2025(body, ctx) {
   const tiRows = [
     headRow("Income from Salaries", "Sch. S", tiSalary),
     headRow("Income from House Property", "Sch. HP", tiHP),
-    // No business head. ITR-2 is the return for an assessee with no income
-    // under that head, and its Part B-TI has no such row — printing a nil one
-    // would state something the return does not.
+    headRow("Profits and Gains of Business or Profession", "Sch. BP", tiBP),
     headRow("Capital Gains", "Sch. CG", tiCG),
     headRow("Income from Other Sources", "Sch. OS", tiOS),
     subtotal("Total of Heads of Income", totalOfHeads),
@@ -128,30 +174,51 @@ export function mapItr2Ay2025(body, ctx) {
     cyla !== 0 && sub("Balance after set-off of current year loss", balanceAfterCyla),
     bfla !== 0 && sub("Less: Set-off of brought forward loss u/s 72", bfla, { ref: "Sch. BFLA" }),
     subtotal("Gross Total Income", gti),
+    deduction10AA !== 0 && sub("Less: Deduction u/s 10AA", deduction10AA, { ref: "Sec. 10AA" }),
     sub("Less: Deductions under Chapter VI-A", chapterVIATotal, { ref: "Sch. VI-A" }),
     total("Total Income (rounded off u/s 288A)", totalIncome),
     splRateIncome !== 0 && sub("of which, income taxable at special rates", splRateIncome, { ref: "Sch. SI" }),
-    splRateIncome !== 0 && sub("balance taxable at the rates in force", aggregateIncome),
+    // Agricultural income is exempt. It appears here only because s.2(13) of the
+    // Finance Act aggregates it to fix the rate, and the tax section takes it
+    // back out. Showing the aggregate without saying why would read as a charge.
+    agriForRate !== 0 && sub("Add: Net agricultural income, aggregated for rate purposes only", agriForRate, {
+      ref: "Sch. EI",
+      note: "Exempt u/s 10(1); it does not enter total income",
+    }),
+    agriForRate !== 0 && sub("Aggregate income on which the rate is determined", aggregateIncome),
   ];
 
-  /* ---- G. Computation of tax liability -------------------------------------- */
+  /* ---- H. Computation of tax liability -------------------------------------- */
   const tax = taxRows(src, { siRows, totalIncome });
 
-  // §12: state why AMT is nil rather than omitting the line.
+  // §12: state why AMT is nil rather than omitting the line. On ITR-3 the AMT
+  // schedule is the assessee's own, and the credit table below it carries what
+  // earlier years left behind.
   const amtIncome = src.num("ScheduleAMT.AdjustedUnderSec115JC");
   const amtTax = src.num("ScheduleAMT.TaxPayableUnderSec115JC");
+  const amtCreditAvailable = src.num("ScheduleAMTC.AmtTaxCreditAvailable");
   src.claim("ScheduleAMT");
   src.claim("ScheduleAMTC");
-  const amtFootnote = amtTax === 0 && amtIncome
-    ? `Adjusted total income u/s 115JC is ${amtIncome.toLocaleString("en-IN")}; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.`
-    : "";
+  let amtFootnote = "";
+  if (amtTax === 0 && amtIncome) {
+    amtFootnote = `Adjusted total income u/s 115JC is ${inr(amtIncome)}; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.`;
+  } else if (amtTax === 0 && amtCreditAvailable) {
+    amtFootnote = `Alternate Minimum Tax u/s 115JC is Nil, so tax under the regular provisions of ${inr(amtCreditAvailable)} is payable.`;
+  }
 
-  /* ---- H. Taxes paid -------------------------------------------------------- */
+  /* ---- I. Taxes paid -------------------------------------------------------- */
   const paidRows = taxesPaidRows(src, { aggregate: tax.aggregate });
   const banner = refundOrPayable(src, notes);
-  paidRows.push(total(banner.refundDue > 0 ? "Refund Due" : "Tax Payable", banner.refundDue > 0 ? banner.refundDue : banner.balPayable));
+  // A return can close level: CPC neither refunds nor demands a few rupees, and
+  // the return states nil against both. Saying so beats a "Refund Due — nil" row
+  // that reads like a rejected claim.
+  if (banner.refundDue > 0 || banner.balPayable > 0) {
+    paidRows.push(total(banner.refundDue > 0 ? "Refund Due" : "Tax Payable", banner.refundDue > 0 ? banner.refundDue : banner.balPayable));
+  } else {
+    paidRows.push(total("Nothing further payable or refundable", 0));
+  }
 
-  /* ---- I. Losses carried forward -------------------------------------------- */
+  /* ---- J. Losses carried forward -------------------------------------------- */
   const cflRows = [];
   const carried = src.num("PartB-TI.LossesOfCurrentYearCarriedFwd");
   src.claim("ScheduleCFL");
@@ -166,11 +233,8 @@ export function mapItr2Ay2025(body, ctx) {
   /* ---- notes ----------------------------------------------------------------- */
   notes.unshift({
     severity: "info",
-    text: `This computation has been prepared from the ITR-2 return data (JSON) for A.Y. ${ctx.ay} and the figures correspond to Schedule S, Schedule HP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return.`,
+    text: `This computation has been prepared from the ITR-3 return data (JSON) for A.Y. ${ctx.ay} and the figures correspond to Schedule S, Schedule HP, Schedule BP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return.`,
   });
-  // Lower-case the first letter only. toLowerCase() on the whole label turns the
-  // section reference into "s.115bac(1a)", which is not how a section is written
-  // on a document somebody signs.
   if (regime) {
     notes.push({ severity: "info", text: `The return is filed under the ${regime[0].toLowerCase()}${regime.slice(1)}.` });
   }
@@ -179,18 +243,37 @@ export function mapItr2Ay2025(body, ctx) {
   if (restrictedTotal > 0) {
     notes.push({
       severity: "attention",
-      text: `Deductions under Chapter VI-A of ${via.claimedTotal.toLocaleString("en-IN")} were claimed, of which ${restrictedTotal.toLocaleString("en-IN")} was restricted by the statutory limits; ${via.allowedTotal.toLocaleString("en-IN")} has been allowed.`,
+      text: `Deductions under Chapter VI-A of ${inr(via.claimedTotal)} were claimed, of which ${inr(restrictedTotal)} was restricted by the statutory limits; ${inr(via.allowedTotal)} has been allowed.`,
     });
   }
+
+  const agriGross = src.num("ScheduleEI.GrossAgriRecpt");
   const exempt = src.num("ScheduleEI.TotalExemptInc");
   src.claim("ScheduleEI");
   src.claim("ScheduleTR1");
-  if (exempt) notes.push({ severity: "info", text: `Exempt income reported under Schedule EI: ${exempt.toLocaleString("en-IN")}.` });
+  src.claim("ScheduleFA");
+  src.claim("ScheduleSPI");
+  src.claim("ScheduleTPSA");
+  if (agriGross) {
+    notes.push({
+      severity: "info",
+      text: `Net agricultural income of ${inr(agriForRate || agriGross)} is exempt u/s 10(1) and has been aggregated with total income only to determine the rate of tax, the tax on it being allowed as a rebate above.`,
+    });
+  } else if (exempt) {
+    notes.push({ severity: "info", text: `Exempt income reported under Schedule EI: ${inr(exempt)}.` });
+  }
+  if (firms.length) {
+    notes.push({
+      severity: "info",
+      text: `The assessee is a partner in ${firms.length} firm${firms.length > 1 ? "s" : ""}. Interest, salary, bonus and commission from a firm are chargeable under the head Business or Profession; the share of the firm's profit is exempt u/s 10(2A).`,
+    });
+  }
 
   /* ---- assemble --------------------------------------------------------------- */
   const sections = [
     section("SALARY", "Income from Salaries", salary, { tone: "navy" }),
     section("HP", "Income from House Property", hp, { tone: "navy" }),
+    section("BP", "Profits and Gains of Business or Profession", bp, { tone: "navy" }),
     section("CG", "Capital Gains", cg, { tone: "navy" }),
     section("OS", "Income from Other Sources", os, { tone: "navy" }),
     via.rows.length ? section("VIA", "Deductions under Chapter VI-A", via.rows, { tone: "navy" }) : null,
@@ -202,7 +285,7 @@ export function mapItr2Ay2025(body, ctx) {
 
   const doc = document({
     meta: {
-      form: "ITR2",
+      form: "ITR3",
       assessmentYear: ctx.ay,
       previousYear: pyLabel(ctx.ay),
       schemaVersion: ctx.schemaVersion,
@@ -229,21 +312,23 @@ export function mapItr2Ay2025(body, ctx) {
   src.restate([
     "ScheduleS.Salaries[0].Salarys.GrossSalary",
     "ScheduleS.AllwncExemptUs10.AllwncExemptUs10Dtls[0].SalOthAmount",
+    "PartB-TI.ProfBusGain.ProfGainNoSpecBus",
+    "PartB-TI.ProfBusGain.ProfGainSpecBus",
+    "PartB-TI.ProfBusGain.ProfGainSpecifiedBus",
+    "PartB-TI.ProfBusGain.ProfIncome115BBF",
     "PartB-TI.CapGain.ShortTermLongTermTotal",
     "PartB-TI.CapGain.ShortTerm.TotalShortTerm",
     "PartB-TI.CapGain.LongTerm.TotalLongTerm",
-    "PartB-TI.CapGain.ShortTerm.ShortTerm15Per",
-    "PartB-TI.CapGain.ShortTerm.ShortTerm20Per",
-    "PartB-TI.CapGain.ShortTerm.ShortTerm30Per",
-    "PartB-TI.CapGain.LongTerm.LongTerm10Per",
-    "PartB-TI.CapGain.LongTerm.LongTerm12_5Per",
-    "PartB-TI.CapGain.LongTerm.LongTerm20Per",
     "PartB-TI.IncFromOS.OtherSrcThanOwnRaceHorse",
     "PartB-TI.IncChargeTaxSplRate111A112",
     "PartB-TI.DeemedIncomeUs115JC",
+    "PartB-TI.DeductionsUndSchVIADtl.PartBchapterVIA",
+    "PartB-TI.DeductionsUndSchVIADtl.PartCchapterVIA",
     "ScheduleOS.IncOthThanOwnRaceHorse.InterestGross",
     "ScheduleOS.IncOthThanOwnRaceHorse.DividendOthThan22e",
     "ScheduleOS.IncOthThanOwnRaceHorse.BalanceNoRaceHorse",
+    "ScheduleOS.IncOthThanOwnRaceHorse.Deductions.Expenses",
+    "ScheduleEI.NetAgriIncOrOthrIncRule7",
     "ScheduleSI.TotSplRateInc",
     "ScheduleSI.TotSplRateIncTax",
     "PartB_TTI.ComputationOfTaxLiability.NetTaxLiability",

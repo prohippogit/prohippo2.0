@@ -89,6 +89,10 @@ function renderParticulars(doc) {
 </div>`;
 }
 
+/* The same card serves a firm listing its partners (ITR-5) and an individual
+   listing the firms they are a partner in (ITR-3). A mapper that has particulars
+   the default composition cannot express — a firm's capital balance, say —
+   supplies them pre-composed as `detail`. */
 function renderPartners(doc) {
   const partners = doc.assessee.partners || [];
   if (!partners.length) return "";
@@ -96,7 +100,7 @@ function renderPartners(doc) {
   <div class="pill">${esc(doc.assessee.constitutionTitle || "Constitution")}</div>
   <div class="partners">${partners.map((p) => `<div class="partner">
     <div class="pn">${esc(p.name)}</div>
-    <div class="pd">${esc([
+    <div class="pd">${esc(p.detail || [
       p.pan && `PAN ${p.pan}`,
       p.share && `Share ${p.share}`,
       `Remuneration ${p.remuneration ? inr(p.remuneration) : "—"}`,

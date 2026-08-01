@@ -13,11 +13,13 @@
 import { detect, UnsupportedFormError } from "./detect.js";
 import { validate, ValidationError } from "./validate.js";
 import { mapItr2, SUPPORTED_YEARS as itr2Years } from "./mappers/itr2/index.js";
+import { mapItr3, SUPPORTED_YEARS as itr3Years } from "./mappers/itr3/index.js";
 import { mapItr5, SUPPORTED_YEARS as itr5Years } from "./mappers/itr5/index.js";
 import { renderHtml } from "./render/template.js";
 
 const MAPPERS = {
   ITR2: mapItr2,
+  ITR3: mapItr3,
   ITR5: mapItr5,
 };
 
@@ -55,4 +57,4 @@ export function buildComputation(json, ctx = {}) {
 export { detect, validate, UnsupportedFormError, ValidationError };
 /* Which form-and-year combinations produce a document today. The Returns tab
    reads this so an unsupported year says so plainly rather than failing. */
-export const SUPPORTED = { ITR2: itr2Years, ITR5: itr5Years };
+export const SUPPORTED = { ITR2: itr2Years, ITR3: itr3Years, ITR5: itr5Years };

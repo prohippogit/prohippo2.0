@@ -1,11 +1,15 @@
 /*
- * ITR-2 helpers that are stable across assessment years.
- * docs/computation-spec.md §9 — anything year-specific belongs in ayNNNN-NN.js.
+ * Label tables for the individual/HUF family of returns — ITR-2 and ITR-3.
+ * docs/computation-spec.md §9; anything year-specific belongs in ayNNNN-NN.js.
  *
- * ITR-2 is filed by individuals and HUFs with no business income, so almost
- * nothing here is shared with the ITR-5 helpers: no partners, no tax audit, a
- * different regime field with the opposite sense, and heads (salary, capital
- * gains) that a firm's return never carries.
+ * ITR-2 and ITR-3 are the same return with one difference: ITR-3 carries a
+ * business head. Their Schedule S, HP, CG, OS, VIA, SI, TDS and Part B-TTI
+ * blocks are the same schema, field for field, so the captions live here once
+ * rather than being copied into each form's directory and drifting apart.
+ *
+ * ITR-5 is deliberately NOT served from here. A firm's return has no salary,
+ * no regime choice, no s.16 deductions and a differently-sensed regime field;
+ * sharing a table with it would mean one table trying to satisfy two audiences.
  */
 
 /* Schedule SI drives the special-rate rows in the tax section. The section codes
@@ -33,13 +37,20 @@ export function specialRateLabel(code) {
   return SI_SECTIONS[c] || `Income taxable at a special rate (code ${c})`;
 }
 
-/* The regime. ITR-2 and ITR-3 ask it as `OptOutNewTaxRegime`, whose sense reads
-   backwards at a glance: "Y" means the assessee opted OUT of the new regime and
-   is therefore taxed under the OLD one. Every Chapter VI-A deduction depends on
-   which it is, so the computation states it rather than leaving a reader to
-   infer it from whether 80C appears. */
-export function regimeLabel(optOutNewTaxRegime) {
-  const v = String(optOutNewTaxRegime || "").trim().toUpperCase();
+/* The regime, which every deduction below it depends on — so the computation
+   states it rather than leaving a reader to infer it from whether 80C appears.
+   Both fields read backwards: they ask whether the assessee opted OUT.
+
+   ITR-2 asks it once, as `OptOutNewTaxRegime`. ITR-3 asks it as
+   `No_OptOutNewTaxReg` alongside `OptOutNewTaxRegime_Method` (how the option was
+   exercised, e.g. BY10IEA = by filing Form 10-IEA). The reading of
+   `No_OptOutNewTaxReg` is not guessed: in the ITR-3 fixture it is "N", and the
+   return's own tax at normal rates reconciles to the rupee against the
+   s.115BAC(1A) slabs and to nothing else — see §10. */
+export function regimeLabel(filingStatus) {
+  const fs = filingStatus && typeof filingStatus === "object" ? filingStatus : {};
+  const raw = fs.OptOutNewTaxRegime ?? fs.No_OptOutNewTaxReg;
+  const v = String(raw ?? "").trim().toUpperCase();
   if (v === "Y") return "Old regime — opted out of s.115BAC(1A)";
   if (v === "N") return "New regime u/s 115BAC(1A) (default)";
   return "";
@@ -117,9 +128,9 @@ export function joinAddress(addr) {
   ].map((x) => String(x == null ? "" : x).trim().replace(/,$/, "")).filter(Boolean).join(", ");
 }
 
-/* Section under which the return was filed. Same table as ITR-5's, kept here
-   rather than shared because the two forms' helper modules are deliberately
-   independent — see the note at the top of this file. */
+/* Section under which the return was filed. ITR-5 carries the same table in its
+   own helpers; see the note at the top of this file on why that one is not
+   served from here. */
 const FILING_SECTION = {
   11: "Section 139(1) — on or before the due date",
   12: "Section 139(4) — belated",
@@ -142,9 +153,8 @@ export function isNonOrdinaryFiling(code) {
   return [12, 13, 17, 18, 19].includes(Number(code));
 }
 
-/* TDS section codes, as on ITR-5 — the portal writes "94A" for s.194A. Kept in
-   both helper modules on purpose: the two forms' code tables have diverged
-   before and a shared one would have to satisfy both. */
+/* TDS section codes — the portal writes "94A" for s.194A. An unrecognised code
+   prints as itself; the nature line is simply omitted when we cannot name it. */
 const TDS_SECTIONS = {
   "92A": "192A", "92B": "192", "93A": "193", 94: "194",
   "94A": "194A", "94B": "194B", "94C": "194C", "94D": "194D", "4DA": "194DA",

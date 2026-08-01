@@ -21,6 +21,9 @@ const PERSON_KEYS = new Set([
   "FatherName", "TradeName1", "TradeName2", "TradeName3", "NameOfEmployer", "EmployerName",
   "NameOfBusiness", "NameOfPerson", "NameOfDonee", "DoneeWithPan", "NameOfInstitution",
   "NameOfSecurity", "NameOfCompany", "TenantName", "LenderName", "NameOfDeductor",
+  // ITR-3: Schedule IF names every firm the assessee is a partner in, and the
+  // filing-status block names them again. A firm's name is its proprietors'.
+  "FirmName", "NameOfFirm",
   // The TDS schedules name the same employer again under their own key.
   "EmployerOrDeductorOrCollecterName", "DeductorName", "CollecterName",
   "InsurerName",
@@ -41,11 +44,14 @@ const OPAQUE_KEYS = new Set([
   // policy number and an ISIN each point at a specific holding of a specific
   // person, and none of them is a figure the mapper reads.
   "PRANNum", "PolicyNo", "ISINCode", "IdentificationNo",
+  // A DIN identifies a named director on a public register; a challan's BSR
+  // code and serial number together identify one payment from one bank branch.
+  "DIN", "BSRCode",
 ]);
 // NOT here on purpose: GSTINNo. A GSTIN embeds the PAN, so masking the whole
 // string destroys a shape the mapper displays; replacing the PAN inside it
 // leaves a structurally valid GSTIN belonging to the dummy assessee.
-const NUMERIC_ID_KEYS = new Set(["MobileNo", "AckNum44AB", "PhoneNo", "STDcode"]);
+const NUMERIC_ID_KEYS = new Set(["MobileNo", "AckNum44AB", "PhoneNo", "STDcode", "SrlNoOfChaln"]);
 
 // A PAN's fourth character carries the assessee's status, and the mapper reads
 // it — so a replacement must keep it or the fixture stops representing the case.
@@ -136,7 +142,7 @@ export function auditResidual(values) {
    ten digits and would otherwise sort above every real figure in the return —
    the opposite of useful when the point of this listing is "what is big here?".
    Mirrors the reasoning in src/computation/ignore-paths.js. */
-const NOT_A_FIGURE = /\.(MobileNo|PhoneNo|STDcode|PinCode|StateCode|CountryCode|CountryCodeMobile|AadhaarCardNo|AckNum44AB|SharePercentage|RateOfInterest|AssessePercentShareProp|HPSNo|TenantSNo|SplRatePercent)$/;
+const NOT_A_FIGURE = /\.(MobileNo|PhoneNo|STDcode|PinCode|StateCode|CountryCode|CountryCodeMobile|AadhaarCardNo|AckNum44AB|SharePercentage|RateOfInterest|AssessePercentShareProp|HPSNo|TenantSNo|SplRatePercent|SrlNoOfChaln|ProfitSharePercent|NumSharesUnits|SalePricePerShareUnit)$/;
 
 export function describe(body) {
   // Walk once. An earlier version walked again per schedule to count that

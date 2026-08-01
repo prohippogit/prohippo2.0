@@ -82,8 +82,19 @@ src/computation/
   unmapped.js          the non-zero-leaf walker                       (§8)
   ignore-paths.js      deliberate allow-list of unmapped fields       (§8)
   mappers/
-    itr5/
+    individual/        shared by ITR-2 and ITR-3 — see below
+      labels.js        section, capacity, TDS and VI-A caption tables
+      heads.js         salary, house property, capital gains, other sources,
+                       Chapter VI-A, tax liability, taxes paid
+    itr2/
       index.js         detects AY, delegates
+      ay2025-26.js
+    itr3/
+      index.js
+      ay2025-26.js
+      businessHead.js  Schedule BP — the head ITR-2 has no schedule for
+    itr5/
+      index.js
       ay2025-26.js
       shared.js        helpers stable across years
   render/
@@ -99,6 +110,24 @@ renderer for "ITR-3 style".
 
 Adding support for a new ITR form = writing one mapper + one fixture + one
 golden test. Nothing else.
+
+**Sharing between mappers is by family, not by convenience.** ITR-2 and ITR-3
+are the same return with one difference — ITR-3 carries a business head — and
+their Schedule S, HP, CG, OS, VIA, SI, TDS and Part B-TTI blocks are the same
+schema field for field. Those workings therefore live once, in
+`mappers/individual/`, and both call them. ITR-5 does not: a firm has no salary,
+no regime choice and no s.16 deductions, and a table serving both would be
+serving neither.
+
+The test that a shared builder is safe to extract is the golden model: if
+ITR-2's stored model does not change to the byte after the refactor, the
+refactor did not change behaviour. Do it that way round.
+
+**No head is assumed absent.** An assessee is not a template — one has salary
+and a house, the next has capital gains and a partner's interest from a firm.
+Every head builder walks all the sub-blocks its schedule can carry and emits
+rows for whichever ones carry a figure. What a builder does not recognise it
+leaves unconsumed, so §8 surfaces it rather than dropping it.
 
 ### Commands
 
@@ -146,7 +175,15 @@ export interface Assessee {
 }
 
 export interface Fact { label: string; value: string; }
-export interface Partner { name: string; pan: string; share: string; remuneration: number|null; interest: number|null; }
+export interface Partner {
+  name: string; pan: string; share: string;
+  remuneration: number|null; interest: number|null;
+  // Pre-composed particulars, used where the default composition cannot express
+  // them: the card serves both a firm listing its partners (ITR-5) and an
+  // individual listing the firms they are a partner in (ITR-3, Schedule IF),
+  // and a firm's capital balance is not a partner's remuneration.
+  detail?: string;
+}
 
 export interface Section {
   id:       string;            // 'BP', 'OS', 'TI', 'TAX', 'TAXES_PAID', 'CFL'
@@ -478,12 +515,56 @@ Recorded so nobody has to rediscover them.
   should not have to open the return.
 
 **Regime (`FilingStatus`)**
-- ITR-2/3 use `OptOutNewTaxRegime`. `"Y"` means the assessee has opted **out**
+- ITR-2 uses `OptOutNewTaxRegime`. `"Y"` means the assessee has opted **out**
   of the new regime and is taxed under the **old** one — the negative reads
   backwards at a glance and must be stated on the face of the computation,
   because every Chapter VI-A deduction below depends on it.
+- ITR-3 asks the same question as `No_OptOutNewTaxReg`, alongside
+  `OptOutNewTaxRegime_Method` (how the option was exercised — `BY10IEA` means by
+  filing Form 10-IEA). `"N"` is the new regime. This reading is **verified, not
+  inferred**: in the ITR-3 fixture the return's own tax at normal rates,
+  3,53,432 on an aggregate of 22,11,440, reconciles to the rupee against the
+  s.115BAC(1A) slabs and to nothing else, and the agricultural-income rebate of
+  5,500 confirms a basic exemption of 3,00,000. If a future return disagrees,
+  re-derive it the same way rather than trusting the field name.
 - ITR-5 uses `OptOldRegimeCurrAY` with the opposite sense, and firms have no
   such choice at all. Do not share one helper across the two.
+
+**Part B-TTI is not laid out the same way in ITR-2 and ITR-3**
+- ITR-2 carries `Rebate87A`, `TaxPayableOnRebate`, `TotalSurcharge` and
+  `EducationCess` directly under `ComputationOfTaxLiability`. ITR-3 nests all
+  four inside `TaxPayableOnTI`. Read the nested one where it exists and the
+  outer one otherwise — getting this wrong prints a cess of nil on a document
+  somebody signs, and every total below it still ties, so nothing catches it
+  except reading the page.
+
+**Business head (`ITR3ScheduleBP`)**
+- Note the key: ITR-3 calls it `ITR3ScheduleBP`, not `ScheduleBP`.
+- A partner's **interest, salary, bonus and commission from a firm** are
+  business income and are carried in `AnyOthIncNotInclInSalary` / `…Bonus` /
+  `…Commission` / `…Interest` — "income not credited to the profit & loss
+  account". Schedule BP's own item text names the case, so the captions are the
+  form's, not ours. The partner's **share of the firm's profit** is exempt
+  u/s 10(2A) and comes out again through `IncCredPL.FirmShareInc`.
+- An assessee with no books has no P&L row to add to. Do not print a nil "net
+  profit before tax" line and hang the working off it.
+- `IncChrgUnHdProftGain` is item 43 — the head total, already including the
+  speculative and specified-business workings. Use it rather than adding the
+  three, which would be a recomputation (§1).
+- Presumptive businesses appear twice and in opposite directions: the P&L
+  figure in `ProfitLossInclRefrdSec.ProfitLossUs44AD…` comes out, the deemed
+  profit in `DeemedProfitBusUs.Section44AD…` goes in.
+
+**Agricultural income**
+- Exempt u/s 10(1), but aggregated with total income to fix the **rate**, and
+  then removed through `TaxPayableOnTI.RebateOnAgriInc`. Both movements are
+  printed. Showing only the aggregate makes an exempt receipt look charged;
+  showing neither makes the tax look computed on the wrong figure.
+
+**Schedule IF**
+- The firms an individual is a partner in: name, PAN, profit share and capital
+  balance. The same firms are named again in
+  `FilingStatus.PartnerInFirm.PartnerInFirmDtls`.
 
 **Chapter VI-A (`ScheduleVIA`)**
 - Two parallel blocks: `UsrDeductUndChapVIA` is what the assessee **claimed**,
@@ -517,7 +598,8 @@ test/fixtures/
   itr5-firm-business-loss-ay2025-26.json        // set-offs, unabsorbed dep, tax audit
   itr5-firm-house-property-loss-ay2025-26.json  // s.24(b) loss, b/f losses, 22 partners
   itr2-salary-hp-capgains-ay2025-26.json        // salary, s.24(b) loss, s.111A/112A, VI-A caps
-  itr3-…  itr4-…                                 // add as forms are supported
+  itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
+  itr4-…  itr1-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
 ```
@@ -564,17 +646,25 @@ than it is:
 |-------|---------|--------|------|--------|-------------|
 | ITR-5 | 2025-26 | ✓      | ✓    | ✓      | ✓           |
 | ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
+| ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 
-The ITR-2 tax-payable path is written and rendered (the banner and the "Tax
-Payable" closing row), but no real return exercising it has come through the
-sync yet, and a fabricated one would test our own assumption rather than the
-schema. Add the fixture when one arrives.
+The tax-payable path is written and rendered for both individual forms (the
+banner and the "Tax Payable" closing row), but no real return exercising it has
+come through the sync yet, and a fabricated one would test our own assumption
+rather than the schema. The ITR-3 fixture closes level — taxes paid exceed the
+liability by four rupees, which CPC neither refunds nor demands — which is worth
+having as a case in its own right but is not a refund case. Add the missing
+fixtures when returns arrive that carry them.
 
 ---
 
 ## 12. Edge cases to handle explicitly
 
 - Tax **payable** rather than refundable → amber banner, no bank block.
+- Neither payable nor refundable — the return closes within the few rupees CPC
+  writes off, and states nil against both fields → no banner at all, and the
+  closing row says so rather than reading "Refund Due — nil", which looks like a
+  rejected claim.
 - Nil / negative total income → tax section still renders, all rows nil.
 - Multiple GSTINs in `ScheduleGST` → list all, sum turnover.
 - Multiple TDS rows against the same TAN → separate rows, unless they also share

@@ -111,37 +111,49 @@ Each document is fetched exactly once, when its acknowledgement number is first
 seen. A filed return never changes, so there is nothing a later sync could
 usefully re-read.
 
-### The rendered return is synced for recent years only
+### The rendered return is NOT synced — it is fetched on demand
 
-Everything above is incremental, so a routine full sync costs **one list call
-per PAN** and nothing else once a practice is caught up. The exception was the
-rendered return: 10-12 MB per year, downloaded from the portal *and* uploaded to
-Storage, so ten years of history for one client is over 200 MB of traffic.
+Of the four documents above, three are small (a few hundred KB between them) and
+one is 10-25 MB: `returns/preview/{ay}`, the whole filed return rendered for
+printing. It is paid twice — down from the portal, up to Storage — on a
+practitioner's home connection. Measured on a real practice it was **18-21
+seconds per year**, more than half of every sync that had any work in it.
 
-Rationing that backfill across runs was tried first (three per sync) and was
-worse than it sounds: it made **every** sync slow instead of one, and gave no
-answer to "when does this stop?".
+Against that, nothing in the app depends on it:
 
-The sync now fetches the rendered form for the **2 most recent assessment
-years** only — `FORM_SYNC_RECENT_YEARS` in `connector/src/main/portalReturns.js`
-and `extension/portal-login.js`, which must stay in step. Those are the years
-under assessment or rectification, or being compared against the current filing.
-Once they are on file the pass fetches nothing at all, and a full sync is one
-list call per PAN, run after run.
+| What you might want | Where it comes from |
+|---|---|
+| Computation of Total Income | the **ITR JSON** |
+| Every figure on the Returns tab | the **status service** |
+| Proof of filing | the **ITR-V**, 150 KB, always synced |
+| Reading or printing the return as filed | the rendered form — **on demand** |
 
-Older years are **one click**: the Returns tab's **Fetch form** button pulls any
-single year on demand. That is the right shape for a document opened once a
-year, and the sync says how many years are in that state rather than implying
-they are pending.
+So the sync fetches the JSON, the ITR-V and the CPC orders for every year, and
+leaves the rendered form to the Returns tab's **Fetch form** button, which pulls
+one named year while the practitioner waits for *that* year.
 
-Nothing else is deferred: the JSON, the ITR-V and the CPC orders are small and
-are fetched for every year on first sight. The **Computation** button reads the
-JSON, not the rendered form, so every year can produce a Computation of Total
-Income whether or not its form PDF was synced.
+`FORM_SYNC_RECENT_YEARS` (`connector/src/main/portalReturns.js` and
+`extension/portal-login.js`, which must stay in step) is **0**. Set it to N to
+sync the newest N years again — roughly 20 seconds per year per client on that
+client's first sync, and nothing thereafter.
 
-This rests on `knownFormAcks` being tracked separately from `knownAckNums` — a
-return can be on file with its form deliberately absent, and the next sync must
-tell that apart from a return it has never seen.
+Two earlier attempts are recorded here because both looked reasonable and both
+were wrong. **Rationing** the backfill (three per run) made every sync slow
+instead of one, and could not answer "when does this stop?". A **window** of the
+two most recent years still cost 40 seconds per client — and, because the fetch
+was silently failing, cost it on every single run.
+
+### When the fetch fails
+
+A form fetch that comes back unusable — a portal error, an HTML page, or a
+document past the 80 MB ceiling — is **recorded on the return** as
+`formPdfError` rather than silently dropped. The Returns tab then offers
+**Retry form** with the reason on hover.
+
+This matters more than it sounds. Before it, a failed fetch left no trace, so
+every later sync tried again and failed identically: twenty seconds per year,
+per client, for ever, with nothing anywhere saying why. It survived four rounds
+of performance work because a silent failure is indistinguishable from work.
 
 ### Orders that are never re-fetched
 

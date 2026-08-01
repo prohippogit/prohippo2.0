@@ -94,6 +94,36 @@ const DIRECT_DOWNLOAD_FROM_AY = 2017;
 
 const NO_CLOCK = { time: (_name, fn) => fn(), add: () => {} };
 
+/* Run ingests one behind the fetches instead of in lockstep with them.
+ *
+ * Uploading a year's documents to Storage and asking the portal for the next
+ * year's are unrelated jobs on unrelated connections, but the loop used to wait
+ * for the first before starting the second. On a real practice's numbers that
+ * was 28 seconds of a 110-second sync spent with the portal side sitting idle.
+ *
+ * Exactly one ingest is allowed in flight: enough to hide the upload behind the
+ * next fetch, and no more, because each pending payload holds an 11 MB document
+ * in memory and five of these workers run at once. A failed ingest is reported
+ * and does not stop the pass — same contract as before, since the call was
+ * already best-effort.
+ */
+function ingestQueue(emit) {
+  let inFlight = null;
+  const settle = (p) => p.catch((err) => {
+    emit("returns", `Couldn't save one year's documents (${(err && err.message) || err})`, "warn");
+  });
+  return {
+    push(fn) {
+      const wait = inFlight || Promise.resolve();
+      inFlight = settle(wait.then(fn));
+      return wait; // callers await the PREVIOUS one, never their own
+    },
+    drain() {
+      return inFlight || Promise.resolve();
+    },
+  };
+}
+
 // "Tue Nov 25 14:16:09 IST 2025" → "2025-11-25". This is Java's default
 // Date.toString(), which JS cannot parse — the timezone abbreviation defeats
 // Date.parse on every engine. Pulling the fields out by hand is the only
@@ -164,6 +194,7 @@ async function syncReturns(page, job, pan, summary, emit) {
   // is derived from that date and nothing else.
   const lockedRefs = new Set((job.knowns.lockedOrderRefs || []).map((x) => String(x)));
   let fetched = 0; // anything this run actually pulled, for the closing line
+  const ingests = ingestQueue(emit);
 
   emit("returns", "Fetching filed returns…", "info", 88);
 
@@ -312,7 +343,9 @@ async function syncReturns(page, job, pan, summary, emit) {
     // nothing to say.
     if (!isNew && !orders.length && !formPdf) continue;
 
-    await t.time("ingest", () => ingestSyncMessage({
+    // Hand the payload to the queue and carry on. The wait here is for the
+    // PREVIOUS year's upload, which has had this year's fetch to finish in.
+    await t.time("ingest", () => ingests.push(() => ingestSyncMessage({
       assesseeId: job.assesseeId,
       kind: "return",
       return: {
@@ -342,11 +375,14 @@ async function syncReturns(page, job, pan, summary, emit) {
         formPdfBase64: formPdf ? formPdf.base64 : null,
         orders,
       },
-    }));
+    })));
     if (isNew) summary.returns = (summary.returns || 0) + 1;
     if (isNew) fetched += 1;
     await t.time("pacing", () => jsleep(...PACE.betweenDocs));
   }
+
+  // The last year's upload has nothing after it to hide behind.
+  await t.time("ingest", () => ingests.drain());
 
   // A run that changed nothing should say so. Silence after a list call looks
   // like a stall, which is how "the sync is slow" starts.

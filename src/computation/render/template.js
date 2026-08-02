@@ -155,6 +155,28 @@ function renderTail(doc) {
 </div>`;
 }
 
+/* The standing declaration, on the face of every computation.
+ *
+ * It sits in the renderer rather than in a mapper's notes for the reason §2
+ * gives for the renderer existing at all: there is ONE of it, shared by every
+ * form and every year, so a declaration put here cannot be forgotten when the
+ * next form or the next year is added. It is also kept apart from the Notes
+ * list, which carries facts about THIS return — the reader should not have to
+ * work out which bullet is a standing term and which is a finding.
+ *
+ * The wording is deliberately plain. This document restates a filed return; it
+ * is not a certificate, not an audit report and not advice, and the person
+ * reading it may be the assessee rather than the practitioner who generated it.
+ */
+const DECLARATION = "This Computation of Total Income and Tax Liability is a summary reference "
+  + "generated from the return data (JSON) filed on the income-tax portal. It restates the "
+  + "figures of that return and is not a certificate, an audit report or tax advice. Please "
+  + "take the advice of a tax practitioner before relying upon it.";
+
+function renderDeclaration() {
+  return `<div class="declaration"><strong>Declaration</strong> ${esc(DECLARATION)}</div>`;
+}
+
 /* §8: unmapped figures never disappear quietly. The PDF says so on its face,
    because the practitioner may be reading a printed copy with no app in front
    of them. */
@@ -188,6 +210,7 @@ ${renderBanner(doc)}
 ${doc.sections.filter((s) => s.id === "CFL").map(renderSection).join("\n")}
 ${renderReview(doc)}
 ${renderTail(doc)}
+${renderDeclaration()}
 </body>
 </html>`;
 }

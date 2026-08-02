@@ -114,6 +114,20 @@ functions/
   computation.js       headless Chromium → PDF (§13)
 ```
 
+**Every computation carries a standing declaration.** The document restates a
+filed return: it is not a certificate, not an audit report and not advice, and
+the person holding a printed copy is often the assessee rather than the
+practitioner who generated it. So it says so on its own face, at the foot, set
+apart from the Notes by a rule — Notes carry facts about *that* return, and a
+reader should not have to work out which bullet is a standing term and which is
+a finding.
+
+It lives in `render/template.js`, not in a mapper, for the same reason the
+renderer is shared at all: a declaration put there cannot be forgotten when the
+next form or the next year is added. `test/computation/declaration.test.mjs`
+walks **every** fixture in the repository rather than a named list, so a new
+form's first fixture is also the proof that its PDF carries it.
+
 **The renderer is written once and never forked per form.** If a form needs a
 new kind of row, add a row *type* to the model — do not add a branch to the
 renderer for "ITR-3 style".

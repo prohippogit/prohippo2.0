@@ -1,8 +1,8 @@
 {
  "meta": {
   "form": "ITR2",
-  "assessmentYear": "2025-26",
-  "previousYear": "2024-25",
+  "assessmentYear": "2024-25",
+  "previousYear": "2023-24",
   "schemaVersion": "Ver1.0",
   "generatedAt": "2026-01-01T00:00:00.000Z"
  },
@@ -38,7 +38,7 @@
    },
    {
     "label": "Due date",
-    "value": "31 July 2025"
+    "value": "31 July 2024"
    },
    {
     "label": "E-mail / mobile",
@@ -57,52 +57,35 @@
     {
      "kind": "sub",
      "label": "Salary as per section 17(1)",
-     "amount": 2858463,
+     "amount": 2582772,
      "ref": "Sch. S",
      "note": "SAMPLE NAME 4"
     },
     {
      "kind": "sub",
      "label": "— Basic salary",
-     "amount": 1029396
+     "amount": 2110460
     },
     {
      "kind": "sub",
      "label": "— House rent allowance",
-     "amount": 249996
-    },
-    {
-     "kind": "sub",
-     "label": "— Other allowances",
-     "amount": 1579071
-    },
-    {
-     "kind": "sub",
-     "label": "Add: Value of perquisites u/s 17(2)",
-     "amount": 8000,
-     "note": "Other benefits or amenities — SALARY_17_2"
+     "amount": 472312
     },
     {
      "kind": "subtotal",
      "label": "Gross Salary",
-     "amount": 2866463
+     "amount": 2582772
     },
     {
      "kind": "sub",
      "label": "Less: House rent allowance exempt u/s 10(13A)",
-     "amount": 157060,
-     "note": "HRA received 2,49,996 · rent paid 2,60,000"
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Any other allowance exempt u/s 10",
-     "amount": 9582,
-     "note": "Others"
+     "amount": 156685,
+     "note": ""
     },
     {
      "kind": "subtotal",
      "label": "Net Salary",
-     "amount": 2699821
+     "amount": 2426087
     },
     {
      "kind": "sub",
@@ -111,15 +94,9 @@
      "ref": "Sec. 16(ia)"
     },
     {
-     "kind": "sub",
-     "label": "Less: Tax on employment u/s 16(iii)",
-     "amount": 2500,
-     "ref": "Sec. 16(iii)"
-    },
-    {
      "kind": "total",
      "label": "Income chargeable under the head Salaries",
-     "amount": 2647321
+     "amount": 2376087
     }
    ],
    "footnote": "",
@@ -141,14 +118,13 @@
     {
      "kind": "sub",
      "label": "Less: Interest on borrowed capital u/s 24(b)",
-     "amount": 169959,
-     "ref": "Sec. 24(b)",
-     "note": "Borrowed from SAMPLE NAME 5"
+     "amount": 176493,
+     "ref": "Sec. 24(b)"
     },
     {
      "kind": "total",
      "label": "Loss from House Property",
-     "amount": 169959,
+     "amount": 176493,
      "isLoss": true
     }
    ],
@@ -172,17 +148,12 @@
     {
      "kind": "sub",
      "label": "Full value of consideration — equity shares / units (STT paid)",
-     "amount": 409100
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 403535
+     "amount": 3936
     },
     {
      "kind": "subtotal",
      "label": "Total Short-term Capital Gains",
-     "amount": 5565
+     "amount": 3936
     },
     {
      "kind": "columnHeader",
@@ -195,32 +166,22 @@
     {
      "kind": "sub",
      "label": "Full value of consideration — equity shares / units u/s 112A",
-     "amount": 236942
+     "amount": 164483
     },
     {
      "kind": "sub",
      "label": "Less: Cost of acquisition",
-     "amount": 155216
+     "amount": 0
     },
     {
      "kind": "subtotal",
      "label": "Total Long-term Capital Gains",
-     "amount": 81726
-    },
-    {
-     "kind": "sub",
-     "label": "— taxable at 10%",
-     "amount": 24697
-    },
-    {
-     "kind": "sub",
-     "label": "— taxable at 12.5%",
-     "amount": 57029
+     "amount": 164483
     },
     {
      "kind": "total",
      "label": "Income chargeable under the head Capital Gains",
-     "amount": 87291
+     "amount": 168419
     }
    ],
    "footnote": "",
@@ -235,28 +196,28 @@
     {
      "kind": "sub",
      "label": "Dividend income",
-     "amount": 32059,
+     "amount": 21508,
      "ref": "Sch. OS"
     },
     {
      "kind": "sub",
      "label": "Interest from savings bank accounts",
-     "amount": 24190
+     "amount": 46383
     },
     {
      "kind": "sub",
      "label": "Interest on term / fixed deposits",
-     "amount": 60362
+     "amount": 52349
     },
     {
      "kind": "subtotal",
      "label": "Gross income chargeable under Other Sources",
-     "amount": 116611
+     "amount": 120240
     },
     {
      "kind": "total",
      "label": "Income chargeable under the head Other Sources",
-     "amount": 116611
+     "amount": 120240
     }
    ],
    "footnote": "",
@@ -273,24 +234,18 @@
      "label": "u/s 80C — life insurance, provident fund, tuition fees etc.",
      "amount": 150000,
      "ref": "80C",
-     "note": "Claimed 2,28,513; restricted to the statutory limit"
-    },
-    {
-     "kind": "sub",
-     "label": "u/s 80CCD(1B) — additional contribution to NPS",
-     "amount": 50000,
-     "ref": "80CCD(1B)"
+     "note": "Claimed 2,64,597; restricted to the statutory limit"
     },
     {
      "kind": "sub",
      "label": "u/s 80CCD(2) — employer's contribution to NPS",
-     "amount": 92664,
+     "amount": 81252,
      "ref": "80CCD(2)"
     },
     {
      "kind": "sub",
      "label": "u/s 80D — health insurance premium",
-     "amount": 24711,
+     "amount": 23254,
      "ref": "80D"
     },
     {
@@ -298,12 +253,12 @@
      "label": "u/s 80TTA — interest on deposits in a savings account",
      "amount": 10000,
      "ref": "80TTA",
-     "note": "Claimed 24,190; restricted to the statutory limit"
+     "note": "Claimed 46,383; restricted to the statutory limit"
     },
     {
      "kind": "total",
      "label": "Total deductions under Chapter VI-A",
-     "amount": 327375
+     "amount": 264506
     }
    ],
    "footnote": "",
@@ -318,7 +273,7 @@
     {
      "kind": "head",
      "label": "Income from Salaries",
-     "amount": 2647321,
+     "amount": 2376087,
      "ref": "Sch. S"
     },
     {
@@ -330,57 +285,57 @@
     {
      "kind": "head",
      "label": "Capital Gains",
-     "amount": 87291,
+     "amount": 168419,
      "ref": "Sch. CG"
     },
     {
      "kind": "head",
      "label": "Income from Other Sources",
-     "amount": 116611,
+     "amount": 120240,
      "ref": "Sch. OS"
     },
     {
      "kind": "subtotal",
      "label": "Total of Heads of Income",
-     "amount": 2851223
+     "amount": 2664746
     },
     {
      "kind": "sub",
      "label": "Less: Set-off of current year house property loss u/s 71",
-     "amount": 169959,
+     "amount": 176493,
      "ref": "Sch. CYLA"
     },
     {
      "kind": "sub",
      "label": "Balance after set-off of current year loss",
-     "amount": 2681264
+     "amount": 2488253
     },
     {
      "kind": "subtotal",
      "label": "Gross Total Income",
-     "amount": 2681264
+     "amount": 2488253
     },
     {
      "kind": "sub",
      "label": "Less: Deductions under Chapter VI-A",
-     "amount": 327375,
+     "amount": 264506,
      "ref": "Sch. VI-A"
     },
     {
      "kind": "total",
      "label": "Total Income (rounded off u/s 288A)",
-     "amount": 2353890
+     "amount": 2223750
     },
     {
      "kind": "sub",
      "label": "of which, income taxable at special rates",
-     "amount": 87291,
+     "amount": 168419,
      "ref": "Sch. SI"
     },
     {
      "kind": "sub",
      "label": "balance taxable at the rates in force",
-     "amount": 2266599
+     "amount": 2055331
     }
    ],
    "footnote": "",
@@ -395,34 +350,27 @@
     {
      "kind": "sub",
      "label": "Tax on income at the rates in force",
-     "amount": 492480,
+     "amount": 429099,
      "ref": "Para A, Sch. I"
     },
     {
      "kind": "sub",
-     "label": "Short-term capital gains u/s 111A — at 20%",
-     "amount": 1113,
-     "note": "on 5,565",
-     "ref": "Sch. SI"
-    },
-    {
-     "kind": "sub",
-     "label": "Long-term capital gains u/s 112A — at 12.5%",
-     "amount": 0,
-     "note": "on 57,029",
+     "label": "Short-term capital gains u/s 111A — at 15%",
+     "amount": 590,
+     "note": "on 3,936",
      "ref": "Sch. SI"
     },
     {
      "kind": "sub",
      "label": "Long-term capital gains u/s 112A — at 10%",
-     "amount": 0,
-     "note": "on 24,697",
+     "amount": 6448,
+     "note": "on 1,64,483",
      "ref": "Sch. SI"
     },
     {
      "kind": "subtotal",
      "label": "Tax on Total Income",
-     "amount": 493593
+     "amount": 436137
     },
     {
      "kind": "sub",
@@ -439,12 +387,12 @@
     {
      "kind": "sub",
      "label": "Add: Health & Education Cess @ 4%",
-     "amount": 19744
+     "amount": 17445
     },
     {
      "kind": "subtotal",
      "label": "Gross Tax Liability",
-     "amount": 513337
+     "amount": 453582
     },
     {
      "kind": "sub",
@@ -459,10 +407,10 @@
     {
      "kind": "total",
      "label": "Total Tax and Interest Payable",
-     "amount": 513337
+     "amount": 453582
     }
    ],
-   "footnote": "Adjusted total income u/s 115JC is 23,53,890; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.",
+   "footnote": "Adjusted total income u/s 115JC is 22,23,750; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.",
    "omitIfAllNil": false
   },
   {
@@ -482,25 +430,70 @@
     {
      "kind": "sub",
      "label": "XXXX00000X",
-     "amount": 547095,
-     "note": "SAMPLE NAME 4 · Salary · Sec. 192",
+     "amount": 452874,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
      "cols": {
-      "ref": "28,66,463"
+      "ref": "25,82,772"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAD00003A",
+     "amount": 5235,
+     "note": "",
+     "cols": {
+      "ref": "52,349"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAG00006A",
+     "amount": 0,
+     "note": "",
+     "cols": {
+      "ref": "3,234"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAF00005A",
+     "amount": 0,
+     "note": "",
+     "cols": {
+      "ref": "1,695"
      }
     },
     {
      "kind": "sub",
      "label": "AAAB00001A",
-     "amount": 6036,
-     "note": "Interest other than interest on securities · Sec. 194A",
+     "amount": 0,
+     "note": "",
      "cols": {
-      "ref": "60,362"
+      "ref": "850"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAE00004A",
+     "amount": 0,
+     "note": "",
+     "cols": {
+      "ref": "140"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAC00002A",
+     "amount": 0,
+     "note": "",
+     "cols": {
+      "ref": "125"
      }
     },
     {
      "kind": "subtotal",
      "label": "Total Tax Deducted at Source",
-     "amount": 553131,
+     "amount": 458109,
      "ref": "Sch. TDS"
     },
     {
@@ -518,23 +511,23 @@
     {
      "kind": "sub",
      "label": "Tax Collected at Source",
-     "amount": 12673,
+     "amount": 0,
      "ref": "Sch. TCS"
     },
     {
      "kind": "subtotal",
      "label": "Total Taxes Paid",
-     "amount": 565804
+     "amount": 458109
     },
     {
      "kind": "sub",
      "label": "Less: Total Tax and Interest Payable",
-     "amount": 513337
+     "amount": 453582
     },
     {
      "kind": "total",
      "label": "Refund Due",
-     "amount": 52467
+     "amount": 4527
     }
    ],
    "footnote": "",
@@ -542,9 +535,9 @@
   }
  ],
  "refund": {
-  "amount": 52467,
+  "amount": 4527,
   "bank": {
-   "name": "SAMPLE NAME 5",
+   "name": "SAMPLE NAME 6",
    "accountNo": "00000000000000",
    "type": "SB",
    "ifsc": "XXXX0000000"
@@ -554,7 +547,11 @@
  "notes": [
   {
    "severity": "info",
-   "text": "This computation has been prepared from the ITR-2 return data (JSON) for A.Y. 2025-26 and the figures correspond to Schedule S, Schedule HP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+   "text": "This computation has been prepared from the ITR-2 return data (JSON) for A.Y. 2024-25 and the figures correspond to Schedule S, Schedule HP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+  },
+  {
+   "severity": "attention",
+   "text": "No bank account is flagged for the refund in the return; the first account listed is shown."
   },
   {
    "severity": "info",
@@ -562,15 +559,15 @@
   },
   {
    "severity": "attention",
-   "text": "Deductions under Chapter VI-A of 4,20,078 were claimed, of which 92,703 was restricted by the statutory limits; 3,27,375 has been allowed."
+   "text": "Deductions under Chapter VI-A of 4,15,486 were claimed, of which 1,50,980 was restricted by the statutory limits; 2,64,506 has been allowed."
   }
  ],
  "signatory": {
-  "name": "SAMPLE NAME 17",
+  "name": "SAMPLE NAME 8",
   "capacity": "Self",
   "pan": "AAAPZ1000A",
   "place": "SAMPLE PLACE 5",
-  "date": "2025-09-11"
+  "date": "2024-07-29"
  },
  "unmapped": []
 }

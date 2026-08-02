@@ -13,45 +13,188 @@
  */
 
 /* Schedule SI drives the special-rate rows in the tax section. The section codes
-   are ITD's own; an unrecognised one prints as itself rather than being guessed
-   at, because a wrong statutory reference on a signed document is worse than a
-   bare code a reader can look up.
+   are ITD's own, and so are the meanings: the department publishes the full code
+   list in the `SecCode` enum of its own schema, where every code carries a
+   description. The table below is that list, with the department's wording put
+   into the house style — not a reading of what a code looked like it meant.
 
-   Every entry below is either read off a return we hold or left as the raw code.
-   Code "21" was previously captioned "short-term capital gains u/s 111A" — a
-   guess, and a wrong one. An A.Y. 2024-25 ITR-3 carries it at 20% against
-   3,56,060, which is exactly that return's `PartB-TI.CapGain.LongTerm.
-   LongTerm20Per`: it is LONG-term gain taxed u/s 112. Corrected, and the
-   evidence recorded here so nobody re-guesses it. */
+   Source: ITR2_2024_Main_V1.4.json,
+   definitions.ScheduleSI.properties.SplCodeRateTax.items.properties.SecCode.
+
+   That source matters. Code "21" was once captioned here as "short-term capital
+   gains u/s 111A" — a guess, and a wrong one; the schema states it is s.112 long
+   term gain with indexation, which is what the A.Y. 2024-25 ITR-3 that exposed
+   the error also showed. Codes not in the list print as themselves (§5): a wrong
+   statutory reference on a signed document is worse than a bare code a reader
+   can look up. */
 const SI_SECTIONS = {
+  1: "Tax on the accumulated balance of a recognised provident fund u/s 111",
   "1A": "Short-term capital gains u/s 111A",
-  21: "Long-term capital gains u/s 112",
-  "21ciii": "Long-term capital gains u/s 112(1)(c)(iii)",
-  22: "Long-term capital gains u/s 112, at the proviso rate",
+  21: "Long-term capital gains u/s 112, with indexation",
+  22: "Long-term capital gains u/s 112, at the proviso rate without indexation",
+  "21ciii": "Long-term capital gains u/s 112(1)(c)(iii) — unlisted securities of a non-resident",
   "2A": "Long-term capital gains u/s 112A",
-  "2A_BE": "Long-term capital gains u/s 112A",
-  PTI_LTCG10P112A: "Long-term capital gains u/s 112A — pass-through income",
-  "5AC": "Income u/s 115AC",
-  "5ACA": "Income u/s 115ACA",
-  "5ACA1b": "Income u/s 115ACA(1)(b)",
-  "5AD1b i": "Income u/s 115AD",
-  "5ADii": "Income u/s 115AD(1)(ii)",
-  "5ADiii": "Income u/s 115AD(1)(iii)",
-  "5Eb": "Income u/s 115E(b)",
-  "1BB": "Winnings from lotteries, crossword puzzles etc. u/s 115BB",
-  "5BB": "Winnings from lotteries, crossword puzzles etc. u/s 115BB",
-  "1BBE": "Income u/s 115BBE",
-  "5BBE": "Income u/s 115BBE",
-  "1BBJ": "Winnings from online games u/s 115BBJ",
+  "5A1ai": "Dividend, interest and income from units purchased in foreign currency u/s 115A(1)(a)(i)",
+  "5A1aA": "Dividend from a unit in an IFSC u/s 115A(1)(a)(A)",
+  "5A1aii": "Interest from Government or an Indian concern received in foreign currency u/s 115A(1)(a)(ii)",
+  "5A1aiia": "Interest from an infrastructure debt fund u/s 115A(1)(a)(iia)",
+  "5A1aiiaa": "Interest u/s 194LC(1), taxable u/s 115A(1)(a)(iiaa)",
+  "5A1aiiaaP": "Income of a non-resident under the proviso to s.194LC(1), taxable u/s 115A(1)(a)(iiaa)",
+  "5A1aiiab": "Interest u/s 194LD, taxable u/s 115A(1)(a)(iiab)",
+  "5A1aiiac": "Interest u/s 194LBA, taxable u/s 115A(1)(a)(iiac)",
+  "5A1aiii": "Income from units of the UTI purchased in foreign currency u/s 115A(1)(a)(iii)",
+  "5A1bA": "Royalty and fees for technical services u/s 115A(1)(b)",
+  "5AC1ab": "Interest on bonds purchased in foreign currency u/s 115AC(1)(a)",
+  "5AC1abD": "Dividend on GDRs purchased in foreign currency u/s 115AC(1)(b)",
+  "5AC1c": "Long-term capital gains on bonds or GDRs purchased in foreign currency u/s 115AC(1)(c)",
+  "5ACA1a": "Income from GDRs purchased in foreign currency u/s 115ACA(1)(a)",
+  "5ACA1b": "Long-term capital gains on GDRs purchased in foreign currency u/s 115ACA(1)(b)",
+  "5AD1i": "Income of an FII from securities u/s 115AD(1)(i)",
+  "5AD1iDiv": "Dividend received by an FII on securities u/s 115AD(1)(i)",
+  "5AD1iP": "Income of an FII from bonds or Government securities u/s 194LD, taxable u/s 115AD(1)(i)",
+  "5AD1biip": "Short-term capital gains of an FII referred to in s.111A, taxable u/s 115AD(1)(b)(ii)",
+  "5ADii": "Short-term capital gains of an FII, other than those u/s 111A, taxable u/s 115AD(1)(ii)",
+  "5ADiii": "Long-term capital gains of an FII u/s 115AD(1)(iii)",
+  "5ADiiiP": "Long-term capital gains of an FII under the proviso to s.115AD(1)(iii)",
+  "5BB": "Winnings from lotteries, crossword puzzles, races, card games and the like u/s 115BB",
   "5BBJ": "Winnings from online games u/s 115BBJ",
+  "5BBA": "Income of a non-resident sportsman or sports association u/s 115BBA",
+  "5BBC": "Anonymous donations u/s 115BBC",
+  "5BBE": "Income referred to in s.68, 69, 69A, 69B, 69C or 69D, taxable u/s 115BBE",
+  "5BBF": "Income from patents u/s 115BBF",
+  "5BBG": "Income from the transfer of carbon credits u/s 115BBG",
+  "5BBH": "Income from the transfer of virtual digital assets u/s 115BBH",
+  "5Ea": "Investment income of a non-resident Indian u/s 115E(a)",
+  "5Eacg": "Long-term capital gains of a non-resident Indian on an asset other than a specified asset u/s 115E(a)",
+  "5Eb": "Long-term capital gains of a non-resident Indian u/s 115E(b)",
+  DTAASTCG: "Short-term capital gains taxable at DTAA rates",
+  DTAALTCG: "Long-term capital gains taxable at DTAA rates",
+  DTAAOS: "Income from other sources taxable at DTAA rates",
   DTAA: "Income taxable at DTAA rates",
+};
+
+/* Pass-through income carries the same section codes with a PTI_ prefix — the
+   income of a business trust or investment fund, taxed in the unit holder's
+   hands under the section that would have applied to the fund. A few PTI codes
+   name the rate instead of a section, so those are captioned separately. */
+const PTI_RATE_CODES = {
+  PTI_STCG15P: "Short-term capital gains u/s 111A, at 15%",
+  PTI_STCG30P: "Short-term capital gains at 30%",
+  PTI_LTCG10P112A: "Long-term capital gains u/s 112A, at 10%",
+  PTI_LTCG12_5P112A: "Long-term capital gains u/s 112A, at 12.5%",
+  PTI_LTCG10P: "Long-term capital gains at 10%",
+  PTI_LTCG12_5P: "Long-term capital gains at 12.5%",
+  PTI_LTCG20P: "Long-term capital gains at 20%",
 };
 
 /** A readable caption for a Schedule SI row. */
 export function specialRateLabel(code) {
   const c = String(code || "").trim();
-  return SI_SECTIONS[c] || `Income taxable at a special rate (code ${c})`;
+  // The suffixes mark the same section stated twice, not a different section:
+  // _BE / _AE split a figure across the rate before and after 23 July 2024, and
+  // _BP marks the copy of the row that sits under the business head in ITR-3.
+  // The rate is printed from the return's own SplRatePercent, so one caption
+  // serves all of them.
+  const base = c.replace(/_(BE|AE|BP)$/, "");
+  if (SI_SECTIONS[base]) return SI_SECTIONS[base];
+  if (PTI_RATE_CODES[base]) return `${PTI_RATE_CODES[base]} — pass-through income`;
+  const pti = /^PTI_(.+)$/.exec(base);
+  if (pti && SI_SECTIONS[pti[1]]) return `${SI_SECTIONS[pti[1]]} — pass-through income`;
+  return `Income taxable at a special rate (code ${c})`;
 }
+
+/* --------------------------------------------------- salary components ------
+ *
+ * Schedule S itemises gross salary by a numeric code. Until the department's
+ * schema was to hand these were deliberately left undecoded — guessing that
+ * code "4" meant House Rent Allowance would have put an unverified label on a
+ * signed document. The schema states the table outright, so the guess is no
+ * longer a guess:
+ *
+ *   ITR2_2024_Main_V1.4.json
+ *     definitions.NatureOfSalaryDtlsType.properties.NatureDesc
+ *     definitions.NatureOfPerquisitesType.properties.NatureDesc
+ *     definitions.NatureOfProfitInLieuOfSalaryType.properties.NatureDesc
+ *     definitions.AllwncExemptUs10DtlsType.properties.SalNatureDesc
+ */
+const SALARY_COMPONENTS = {
+  1: "Basic salary",
+  2: "Dearness allowance",
+  3: "Conveyance allowance",
+  4: "House rent allowance",
+  5: "Leave travel allowance",
+  6: "Children education allowance",
+  7: "Other allowances",
+  8: "Employer's contribution to a pension scheme u/s 80CCD",
+  9: "Amount deemed to be income under rule 11 of the Fourth Schedule",
+  10: "Amount deemed to be income under rule 6 of the Fourth Schedule",
+  11: "Annuity or pension",
+  12: "Commuted pension",
+  13: "Gratuity",
+  14: "Fees or commission",
+  15: "Advance of salary",
+  16: "Leave encashment",
+  17: "Contribution by the Central Government to the Agnipath Scheme u/s 80CCH",
+  OTH: "Other salary",
+};
+
+const PERQUISITE_COMPONENTS = {
+  1: "Accommodation",
+  2: "Cars or other automotive",
+  3: "Sweeper, gardener, watchman or personal attendant",
+  4: "Gas, electricity and water",
+  5: "Interest-free or concessional loans",
+  6: "Holiday expenses",
+  7: "Free or concessional travel",
+  8: "Free meals",
+  9: "Free education",
+  10: "Gifts, vouchers etc.",
+  11: "Credit card expenses",
+  12: "Club expenses",
+  13: "Use of movable assets by employees",
+  14: "Transfer of assets to the employee",
+  15: "Value of any other benefit, amenity, service or privilege",
+  16: "Stock options of an eligible start-up u/s 80-IAC — tax deferred",
+  17: "Stock options other than ESOPs",
+  18: "Employer's contribution to a fund or scheme taxable u/s 17(2)(vii)",
+  19: "Annual accretion on the balance of a fund or scheme taxable u/s 17(2)(viia)",
+  21: "Stock options of an eligible start-up u/s 80-IAC — tax not deferred",
+  OTH: "Other benefits or amenities",
+};
+
+const PROFIT_IN_LIEU_COMPONENTS = {
+  1: "Compensation on termination of employment or modification of its terms",
+  2: "Payment from a provident or other fund, or under a Keyman insurance policy",
+  3: "Amount received before joining or after cessation of employment",
+  OTH: "Any other profit in lieu of salary",
+};
+
+const componentTable = (kind) => (kind === "perquisite" ? PERQUISITE_COMPONENTS
+  : kind === "inLieu" ? PROFIT_IN_LIEU_COMPONENTS
+    : SALARY_COMPONENTS);
+
+/** A caption for one component of gross salary. `kind` picks the table. */
+export function salaryComponent(kind, code) {
+  return componentTable(kind)[String(code ?? "").trim().toUpperCase()] || "";
+}
+
+/* The order the components are listed in, which is the schema's own — basic pay,
+   then the allowances, then the retirement receipts. A return states them in
+   whatever order the software wrote them: this return puts house rent allowance
+   before basic salary, which is not how anyone reads a salary certificate. */
+export function salaryComponentOrder(kind, code) {
+  const i = Object.keys(componentTable(kind)).indexOf(String(code ?? "").trim().toUpperCase());
+  return i === -1 ? 999 : i;
+}
+
+/* Allowances exempt u/s 10. The code IS the section for most of these, so it is
+   printed as given; the two that are not are named here. */
+const EXEMPT_ALLOWANCE = {
+  EIC: "Exempt income of a judge under the Judges (Salaries) Act",
+  OTH: "Any other allowance exempt u/s 10",
+};
+
+export const exemptAllowanceLabel = (code) => EXEMPT_ALLOWANCE[String(code || "").trim().toUpperCase()] || "";
 
 /* The regime, which every deduction below it depends on — so the computation
    states it rather than leaving a reader to infer it from whether 80C appears.
@@ -102,6 +245,17 @@ export function viaLabel(key) {
   return VIA_SECTIONS[key] || `Deduction under ${String(key).replace(/^Section/, "u/s ")}`;
 }
 
+/* The reference chip alongside each deduction. Three of the keys spell out who
+   contributed rather than naming the sub-section, so stripping "Section" off
+   them leaves "80CCDEmployer" printed where "80CCD(2)" belongs. */
+const VIA_REF = {
+  Section80CCDEmployee: "80CCD(1)",
+  Section80CCD1B: "80CCD(1B)",
+  Section80CCDEmployer: "80CCD(2)",
+};
+
+export const viaRef = (key) => VIA_REF[key] || String(key).replace(/^Section/, "");
+
 /** The order deductions are conventionally listed in. Unknown keys come last. */
 export function viaOrder(key) {
   const i = Object.keys(VIA_SECTIONS).indexOf(key);
@@ -109,8 +263,13 @@ export function viaOrder(key) {
 }
 
 /* Capacity codes on the verification block. An individual signing their own
-   return uses "S"; the rest appear on HUF and representative filings. */
-const CAPACITY = { S: "Self", KA: "Karta", AM: "Authorised Member", R: "Representative Assessee", G: "Guardian" };
+   return uses "S"; the rest appear on HUF and representative filings.
+
+   The four codes below are the whole enum — Verification.Capacity in
+   ITR2_2024_Main_V1.4.json. This table previously carried "KA", "AM" and "G",
+   which are not codes this return can hold: a HUF's Karta signs as "K", not
+   "KA", so a real Karta's return would have printed the bare code. */
+const CAPACITY = { S: "Self", R: "Representative", K: "Karta", A: "Authorised Signatory" };
 
 export function capacityName(code) {
   const c = String(code || "").trim().toUpperCase();

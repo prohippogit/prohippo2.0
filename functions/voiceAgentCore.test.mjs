@@ -356,6 +356,32 @@ test("the daily ceiling holds and resets on a new day", () => {
 const SECRET = "test-secret-value";
 const BODY = JSON.stringify({ event: "call.started", from: "+919825011234" });
 
+test("a static shared secret is accepted — it is what the Sarvam console can send", () => {
+  // The Auth tab is a fixed string; it cannot hash a body that changes per call.
+  for (const headers of [
+    { authorization: `Bearer ${SECRET}` },
+    { Authorization: `bearer ${SECRET}` },
+    { authorization: SECRET },              // no scheme word
+    { "x-prohippo-token": SECRET },
+    { "x-api-key": SECRET },
+  ]) {
+    const r = verifyWebhook({ headers, rawBody: BODY, secret: SECRET });
+    assert.equal(r.ok, true, JSON.stringify(headers));
+    assert.equal(r.via, "shared-secret");
+  }
+});
+
+test("a wrong or near-miss shared secret is refused", () => {
+  for (const headers of [
+    { authorization: "Bearer wrong-secret" },
+    { authorization: `Bearer ${SECRET}x` },
+    { authorization: `Bearer ${SECRET.slice(0, -1)}` },
+    { "x-api-key": "" },
+  ]) {
+    assert.equal(verifyWebhook({ headers, rawBody: BODY, secret: SECRET }).ok, false, JSON.stringify(headers));
+  }
+});
+
 test("a correctly signed request is accepted, hex or base64", () => {
   const sig = signPayload(SECRET, BODY);
   assert.ok(verifyWebhook({ headers: { "x-sarvam-signature": sig.hex }, rawBody: BODY, secret: SECRET }).ok);

@@ -1,0 +1,1878 @@
+{
+ "ITR": {
+  "ITR3": {
+   "CreationInfo": {
+    "SWVersionNo": "18.0.0.0",
+    "SWCreatedBy": "XX00000000",
+    "JSONCreatedBy": "XX00000000",
+    "JSONCreationDate": "2024-06-29",
+    "IntermediaryCity": "SAMPLE PLACE 1",
+    "Digest": "XXX0XX00XXXXXXX0XXXXXXXXXX0XXXXXXX+0XXXXXXX="
+   },
+   "Form_ITR3": {
+    "FormName": "ITR-3",
+    "Description": "For indls and HUFs having income from  a proprietory business or profession",
+    "AssessmentYear": "2024",
+    "SchemaVer": "Ver1.0",
+    "FormVer": "Ver1.0"
+   },
+   "PartA_GEN1": {
+    "PersonalInfo": {
+     "AssesseeName": {
+      "FirstName": "SAMPLE NAME 1",
+      "MiddleName": "SAMPLE NAME 2",
+      "SurNameOrOrgName": "SAMPLE NAME 3"
+     },
+     "PAN": "AAAPZ1000A",
+     "Address": {
+      "ResidenceNo": "C-2",
+      "ResidenceName": "SAMPLE PLACE 2",
+      "RoadOrStreet": "SAMPLE PLACE 3",
+      "LocalityOrArea": "SAMPLE PLACE 4",
+      "CityOrTownOrDistrict": "SAMPLE PLACE 5",
+      "StateCode": "11",
+      "CountryCode": "91",
+      "PinCode": 380007,
+      "CountryCodeMobile": 91,
+      "MobileNo": 9800000001,
+      "EmailAddress": "sample@example.com"
+     },
+     "DOB": "1973-04-23",
+     "Status": "I",
+     "AadhaarCardNo": "000000000000"
+    },
+    "FilingStatus": {
+     "ReturnFileSec": 11,
+     "OptOutNewTaxRegime": "N",
+     "SeventhProvisio139": "N",
+     "ResidentialStatus": "RES",
+     "ConditionsResStatus": "1",
+     "BenefitUs115HFlg": "N",
+     "PortugeseCC5A": "N",
+     "AsseseeRepFlg": "N",
+     "CompDirectorPrvYrFlg": "N",
+     "PartnerInFirmFlg": "N",
+     "HeldUnlistedEqShrPrYrFlg": "N",
+     "ForeignExchangeFlag": "N",
+     "FiiFpiFlag": "N",
+     "ItrFilingDueDate": "2024-07-31"
+    }
+   },
+   "PartA_GEN2": {
+    "AuditInfo": {
+     "LiableSec44AAflg": "N",
+     "IncDclrdUs": "Y",
+     "LiableSec44ABflg": "N",
+     "LiableSec92Eflg": "N",
+     "AccountAuditFlag": "N"
+    },
+    "NatOfBus": {
+     "NatureOfBusiness": [
+      {
+       "Code": "09027",
+       "TradeName1": "SAMPLE NAME 4"
+      }
+     ]
+    }
+   },
+   "PARTA_BS": {
+    "FundSrc": {
+     "PropFund": {
+      "PropCap": 0,
+      "ResrNSurp": {
+       "RevResr": 0,
+       "CapResr": 0,
+       "StatResr": 0,
+       "OthResr": 0,
+       "TotResrNSurp": 0
+      },
+      "TotPropFund": 0
+     },
+     "LoanFunds": {
+      "SecrLoan": {
+       "ForeignCurrLoan": 0,
+       "RupeeLoan": {
+        "FrmBank": 0,
+        "FrmOthrs": 0,
+        "TotRupeeLoan": 0
+       },
+       "TotSecrLoan": 0
+      },
+      "UnsecrLoan": {
+       "FrmBank": 0,
+       "FrmOthrs": 4705000,
+       "TotUnSecrLoan": 4705000
+      },
+      "TotLoanFund": 4705000
+     },
+     "DeferredTax": 0,
+     "Advances": {
+      "TotalAdvances": 0
+     },
+     "TotFundSrc": 4705000
+    },
+    "FundApply": {
+     "FixedAsset": {
+      "GrossBlock": 854,
+      "Depreciation": 244,
+      "NetBlock": 610,
+      "CapWrkProg": 0,
+      "TotFixedAsset": 610
+     },
+     "Investments": {
+      "LongTermInv": {
+       "GovtOthSecQuoted": 0,
+       "GovOthSecUnQoted": 526814,
+       "TotLongTermInv": 526814
+      },
+      "TradeInv": {
+       "EquityShares": 0,
+       "PreferShares": 0,
+       "Debenture": 0,
+       "TotTradeInv": 0
+      },
+      "TotInvestments": 526814
+     },
+     "CurrAssetLoanAdv": {
+      "CurrAsset": {
+       "Inventories": {
+        "StoresConsumables": 0,
+        "RawMatl": 0,
+        "StkInProcess": 0,
+        "FinOrTradGood": 0,
+        "TotInventries": 0
+       },
+       "SndryDebtors": 0,
+       "CashOrBankBal": {
+        "CashinHand": 1100,
+        "BankBal": 46035,
+        "TotCashOrBankBal": 47135
+       },
+       "OthCurrAsset": 4129479,
+       "TotCurrAsset": 4176614
+      },
+      "LoanAdv": {
+       "AdvRecoverable": 0,
+       "Deposits": 962,
+       "BalWithRevAuth": 0,
+       "TotLoanAdv": 962
+      },
+      "TotCurrAssetLoanAdv": 4177576,
+      "CurrLiabilitiesProv": {
+       "CurrLiabilities": {
+        "SundryCred": 0,
+        "LiabForLeasedAsset": 0,
+        "AccrIntonLeasedAsset": 0,
+        "AccrIntNotDue": 0,
+        "TotCurrLiabilities": 0
+       },
+       "Provisions": {
+        "ITProvision": 0,
+        "ELSuperAnnGratProvision": 0,
+        "OthProvision": 0,
+        "TotProvisions": 0
+       },
+       "TotCurrLiabilitiesProvision": 0
+      },
+      "NetCurrAsset": 4177576
+     },
+     "MiscAdjust": {
+      "MiscExpndr": 0,
+      "DefTaxAsset": 0,
+      "AccumaltedLosses": 0,
+      "TotMiscAdjust": 0
+     },
+     "TotFundApply": 4705000
+    },
+    "NoBooksOfAccBS": {
+     "TotSundryDbtAmt": 0,
+     "TotSundryCrdAmt": 0,
+     "TotStkInTradAmt": 0,
+     "CashBalAmt": 0
+    }
+   },
+   "ManufacturingAccount": {
+    "OpeningInventory": {
+     "OpngInvntryTotal": 0,
+     "DirectExpenses": 0,
+     "TotalFactoryOverheads": 0,
+     "TotalDebtsManfctrngAcc": 0
+    },
+    "ClosingStock": {
+     "ClsngStckTotal": 0
+    },
+    "CostOfGoodsPrdcd": 0
+   },
+   "TradingAccount": {
+    "OperatingRevenueTotal": 0,
+    "SalesGrossReceiptsTotal": 0,
+    "ExciseCustomsVAT": {
+     "TotExciseCustomsVAT": 0
+    },
+    "TotRevenueFrmOperations": 0,
+    "TardingAccTotCred": 0,
+    "DirectExpenses": 0,
+    "DirectExpensesTotal": 0,
+    "DutyTaxPay": {
+     "ExciseCustomsVAT": {
+      "TotExciseCustomsVAT": 0
+     }
+    },
+    "GoodsCostPrdcdFrmMA": 0,
+    "GrossProfitFrmBusProf": 0
+   },
+   "PARTA_PL": {
+    "CreditsToPL": {
+     "GrossProfitTrnsfFrmTrdAcc": 0,
+     "OthIncome": {
+      "RentInc": 0,
+      "Comissions": 0,
+      "Dividends": 0,
+      "InterestInc": 0,
+      "ProfitOnSaleFixedAsset": 0,
+      "ProfitOnInvChrSTT": 0,
+      "ProfitOnOthInv": 0,
+      "ProfitOnCurrFluct": 0,
+      "ProfitOnCnvInvntryToCapAsst": 0,
+      "ProfitOnAgriIncome": 0,
+      "MiscOthIncome": 0,
+      "TotOthIncome": 0
+     },
+     "TotCreditsToPL": 0
+    },
+    "DebitsToPL": {
+     "Freight": 0,
+     "ConsumptionOfStores": 0,
+     "PowerFuel": 0,
+     "RentExpdr": 0,
+     "RepairsBldg": 0,
+     "RepairMach": 0,
+     "EmployeeComp": {
+      "SalsWages": 0,
+      "Bonus": 0,
+      "MedExpReimb": 0,
+      "LeaveEncash": 0,
+      "LeaveTravelBenft": 0,
+      "ContToSuperAnnFund": 0,
+      "ContToPF": 0,
+      "ContToGratFund": 0,
+      "ContToOthFund": 0,
+      "OthEmpBenftExpdr": 0,
+      "TotEmployeeComp": 0,
+      "AnyCompPaidToNonRes": "N"
+     },
+     "Insurances": {
+      "MedInsur": 0,
+      "LifeInsur": 0,
+      "KeyManInsur": 0,
+      "OthInsur": 0,
+      "TotInsurances": 0
+     },
+     "StaffWelfareExp": 0,
+     "Entertainment": 0,
+     "Hospitality": 0,
+     "Conference": 0,
+     "SalePromoExp": 0,
+     "Advertisement": 0,
+     "CommissionExpdrDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "Total": 0
+     },
+     "RoyalityDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "Total": 0
+     },
+     "ProfessionalConstDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "Total": 0
+     },
+     "HotelBoardLodge": 0,
+     "TravelExp": 0,
+     "ForeignTravelExp": 0,
+     "ConveyanceExp": 3600,
+     "TelephoneExp": 12285,
+     "GuestHouseExp": 0,
+     "ClubExp": 0,
+     "FestivalCelebExp": 0,
+     "Scholarship": 0,
+     "Gift": 0,
+     "Donation": 0,
+     "RatesTaxesPays": {
+      "ExciseCustomsVAT": {
+       "UnionExciseDuty": 0,
+       "ServiceTax": 0,
+       "VATorSaleTax": 0,
+       "CentralGoodServiceTax": 0,
+       "StateGoodServiceTax": 0,
+       "IntegratedGoodServiceTax": 0,
+       "UnionTerrGoodServiceTax": 0,
+       "OthDutyTaxCess": 0,
+       "TotExciseCustomsVAT": 0
+      }
+     },
+     "AuditFee": 0,
+     "OtherExpensesDtls": [
+      {
+       "ExpenseNature": "SAMPLE NAME 5",
+       "Amount": 14406
+      },
+      {
+       "ExpenseNature": "SAMPLE NAME 6",
+       "Amount": 613
+      },
+      {
+       "ExpenseNature": "SAMPLE NAME 7",
+       "Amount": 1440
+      },
+      {
+       "ExpenseNature": "SAMPLE NAME 8",
+       "Amount": 294450
+      }
+     ],
+     "OtherExpenses": 310909,
+     "BadDebtDtls": {
+      "BadDebtAmtDtlsTotal": 0,
+      "OthersPANNotAvlblDtlTotal": 0,
+      "OthersAmtLt1Lakh": 0,
+      "BadDebt": 0
+     },
+     "ProvForBadDoubtDebt": 0,
+     "OthProvisionsExpdr": 0,
+     "PBIDTA": -326794,
+     "InterestExpdrtDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "InterestExpdr": 0
+     },
+     "DepreciationAmort": 244,
+     "PBT": -327038
+    },
+    "TaxProvAppr": {
+     "ProvForCurrTax": 0,
+     "ProvDefTax": 0,
+     "ProfitAfterTax": -327038,
+     "BalBFPrevYr": 0,
+     "AmtAvlAppr": -327038,
+     "TrfToReserves": 0,
+     "ProprietorAccBalTrf": -327038
+    },
+    "PersumptiveInc44AD": {
+     "GrsTrnOverOrReceipt": 0,
+     "TotPersumptiveInc44AD": 0
+    },
+    "PersumptiveInc44ADA": {
+     "GrsReceipt": 0
+    },
+    "TotalNumOfMonths": 0,
+    "TotalPrsumptvIncUs44EGoods": 0,
+    "TotalPrsumptvIncUs44E": 0,
+    "NoBooksOfAccPL": {
+     "GrossReceipt": 0,
+     "GrsRcptAccPayeeOrBankMode": 0,
+     "GrsRcptOtherMode": 0,
+     "GrossProfit": 0,
+     "Expenses": 0,
+     "NetProfit": 0,
+     "GrossReceiptPrf": 0,
+     "GrsRcptAccPayeeOrBankModePrf": 0,
+     "GrsRcptOtherModePrf": 0,
+     "GrossProfitPrf": 0,
+     "ExpensesPrf": 0,
+     "NetProfitPrf": 0,
+     "TotBusinessProfession": 0
+    },
+    "TurnverFrmSpecActivity": 0,
+    "NetIncomeFrmSpecActivity": 0
+   },
+   "PARTA_OI": {
+    "MethodOfAcct": "MERC",
+    "ChangeInAcctMethFlg": "N",
+    "ProfDeviatDueAcctMeth": 0,
+    "DecProOrIncLossUs145_2": 0,
+    "MethodOfValClgStk": {
+     "ValRawMaterial": "1",
+     "ValFinishedGoods": "1",
+     "ChngStockValMetFlg": "N",
+     "EffectOnPL": 0,
+     "DecProOrIncLossUs145_A": 0
+    },
+    "NoCredToPLAmt": {
+     "Section28Items": 0,
+     "ProformaCreditsDue": 0,
+     "PrevYrEscalClaim": 0,
+     "OthItemInc": 0,
+     "CapReceipt": 0,
+     "TotNoCredToPLAmt": 0
+    },
+    "AmtDisallUs36": {
+     "StkInsurPrem": 0,
+     "EmpHealthInsurPrem": 0,
+     "EmpBonusCommSum": 0,
+     "IntOnBorrCap": 0,
+     "ZeroCoupBondDisc": 0,
+     "RecogPFContribAmt": 0,
+     "AppSuperAnnFundAmt": 0,
+     "PensionSchemeSec80CCD": 0,
+     "AppGratFundAmt": 0,
+     "OthFundAmt": 0,
+     "EmpContributionCredits": 0,
+     "BadDebtDoubtAmt": 0,
+     "BadDebtDoubtProvn": 0,
+     "SpecResrvTranfr": 0,
+     "FamPlanPromoExp": 0,
+     "SecuritiesPaidAmt": 0,
+     "MrktLossOthExpLossICDS": 0,
+     "OthDisallowances": 0,
+     "TotAmtDisallUs36": 0
+    },
+    "AmtDisallUs37": {
+     "CapitalNatureExp": 0,
+     "PersonalExp": 0,
+     "BusOrProfessnExp": 0,
+     "PoliticPartyExp": 0,
+     "LawVoilatPenalExp": 0,
+     "OthPenalFineExp": 0,
+     "OffenceExp": 0,
+     "ContigentLiability": 0,
+     "OthAmtNotAllowUs37": 0,
+     "TotAmtDisallUs37": 0
+    },
+    "AmtDisallUs40": {
+     "NonCompChapXVIIBAmt": 0,
+     "NonComp40aiiChapXVIIBAmt": 0,
+     "NonComp40aibChapXVIIBAmt": 0,
+     "NonComp40aiiiChapXVIIBAmt": 0,
+     "TaxAmtOnProfits": 0,
+     "WTAmt": 0,
+     "RolyatyOrServiceFee": 0,
+     "IntSalBonPartner": 0,
+     "OthDisallow": 0,
+     "TotAmtDisallUs40": 0,
+     "AmtDisallUs40PyNowAll": 0
+    },
+    "AmtDisallUs40A": {
+     "AmtPaidUs40A2b": 0,
+     "AmtGT20kCash": 0,
+     "ProvPmtGrat": 0,
+     "ContToSetupTrust": 0,
+     "OthDisallow": 0,
+     "TotAmtDisallUs40A": 0
+    },
+    "AmtDisallUs43BPyNowAll": {
+     "AmtUs43B": {
+      "TaxDutyCesAmt": 0,
+      "ContToEmpPFSFGF": 0,
+      "EmpBonusComm": 0,
+      "IntPayaleToFI": 0,
+      "SumPayaleLoanBrToFinComp": 0,
+      "IntPayaleToFISchBank": 0,
+      "LeaveEncashPayable": 0,
+      "TotAmtUs43b": 0
+     }
+    },
+    "AmtDisall43B": {
+     "AmtUs43B": {
+      "TaxDutyCesAmt": 0,
+      "ContToEmpPFSFGF": 0,
+      "EmpBonusComm": 0,
+      "IntPayaleToFI": 0,
+      "SumPayaleLoanBrToFinComp": 0,
+      "IntPayaleToFISchBank": 0,
+      "LeaveEncashPayable": 0,
+      "TotAmtUs43b": 0
+     }
+    },
+    "AmtExciseCustomsVATOutstanding": {
+     "ExciseCustomsVAT": {
+      "UnionExciseDuty": 0,
+      "ServiceTax": 0,
+      "VATorSaleTax": 0,
+      "CentralGoodServiceTax": 0,
+      "StateGoodServiceTax": 0,
+      "IntegratedGoodServiceTax": 0,
+      "UnionTerrGoodServiceTax": 0,
+      "OthDutyTaxCess": 0,
+      "TotExciseCustomsVAT": 0
+     }
+    },
+    "DeemedProfUs33ABs": 0,
+    "ProfTaxAmtUs41": 0,
+    "PriorAmtIncCrDrPL": 0,
+    "AmountOfExpDisAllwUs14A": 0,
+    "ScheduleTPSAFlg": "N"
+   },
+   "ITR3ScheduleBP": {
+    "BusinessIncOthThanSpec": {
+     "ProfBfrTaxPL": -327038,
+     "NetPLFromSpecBus": 0,
+     "NetPLFromSpecifiedBus": 0,
+     "IncRecCredPLOthHeadDtls": {
+      "Salary": 0,
+      "HouseProperty": 0,
+      "CapitalGains": 0,
+      "OtherSources": 0,
+      "Dividend": 0,
+      "OtherThanDividend": 0,
+      "Us115BBF": 0,
+      "Us115BBG": 0,
+      "115BBH": 0
+     },
+     "PLUs44sChapXIIG": 0,
+     "ProfitLossInclRefrdSec": {
+      "ProfitLossUs44AD": 0,
+      "ProfitLossUs44ADA": 0,
+      "ProfitLossUs44AE": 0,
+      "ProfitLossUs44B": 0,
+      "ProfitLossUs44BB": 0,
+      "ProfitLossUs44BBA": 0,
+      "ProfitLossUs44DA": 0
+     },
+     "TotalProfitFrmActCvrd": 0,
+     "ProfitFrmActCvrd": {
+      "ProfitFrmActCvrdUndrRule7": 0,
+      "ProfitFrmActCvrdUndrRule7A": 0,
+      "ProfitFrmActCvrdUndrRule7B1": 0,
+      "ProfitFrmActCvrdUndrRule7B1A": 0,
+      "ProfitFrmActCvrdUndrRule8": 0
+     },
+     "IncCredPL": {
+      "FirmShareInc": 0,
+      "AOPBOISharInc": 0,
+      "OtherExmptIncDtl": {
+       "OperatingDividendName": "Dividend",
+       "OperatingDividendAmt": 0
+      },
+      "OthExempInc": 0,
+      "TotExempIncPL": 0
+     },
+     "BalancePLOthThanSpecBus": -327038,
+     "ExpDebToPLOthHeadDtls": {
+      "Salary": 0,
+      "HouseProperty": 0,
+      "CapitalGains": 0,
+      "OtherSources": 0,
+      "Us115BBF": 0,
+      "Us115BBG": 0,
+      "115BBH": 0
+     },
+     "ExpDebToPLExemptInc": 0,
+     "ExpDebToPLExemptIncDisAllwUs14A": 0,
+     "TotExpDebPL": 0,
+     "AdjustedPLOthThanSpecBus": -327038,
+     "DepreciationDebPLCosAct": 244,
+     "DepreciationAllowITAct32": {
+      "DepreciationAllowUs32_1_ii": 244,
+      "DepreciationAllowUs32_1_i": 0,
+      "TotDeprAllowITAct": 244
+     },
+     "AdjustPLAfterDeprOthSpecInc": -327038,
+     "AmtDebPLDisallowUs36": 0,
+     "AmtDebPLDisallowUs37": 0,
+     "AmtDebPLDisallowUs40": 0,
+     "AmtDebPLDisallowUs40A": 0,
+     "AmtDebPLDisallowUs43B": 0,
+     "InterestDisAllowUs23SMEAct": 0,
+     "DeemIncUs41": 0,
+     "DeemIncUs3380HHD80IA": 0,
+     "DeemIncUs43CA": 0,
+     "OthItemDisallowUs28To44DA": 0,
+     "AnyOthIncNotInclInExpDisallowPL": 0,
+     "AnyOthIncNotInclInSalary": 0,
+     "AnyOthIncNotInclInBonus": 0,
+     "AnyOthIncNotInclInCommission": 0,
+     "AnyOthIncNotInclInInterest": 0,
+     "AnyOthIncNotInclInOthers": 0,
+     "IncProfDecLossAccICDSAdj": 0,
+     "TotAfterAddToPLDeprOthSpecInc": 0,
+     "DeductUs32_1_iii": 0,
+     "DebPLUs35ExcessAmt": 0,
+     "AmtDisallUs40NowAllow": 0,
+     "AmtDisallUs43BNowAllow": 0,
+     "AnyOthAmtAllDeduct": 0,
+     "DecProfIncLossAccICDSAdj": 0,
+     "TotDeductionAmts": 0,
+     "PLAftAdjDedBusOthThanSpec": -327038,
+     "DeemedProfitBusUs": {
+      "Section44AD": 0,
+      "Section44ADA": 0,
+      "Section44AE": 0,
+      "Section44B": 0,
+      "Section44BB": 0,
+      "Section44BBA": 0,
+      "Section44DA": 0,
+      "TotDeemedProfitBusUs": 0
+     },
+     "NetPLAftAdjBusOthThanSpec": -327038,
+     "NetPLBusOthThanSpec7A7B7C": -327038,
+     "ChrgblIncUndrRule7": 0,
+     "DeemedChrgblIncUndrRule7A": 0,
+     "DeemedChrgblIncUndrRule7B1": 0,
+     "DeemedChrgblIncUndrRule7B1A": 0,
+     "DeemedChrgblIncUndrRule8": 0,
+     "IncomeOtherThanRule": -327038,
+     "BalIncDeemedFrmAgri": 0
+    },
+    "SpecBusinessInc": {
+     "NetPLFrmSpecBus": 0,
+     "AdditionUs28to44DA": 0,
+     "DeductUs28to44DA": 0,
+     "AdjustedPLFrmSpecuBus": 0
+    },
+    "SpecifiedBusinessInc": {
+     "NetPLFrmSpecifiedBus": 0,
+     "AddSec28to44DA": 0,
+     "DedSec28to44DAOTDedSec35AD": 0,
+     "ProfitLossSpecifiedBusiness": 0,
+     "PLFrmSpecifiedBus": 0
+    },
+    "IncChrgUnHdProftGain": -327038,
+    "BusSetoffCurrYr": {
+     "LossSetOffOnBusLoss": 327038,
+     "SpeculativeInc": {
+      "IncOfCurYrUnderThatHead": 0,
+      "BusLossSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     },
+     "SpecifiedInc": {
+      "IncOfCurYrUnderThatHead": 0,
+      "BusLossSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     },
+     "TotLossSetOffOnBus": 0,
+     "LossRemainSetOffOnBus": 327038
+    }
+   },
+   "ScheduleDPM": {
+    "PlantMachinery": {
+     "Rate15": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "Total": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     },
+     "Rate30": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "Total": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     },
+     "Rate40": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 610,
+       "Total": 610,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 610,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 244,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 244,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 244,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 366
+      }
+     },
+     "Rate45": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "Total": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     }
+    }
+   },
+   "ScheduleDEP": {
+    "SummaryFromDeprSch": {
+     "PlantMachinerySummary": {
+      "DeprBlockTot15Percent": 0,
+      "DeprBlockTot30Percent": 0,
+      "DeprBlockTot40Percent": 244,
+      "DeprBlockTot45Percent": 0,
+      "TotPlntMach": 244
+     },
+     "BuildingSummary": {
+      "DeprBlockTot5Percent": 0,
+      "DeprBlockTot10Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "TotBuildng": 0
+     },
+     "TotalDepreciation": 244
+    }
+   },
+   "ScheduleCGFor23": {
+    "ShortTermCapGainFor23": {
+     "SlumpSaleInStcg": {
+      "FMV11UAEii": 0,
+      "FMV11UAEiii": 0,
+      "FullConsideration": 0,
+      "NetWorthOfDivision": 0,
+      "CapgainonAssets": 0
+     },
+     "EquityMFonSTT": [
+      {
+       "MFSectionCode": "1A",
+       "EquityMFonSTTDtls": {
+        "FullConsideration": 34063,
+        "DeductSec48": {
+         "AquisitCost": 0,
+         "ImproveCost": 0,
+         "ExpOnTrans": 0,
+         "TotalDedn": 0
+        },
+        "BalanceCG": 34063,
+        "LossSec94of7Or94of8": 0,
+        "CapgainonAssets": 34063
+       }
+      }
+     ],
+     "NRITransacSec48Dtl": {
+      "NRItaxSTTPaid": 0,
+      "NRItaxSTTNotPaid": 0
+     },
+     "NRISecur115AD": {
+      "FullValueConsdRecvUnqshr": 0,
+      "FairMrktValueUnqshr": 0,
+      "FullValueConsdSec50CA": 0,
+      "FullValueConsdOthUnqshr": 0,
+      "FullConsideration": 0,
+      "DeductSec48": {
+       "AquisitCost": 0,
+       "ImproveCost": 0,
+       "ExpOnTrans": 0,
+       "TotalDedn": 0
+      },
+      "BalanceCG": 0,
+      "LossSec94of7Or94of8": 0,
+      "CapgainonAssets": 0
+     },
+     "SaleOnOtherAssets": {
+      "FullValueConsdRecvUnqshr": 0,
+      "FairMrktValueUnqshr": 0,
+      "FullValueConsdSec50CA": 0,
+      "FullValueConsdOthUnqshr": 0,
+      "FullConsideration": 0,
+      "DeductSec48": {
+       "AquisitCost": 0,
+       "ImproveCost": 0,
+       "ExpOnTrans": 0,
+       "TotalDedn": 0
+      },
+      "BalanceCG": 0,
+      "LossSec94of7Or94of8": 0,
+      "DeemedStcgOnAssets": 0,
+      "ExemptionOrDednUs54": {
+       "ExemptionGrandTotal": 0
+      },
+      "CapgainonAssets": 0
+     },
+     "UnutilizedStcgFlag": "N",
+     "TotalAmtDeemedStcg": 0,
+     "PassThrIncNatureSTCG": 0,
+     "PassThrIncNatureSTCG15Per": 0,
+     "PassThrIncNatureSTCG30Per": 0,
+     "PassThrIncNatureSTCGAppRate": 0,
+     "TotalAmtNotTaxUsDTAAStcg": 0,
+     "TotalAmtTaxUsDTAAStcg": 0,
+     "TotalSTCG": 34063
+    },
+    "LongTermCapGain23": {
+     "SlumpSaleInLtcg": {
+      "FMV11UAEii": 0,
+      "FMV11UAEiii": 0,
+      "FullConsideration": 0,
+      "NetWorthOfDivision": 0,
+      "SlumpBalance": 0,
+      "ExemptionOrDednUs54": {
+       "ExemptionGrandTotal": 0
+      },
+      "CapgainonAssets": 0
+     },
+     "SaleofBondsDebntr": {
+      "FullConsideration": 0,
+      "DeductSec48": {
+       "AquisitCost": 0,
+       "ImproveCost": 0,
+       "ExpOnTrans": 0,
+       "TotalDedn": 0
+      },
+      "BalanceCG": 0,
+      "DeductionUs54F": 0,
+      "CapgainonAssets": 0
+     },
+     "SaleOfEquityShareUs112A": {
+      "BalanceCG": 0,
+      "DeductionUs54F": 0,
+      "CapgainonAssets": 0
+     },
+     "NRISaleOfEquityShareUs112A": {
+      "BalanceCG": 0,
+      "DeductionUs54F": 0,
+      "CapgainonAssets": 0
+     },
+     "NRISaleofForeignAsset": {
+      "SaleonSpecAsset": 0,
+      "DednSpecAssetus115": 0,
+      "BalonSpeciAsset": 0,
+      "SaleOtherSpecAsset": 0,
+      "DednOtherSpecAssetus115": 0,
+      "BalOtherthanSpecAsset": 0
+     },
+     "SaleofAssetNA": {
+      "FullValueConsdRecvUnqshr": 0,
+      "FairMrktValueUnqshr": 0,
+      "FullValueConsdSec50CA": 0,
+      "FullValueConsdOthUnqshr": 0,
+      "FullConsideration": 0,
+      "DeductSec48": {
+       "AquisitCost": 0,
+       "ImproveCost": 0,
+       "ExpOnTrans": 0,
+       "TotalDedn": 0
+      },
+      "BalanceCG": 0,
+      "ExemptionOrDednUs54": {
+       "ExemptionGrandTotal": 0
+      },
+      "CapgainonAssets": 0
+     },
+     "UnutilizedLtcgFlag": "N",
+     "TotalAmtDeemedLtcg": 0,
+     "PassThrIncNatureLTCG": 0,
+     "PassThrIncNatureLTCGUs112A": 0,
+     "PassThrIncNatureLTCG10Per": 0,
+     "PassThrIncNatureLTCG20Per": 0,
+     "TotalAmtNotTaxUsDTAALtcg": 0,
+     "TotalAmtTaxUsDTAALtcg": 0,
+     "TotalLTCG": 0
+    },
+    "SumOfCGIncm": 34063,
+    "IncmFromVDATrnsf": 0,
+    "TotScheduleCGFor23": 34063,
+    "DeducClaimInfo": {
+     "TotDeductClaim": 0
+    },
+    "CurrYrLosses": {
+     "InLossSetOff": {
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff10Per": 0,
+      "LtclSetOff20Per": 0,
+      "LtclSetOffDTAARate": 0
+     },
+     "InStcg15Per": {
+      "CurrYearIncome": 34063,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "CurrYrCapGain": 34063
+     },
+     "InStcg30Per": {
+      "CurrYearIncome": 0,
+      "StclSetoff15Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InStcgAppRate": {
+      "CurrYearIncome": 0,
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffDTAARate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InStcgDTAARate": {
+      "CurrYearIncome": 0,
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InLtcg10Per": {
+      "CurrYearIncome": 0,
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff20Per": 0,
+      "LtclSetOffDTAARate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InLtcg20Per": {
+      "CurrYearIncome": 0,
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff10Per": 0,
+      "LtclSetOffDTAARate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InLtcgDTAARate": {
+      "CurrYearIncome": 0,
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff10Per": 0,
+      "LtclSetOff20Per": 0,
+      "CurrYrCapGain": 0
+     },
+     "TotLossSetOff": {
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff10Per": 0,
+      "LtclSetOff20Per": 0,
+      "LtclSetOffDTAARate": 0
+     },
+     "LossRemainSetOff": {
+      "StclSetoff15Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff10Per": 0,
+      "LtclSetOff20Per": 0,
+      "LtclSetOffDTAARate": 0
+     }
+    },
+    "AccruOrRecOfCG": {
+     "ShortTermUnder15Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "ShortTermUnder30Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "ShortTermUnderAppRate": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "ShortTermUnderDTAARate": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "LongTermUnder10Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "LongTermUnder20Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "LongTermUnderDTAARate": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "VDATrnsfGainsUnder30Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     }
+    }
+   },
+   "ScheduleOS": {
+    "IncOthThanOwnRaceHorse": {
+     "GrossIncChrgblTaxAtAppRate": 1510,
+     "DividendGross": 0,
+     "DividendOthThan22e": 0,
+     "Dividend22e": 0,
+     "InterestGross": 1510,
+     "IntrstFrmSavingBank": 1510,
+     "IntrstFrmTermDeposit": 0,
+     "IntrstFrmIncmTaxRefund": 0,
+     "NatofPassThrghIncome": 0,
+     "IntrstFrmOthers": 0,
+     "RentFromMachPlantBldgs": 0,
+     "Tot562x": 0,
+     "Aggrtvaluewithoutcons562x": 0,
+     "Immovpropwithoutcons562x": 0,
+     "Immovpropinadeqcons562x": 0,
+     "Anyotherpropwithoutcons562x": 0,
+     "Anyotherpropinadeqcons562x": 0,
+     "FamilyPension": 0,
+     "AnyOtherIncome": 0,
+     "OthersInc": {
+      "OthersIncDtls": [
+       {
+        "OthNatOfInc": "SAMPLE NAME 9",
+        "OthAmount": 0
+       }
+      ]
+     },
+     "IncChargeableSpecialRates": 0,
+     "LtryPzzlChrgblUs115BB": 0,
+     "IncChrgblUs115BBE": 0,
+     "CashCreditsUs68": 0,
+     "UnExplndInvstmntsUs69": 0,
+     "UnExplndMoneyUs69A": 0,
+     "UnDsclsdInvstmntsUs69B": 0,
+     "UnExplndExpndtrUs69C": 0,
+     "AmtBrwdRepaidOnHundiUs69D": 0,
+     "TaxAccumulatedBalRecPF": {
+      "TotalIncomeBenefit": 0,
+      "TotalTaxBenefit": 0
+     },
+     "OthersGross": 0,
+     "PassThrIncOSChrgblSplRate": 0,
+     "IncChargblSplRateOS": {
+      "TotalAmtTaxUsDTAASchOs": 0
+     },
+     "Deductions": {
+      "Depreciation": 0,
+      "TotDeductions": 0
+     },
+     "BalanceNoRaceHorse": 1510
+    },
+    "TotOthSrcNoRaceHorse": 1510,
+    "IncFromOwnHorse": {
+     "Receipts": 0,
+     "DeductSec57": 0,
+     "BalanceOwnRaceHorse": 0
+    },
+    "IncChargeable": 1510,
+    "IncFrmLottery": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "IncFrmOnGames": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Upto15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115BBDA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115A1ai": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115A1aA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Upto15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115AC": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115ACA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115AD1i": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "NOT89A": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendDTAA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    }
+   },
+   "ScheduleCYLA": {
+    "CYLAEditFlag": "N",
+    "Salary": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "HP": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "BusProfExclSpecProf": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "SpeculativeInc": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "SpecifiedInc": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCG15Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 34063,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 34063,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCG30Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCGAppRate": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCGDTAARate": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "LTCG10Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "LTCG20Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "LTCGDTAARate": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "OthSrcExclRaceHorse": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 1510,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 1510,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "OthSrcRaceHorse": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "IncOSDTAA": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "TotalCurYr": {
+     "TotHPlossCurYr": 0,
+     "TotBusLoss": 327038,
+     "TotOthSrcLossNoRaceHorse": 0
+    },
+    "TotalLossSetOff": {
+     "TotHPlossCurYrSetoff": 0,
+     "TotBusLossSetoff": 35573,
+     "TotOthSrcLossNoRaceHorseSetoff": 0
+    },
+    "LossRemAftSetOff": {
+     "BalHPlossCurYrAftSetoff": 0,
+     "BalBusLossAftSetoff": 291465,
+     "BalOthSrcLossNoRaceHorseAftSetoff": 0
+    }
+   },
+   "ScheduleBFLA": {
+    "BFLAEditFlag": "N",
+    "Salary": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "HP": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "BusProfExclSpecProf": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "SpeculativeInc": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "SpecifiedInc": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCG15Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCG30Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCGAppRate": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCGDTAARate": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "LTCG10Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "LTCG20Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "LTCGDTAARate": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "OthSrcExclRaceHorse": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "OthSrcRaceHorse": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "IncOSDTAA": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "TotalBFLossSetOff": {
+     "TotBFLossSetoff": 0,
+     "TotUnabsorbedDeprSetoff": 0,
+     "TotAllUs35cl4Setoff": 0
+    },
+    "IncomeOfCurrYrAftCYLABFLA": 0
+   },
+   "ScheduleCFL": {
+    "LossCFFromPrev3rdYearFromAY": {
+     "CarryFwdLossDetail": {
+      "DateOfFiling": "2016-07-23",
+      "BrtFwdBusLoss": 565132,
+      "BusLossOthThanSpecLossCF": 565132
+     }
+    },
+    "LossCFCurrentAssmntYear": {
+     "CarryFwdLossDetail": {
+      "DateOfFiling": "2019-07-23",
+      "BrtFwdBusLoss": 2446909,
+      "BusLossOthThanSpecLossCF": 2446909
+     }
+    },
+    "LossCFCurrentAssmntYear2021": {
+     "CarryFwdLossDetail": {
+      "DateOfFiling": "2022-07-16",
+      "BrtFwdBusLoss": 94856,
+      "BusLossOthThanSpecLossCF": 94856
+     }
+    },
+    "LossCFCurrentAssmntYear2022": {
+     "CarryFwdLossDetail": {
+      "DateOfFiling": "2021-11-22",
+      "BrtFwdBusLoss": 830179,
+      "BusLossOthThanSpecLossCF": 830179
+     }
+    },
+    "LossCFCurrentAssmntYear2024": {
+     "CarryFwdLossDetail": {
+      "DateOfFiling": "2023-06-24",
+      "BrtFwdBusLoss": 1513184,
+      "BusLossOthThanSpecLossCF": 1513184,
+      "TotalSTCGPTILossCF": 194592
+     }
+    },
+    "TotalOfBFLossesEarlierYrs": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 5450260,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 194592,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    },
+    "AdjTotBFLossInBFLA": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 0,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 0,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    },
+    "CurrentAYloss": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 291465,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 0,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    },
+    "TotalLossCFSummary": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 5176593,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 194592,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    }
+   },
+   "ITR3ScheduleUD": {
+    "CurrAssYr": "2024-25",
+    "CurBalCFNY": 244,
+    "CurAllowBalCFNY": 0,
+    "ScheduleUD": [
+     {
+      "AssYr": "2023-24",
+      "AmtBFUD": 407,
+      "AmtDeprSOCY": 0,
+      "BalCFNY": 407,
+      "AmtBFUAllow": 0,
+      "AmtAllowSOCY": 0,
+      "AllowBalCFNY": 0
+     }
+    ],
+    "TotBFUDepritAmt": 407,
+    "TotCurYrdepritSetoffInc": 0,
+    "TotDepritBalCFNY": 651,
+    "TotBFUAllowAmt": 0,
+    "TotCurYrAllowSetoffInc": 0,
+    "TotalBalCFNY": 0
+   },
+   "ScheduleAMTC": {
+    "TaxSection115JC": 0,
+    "TaxOthProvisions": 0,
+    "AmtTaxCreditAvailable": 0,
+    "ScheduleAMTCDtls": [
+     {
+      "AssYr": "2013-14",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2014-15",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2015-16",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2016-17",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2017-18",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2018-19",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2019-20",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2020-21",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2021-22",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2022-23",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2023-24",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     }
+    ],
+    "CurrAssYr": "2024-25",
+    "CurrYrAmtCreditFwd": 0,
+    "CurrYrCreditCarryFwd": 0,
+    "TotAMTGross": 0,
+    "TotSetOffEys": 0,
+    "TotBalBF": 0,
+    "TotAmtCreditUtilisedCY": 0,
+    "TotBalAMTCreditCF": 0,
+    "TaxSection115JD": 0,
+    "AmtLiabilityAvailable": 0
+   },
+   "ScheduleEI": {
+    "InterestInc": 0,
+    "NetAgriIncOrOthrIncRule7": 0,
+    "OthersInc": {
+     "NatureofDescDivName": "Dividend",
+     "OthDividendAmt": 0,
+     "OthersIncDtls": [
+      {
+       "NatureDesc": "OTH",
+       "OthNatOfInc": "SAMPLE NAME 9",
+       "OthAmount": 17465
+      }
+     ]
+    },
+    "Others": 17465,
+    "IncChrgblAsPerDTAA": 0,
+    "PassThrIncNotChrgblTax": 0,
+    "TotalExemptInc": 17465
+   },
+   "ScheduleTR1": {
+    "TotalTaxPaidOutsideIndia": 0,
+    "TotalTaxReliefOutsideIndia": 0,
+    "TaxReliefOutsideIndiaDTAA": 0,
+    "TaxReliefOutsideIndiaNotDTAA": 0,
+    "TaxPaidOutsideIndFlg": "NO"
+   },
+   "PartB-TI": {
+    "Salaries": 0,
+    "IncomeFromHP": 0,
+    "ProfBusGain": {
+     "ProfGainNoSpecBus": 0,
+     "ProfGainSpecBus": 0,
+     "ProfGainSpecifiedBus": 0,
+     "ProfIncome115BBF": 0,
+     "TotProfBusGain": 0
+    },
+    "CapGain": {
+     "ShortTerm": {
+      "ShortTerm15Per": 34063,
+      "ShortTerm30Per": 0,
+      "ShortTermAppRate": 0,
+      "ShortTermSplRateDTAA": 0,
+      "TotalShortTerm": 34063
+     },
+     "LongTerm": {
+      "LongTerm10Per": 0,
+      "LongTerm20Per": 0,
+      "LongTermSplRateDTAA": 0,
+      "TotalLongTerm": 0
+     },
+     "ShortTermLongTermTotal": 34063,
+     "CapGains30Per115BBH": 0,
+     "TotalCapGains": 34063
+    },
+    "IncFromOS": {
+     "OtherSrcThanOwnRaceHorse": 1510,
+     "IncChargblSplRate": 0,
+     "FromOwnRaceHorse": 0,
+     "TotIncFromOS": 1510
+    },
+    "TotalTI": 35573,
+    "CurrentYearLoss": 35573,
+    "BalanceAfterSetoffLosses": 0,
+    "BroughtFwdLossesSetoff": 0,
+    "GrossTotalIncome": 0,
+    "IncChargeTaxSplRate111A112": 0,
+    "DeductionsUndSchVIADtl": {
+     "PartBchapterVIA": 0,
+     "PartCchapterVIA": 0,
+     "TotDeductUndSchVIA": 0
+    },
+    "DeductionsUnder10Aor10AA": 0,
+    "TotalIncome": 0,
+    "IncChargeableTaxSplRates": 0,
+    "NetAgricultureIncomeOrOtherIncomeForRate": 0,
+    "AggregateIncome": 0,
+    "LossesOfCurrentYearCarriedFwd": 291465,
+    "DeemedIncomeUs115JC": 0
+   },
+   "PartB_TTI": {
+    "ComputationOfTaxLiability": {
+     "TaxPayableOnDeemedTI": {
+      "TaxDeemedTISec115JC": 0,
+      "SurchargeOnAboveCrore": 0,
+      "EducationCess": 0,
+      "TotalTax": 0
+     },
+     "TaxPayableOnTI": {
+      "TaxAtNormalRatesOnAggrInc": 0,
+      "TaxAtSpecialRates": 0,
+      "RebateOnAgriInc": 0,
+      "TaxPayableOnTotInc": 0,
+      "Rebate87A": 0,
+      "TaxPayableOnRebate": 0,
+      "Surcharge25ofSI": 0,
+      "Surcharge25ofSIBeforeMarginal": 0,
+      "SurchargeOnAboveCroreBeforeMarginal": 0,
+      "SurchargeOnAboveCrore": 0,
+      "TotalSurcharge": 0,
+      "EducationCess": 0,
+      "GrossTaxLiability": 0
+     },
+     "GrossTaxPayable": 0,
+     "GrossTaxPay": {
+      "TaxInc17": 0,
+      "TaxDeferred17": 0,
+      "TaxDeferredPayableCY": 0
+     },
+     "CreditUS115JD": 0,
+     "TaxPayAfterCreditUs115JD": 0,
+     "TaxRelief": {
+      "Section89": 0,
+      "Section90": 0,
+      "Section91": 0,
+      "TotTaxRelief": 0
+     },
+     "NetTaxLiability": 0,
+     "IntrstPay": {
+      "IntrstPayUs234A": 0,
+      "IntrstPayUs234B": 0,
+      "IntrstPayUs234C": 0,
+      "LateFilingFee234F": 0
+     },
+     "AggregateTaxInterestLiability": 0
+    },
+    "TaxPaid": {
+     "TaxesPaid": {
+      "AdvanceTax": 0,
+      "TDS": 0,
+      "TCS": 0,
+      "SelfAssessmentTax": 0,
+      "TotalTaxesPaid": 0
+     },
+     "BalTaxPayable": 0
+    },
+    "Refund": {
+     "RefundDue": 0,
+     "BankAccountDtls": {
+      "BankDtlsFlag": "Y",
+      "AddtnlBankDetails": [
+       {
+        "IFSCCode": "XXXX0000000",
+        "BankName": "SAMPLE NAME 10",
+        "BankAccountNo": "000000000000000",
+        "AccountType": "SB"
+       },
+       {
+        "IFSCCode": "XXXX0000000",
+        "BankName": "SAMPLE NAME 11",
+        "BankAccountNo": "00000000000000",
+        "AccountType": "SB"
+       }
+      ]
+     }
+    },
+    "AssetOutIndiaFlag": "NO"
+   },
+   "Verification": {
+    "Declaration": {
+     "AssesseeVerName": "SAMPLE NAME 12",
+     "FatherName": "SAMPLE NAME 13",
+     "AssesseeVerPAN": "AAAPZ1000A"
+    },
+    "Capacity": "S",
+    "Date": "2024-06-29",
+    "Place": "SAMPLE PLACE 5"
+   }
+  }
+ }
+}

@@ -577,6 +577,21 @@ function signPayload(secret, payload) {
  */
 function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(), toleranceMs = 5 * 60 * 1000 }) {
   if (!secret) return { ok: false, reason: "no-secret" };
+  /*
+   * TRIM THE STORED SECRET, not just the presented one.
+   *
+   * `openssl rand -base64 32 | firebase functions:secrets:set …` is the obvious
+   * way to create this value and it stores a TRAILING NEWLINE, because that is
+   * what openssl prints. Reading it back through $( ) strips the newline — so
+   * the sender transmits "abc=" while the function holds "abc=\n" and every
+   * request fails a comparison that looks, in every log and every screenshot,
+   * exactly like a wrong password.
+   *
+   * Trimming both sides costs nothing: leading or trailing whitespace in a
+   * shared secret is never meaningful, and never intentional.
+   */
+  const key = String(secret).trim();
+  if (!key) return { ok: false, reason: "no-secret" };
   const lower = {};
   for (const [k, v] of Object.entries(headers)) lower[String(k).toLowerCase()] = v;
 
@@ -587,7 +602,7 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
     const raw = lower[h];
     if (!raw) continue;
     const presented = String(raw).trim().replace(/^Bearer\s+/i, "");
-    if (timingSafeEqual(presented, secret)) return { ok: true, via: "shared-secret" };
+    if (timingSafeEqual(presented, key)) return { ok: true, via: "shared-secret" };
   }
 
   // 2. HMAC over the body — stronger, kept for anything that can produce it.
@@ -616,8 +631,8 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
 
   // Signed body, and — for vendors that prepend the timestamp — signed
   // "<timestamp>.<body>" too.
-  const candidates = [signPayload(secret, rawBody)];
-  if (ts) candidates.push(signPayload(secret, `${ts}.${rawBody}`));
+  const candidates = [signPayload(key, rawBody)];
+  if (ts) candidates.push(signPayload(key, `${ts}.${rawBody}`));
   for (const c of candidates) {
     if (timingSafeEqual(provided, c.hex) || timingSafeEqual(provided, c.base64)) return { ok: true, via: "hmac" };
   }

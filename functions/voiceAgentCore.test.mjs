@@ -356,6 +356,32 @@ test("the daily ceiling holds and resets on a new day", () => {
 const SECRET = "test-secret-value";
 const BODY = JSON.stringify({ event: "call.started", from: "+919825011234" });
 
+test("a static shared secret is accepted — it is what the Sarvam console can send", () => {
+  // The Auth tab is a fixed string; it cannot hash a body that changes per call.
+  for (const headers of [
+    { authorization: `Bearer ${SECRET}` },
+    { Authorization: `bearer ${SECRET}` },
+    { authorization: SECRET },              // no scheme word
+    { "x-prohippo-token": SECRET },
+    { "x-api-key": SECRET },
+  ]) {
+    const r = verifyWebhook({ headers, rawBody: BODY, secret: SECRET });
+    assert.equal(r.ok, true, JSON.stringify(headers));
+    assert.equal(r.via, "shared-secret");
+  }
+});
+
+test("a wrong or near-miss shared secret is refused", () => {
+  for (const headers of [
+    { authorization: "Bearer wrong-secret" },
+    { authorization: `Bearer ${SECRET}x` },
+    { authorization: `Bearer ${SECRET.slice(0, -1)}` },
+    { "x-api-key": "" },
+  ]) {
+    assert.equal(verifyWebhook({ headers, rawBody: BODY, secret: SECRET }).ok, false, JSON.stringify(headers));
+  }
+});
+
 test("a correctly signed request is accepted, hex or base64", () => {
   const sig = signPayload(SECRET, BODY);
   assert.ok(verifyWebhook({ headers: { "x-sarvam-signature": sig.hex }, rawBody: BODY, secret: SECRET }).ok);
@@ -547,6 +573,42 @@ test("start and end events are told apart across naming conventions", () => {
   for (const event of ["call.ended", "session.end", "call_completed", "hangup"]) {
     assert.equal(parseRequest({ event }).kind, "session-end", event);
   }
+});
+
+test("the URL path names the tool when the body is flat — Sarvam's actual shape", () => {
+  // Sarvam's API-tool form sends only the fields you declared, with no wrapper.
+  const p = parseRequest({ query: "raise a bill" }, "/sarvamVoiceWebhook/find_feature");
+  assert.equal(p.kind, "tool");
+  assert.equal(p.toolName, "find_feature");
+  assert.equal(p.args.query, "raise a bill");
+});
+
+test("call metadata alongside a flat body is not mistaken for a tool argument", () => {
+  const p = parseRequest(
+    { days: 7, call_id: "c1", language: "hi-IN", user_config: { user_phone_number: "+919825011234" } },
+    "/sarvamVoiceWebhook/upcoming_hearings"
+  );
+  assert.deepEqual(p.args, { days: 7 });
+  assert.equal(p.callId, "c1");
+  assert.equal(p.phone, "+919825011234");
+});
+
+test("a tool with no arguments still routes off the path", () => {
+  const p = parseRequest({}, "/sarvamVoiceWebhook/today_brief");
+  assert.equal(p.toolName, "today_brief");
+  assert.deepEqual(p.args, {});
+});
+
+test("an unrecognised path is not treated as a tool name", () => {
+  // Otherwise a typo'd URL becomes an invented tool rather than a clean refusal.
+  const p = parseRequest({ event: "call.started" }, "/sarvamVoiceWebhook/nonsense");
+  assert.equal(p.toolName, null);
+  assert.equal(p.kind, "session-start");
+});
+
+test("a body-level tool name still wins over the path", () => {
+  const p = parseRequest({ tool_name: "open_tasks" }, "/sarvamVoiceWebhook/find_feature");
+  assert.equal(p.toolName, "open_tasks");
 });
 
 test("an unknown tool name still parses as a tool — so the dispatcher can refuse it", () => {

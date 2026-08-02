@@ -347,7 +347,11 @@ const ADVICE_REPLY =
  * above, so the file is a build artifact of the same source of truth the server
  * enforces against, not a second one.
  */
-const KB_NAME = "ProHippo app guide";
+/* Sarvam's KB name is a slug, not a display name — lowercase letters, digits,
+   hyphens or underscores, 3-32 characters. A prose title is rejected at the
+   Create dialog, so this matches what the platform will actually accept, and
+   what the agent's query tool names when it searches. */
+const KB_NAME = "prohippo-app-guide";
 
 /*
  * The description is what the agent routes on — Sarvam embeds it to decide

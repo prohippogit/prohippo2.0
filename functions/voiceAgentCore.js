@@ -22,6 +22,7 @@
 const crypto = require("crypto");
 const {
   FEATURES,
+  KB_NAME,
   RESTRICTED_PATTERNS,
   RESTRICTED_REPLY,
   ADVICE_REPLY,
@@ -458,7 +459,11 @@ function buildSystemPrompt(caller = null) {
     "",
     "THE APP",
     `The screens, left to right in the sidebar: ${featureIndex}.`,
-    "For anything beyond naming the screen — what it does, the exact steps to reach it — call find_feature, or search the ProHippo app guide knowledge base. Do not describe a screen from memory; they move.",
+    // Names the KB by its real slug on Sarvam, so the agent asks for a knowledge
+    // base that exists. Interpolated rather than typed twice — the platform
+    // rejects a prose name, and a prompt naming a KB that isn't there is a
+    // retrieval that silently never happens.
+    `For anything beyond naming the screen — what it does, the exact steps to reach it — call find_feature, or search the ${KB_NAME} knowledge base. Do not describe a screen from memory; they move.`,
   ].join("\n");
 }
 
@@ -509,16 +514,40 @@ const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 /* ---------------- webhook authentication ---------------- */
 
 /*
- * Sarvam signs each webhook with the shared secret configured on the agent.
- * Vendors differ on the header name and on whether the digest is hex or
- * base64, and on whether a timestamp is prepended — so we accept the shapes
- * that exist rather than betting on one, and compare in constant time.
+ * TWO ACCEPTED PROOFS, AND WHY THERE ARE TWO.
  *
- * FAIL CLOSED. No secret configured, no signature, or a signature that doesn't
- * match means the request is rejected. This endpoint reads a practitioner's
- * client data out loud; an unauthenticated caller who can guess a phone number
- * must not be able to reach it.
+ * The original design took only an HMAC of the request body. That is the
+ * stronger scheme — it binds the signature to the exact bytes sent, so a
+ * captured request cannot be edited and replayed. It is also not something
+ * Sarvam's console can produce: an API tool is configured with a static Auth
+ * tab, and a fixed string cannot be a hash of a body that changes every call.
+ * Demanding it would have meant rejecting every tool call with a 401.
+ *
+ * So a STATIC SHARED SECRET is accepted as well, in an Authorization: Bearer
+ * header or one of the token headers below, compared in constant time against
+ * the same SARVAM_WEBHOOK_SECRET.
+ *
+ * Be clear about what that costs. A static token does not bind to the body and
+ * is replayable by anyone who obtains it — it is a password, not a signature.
+ * It is acceptable here because the transport is TLS to one fixed URL, and
+ * because possession of it grants far less than it appears to: the token proves
+ * only that a request came from our agent. WHO the caller is gets re-derived
+ * from scratch on every single tool call, from the session token or the phone
+ * number, and every read is scoped to that uid. An attacker holding this secret
+ * still cannot name an account and read it back.
+ *
+ * FAIL CLOSED either way. No secret configured, no proof, or a proof that
+ * doesn't match means rejection. This endpoint reads a practitioner's client
+ * data out loud.
  */
+const BEARER_HEADERS = [
+  "authorization",
+  "x-prohippo-token",
+  "x-webhook-token",
+  "x-api-key",
+  "x-sarvam-token",
+];
+
 const SIGNATURE_HEADERS = [
   "x-sarvam-signature",
   "sarvam-signature",
@@ -551,6 +580,17 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
   const lower = {};
   for (const [k, v] of Object.entries(headers)) lower[String(k).toLowerCase()] = v;
 
+  // 1. Static shared secret — what the Sarvam console can actually send.
+  //    "Bearer <secret>" and a bare "<secret>" are both accepted, because the
+  //    Auth tab may or may not add the scheme word for you.
+  for (const h of BEARER_HEADERS) {
+    const raw = lower[h];
+    if (!raw) continue;
+    const presented = String(raw).trim().replace(/^Bearer\s+/i, "");
+    if (timingSafeEqual(presented, secret)) return { ok: true, via: "shared-secret" };
+  }
+
+  // 2. HMAC over the body — stronger, kept for anything that can produce it.
   const headerName = SIGNATURE_HEADERS.find((h) => lower[h]);
   if (!headerName) return { ok: false, reason: "no-signature" };
   // "sha256=abc123" and bare "abc123" are both in the wild.
@@ -572,7 +612,7 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
   const candidates = [signPayload(secret, rawBody)];
   if (ts) candidates.push(signPayload(secret, `${ts}.${rawBody}`));
   for (const c of candidates) {
-    if (timingSafeEqual(provided, c.hex) || timingSafeEqual(provided, c.base64)) return { ok: true };
+    if (timingSafeEqual(provided, c.hex) || timingSafeEqual(provided, c.base64)) return { ok: true, via: "hmac" };
   }
   return { ok: false, reason: "mismatch" };
 }
@@ -713,17 +753,55 @@ const pick = (obj, ...paths) => {
   return undefined;
 };
 
-function parseRequest(body) {
+/*
+ * Envelope keys — everything that is ABOUT the call rather than an argument to
+ * a tool. Used to tell the two apart when the body arrives flat (see below).
+ */
+const ENVELOPE_KEYS = new Set([
+  "event", "event_type", "type", "webhook_event",
+  "tool_name", "toolname", "function_name", "name", "tool", "function",
+  "arguments", "parameters", "tool_arguments", "toolarguments", "input",
+  "call_id", "callid", "session_id", "sessionid", "conversation_id", "conversationid", "id",
+  "from", "from_number", "fromnumber", "caller", "caller_id", "callerid", "customer_number",
+  "user_config", "user_phone_number", "call", "session", "data", "metadata",
+  "webhook_config", "agent_variables", "app_config", "variables", "session_token",
+  "transcript", "messages", "conversation", "duration", "duration_seconds", "durationsec",
+  "language", "language_code", "locale", "utterance", "query_text", "user_message",
+  "last_user_message", "text",
+]);
+
+/*
+ * `pathname` is the webhook's own URL path, and on Sarvam it is what carries
+ * the tool's identity.
+ *
+ * Sarvam's API-tool form builds a FLAT body out of the fields you declare —
+ * `{"query": "raise a bill"}` — with no wrapper naming which tool produced it.
+ * That is fine for a single-purpose endpoint and useless for a dispatcher, so
+ * each tool is registered with its own URL suffix:
+ *
+ *   .../sarvamVoiceWebhook/find_feature
+ *   .../sarvamVoiceWebhook/upcoming_hearings
+ *
+ * The last path segment names the tool. A body-level name still wins if one is
+ * present, so anything that does send a wrapper keeps working.
+ */
+function parseRequest(body, pathname = "") {
   const b = body && typeof body === "object" ? body : {};
   const event = String(
     pick(b, "event", "event_type", "type", "webhook_event", "data.event") || ""
   ).toLowerCase();
 
+  const fromPath = String(pathname || "")
+    .split("?")[0]
+    .split("/")
+    .filter(Boolean)
+    .pop();
+
   const toolName = pick(
     b,
     "tool_name", "toolName", "tool.name", "function_name", "function.name",
     "name", "data.tool_name", "data.function.name"
-  );
+  ) || (fromPath && isKnownTool(fromPath) ? fromPath : undefined);
 
   let args = pick(
     b,
@@ -734,6 +812,16 @@ function parseRequest(body) {
     try { args = JSON.parse(args); } catch { args = { query: args }; }
   }
   if (!args || typeof args !== "object" || Array.isArray(args)) args = {};
+
+  /* No wrapper? Then the body IS the arguments — Sarvam's normal shape. Take
+     every key that isn't call metadata, so `{"query": "raise a bill"}` becomes
+     `{query: "raise a bill"}` and a stray `event` or `call_id` alongside it
+     doesn't get handed to a tool as if the agent had chosen it. */
+  if (!Object.keys(args).length) {
+    for (const [k, v] of Object.entries(b)) {
+      if (!ENVELOPE_KEYS.has(k.toLowerCase())) args[k] = v;
+    }
+  }
 
   /* `user_config.user_phone_number` is the platform's own name for the person
      on the other end — it is what you supply when triggering an outbound call,

@@ -550,7 +550,10 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
       }
 
       const started = Date.now();
-      const parsed = parseRequest(body);
+      // req.path carries the per-tool suffix the agent was configured with —
+      // .../sarvamVoiceWebhook/find_feature — which is how a flat body gets
+      // matched to a tool. See parseRequest().
+      const parsed = parseRequest(body, req.path || req.url || "");
       const caller = await identifyCaller(parsed, sarvamWebhookSecret.value());
 
       try {

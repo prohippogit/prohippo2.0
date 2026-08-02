@@ -371,6 +371,20 @@ test("a static shared secret is accepted — it is what the Sarvam console can s
   }
 });
 
+test("the refusal reason distinguishes a missing token from a wrong one", () => {
+  // The whole point: "token-mismatch" means the wiring is right and the VALUE
+  // is stale, which sends you to check secret versions rather than config.
+  assert.equal(verifyWebhook({ headers: {}, rawBody: BODY, secret: SECRET }).reason, "no-credentials");
+  assert.equal(
+    verifyWebhook({ headers: { authorization: "Bearer nope" }, rawBody: BODY, secret: SECRET }).reason,
+    "token-mismatch"
+  );
+  assert.equal(
+    verifyWebhook({ headers: { "x-api-key": "nope" }, rawBody: BODY, secret: SECRET }).reason,
+    "token-mismatch"
+  );
+});
+
 test("a wrong or near-miss shared secret is refused", () => {
   for (const headers of [
     { authorization: "Bearer wrong-secret" },

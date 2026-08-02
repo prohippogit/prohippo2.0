@@ -592,7 +592,14 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
 
   // 2. HMAC over the body — stronger, kept for anything that can produce it.
   const headerName = SIGNATURE_HEADERS.find((h) => lower[h]);
-  if (!headerName) return { ok: false, reason: "no-signature" };
+  if (!headerName) {
+    /* Distinguish "you sent nothing" from "you sent a token that was wrong".
+       Both are a 401, but only one of them means the wiring is right and the
+       VALUE is stale — which is the difference between checking your config
+       and checking your secret versions. */
+    const sentToken = BEARER_HEADERS.some((h) => lower[h]);
+    return { ok: false, reason: sentToken ? "token-mismatch" : "no-credentials" };
+  }
   // "sha256=abc123" and bare "abc123" are both in the wild.
   const provided = String(lower[headerName]).trim().replace(/^sha256=/i, "");
 

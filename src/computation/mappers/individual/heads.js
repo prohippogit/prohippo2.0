@@ -578,6 +578,9 @@ function interestNote(src, at) {
   ].filter(([, v]) => v).map(([s, v]) => `s.${s} ${inr(v)}`);
   const fee = src.num(`${at}.IntrstPay.LateFilingFee234F`);
   if (fee) parts.push(`fee u/s 234F ${inr(fee)}`);
+  // New in the A.Y. 2026-27 schema, alongside the s.234 interest.
+  const furnishFee = src.num(`${at}.IntrstPay.FeeFurnish234I`);
+  if (furnishFee) parts.push(`fee u/s 234I ${inr(furnishFee)}`);
   return parts.length ? parts.join(" · ") : undefined;
 }
 

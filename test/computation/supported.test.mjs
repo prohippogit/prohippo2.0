@@ -34,7 +34,7 @@ test("a form with no mapper says so, and says what there is instead", () => {
 });
 
 test("a supported form in an unsupported year names the years that are supported", () => {
-  const { ok, reason } = computationAvailability("ITR-2", "2019-20");
+  const { ok, reason } = computationAvailability("ITR-5", "2019-20");
   assert.equal(ok, false);
   assert.match(reason, /A\.Y\. 2025-26 only/);
   // §9: never fall back to the nearest year. The reason says why, because a
@@ -43,12 +43,14 @@ test("a supported form in an unsupported year names the years that are supported
 });
 
 test("a form supported for several years lists them all, not just the newest", () => {
-  // ITR-3 covers two years. Naming only one would send a practitioner to the
-  // portal for a computation the app can already produce.
-  const { ok, reason } = computationAvailability("ITR-3", "2019-20");
-  assert.equal(ok, false);
-  assert.match(reason, /2025-26/);
-  assert.match(reason, /2024-25/);
+  // Naming only one would send a practitioner to the portal for a computation
+  // the app can already produce.
+  for (const [form, years] of Object.entries(SUPPORTED)) {
+    if (years.length < 2) continue;
+    const { ok, reason } = computationAvailability(form.replace("ITR", "ITR-"), "1999-00");
+    assert.equal(ok, false);
+    for (const ay of years) assert.match(reason, new RegExp(ay), `${form} should name ${ay}`);
+  }
 });
 
 test("an unknown form is offered rather than refused", () => {

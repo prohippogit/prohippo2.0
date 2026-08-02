@@ -88,7 +88,9 @@ src/computation/
                        Chapter VI-A, tax liability, taxes paid
     itr2/
       index.js         detects AY, delegates
-      ay2025-26.js
+      ay2026-27.js     registration + a home for that year's divergences
+      ay2025-26.js     ditto
+      build.js         the workings, shared by both years
     itr3/
       index.js
       ay2025-26.js     registration + a home for that year's divergences
@@ -612,6 +614,18 @@ Recorded so nobody has to rediscover them.
   appears in Part B-TI's rate buckets, which cover every class of asset and
   every year.
 
+**What differs between A.Y. 2025-26 and 2026-27 (ITR-2)**
+- Capital gains: 2025-26 straddles the mid-year rate change and carries both a
+  10% and a 12.5% long-term bucket; 2026-27 is the first full year on the
+  amended rates and carries one of each. Nothing branches on the year — the
+  workings emit a rate split only where the return puts a figure in more than
+  one bucket.
+- `PartB_TTI` drops the `TaxPayableOnDeemedTI` block; the deemed-income figures
+  sit directly under `PartB_TTI`. Nil in the return we hold, so they would
+  surface for review rather than being read wrongly.
+- `IntrstPay` gains `FeeFurnish234I` alongside the s.234 interest.
+- `PersonalInfo` gains a `SecondaryAdd` flag and an `AlternateAddress` block.
+
 **What differs between A.Y. 2024-25 and 2025-26 (ITR-3)**
 - The schedules are the same fields. What changes is the data, and all of it is
   read from the return: capital-gains rate buckets, the standard deduction under
@@ -635,6 +649,7 @@ test/fixtures/
   itr5-firm-business-loss-ay2025-26.json        // set-offs, unabsorbed dep, tax audit
   itr5-firm-house-property-loss-ay2025-26.json  // s.24(b) loss, b/f losses, 22 partners
   itr2-salary-hp-capgains-ay2025-26.json        // salary, s.24(b) loss, s.111A/112A, VI-A caps
+  itr2-salary-112a-refund-ay2026-27.json        // one 112A rate, TDS over the liability → refund
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr4-…  itr1-…                                 // add as forms are supported
@@ -683,6 +698,7 @@ than it is:
 | Form  | A.Y.    | profit | loss | refund | tax payable |
 |-------|---------|--------|------|--------|-------------|
 | ITR-5 | 2025-26 | ✓      | ✓    | ✓      | ✓           |
+| ITR-2 | 2026-27 | ✓      | —    | ✓      | — not yet   |
 | ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |

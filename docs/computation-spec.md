@@ -97,6 +97,7 @@ src/computation/
       ay2026-27.js     registration + a home for that year's divergences
       ay2025-26.js     ditto
       ay2024-25.js     ditto
+      ay2023-24.js     ditto
       ay2022-23.js     ditto
       build.js         the workings, shared by every year
       businessHead.js  Schedule BP — the head ITR-2 has no schedule for
@@ -565,6 +566,34 @@ Recorded so nobody has to rediscover them.
 - ITR-5 uses `OptOldRegimeCurrAY` with the opposite sense, and firms have no
   such choice at all. Do not share one helper across the two.
 
+**Schedule CFL, never Part B-TI, for losses carried forward**
+- `PartB-TI.LossesOfCurrentYearCarriedFwd` is THIS YEAR'S loss alone. The
+  A.Y. 2023-24 ITR-3 states 8,83,972 there and 26,15,711 in
+  `ScheduleCFL.TotalLossCFSummary`, the difference being a long-term capital
+  loss of 17,31,739 still unabsorbed from an earlier year. Summarising from
+  Part B-TI understated by 17.3 lakh the relief available in future years.
+- Name the kind of loss, and print the date each earlier year's return was
+  filed beside it: s.80 allows the carry-forward only where that return was in
+  time, which is the first thing anyone checks about a brought-forward loss.
+- The `LossCFCurrentAssmntYear…` keys carry a year-like suffix that is NOT
+  reliably the assessment year. Identify the row by the filing date the return
+  states, not by the key.
+
+**Schedule TDS3 — tax deducted by someone with no TAN**
+- A buyer of immovable property (s.194-IA), an individual tenant (s.194-IB) or
+  a person paying under s.194M deducts against their own **PAN**. Those credits
+  are in Schedule TDS3 and appear in neither TDS1 nor TDS2. On the A.Y. 2023-24
+  return it is the only tax deducted at source there is — reading only TDS1 and
+  TDS2 printed a total of 45,900 with no row above it explaining any of it.
+- Schedule TCS is the same information need: name the collectors rather than
+  printing a bare total.
+
+**A negative subtotal needs the right noun, not just parentheses**
+- The renderer parenthesises and reddens any negative amount, so a loss reads as
+  a loss in the figure column whatever the label says. "Total Long-term Capital
+  Gains (8,83,972)" is still wrong English on a document somebody signs. Where a
+  head or a subtotal can go negative, change the caption too.
+
 **Chapter VI-A carries its own subtotals inside the deduction block**
 - A.Y. 2022-23's `DeductUndChapVIA` holds `TotPartBchapterVIA` and
   `TotPartCAandDchapterVIA` beside the real sections. Iterating the block's keys
@@ -744,6 +773,7 @@ test/fixtures/
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
   itr3-oldregime-marginal-relief-ay2022-23.json // NewTaxRegime, marginal relief, VI-A subtotals
+  itr3-partner-cgloss-tds3-ay2023-24.json       // capital LOSS + losses c/f, Sch. TDS3, TCS, refund
   itr4-…  itr1-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
@@ -819,6 +849,7 @@ than it is:
 | ITR-3 | 2026-27 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |
+| ITR-3 | 2023-24 | ✓      | ✓    | ✓      | — not yet   |
 | ITR-3 | 2022-23 | ✓      | —    | — (level) | — not yet |
 
 The tax-payable path is written and rendered for both individual forms (the

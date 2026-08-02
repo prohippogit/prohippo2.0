@@ -409,3 +409,17 @@ const TDS_NATURE = {
 
 export const tdsSection = (code) => TDS_SECTIONS[String(code || "").trim().toUpperCase()] || String(code || "");
 export const tdsNature = (section) => TDS_NATURE[section] || "";
+
+/* The head a TDS or TCS credit belongs to. Worth printing where the deductor
+   cannot be named by section — a s.194-IA deduction against capital gains is
+   a property sale, and saying so explains a credit that has no section code. */
+const HEAD_OF_INCOME = {
+  SAL: "against Salaries",
+  HP: "against House Property",
+  BP: "against Business or Profession",
+  CG: "against Capital Gains",
+  OS: "against Other Sources",
+  EI: "against exempt income",
+};
+
+export const headOfIncome = (code) => HEAD_OF_INCOME[String(code || "").trim().toUpperCase()] || "";

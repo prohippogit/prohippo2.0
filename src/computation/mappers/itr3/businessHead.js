@@ -167,7 +167,28 @@ export function businessRows(src) {
   line("Less: Share of profit from firms, exempt u/s 10(2A)", n("IncCredPL.FirmShareInc"));
   line("Less: Share of income from an AOP or BOI", n("IncCredPL.AOPBOISharInc"));
   line("Less: Dividend credited to the profit & loss account", n("IncCredPL.OtherExmptIncDtl.OperatingDividendAmt"));
-  line("Less: Other exempt income credited to the profit & loss account", n("IncCredPL.OthExempInc"));
+
+  /* The exempt items the return names, one row each.
+   *
+   * `OtherExmptIncDtls` (note the plural — the singular spelling above is a
+   * different field) is an ARRAY of { OperatingRevenueName, OperatingRevenueAmt }.
+   * The A.Y. 2023-24 return states "Agriculture Income" 2,12,200 there, and
+   * reading only the `OthExempInc` total printed the right figure under a
+   * caption that said nothing about what it was — while the array element itself
+   * surfaced in the review block. Where the items account for the whole total
+   * they replace the summary line; where they do not, the balance follows them. */
+  const exemptItems = (src.peek(`${BP}.IncCredPL.OtherExmptIncDtls`) || [])
+    .map((_, i) => {
+      const at = `${BP}.IncCredPL.OtherExmptIncDtls[${i}]`;
+      return { name: String(src.peek(`${at}.OperatingRevenueName`) || "").trim(), amt: src.num(`${at}.OperatingRevenueAmt`) };
+    })
+    .filter((e) => e.amt);
+  for (const e of exemptItems) {
+    line(`Less: ${e.name || "Exempt income"} credited to the profit & loss account`, e.amt);
+  }
+  const otherExempt = n("IncCredPL.OthExempInc");
+  const itemised = exemptItems.reduce((s, e) => s + e.amt, 0);
+  line("Less: Other exempt income credited to the profit & loss account", otherExempt - itemised);
   src.restate([`${BP}.IncCredPL.TotExempIncPL`, `${BP}.BalancePLOthThanSpecBus`]);
 
   for (const [key, what] of OTHER_HEAD_CREDITS) {

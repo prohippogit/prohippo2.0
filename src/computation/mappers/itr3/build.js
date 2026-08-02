@@ -46,7 +46,7 @@ import {
 } from "../individual/labels.js";
 import {
   salaryRows, housePropertyRows, capitalGainsRows, otherSourcesRows,
-  chapterVIA, taxRows, taxesPaidRows, refundOrPayable,
+  chapterVIA, taxRows, taxesPaidRows, refundOrPayable, carriedForwardRows,
 } from "../individual/heads.js";
 import { businessRows } from "./businessHead.js";
 
@@ -235,16 +235,10 @@ export function buildItr3(body, ctx) {
   }
 
   /* ---- J. Losses carried forward -------------------------------------------- */
-  const cflRows = [];
-  const carried = src.num("PartB-TI.LossesOfCurrentYearCarriedFwd");
-  src.claim("ScheduleCFL");
+  const cflRows = carriedForwardRows(src, ctx);
+  src.num("PartB-TI.LossesOfCurrentYearCarriedFwd");
   src.claim("ScheduleCYLA");
   src.claim("ScheduleBFLA");
-  if (carried) {
-    cflRows.push(columnHeader("Assessment Year / Nature of loss", { ref: "Nature" }));
-    cflRows.push(sub(`A.Y. ${ctx.ay} · loss of the current year`, carried, { cols: { ref: "Carried forward" } }));
-    cflRows.push(total("Total Loss Carried Forward", carried));
-  }
 
   /* ---- notes ----------------------------------------------------------------- */
   notes.unshift({

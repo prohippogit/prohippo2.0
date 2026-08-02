@@ -97,12 +97,26 @@ const RESEND_PLAN = {
   overageUsdPer1000: 0, // Free does not bill overage; it rate-limits instead
 };
 
+/*
+ * Sarvam bills the inbound voice agent by the minute, and the rate depends on
+ * the plan and the number the calls land on. It is DELIBERATELY UNPRICED here,
+ * for the same reason as gemini-3.1-flash above: a made-up rate is worse than a
+ * visible gap. Minutes are still metered — the Costs page reports them as
+ * "N calls had no rate", so the volume is in front of you before the invoice is.
+ *
+ * To price it: add `sarvam` to priceCall() with a per-minute INR rate taken off
+ * your actual Sarvam invoice, and bump RATE_VERSION. `units` on these records is
+ * MINUTES (fractional), not calls.
+ */
+const SARVAM_INR_PER_MINUTE = null; // unconfirmed — see the note above
+
 /* Vendors and the SKUs each can bill. The console groups by these. */
-const VENDORS = ["gemini", "2factor", "resend", "firebase"];
+const VENDORS = ["gemini", "2factor", "resend", "sarvam", "firebase"];
 const SKUS = {
   gemini: Object.keys(GEMINI_RATES),
   "2factor": ["sms-otp"],
   resend: ["email-otp", "email-client"],
+  sarvam: ["voice-agent"],
   firebase: ["manual"],
 };
 
@@ -110,6 +124,7 @@ const VENDOR_LABEL = {
   gemini: "Gemini",
   "2factor": "2Factor SMS",
   resend: "Resend email",
+  sarvam: "Sarvam voice",
   firebase: "Firebase",
 };
 
@@ -186,6 +201,7 @@ const notes = [
   `Rates are exclusive of GST. SMS is ₹${SMS_INR_PER_SEND} (the ₹${SMS_PACK.paidExGstInr}/${SMS_PACK.credits.toLocaleString("en-IN")} pack rate) — ₹${(SMS_PACK.paidInr / SMS_PACK.credits).toFixed(4)} including GST, which is recovered as input credit.`,
   `Email marginal cost is ₹0: Resend Free includes ${RESEND_PLAN.includedPerMonth.toLocaleString("en-IN")} messages a month with no overage billing. Watch the volume, not the rupees — the next step is Pro at $20/month.`,
   `Gemini output pricing includes thinking tokens, so thoughtsTokenCount is counted alongside the visible answer.`,
+  `Sarvam voice minutes are metered but not yet priced — the per-minute rate is unconfirmed, so those calls show under "no rate" rather than as ₹0.`,
 ];
 
 module.exports = {
@@ -195,6 +211,7 @@ module.exports = {
   GEMINI_RATES,
   SMS_INR_PER_SEND,
   SMS_PACK,
+  SARVAM_INR_PER_MINUTE,
   RESEND_PLAN,
   VENDORS,
   SKUS,

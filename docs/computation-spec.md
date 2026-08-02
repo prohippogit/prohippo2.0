@@ -91,7 +91,9 @@ src/computation/
       ay2025-26.js
     itr3/
       index.js
-      ay2025-26.js
+      ay2025-26.js     registration + a home for that year's divergences
+      ay2024-25.js     ditto
+      build.js         the workings, shared by both years
       businessHead.js  Schedule BP — the head ITR-2 has no schedule for
     itr5/
       index.js
@@ -429,6 +431,13 @@ plain sentence. It never falls back to "the nearest year" — a computation buil
 from the wrong year's schema is exactly the silent-wrong-answer failure §8
 exists to prevent.
 
+Two years MAY share a builder (ITR-3's `build.js` serves 2024-25 and 2025-26),
+but each year keeps its own module, its own registration and its own golden
+test. The rule is that no year runs against code nobody checked it against — not
+that identical code must be typed twice. When a year diverges, its module is
+where the divergence goes, and the other year's golden is what proves the change
+did not reach it.
+
 ---
 
 ## 10. Schema notes observed in real returns
@@ -582,8 +591,36 @@ Recorded so nobody has to rediscover them.
   pre-change rate. An unrecognised code prints as itself.
 
 **Capital gains (`ScheduleCGFor23`, ITR-2/3)**
-- `BalanceCGTransferBE` / `…AE` split one figure across the mid-year rate
-  change. Label them by the rate `ScheduleSI` gives, not by a date we assert.
+- A head's subtotal is captioned by **rate, never by section**. "Short-term
+  Capital Gain u/s 111A" was correct for the first return we saw, where every
+  rupee of short-term gain was STT-paid equity — and wrong for the next, where
+  7,51,835 of it was a land sale taxable at slab rates under the same caption.
+  The split comes from `PartB-TI.CapGain.ShortTerm.*` / `.LongTerm.*`, whose
+  buckets differ by year (2024-25 has no 20% short-term or 12.5% long-term;
+  2025-26 added both), and the section attribution lives in the tax section
+  where Schedule SI states it against each figure.
+- **Land and building** does not share the s.48 shape the other classes use:
+  `SaleofLandBuild.SaleofLandBuildDtls[]` carries `PropertyValuation` and
+  `FullConsideration50C` alongside the consideration, because s.50C substitutes
+  the higher; `AquisitCostIndex` rather than a plain cost for long-term gains;
+  and `TrnsfImmblPrprty` — the buyers, their shares and their PANs, which are a
+  disclosure rather than a step in the working. A computation showing only "full
+  value of consideration" would hide a s.50C substitution, which is the single
+  most contested figure in a property sale.
+- `BalanceCGTransferBE` / `…AE` split a s.112A gain across the mid-year rate
+  change in A.Y. 2025-26. They are restated rather than shown: the same split
+  appears in Part B-TI's rate buckets, which cover every class of asset and
+  every year.
+
+**What differs between A.Y. 2024-25 and 2025-26 (ITR-3)**
+- The schedules are the same fields. What changes is the data, and all of it is
+  read from the return: capital-gains rate buckets, the standard deduction under
+  the new regime (50,000 → 75,000), and the slab table (never recomputed — Part
+  B-TTI states the tax).
+- The regime field differs: 2024-25 asks `OptOutNewTaxRegime`, 2025-26 asks
+  `No_OptOutNewTaxReg`. `regimeLabel()` reads whichever is present.
+- `ScheduleTDS2.TDSOthThanSalaryDtls[].TDSSection` is **absent** in the 2024-25
+  return — all 42 rows. Print nothing rather than a bare "Sec.".
 
 **Capacity codes (`Verification.Declaration.Capacity`)**
 - `TR` = Trustee, `MP` = Managing Partner, `P` = Partner, `D` = Director,
@@ -599,6 +636,7 @@ test/fixtures/
   itr5-firm-house-property-loss-ay2025-26.json  // s.24(b) loss, b/f losses, 22 partners
   itr2-salary-hp-capgains-ay2025-26.json        // salary, s.24(b) loss, s.111A/112A, VI-A caps
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
+  itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr4-…  itr1-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
@@ -647,6 +685,7 @@ than it is:
 | ITR-5 | 2025-26 | ✓      | ✓    | ✓      | ✓           |
 | ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
+| ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |
 
 The tax-payable path is written and rendered for both individual forms (the
 banner and the "Tax Payable" closing row), but no real return exercising it has

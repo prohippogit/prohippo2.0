@@ -15,19 +15,35 @@
 /* Schedule SI drives the special-rate rows in the tax section. The section codes
    are ITD's own; an unrecognised one prints as itself rather than being guessed
    at, because a wrong statutory reference on a signed document is worse than a
-   bare code a reader can look up. */
+   bare code a reader can look up.
+
+   Every entry below is either read off a return we hold or left as the raw code.
+   Code "21" was previously captioned "short-term capital gains u/s 111A" — a
+   guess, and a wrong one. An A.Y. 2024-25 ITR-3 carries it at 20% against
+   3,56,060, which is exactly that return's `PartB-TI.CapGain.LongTerm.
+   LongTerm20Per`: it is LONG-term gain taxed u/s 112. Corrected, and the
+   evidence recorded here so nobody re-guesses it. */
 const SI_SECTIONS = {
   "1A": "Short-term capital gains u/s 111A",
-  "21": "Short-term capital gains u/s 111A",
+  21: "Long-term capital gains u/s 112",
+  "21ciii": "Long-term capital gains u/s 112(1)(c)(iii)",
+  22: "Long-term capital gains u/s 112, at the proviso rate",
   "2A": "Long-term capital gains u/s 112A",
   "2A_BE": "Long-term capital gains u/s 112A",
-  22: "Long-term capital gains u/s 112",
+  PTI_LTCG10P112A: "Long-term capital gains u/s 112A — pass-through income",
   "5AC": "Income u/s 115AC",
   "5ACA": "Income u/s 115ACA",
+  "5ACA1b": "Income u/s 115ACA(1)(b)",
   "5AD1b i": "Income u/s 115AD",
+  "5ADii": "Income u/s 115AD(1)(ii)",
+  "5ADiii": "Income u/s 115AD(1)(iii)",
+  "5Eb": "Income u/s 115E(b)",
   "1BB": "Winnings from lotteries, crossword puzzles etc. u/s 115BB",
+  "5BB": "Winnings from lotteries, crossword puzzles etc. u/s 115BB",
   "1BBE": "Income u/s 115BBE",
+  "5BBE": "Income u/s 115BBE",
   "1BBJ": "Winnings from online games u/s 115BBJ",
+  "5BBJ": "Winnings from online games u/s 115BBJ",
   DTAA: "Income taxable at DTAA rates",
 };
 

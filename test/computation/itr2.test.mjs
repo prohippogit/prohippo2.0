@@ -119,10 +119,15 @@ test("capital gains are split by the rate the return states, not a date we asser
   const { doc } = build();
   const cg = doc.sections.find((x) => x.id === "CG");
   const labels = cg.rows.map((r) => r.label);
-  // The rates on s.111A and s.112A both changed mid-year for A.Y. 2025-26.
-  // Reading them off Schedule SI means the document cannot disagree with the
-  // return about which applied.
-  assert.ok(labels.some((l) => /Short-term Capital Gain u\/s 111A \(taxable at 20%\)/.test(l)));
+  // The rates on s.111A and s.112A both changed mid-year for A.Y. 2025-26, so
+  // one head splits across two. The split is read from Part B-TI's own rate
+  // buckets, and the head is captioned by RATE rather than by section: a
+  // subtotal saying "u/s 111A" is right only while every rupee under it happens
+  // to be STT-paid equity, and wrong the moment a land sale at slab rates joins
+  // it. The section attribution lives in the tax section, from Schedule SI.
+  assert.ok(labels.some((l) => /^Total Short-term Capital Gains$/.test(l)));
+  assert.ok(labels.some((l) => /^Total Long-term Capital Gains$/.test(l)));
+  assert.ok(!labels.some((l) => /Capital Gain u\/s/.test(l)), "no section attribution on a subtotal");
   assert.ok(labels.some((l) => /taxable at 10%/.test(l)));
   assert.ok(labels.some((l) => /taxable at 12\.5%/.test(l)));
   assert.equal(cg.rows.find((r) => /taxable at 10%/.test(r.label)).amount, 24697);

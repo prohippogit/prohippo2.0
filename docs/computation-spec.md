@@ -91,6 +91,8 @@ src/computation/
       ay2026-27.js     registration + a home for that year's divergences
       ay2025-26.js     ditto
       ay2024-25.js     ditto
+      ay2023-24.js     ditto
+      ay2022-23.js     ditto
       build.js         the workings, shared by every year
     itr3/
       index.js
@@ -642,6 +644,16 @@ Recorded so nobody has to rediscover them.
   Gains (8,83,972)" is still wrong English on a document somebody signs. Where a
   head or a subtotal can go negative, change the caption too.
 
+**`ifLetOut` is a yes/no before it is an enum**
+- The current schema's enum is `L` (let out), `D` (deemed let out), `S`
+  (self-occupied). A.Y. 2022-23 and 2023-24 answer the same question as a
+  yes/no, so **`"N"` there means NOT let out — self-occupied**. Confirmed
+  rather than assumed: the A.Y. 2023-24 ITR-2 carries `"N"` against a flat, and
+  the A.Y. 2024-25 return of the same assessee carries `"S"` against the same
+  flat, with the same nil annual value and the same interest-only working.
+- Reading `"N"` as let out printed "Annual letable value of the property — nil"
+  on a property that has no annual value by law.
+
 **Chapter VI-A carries its own subtotals inside the deduction block**
 - A.Y. 2022-23's `DeductUndChapVIA` holds `TotPartBchapterVIA` and
   `TotPartCAandDchapterVIA` beside the real sections. Iterating the block's keys
@@ -817,6 +829,8 @@ test/fixtures/
   itr2-salary-hp-capgains-ay2025-26.json        // salary, s.24(b) loss, s.111A/112A, VI-A caps
   itr2-salary-112a-refund-ay2026-27.json        // one 112A rate, TDS over the liability → refund
   itr2-oldregime-hploss-via-ay2024-25.json      // old regime, HP loss u/s 71, VI-A caps, refund
+  itr2-salary-hploss-refund-ay2023-24.json      // ifLetOut "N", s.10 "OTH" allowance, refund
+  itr2-salary-80ggc-level-ay2022-23.json        // closes LEVEL, s.80GGC, perquisite by code
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
@@ -896,6 +910,8 @@ than it is:
 | ITR-2 | 2026-27 | ✓      | —    | ✓      | — not yet   |
 | ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
 | ITR-2 | 2024-25 | ✓      | ✓    | ✓      | — not yet   |
+| ITR-2 | 2023-24 | ✓      | ✓    | ✓      | — not yet   |
+| ITR-2 | 2022-23 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2026-27 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |

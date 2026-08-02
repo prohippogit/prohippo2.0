@@ -22,6 +22,7 @@
 const crypto = require("crypto");
 const {
   FEATURES,
+  KB_NAME,
   RESTRICTED_PATTERNS,
   RESTRICTED_REPLY,
   ADVICE_REPLY,
@@ -458,7 +459,11 @@ function buildSystemPrompt(caller = null) {
     "",
     "THE APP",
     `The screens, left to right in the sidebar: ${featureIndex}.`,
-    "For anything beyond naming the screen — what it does, the exact steps to reach it — call find_feature, or search the ProHippo app guide knowledge base. Do not describe a screen from memory; they move.",
+    // Names the KB by its real slug on Sarvam, so the agent asks for a knowledge
+    // base that exists. Interpolated rather than typed twice — the platform
+    // rejects a prose name, and a prompt naming a KB that isn't there is a
+    // retrieval that silently never happens.
+    `For anything beyond naming the screen — what it does, the exact steps to reach it — call find_feature, or search the ${KB_NAME} knowledge base. Do not describe a screen from memory; they move.`,
   ].join("\n");
 }
 

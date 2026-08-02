@@ -162,9 +162,16 @@ export function housePropertyRows(src) {
     const at = (f) => `ScheduleHP.PropertyDetails[${i}].Rentdetails.${f}`;
     const rent = prop.Rentdetails || {};
     const address = prop.AddressDetailWithZipCode?.AddrDetail || "";
-    // "S" = self-occupied, "L" = let out, "D" = deemed let out.
+    /* "S" = self-occupied, "L" = let out, "D" = deemed let out — the enum of the
+       current schema. A.Y. 2022-23 and 2023-24 answer the same question as a
+       yes/no instead, so "N" there means NOT let out, which is self-occupied.
+       Confirmed rather than assumed: the A.Y. 2023-24 return carries "N" against
+       flat 802, Shilp Revanta, and the A.Y. 2024-25 return carries "S" against
+       the same flat, with the same nil annual value and the same interest-only
+       working. Reading "N" as let out printed an annual letable value of nil on
+       a property that has none by law. */
     const use = String(prop.ifLetOut || "").toUpperCase();
-    const selfOccupied = use === "S";
+    const selfOccupied = use === "S" || use === "N";
 
     if (many) rows.push(columnHeader(`Property ${i + 1}${address ? ` — ${address}` : ""}`, { ref: "" }));
 

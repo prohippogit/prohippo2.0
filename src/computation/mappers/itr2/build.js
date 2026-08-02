@@ -154,7 +154,14 @@ export function buildItr2(body, ctx) {
   /* ---- H. Taxes paid -------------------------------------------------------- */
   const paidRows = taxesPaidRows(src, { aggregate: tax.aggregate });
   const banner = refundOrPayable(src, notes);
-  paidRows.push(total(banner.refundDue > 0 ? "Refund Due" : "Tax Payable", banner.refundDue > 0 ? banner.refundDue : banner.balPayable));
+  // A return can close level: CPC neither refunds nor demands the few rupees the
+  // rounding leaves, and the return states nil against both fields. Saying so
+  // beats a "Tax Payable — nil" row that reads like a demand for nothing.
+  if (banner.refundDue > 0 || banner.balPayable > 0) {
+    paidRows.push(total(banner.refundDue > 0 ? "Refund Due" : "Tax Payable", banner.refundDue > 0 ? banner.refundDue : banner.balPayable));
+  } else {
+    paidRows.push(total("Nothing further payable or refundable", 0));
+  }
 
   /* ---- I. Losses carried forward -------------------------------------------- */
   const cfl = carriedForwardRows(src, ctx);

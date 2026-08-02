@@ -1,0 +1,470 @@
+{
+ "meta": {
+  "form": "ITR2",
+  "assessmentYear": "2023-24",
+  "previousYear": "2022-23",
+  "schemaVersion": "Ver1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+ },
+ "assessee": {
+  "name": "SAMPLE NAME 1 SAMPLE NAME 2 SAMPLE NAME 3",
+  "pan": "AAAPZ1000A",
+  "status": "Individual",
+  "address": "A-207, SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 380008",
+  "email": "sample@example.com",
+  "mobile": "9800000001",
+  "residentialStatus": "Resident",
+  "dateOfFormation": "1983-08-20",
+  "facts": [
+   {
+    "label": "Status",
+    "value": "Individual"
+   },
+   {
+    "label": "Date of birth",
+    "value": "20 August 1983"
+   },
+   {
+    "label": "Residential status",
+    "value": "Resident"
+   },
+   {
+    "label": "Return filed under",
+    "value": "Section 139(1) — on or before the due date"
+   },
+   {
+    "label": "Tax regime",
+    "value": "Old regime — s.115BAC not opted for"
+   },
+   {
+    "label": "Due date",
+    "value": ""
+   },
+   {
+    "label": "E-mail / mobile",
+    "value": "sample@example.com\n+91 9800000001"
+   }
+  ],
+  "partners": []
+ },
+ "sections": [
+  {
+   "id": "SALARY",
+   "letter": "A",
+   "title": "Income from Salaries",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Salary as per section 17(1)",
+     "amount": 2601708,
+     "ref": "Sch. S",
+     "note": "SAMPLE NAME 4"
+    },
+    {
+     "kind": "sub",
+     "label": "— Basic salary",
+     "amount": 2176210
+    },
+    {
+     "kind": "sub",
+     "label": "— House rent allowance",
+     "amount": 425498
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Salary",
+     "amount": 2601708
+    },
+    {
+     "kind": "sub",
+     "label": "Less: House rent allowance exempt u/s 10(13A)",
+     "amount": 27816,
+     "note": ""
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Any other allowance exempt u/s 10",
+     "amount": 69080,
+     "note": "SAMPLE NAME 5"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Net Salary",
+     "amount": 2504812
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Standard deduction u/s 16(ia)",
+     "amount": 50000,
+     "ref": "Sec. 16(ia)"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Tax on employment u/s 16(iii)",
+     "amount": 2500,
+     "ref": "Sec. 16(iii)"
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Salaries",
+     "amount": 2452312
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "HP",
+   "letter": "B",
+   "title": "Income from House Property",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Annual value of the self-occupied property",
+     "amount": 0,
+     "ref": "Sch. HP",
+     "note": "SAMPLE PLACE 8 · self-occupied — annual value taken as nil"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Interest on borrowed capital u/s 24(b)",
+     "amount": 60080,
+     "ref": "Sec. 24(b)"
+    },
+    {
+     "kind": "total",
+     "label": "Loss from House Property",
+     "amount": 60080,
+     "isLoss": true
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "OS",
+   "letter": "C",
+   "title": "Income from Other Sources",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Dividend income",
+     "amount": 12776,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "sub",
+     "label": "Interest from savings bank accounts",
+     "amount": 37601
+    },
+    {
+     "kind": "sub",
+     "label": "Interest on term / fixed deposits",
+     "amount": 82646
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross income chargeable under Other Sources",
+     "amount": 133023
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Other Sources",
+     "amount": 133023
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "VIA",
+   "letter": "D",
+   "title": "Deductions under Chapter VI-A",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "u/s 80C — life insurance, provident fund, tuition fees etc.",
+     "amount": 150000,
+     "ref": "80C",
+     "note": "Claimed 1,92,143; restricted to the statutory limit"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80CCD(1B) — additional contribution to NPS",
+     "amount": 50000,
+     "ref": "80CCD(1B)"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80CCD(2) — employer's contribution to NPS",
+     "amount": 72552,
+     "ref": "80CCD(2)"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80D — health insurance premium",
+     "amount": 20040,
+     "ref": "80D"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80TTA — interest on deposits in a savings account",
+     "amount": 10000,
+     "ref": "80TTA",
+     "note": "Claimed 37,601; restricted to the statutory limit"
+    },
+    {
+     "kind": "total",
+     "label": "Total deductions under Chapter VI-A",
+     "amount": 302592
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "TI",
+   "letter": "E",
+   "title": "Computation of Total Income",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "head",
+     "label": "Income from Salaries",
+     "amount": 2452312,
+     "ref": "Sch. S"
+    },
+    {
+     "kind": "head",
+     "label": "Income from House Property",
+     "amount": 0,
+     "ref": "Sch. HP"
+    },
+    {
+     "kind": "head",
+     "label": "Capital Gains",
+     "amount": 0,
+     "ref": "Sch. CG"
+    },
+    {
+     "kind": "head",
+     "label": "Income from Other Sources",
+     "amount": 133023,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total of Heads of Income",
+     "amount": 2585335
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Set-off of current year house property loss u/s 71",
+     "amount": 60080,
+     "ref": "Sch. CYLA"
+    },
+    {
+     "kind": "sub",
+     "label": "Balance after set-off of current year loss",
+     "amount": 2525255
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Total Income",
+     "amount": 2525255
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Deductions under Chapter VI-A",
+     "amount": 302592,
+     "ref": "Sch. VI-A"
+    },
+    {
+     "kind": "total",
+     "label": "Total Income (rounded off u/s 288A)",
+     "amount": 2222660
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAX",
+   "letter": "F",
+   "title": "Computation of Tax Liability",
+   "tone": "gold",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Tax on income at the rates in force",
+     "amount": 479298,
+     "ref": "Para A, Sch. I"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Tax on Total Income",
+     "amount": 479298
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Rebate u/s 87A",
+     "amount": 0,
+     "ref": "Sec. 87A"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Surcharge",
+     "amount": 0,
+     "note": "Total income does not exceed ₹ 50 lakh"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Health & Education Cess @ 4%",
+     "amount": 19172
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Tax Liability",
+     "amount": 498470
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Relief u/s 89 / 90 / 90A / 91",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Total Tax and Interest Payable",
+     "amount": 498470
+    }
+   ],
+   "footnote": "Adjusted total income u/s 115JC is 22,22,660; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAXES_PAID",
+   "letter": "G",
+   "title": "Taxes Paid & Prepaid Taxes",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Tax Deducted at Source — TAN of Deductor",
+     "amount": null,
+     "cols": {
+      "ref": "Gross Receipt"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 492857,
+     "note": "SAMPLE NAME 4 · Salary · Sec. 192",
+     "cols": {
+      "ref": "26,01,708"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAA00000A",
+     "amount": 8264,
+     "note": "",
+     "cols": {
+      "ref": "82,646"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAB00001A",
+     "amount": 565,
+     "note": "",
+     "cols": {
+      "ref": "3,750"
+     }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Tax Deducted at Source",
+     "amount": 501686,
+     "ref": "Sch. TDS"
+    },
+    {
+     "kind": "sub",
+     "label": "Advance Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Self-Assessment Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax Collected at Source",
+     "amount": 0,
+     "ref": "Sch. TCS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Taxes Paid",
+     "amount": 501686
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Total Tax and Interest Payable",
+     "amount": 498470
+    },
+    {
+     "kind": "total",
+     "label": "Refund Due",
+     "amount": 3216
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  }
+ ],
+ "refund": {
+  "amount": 3216,
+  "bank": {
+   "name": "SAMPLE NAME 6",
+   "accountNo": "00000000000000",
+   "type": "",
+   "ifsc": "XXXX0000000"
+  }
+ },
+ "payable": null,
+ "notes": [
+  {
+   "severity": "info",
+   "text": "This computation has been prepared from the ITR-2 return data (JSON) for A.Y. 2023-24 and the figures correspond to Schedule S, Schedule HP, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+  },
+  {
+   "severity": "info",
+   "text": "The return is filed under the old regime — s.115BAC not opted for."
+  },
+  {
+   "severity": "attention",
+   "text": "Deductions under Chapter VI-A of 3,72,336 were claimed, of which 69,744 was restricted by the statutory limits; 3,02,592 has been allowed."
+  }
+ ],
+ "signatory": {
+  "name": "SAMPLE NAME 7",
+  "capacity": "Self",
+  "pan": "AAAPZ1000A",
+  "place": "SAMPLE PLACE 5",
+  "date": "2023-07-22"
+ },
+ "unmapped": []
+}

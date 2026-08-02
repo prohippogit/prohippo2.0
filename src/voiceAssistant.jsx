@@ -10,7 +10,8 @@
  */
 import React from "react";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
-import { db } from "./firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "./firebase";
 import { useAuth } from "./auth";
 import { useData } from "./store";
 import { Icon, fmtDateTime } from "./shared";
@@ -27,11 +28,27 @@ function Bullet({ icon, color, children }) {
 
 export default function VoiceHelpLineCard() {
   const { user } = useAuth();
-  const { profile } = useData();
+  const { profile, notify } = useData();
   const [recent, setRecent] = React.useState([]);
+  const [calling, setCalling] = React.useState(false);
 
   const linked = Boolean(profile?.phoneVerified && profile?.phone) || Boolean(user?.phoneNumber);
   const callerNumber = profile?.phone || user?.phoneNumber || "";
+
+  /* "Call me" beats ringing in: the server already knows who you are from this
+     session, so it dials the number your account verified rather than trusting
+     whatever number happens to show up on caller ID. */
+  const callMe = async () => {
+    setCalling(true);
+    try {
+      await httpsCallable(functions, "requestVoiceCallback")({});
+      notify("Calling you now — pick up when it rings", "phone");
+    } catch (e) {
+      notify(e?.message || "Couldn't start the call. Please try again.", "alert");
+    } finally {
+      setCalling(false);
+    }
+  };
 
   /* A one-shot read rather than a live subscription: this is a history list on
      a settings page, not something that has to update while you watch it. */
@@ -63,25 +80,28 @@ export default function VoiceHelpLineCard() {
 
       {VOICE_ENABLED ? (
         <>
-          <a
-            href={`tel:${VOICE_HELPLINE_TEL}`}
-            className="btn btn-primary"
-            style={{alignSelf: "flex-start", textDecoration: "none", marginBottom: 12}}
-          >
-            <Icon name="phone" size={14}/>{VOICE_HELPLINE}
-          </a>
+          <div style={{display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12}}>
+            <button className="btn btn-primary" onClick={callMe} disabled={!linked || calling}>
+              <Icon name="phone" size={14}/>{calling ? "Calling…" : "Call me"}
+            </button>
+            <a href={`tel:${VOICE_HELPLINE_TEL}`} className="btn btn-secondary" style={{textDecoration: "none"}}>
+              <Icon name="phone" size={14}/>{VOICE_HELPLINE}
+            </a>
+          </div>
 
-          {!linked && (
-            /* The failure this card exists to prevent. */
+          {!linked ? (
+            /* The failure this card exists to prevent — and it blocks both
+               paths, since "Call me" has no number to ring either. */
             <div style={{background: "var(--p-card-tint)", borderLeft: "3px solid var(--p-danger)", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.5, marginBottom: 12}}>
-              <strong>Link your mobile first.</strong> The line recognises you by the number you
-              call from. Until a mobile is linked to this account it can't look up your practice —
-              use “Link mobile” under Account, above.
+              <strong>Link your mobile first.</strong> The assistant needs a verified number —
+              to know it's you when you ring in, and to know where to call you back.
+              Use “Link mobile” under Account, above.
             </div>
-          )}
-          {linked && callerNumber && (
-            <div className="muted" style={{fontSize: 12, marginBottom: 12}}>
-              Call from <strong>{callerNumber}</strong> — that's the number this account is known by.
+          ) : (
+            <div className="muted" style={{fontSize: 12, lineHeight: 1.5, marginBottom: 12}}>
+              <strong>Call me</strong> rings you on {callerNumber} and knows it's you from this
+              session — the surer of the two. Dialling in works too, as long as you call from
+              that number.
             </div>
           )}
 

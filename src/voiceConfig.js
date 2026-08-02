@@ -11,8 +11,9 @@
  * docs/VOICE_AGENT_SETUP.md).
  */
 
-// e.g. "+91 79 4890 1234". Empty until the Sarvam number is live.
-export const VOICE_HELPLINE = "";
+// The ProHippo number: the line users can ring, and the number "Call me"
+// dials out from.
+export const VOICE_HELPLINE = "+91 80715 82778";
 
 // What the caller can dial straight from a phone. Kept separate from the
 // display form so the pretty spacing above never breaks the tel: link.
@@ -33,6 +34,6 @@ export const VOICE_CAN = [
 
 export const VOICE_CANNOT = [
   "Change anything — it can't add, edit, delete, send or file. It reads only.",
-  "Recognise you from another number. Calls must come from your linked mobile.",
   "Give an opinion on a tax position — that stays with you.",
+  "Tell you anything about ProHippo's own business, or any account but yours.",
 ];

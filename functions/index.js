@@ -2275,14 +2275,16 @@ Object.assign(exports, require("./referrals").build({ REGIONS, db }));
    — one file, one place. Setup: docs/COST_TRACKING.md */
 Object.assign(exports, require("./costs").build({ REGIONS, db }));
 
-/* ---------- Inbound voice agent (Sarvam) ----------
-   A practitioner rings the ProHippo number and gets a colleague who knows the
-   app. Identity is the caller's number resolved against Firebase Auth — the
-   same lookup SMS login uses — and it buys exactly one privilege: reading back
-   that account's own data. Read-only, users/{uid} only, and company internals
+/* ---------- Voice agent (Sarvam) ----------
+   A practitioner talks to a colleague who knows the app — either by ringing the
+   ProHippo number, or by tapping "Call me" in the app, which dials the number
+   their account has verified and carries a signed token so identity comes from
+   their Firebase session rather than from caller ID.
+
+   Either way it is read-only, scoped to users/{uid}, and company internals
    (keys, customer counts, revenue) are refused in code as well as in the
    prompt. Setup: docs/VOICE_AGENT_SETUP.md */
-Object.assign(exports, require("./voiceAgent").build({ PRIMARY_REGION, db, recordSpend }));
+Object.assign(exports, require("./voiceAgent").build({ REGIONS, PRIMARY_REGION, db, recordSpend }));
 
 /* ---------- Computation of Income ----------
    Turns the HTML the browser builds from a filed ITR JSON into a PDF, using

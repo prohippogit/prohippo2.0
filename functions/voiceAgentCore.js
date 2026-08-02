@@ -416,9 +416,13 @@ const isKnownTool = (name) => TOOL_NAMES.includes(String(name || ""));
  */
 function buildSystemPrompt(caller = null) {
   const known = caller && caller.known;
-  const featureLines = FEATURES.map(
-    (f) => `- ${f.label} (${f.route}): ${f.what} How to reach it: ${f.where}`
-  ).join("\n");
+  /* A one-line index, not the manual. The detail moved to the Sarvam knowledge
+     base (voiceKnowledge.buildKnowledgeBaseMarkdown) — what stays here is just
+     enough for the agent to name the right screen without a retrieval round
+     trip, which is the answer to most navigation questions. Every paragraph
+     removed from this prompt is a paragraph no longer competing with the
+     refusal rules for attention on every turn. */
+  const featureIndex = FEATURES.map((f) => `${f.label} (${f.route})`).join(" · ");
 
   return [
     "You are the ProHippo help line — the voice of a colleague who has worked at this firm for years and knows every corner of the ProHippo app.",
@@ -452,8 +456,9 @@ function buildSystemPrompt(caller = null) {
     "Warm, brisk and practical. Indian English, with Hindi or Gujarati if the caller uses it — match the language they speak in. Say amounts the Indian way, in lakh and crore. Say dates as 'tomorrow' or 'on Tuesday the fifth' rather than reading out numbers.",
     "If you did not catch something, ask them to repeat it. Never invent a client name, a PAN, a date or an amount.",
     "",
-    "THE APP, SCREEN BY SCREEN",
-    featureLines,
+    "THE APP",
+    `The screens, left to right in the sidebar: ${featureIndex}.`,
+    "For anything beyond naming the screen — what it does, the exact steps to reach it — call find_feature, or search the ProHippo app guide knowledge base. Do not describe a screen from memory; they move.",
   ].join("\n");
 }
 
@@ -572,6 +577,118 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
   return { ok: false, reason: "mismatch" };
 }
 
+/* ---------------- session tokens (the outbound "Call me" path) ---------------- */
+
+/*
+ * IDENTITY WITHOUT CALLER ID.
+ *
+ * The inbound line has to trust the number on the wire, which is the weakest
+ * link in the whole feature. The "Call me" button doesn't: the app already
+ * holds a signed-in Firebase session, the server checks it, and only then does
+ * ProHippo ask Sarvam to dial the number that account has verified.
+ *
+ * This token is what carries that decision across to the webhook. It says "the
+ * server authenticated this uid at this moment", it is signed with the same
+ * secret the webhook already verifies with, and it expires — a call that hasn't
+ * connected within the window is a call whose token is no longer good for
+ * anything.
+ *
+ * It is a bearer credential, so it is short-lived by design and never contains
+ * anything but a uid and an expiry. It is not a Firebase token and cannot be
+ * exchanged for one.
+ */
+const TOKEN_TTL_MS = 15 * 60 * 1000;
+const b64url = (buf) => Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+function mintSessionToken({ uid, secret, nowMs = Date.now(), ttlMs = TOKEN_TTL_MS }) {
+  if (!uid || !secret) throw new Error("mintSessionToken needs a uid and a secret");
+  const exp = nowMs + ttlMs;
+  const body = `v1.${b64url(String(uid))}.${exp}`;
+  return `${body}.${b64url(crypto.createHmac("sha256", secret).update(body).digest())}`;
+}
+
+function verifySessionToken({ token, secret, nowMs = Date.now() }) {
+  if (!token || !secret) return { ok: false, reason: "missing" };
+  const parts = String(token).split(".");
+  if (parts.length !== 4 || parts[0] !== "v1") return { ok: false, reason: "malformed" };
+  const [, uidPart, expPart, sig] = parts;
+  const body = `v1.${uidPart}.${expPart}`;
+  const expected = b64url(crypto.createHmac("sha256", secret).update(body).digest());
+  // Signature before expiry: an attacker must not learn that a forged token
+  // would otherwise have been in date.
+  if (!timingSafeEqual(sig, expected)) return { ok: false, reason: "bad-signature" };
+  const exp = Number(expPart);
+  if (!Number.isFinite(exp) || nowMs > exp) return { ok: false, reason: "expired" };
+  let uid;
+  try {
+    uid = Buffer.from(uidPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  return uid ? { ok: true, uid } : { ok: false, reason: "malformed" };
+}
+
+/* ---------------- placing an outbound call ---------------- */
+
+/*
+ * Sarvam's outbound endpoint, per the platform's trigger-call quickstart:
+ *   POST https://apps.sarvam.ai/api/outbounds/v1/orgs/{org}/workspaces/{ws}/outbounds
+ *   X-API-Key: <key>
+ */
+const outboundUrl = ({ orgId, workspaceId }) =>
+  `https://apps.sarvam.ai/api/outbounds/v1/orgs/${encodeURIComponent(orgId)}/workspaces/${encodeURIComponent(workspaceId)}/outbounds`;
+
+/*
+ * Build the trigger-call body.
+ *
+ * Two things travel with the call and both matter:
+ *
+ *   • `agent_variables` — what the agent knows before it speaks, so it opens
+ *     with the practitioner's name instead of asking who it is calling.
+ *   • `webhook_config.metadata` — echoed back to us on the call's webhooks,
+ *     which is how the signed token gets from here to the tool handler.
+ *
+ * The token goes in BOTH. Which of the two Sarvam surfaces to a tool call isn't
+ * documented yet, and putting it in one place only would make the identity path
+ * depend on a coin flip. It costs nothing to send twice, and the webhook accepts
+ * it from either.
+ *
+ * Note that outbound identity is safe even if neither arrives: ProHippo chose
+ * the number, and it is the one that account has verified. The token is the
+ * belt; the dialled number is the braces.
+ */
+function buildOutboundCall({ config, toNumber, callerName, firmName, token, callId }) {
+  const first = String(callerName || "").trim().split(/\s+/)[0] || "";
+  return {
+    app_config: {
+      app_id: config.agentId,
+      ...(config.agentVersion ? { app_version: config.agentVersion } : {}),
+      app_type: "agent",
+      connection_config: {
+        connection_id: config.connectionId,
+        agent_phone_number: config.agentPhoneNumber,
+      },
+      agent_variables: {
+        caller_name: callerName || "",
+        caller_firm: firmName || "",
+        caller_known: "yes",
+        session_token: token,
+        call_id: callId,
+      },
+      app_overrides: {
+        initial_bot_message: first
+          ? `Hello ${first}, ProHippo here — you asked me to call. What can I help you with?`
+          : "Hello, ProHippo here — you asked me to call. What can I help you with?",
+      },
+    },
+    user_config: { user_phone_number: toNumber },
+    webhook_config: {
+      url: config.webhookUrl,
+      metadata: { session_token: token, call_id: callId },
+    },
+  };
+}
+
 /* ---------------- reading Sarvam's request ---------------- */
 
 /*
@@ -618,17 +735,33 @@ function parseRequest(body) {
   }
   if (!args || typeof args !== "object" || Array.isArray(args)) args = {};
 
+  /* `user_config.user_phone_number` is the platform's own name for the person
+     on the other end — it is what you supply when triggering an outbound call,
+     so it is the likeliest name for the caller on an inbound one too. */
   const from = pick(
     b,
     "from", "from_number", "fromNumber", "caller", "caller_id", "callerId",
-    "customer_number", "call.from", "call.from_number", "metadata.from",
+    "customer_number", "user_config.user_phone_number", "user_phone_number",
+    "call.from", "call.from_number", "metadata.from",
     "data.from", "data.caller_number", "session.from"
   );
 
   const callId = pick(
     b,
     "call_id", "callId", "session_id", "sessionId", "conversation_id",
-    "conversationId", "id", "call.id", "data.call_id"
+    "conversationId", "id", "call.id", "data.call_id",
+    "metadata.call_id", "webhook_config.metadata.call_id"
+  );
+
+  /* The signed token from a "Call me" call, wherever Sarvam chooses to put it
+     back. We send it as both an agent variable and webhook metadata; this reads
+     every place either could surface. */
+  const sessionToken = pick(
+    b,
+    "metadata.session_token", "webhook_config.metadata.session_token",
+    "agent_variables.session_token", "app_config.agent_variables.session_token",
+    "variables.session_token", "session_token", "data.metadata.session_token",
+    "call.metadata.session_token"
   );
 
   const kind = toolName && isKnownTool(toolName)
@@ -651,6 +784,7 @@ function parseRequest(body) {
     from: from ? String(from) : null,
     phone: normalisePhone(from),
     callId: callId ? String(callId).slice(0, 120) : null,
+    sessionToken: sessionToken ? String(sessionToken).slice(0, 500) : null,
     transcript: pick(b, "transcript", "messages", "data.transcript", "conversation"),
     durationSec: Number(pick(b, "duration", "duration_seconds", "durationSec", "call.duration", "data.duration")) || 0,
     language: pick(b, "language", "language_code", "locale", "data.language") || null,
@@ -693,6 +827,11 @@ module.exports = {
   dayKey,
   verifyWebhook,
   signPayload,
+  TOKEN_TTL_MS,
+  mintSessionToken,
+  verifySessionToken,
+  outboundUrl,
+  buildOutboundCall,
   parseRequest,
   toolResponse,
   findFeature,

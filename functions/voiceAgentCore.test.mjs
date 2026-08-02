@@ -34,10 +34,16 @@ const {
   withinRateLimit,
   verifyWebhook,
   signPayload,
+  mintSessionToken,
+  verifySessionToken,
+  outboundUrl,
+  buildOutboundCall,
   parseRequest,
   toolResponse,
 } = require("./voiceAgentCore.js");
-const { FEATURES, ROUTES, findFeature } = require("./voiceKnowledge.js");
+const {
+  FEATURES, ROUTES, findFeature, KB_DESCRIPTION, buildKnowledgeBaseMarkdown,
+} = require("./voiceKnowledge.js");
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -101,6 +107,8 @@ const MUST_REFUSE = [
   "what is ProHippo's revenue",
   "how much revenue does the company make",
   "what is the turnover of the app",
+  "what is your revenue",
+  "how much does ProHippo earn",
   "what's your MRR",
   "what's the valuation",
   "who are the investors",
@@ -134,6 +142,12 @@ const MUST_ANSWER = [
   "open my account settings",
   "how many matters are active",
   "what is the income of Kavita Joshi",
+  // The trap: this is an income-tax app, so money words sit next to the
+  // product name in ordinary sentences all day long.
+  "where do I enter turnover in ProHippo",
+  "what's the income shown in ProHippo for this client",
+  "does ProHippo show the profit from the profit and loss account",
+  "what is your client's turnover figure",
 ];
 
 test("a practitioner's own vocabulary is never mistaken for a company secret", () => {
@@ -379,6 +393,134 @@ test("a timestamped signature is checked for replay, in seconds or milliseconds"
     }).reason,
     "stale-timestamp"
   );
+});
+
+/* ---------------- session tokens: the "Call me" identity path ---------------- */
+
+test("a freshly minted token verifies and returns the uid it was made for", () => {
+  const token = mintSessionToken({ uid: "uid-abc-123", secret: SECRET });
+  const claim = verifySessionToken({ token, secret: SECRET });
+  assert.equal(claim.ok, true);
+  assert.equal(claim.uid, "uid-abc-123");
+});
+
+test("a token is worthless without the right secret", () => {
+  const token = mintSessionToken({ uid: "uid-abc-123", secret: SECRET });
+  assert.equal(verifySessionToken({ token, secret: "other-secret" }).reason, "bad-signature");
+  assert.equal(verifySessionToken({ token, secret: "" }).reason, "missing");
+});
+
+test("a token cannot be edited to name a different account", () => {
+  // The whole point: swap the uid, keep the signature, and it must not verify.
+  const token = mintSessionToken({ uid: "victim-uid", secret: SECRET });
+  const parts = token.split(".");
+  const forged = ["v1", Buffer.from("attacker-uid").toString("base64url"), parts[2], parts[3]].join(".");
+  assert.equal(verifySessionToken({ token: forged, secret: SECRET }).ok, false);
+  // Nor by pushing the expiry out.
+  const extended = [parts[0], parts[1], String(Number(parts[2]) + 86400000), parts[3]].join(".");
+  assert.equal(verifySessionToken({ token: extended, secret: SECRET }).ok, false);
+});
+
+test("a token expires, and expiry is reported only after the signature checks out", () => {
+  const now = 1785000000000;
+  const token = mintSessionToken({ uid: "uid-1", secret: SECRET, nowMs: now, ttlMs: 60000 });
+  assert.equal(verifySessionToken({ token, secret: SECRET, nowMs: now + 59000 }).ok, true);
+  assert.equal(verifySessionToken({ token, secret: SECRET, nowMs: now + 61000 }).reason, "expired");
+  // An unsigned token that has not "expired" must still fail as a bad
+  // signature — never leak that the timing would otherwise have been fine.
+  assert.equal(verifySessionToken({ token: "v1.dWlk.99999999999999.deadbeef", secret: SECRET }).reason, "bad-signature");
+});
+
+test("junk in the token slot is rejected without throwing", () => {
+  for (const token of ["", null, undefined, "nonsense", "v2.a.b.c", "v1.a.b", "v1...."]) {
+    assert.equal(verifySessionToken({ token, secret: SECRET }).ok, false, String(token));
+  }
+});
+
+/* ---------------- placing an outbound call ---------------- */
+
+const OUTBOUND_CONFIG = {
+  orgId: "org-1", workspaceId: "ws-1", agentId: "agent-1", agentVersion: "",
+  connectionId: "conn-1", agentPhoneNumber: "+918071582778",
+  webhookUrl: "https://example.test/sarvamVoiceWebhook",
+};
+
+test("the outbound URL is built from the org and workspace", () => {
+  assert.equal(
+    outboundUrl(OUTBOUND_CONFIG),
+    "https://apps.sarvam.ai/api/outbounds/v1/orgs/org-1/workspaces/ws-1/outbounds"
+  );
+});
+
+test("the trigger-call body matches the documented shape", () => {
+  const body = buildOutboundCall({
+    config: OUTBOUND_CONFIG,
+    toNumber: "+919825011234",
+    callerName: "Jayesh Vyas",
+    firmName: "Vyas & Co.",
+    token: "tok-1",
+    callId: "cb-1",
+  });
+  assert.equal(body.app_config.app_id, "agent-1");
+  assert.equal(body.app_config.app_type, "agent");
+  assert.equal(body.app_config.connection_config.connection_id, "conn-1");
+  assert.equal(body.app_config.connection_config.agent_phone_number, "+918071582778");
+  assert.equal(body.user_config.user_phone_number, "+919825011234");
+  assert.equal(body.webhook_config.url, OUTBOUND_CONFIG.webhookUrl);
+  // An empty version must be omitted, not sent as "".
+  assert.ok(!("app_version" in body.app_config));
+  // The opening line greets by first name — the call was requested, not cold.
+  assert.match(body.app_config.app_overrides.initial_bot_message, /Jayesh/);
+});
+
+test("the token rides in both places, because only one of them may come back", () => {
+  const body = buildOutboundCall({ config: OUTBOUND_CONFIG, toNumber: "+919825011234", token: "tok-1", callId: "cb-1" });
+  assert.equal(body.app_config.agent_variables.session_token, "tok-1");
+  assert.equal(body.webhook_config.metadata.session_token, "tok-1");
+  assert.equal(body.webhook_config.metadata.call_id, "cb-1");
+});
+
+test("the webhook finds the token wherever Sarvam echoes it back", () => {
+  for (const body of [
+    { tool_name: "open_tasks", metadata: { session_token: "tok-1" } },
+    { tool_name: "open_tasks", webhook_config: { metadata: { session_token: "tok-1" } } },
+    { tool_name: "open_tasks", agent_variables: { session_token: "tok-1" } },
+    { tool_name: "open_tasks", app_config: { agent_variables: { session_token: "tok-1" } } },
+  ]) {
+    assert.equal(parseRequest(body).sessionToken, "tok-1", JSON.stringify(body));
+  }
+  assert.equal(parseRequest({ tool_name: "open_tasks" }).sessionToken, null);
+});
+
+test("an inbound caller number is read from the platform's own field name too", () => {
+  assert.equal(parseRequest({ event: "call.started", user_config: { user_phone_number: "+919825011234" } }).phone, "+919825011234");
+});
+
+/* ---------------- the knowledge base ---------------- */
+
+test("the knowledge base covers every feature and leaks nothing", () => {
+  const md = buildKnowledgeBaseMarkdown();
+  for (const f of FEATURES) {
+    assert.ok(md.includes(f.label), `KB is missing ${f.label}`);
+    assert.ok(md.includes(f.where), `KB is missing navigation for ${f.label}`);
+  }
+  // It is a product manual and gets read aloud to whoever is holding the phone.
+  assert.equal(restrictedTopic(md.replace(/^#.*$/gm, "")), null, "the KB itself trips the guardrail");
+});
+
+test("the KB description tells the agent when NOT to search it", () => {
+  // Sarvam routes on this string, so the exclusions are a real control.
+  assert.match(KB_DESCRIPTION, /Do NOT search this for the caller's own records/);
+  assert.match(KB_DESCRIPTION, /revenue|API keys|admin/);
+});
+
+test("the system prompt stays an index — the manual belongs in the KB", () => {
+  const prompt = buildSystemPrompt(null);
+  // Every feature is nameable without retrieval...
+  for (const f of FEATURES) assert.ok(prompt.includes(f.label), `prompt is missing ${f.label}`);
+  // ...but the step-by-step is not duplicated here.
+  assert.ok(!prompt.includes(FEATURES[1].steps[0]), "prompt still carries the KB's step text");
+  assert.match(prompt, /find_feature|knowledge base/i);
 });
 
 /* ---------------- the Sarvam payload adapter ---------------- */

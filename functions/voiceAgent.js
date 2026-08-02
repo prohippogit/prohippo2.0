@@ -34,9 +34,10 @@
  */
 "use strict";
 
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { VOICE_AGENT_CONFIG, missingConfig, isConfigured } = require("./voiceAgentConfig");
 
 const {
   maskPhone,
@@ -57,6 +58,10 @@ const {
   toolResponse,
   matchAssessee,
   findFeature,
+  mintSessionToken,
+  verifySessionToken,
+  outboundUrl,
+  buildOutboundCall,
   RESTRICTED_REPLY,
 } = require("./voiceAgentCore");
 
@@ -71,6 +76,15 @@ const {
  */
 const sarvamWebhookSecret = defineSecret("SARVAM_WEBHOOK_SECRET");
 
+/*
+ * The Sarvam platform key, for placing outbound calls (the "Call me" button).
+ * From the Sarvam console; store it with
+ *   firebase functions:secrets:set SARVAM_API_KEY
+ * It never reaches the browser — the callable holds it and the browser only
+ * ever asks ProHippo to place a call, never Sarvam directly.
+ */
+const sarvamApiKey = defineSecret("SARVAM_API_KEY");
+
 /* A practice is hundreds of rows, not millions, and a phone call cannot read
    out more than a handful. Bounding the read keeps a runaway document count
    from turning one call into a large bill, and lets the filtering happen in
@@ -78,7 +92,7 @@ const sarvamWebhookSecret = defineSecret("SARVAM_WEBHOOK_SECRET");
 const READ_CAP = 800;
 const SPEAK_CAP = 5; // how many items get read out before we offer the rest
 
-module.exports.build = function build({ PRIMARY_REGION, db, recordSpend }) {
+module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend }) {
   /* ---------------- identity ---------------- */
 
   /*
@@ -89,30 +103,56 @@ module.exports.build = function build({ PRIMARY_REGION, db, recordSpend }) {
    * call, with no second index to drift out of step. The one difference: this
    * path NEVER creates a user. An unrecognised caller stays unrecognised.
    */
-  async function identifyCaller(phoneE164) {
-    if (!phoneE164) return { known: false };
-    let user;
-    try {
-      user = await admin.auth().getUserByPhoneNumber(phoneE164);
-    } catch (e) {
-      if (e.code !== "auth/user-not-found") {
-        console.error("voice: caller lookup failed", e.code || e.message);
-      }
-      return { known: false };
-    }
+  async function loadProfile(uid, fallbackName = "") {
     let profile = {};
     try {
-      const snap = await db.doc(`users/${user.uid}`).get();
+      const snap = await db.doc(`users/${uid}`).get();
       profile = snap.exists ? snap.data() || {} : {};
     } catch (e) {
       console.error("voice: profile read failed", e.message || e);
     }
     return {
       known: true,
-      uid: user.uid,
-      name: profile.ownerName || user.displayName || "",
+      uid,
+      name: profile.ownerName || fallbackName || "",
       firmName: profile.firmName || "",
     };
+  }
+
+  /*
+   * TWO WAYS IN, AND THEY ARE NOT EQUALLY GOOD.
+   *
+   *   1. A signed session token. ProHippo authenticated the user in the app,
+   *      minted this, and asked Sarvam to dial them. Cryptographic, expiring,
+   *      and the path the "Call me" button uses.
+   *   2. The number on the wire. Only as good as caller ID, which is to say
+   *      spoofable — but it is all an inbound call gives us.
+   *
+   * The token is checked first and wins outright. It is checked against the
+   * same secret that authenticated the webhook itself, so a request that got
+   * this far with a valid token was signed by Sarvam AND carries a uid this
+   * server vouched for within the last fifteen minutes.
+   */
+  async function identifyCaller(parsed, secret) {
+    if (parsed.sessionToken) {
+      const claim = verifySessionToken({ token: parsed.sessionToken, secret });
+      if (claim.ok) return { ...(await loadProfile(claim.uid)), via: "token" };
+      // A token that was sent and didn't verify is worth a line in the log: it
+      // is either a clock problem, a rotated secret, or someone trying it on.
+      console.warn("voice: session token rejected —", claim.reason);
+    }
+
+    if (!parsed.phone) return { known: false };
+    let user;
+    try {
+      user = await admin.auth().getUserByPhoneNumber(parsed.phone);
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") {
+        console.error("voice: caller lookup failed", e.code || e.message);
+      }
+      return { known: false };
+    }
+    return { ...(await loadProfile(user.uid, user.displayName)), via: "caller-id" };
   }
 
   /* The ONLY way this module reaches Firestore. Everything is a subcollection
@@ -511,7 +551,7 @@ module.exports.build = function build({ PRIMARY_REGION, db, recordSpend }) {
 
       const started = Date.now();
       const parsed = parseRequest(body);
-      const caller = await identifyCaller(parsed.phone);
+      const caller = await identifyCaller(parsed, sarvamWebhookSecret.value());
 
       try {
         if (parsed.kind === "session-start") {
@@ -613,5 +653,109 @@ module.exports.build = function build({ PRIMARY_REGION, db, recordSpend }) {
     }
   );
 
-  return { sarvamVoiceWebhook };
+  /* ---------------- the "Call me" button ---------------- */
+
+  /*
+   * THE STRONGEST IDENTITY PATH IN THE FEATURE, and the reason it exists.
+   *
+   * The inbound line has to take the caller's word for who they are, via a
+   * number that can be spoofed. This one doesn't: the request arrives on an
+   * authenticated callable, so Firebase has already proved the uid before a
+   * line of this function runs. ProHippo then dials the number THAT ACCOUNT
+   * HAS VERIFIED — not a number supplied in the request — and sends a signed
+   * token along for the webhook to check.
+   *
+   * Note what is NOT a parameter: the number to call. Accepting one would turn
+   * this into a free outbound-dialler for anyone with an account, billed to us.
+   * The only number this will ever ring is the one already on the Firebase user
+   * record, put there by linkPhone after an OTP proved possession.
+   */
+  const requestVoiceCallback = onCall(
+    { region: REGIONS, secrets: [sarvamApiKey, sarvamWebhookSecret], maxInstances: 10 },
+    async (request) => {
+      const uid = request.auth?.uid;
+      if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+
+      if (!isConfigured()) {
+        console.error("voice: callback requested but config is incomplete —", missingConfig().join(", "));
+        throw new HttpsError("failed-precondition", "The voice assistant isn't switched on yet. Please try again later.");
+      }
+
+      // The verified number on the account, and nothing the client sent.
+      let user;
+      try {
+        user = await admin.auth().getUser(uid);
+      } catch (e) {
+        console.error("voice: callback user lookup failed", e.message || e);
+        throw new HttpsError("internal", "Couldn't start the call. Please try again.");
+      }
+      const toNumber = user.phoneNumber;
+      if (!toNumber) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Link your mobile number first — go to Settings, Account, Link mobile. That's the number I'll call you on."
+        );
+      }
+
+      const { allowed } = await consumeRateLimit(uid, "call");
+      if (!allowed) {
+        throw new HttpsError("resource-exhausted", "You've used today's calls. Everything is still in the app — please have a look there, or try again tomorrow.");
+      }
+
+      const profile = await loadProfile(uid, user.displayName);
+      const callId = `cb-${uid.slice(0, 8)}-${Date.now()}`;
+      const token = mintSessionToken({ uid, secret: sarvamWebhookSecret.value() });
+      const payload = buildOutboundCall({
+        config: VOICE_AGENT_CONFIG,
+        toNumber,
+        callerName: profile.name,
+        firmName: profile.firmName,
+        token,
+        callId,
+      });
+
+      const started = Date.now();
+      let ok = false;
+      let errorCode = null;
+      try {
+        const res = await fetch(outboundUrl(VOICE_AGENT_CONFIG), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-Key": sarvamApiKey.value() },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          // Sarvam's message can quote our own request back; it goes to the log,
+          // never to the browser.
+          const detail = await res.text().catch(() => "");
+          console.error("voice: outbound rejected", res.status, detail.slice(0, 300));
+          errorCode = `http-${res.status}`;
+          throw new HttpsError("unavailable", "Couldn't place the call just now. Please try again in a moment.");
+        }
+        ok = true;
+      } catch (e) {
+        if (e instanceof HttpsError) throw e;
+        console.error("voice: outbound request failed", e.message || e);
+        errorCode = "network";
+        throw new HttpsError("unavailable", "Couldn't place the call just now. Please try again in a moment.");
+      } finally {
+        // Metered whether or not it connected: a rejected trigger costs no
+        // minutes, and `units: 0` says exactly that without hiding the attempt.
+        await recordSpend({
+          uid, vendor: "sarvam", sku: "voice-agent", feature: "voice-callback",
+          units: 0, ms: Date.now() - started, ok, errorCode,
+        });
+      }
+
+      await logCall(uid, callId, {
+        startedAt: new Date().toISOString(),
+        direction: "outbound",
+        from: maskPhone(toNumber),
+        tools: [],
+      });
+
+      return { ok: true, callId, calling: maskPhone(toNumber) };
+    }
+  );
+
+  return { sarvamVoiceWebhook, requestVoiceCallback };
 };

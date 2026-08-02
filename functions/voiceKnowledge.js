@@ -233,6 +233,7 @@ const ROUTES = [...new Set(FEATURES.map((f) => f.route))];
  * loose leaks the business, too tight makes the product useless.
  */
 const COMPANY_SUBJECT = "(?:prohippo|the\\s+(?:app|company|platform|product|business|firm[\\s-]?behind)|your\\s+(?:company|app|business|platform)|this\\s+(?:app|platform|company)|you)";
+const MONEY_WORD = "(?:revenue|turnover|profits?|earnings?|income|sales|collections?|kamai)";
 
 const RESTRICTED_PATTERNS = [
   // Credentials and configuration. No innocent reading — a practitioner has no
@@ -248,11 +249,36 @@ const RESTRICTED_PATTERNS = [
     topic: "business metrics",
     re: /\b(mrr|arr|arpu|ltv|cac|burn[\s-]?rate|runway|valuation|cap[\s-]?table|funding[\s-]?round|investors?|gross[\s-]?margin|pricing[\s-]?margin|unit[\s-]?econom)/i,
   },
-  // Money words, but only when aimed at the company rather than at a client's file.
+  /*
+   * Money words aimed at the COMPANY, not at a client's file.
+   *
+   * Mere proximity is not enough, and the first version of this got it wrong:
+   * "income" is a money word and this is an INCOME-TAX app, so a proximity rule
+   * refused "where do I enter turnover in ProHippo" and "what's the income
+   * shown in ProHippo for this client" — both perfectly ordinary questions.
+   * The word "ProHippo" appears near a money word in half the legitimate
+   * sentences a caller will ever say.
+   *
+   * So the match requires GRAMMAR, not distance: the company has to possess the
+   * figure ("ProHippo's revenue"), or be the object of it ("turnover of the
+   * app"), or be the earner ("how much does the company make"). A client's
+   * turnover matches none of those, which is the point.
+   */
   {
     topic: "business metrics",
     re: new RegExp(
-      `\\b(?:revenue|turnover|profit|earnings?|income|sales|collections?|kamai)\\b[^.?!]{0,30}\\b${COMPANY_SUBJECT}\\b|\\b${COMPANY_SUBJECT}\\b[^.?!]{0,30}\\b(?:revenue|turnover|profit|earnings?|makes?[\\s-]?how[\\s-]?much|kamai|kitna[\\s-]?kamata)\\b`,
+      [
+        // "ProHippo's revenue", "the company's turnover"
+        `\\b${COMPANY_SUBJECT}['’]s\\s+${MONEY_WORD}`,
+        // "revenue of ProHippo", "profit from the app"
+        `\\b${MONEY_WORD}\\s+(?:of|from|at)\\s+${COMPANY_SUBJECT}\\b`,
+        // "how much revenue does the company make", "how much do you earn"
+        `\\b${MONEY_WORD}\\b[^.?!]{0,25}\\b(?:does|do)\\s+${COMPANY_SUBJECT}\\b`,
+        `\\bhow\\s+much\\s+(?:does|do)\\s+${COMPANY_SUBJECT}\\s+(?:make|earn|charge)\\b`,
+        // Addressed straight at the agent. Narrow on purpose: "your revenue"
+        // is us, "your client's turnover" is theirs.
+        `\\byour\\s+(?:revenue|turnover|profits?|earnings|financials|numbers)\\b`,
+      ].join("|"),
       "i"
     ),
   },
@@ -303,6 +329,94 @@ const ADVICE_REPLY =
   "I can't give an opinion on the tax position itself — that's your call as the professional. " +
   "What I can do is show you where everything on that matter sits in ProHippo.";
 
+/* ---------------- the Sarvam knowledge base ---------------- */
+
+/*
+ * The same FEATURES, rendered as the Markdown file uploaded to Sarvam as a
+ * knowledge base.
+ *
+ * Why a KB rather than more system prompt: Sarvam's own guidance is that KBs
+ * are for "policies, pricing, product details and FAQs" — which is exactly what
+ * this is — and every paragraph left in the prompt is a paragraph competing
+ * with the refusal rules for the model's attention on every single turn. The
+ * prompt keeps the guardrails and a one-line index; the depth lives here.
+ *
+ * The usual objection to a KB is drift: an uploaded file is a copy, and copies
+ * go stale. That is why this is GENERATED rather than written —
+ * `node scripts/print-voice-agent-config.mjs --kb` renders it from the array
+ * above, so the file is a build artifact of the same source of truth the server
+ * enforces against, not a second one.
+ */
+const KB_NAME = "ProHippo app guide";
+
+/*
+ * The description is what the agent routes on — Sarvam embeds it to decide
+ * whether to search this KB at all. So it does double duty: it says what is in
+ * here, and it says what is NOT, which makes it one more place the boundary is
+ * written down. A model that never searches this KB for account data or company
+ * internals is a model that cannot accidentally answer from it.
+ */
+const KB_DESCRIPTION = [
+  "How to use the ProHippo app: what every screen does and the exact steps to reach it —",
+  "assessees and client records, matters and proceedings, hearings and the cause list, appeals",
+  "and limitation dates, invoices and receipts, client communication, AI notice intake, reports,",
+  "the desktop sync connector, filed returns and Computation of Income, document requests,",
+  "settings, and signing in.",
+  "Search this for any 'how do I', 'where is', or 'what does this do' question about the app.",
+  "Do NOT search this for the caller's own records — their clients, hearing dates, notices,",
+  "invoices or tasks all come from the account tools, never from here.",
+  "Do NOT search this for company information such as user numbers, revenue, pricing internals,",
+  "API keys or admin access: none of that is in here, and none of it is answerable on this line.",
+].join(" ");
+
+function buildKnowledgeBaseMarkdown() {
+  const lines = [
+    `# ${KB_NAME}`,
+    "",
+    "ProHippo is software for Indian income-tax practitioners. It tracks assessees,",
+    "proceedings, hearings, notices, appeals, invoices and client communication, and reads",
+    "income-tax notices with AI.",
+    "",
+    "This guide covers what each screen does and how to reach it. It contains no account",
+    "data and no company information.",
+    "",
+  ];
+  for (const f of FEATURES) {
+    lines.push(
+      `## ${f.label}`,
+      "",
+      f.what,
+      "",
+      `**Where it is:** ${f.where}`,
+      "",
+      "**Steps:**",
+      ...f.steps.map((s, i) => `${i + 1}. ${s}`),
+      "",
+      `**Also called:** ${f.keywords.join(", ")}`,
+      ""
+    );
+  }
+  /*
+   * Kept short, and deliberately NOT a list of the sensitive subjects.
+   *
+   * A KB is retrieved in ~500-token chunks with no surrounding context, so a
+   * paragraph here that enumerates "user counts, revenue, API keys" is a
+   * paragraph that can surface on its own and put those very words into the
+   * agent's mouth. The enumeration belongs in KB_DESCRIPTION and in the system
+   * prompt, both of which are always in context and never retrieved piecemeal.
+   * The unit test asserts this file trips none of RESTRICTED_PATTERNS.
+   */
+  lines.push(
+    "## What this guide does not cover",
+    "",
+    "This guide describes the app itself. A practitioner's own records are read live from",
+    "their account and are not in here. Information about the business behind ProHippo is",
+    "not covered on the help line at all.",
+    ""
+  );
+  return lines.join("\n");
+}
+
 /*
  * Score one feature against the caller's words. Deliberately simple: a
  * substring hit on a keyword is worth more than one on the description,
@@ -345,6 +459,9 @@ const featureById = (id) => FEATURES.find((f) => f.id === id) || null;
 module.exports = {
   FEATURES,
   ROUTES,
+  KB_NAME,
+  KB_DESCRIPTION,
+  buildKnowledgeBaseMarkdown,
   RESTRICTED_PATTERNS,
   RESTRICTED_REPLY,
   ADVICE_REPLY,

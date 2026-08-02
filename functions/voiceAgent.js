@@ -438,7 +438,10 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     const best = matches[0];
     const alt = matches.length > 1 ? ` If you meant ${matches[1].label} instead, tell me and I'll take you there.` : "";
     return toolResponse(
-      `${best.label}. ${best.what} ${best.where} ${best.steps.join(" Then ")}${alt}`,
+      /* Steps join with a plain space, not " Then " — each already ends in a
+         full stop, and the old join produced "Then Tap New invoice… Then To
+         record a payment", which reads fine on a page and badly out loud. */
+      `${best.label}. ${best.what} ${best.where} ${best.steps.join(" ")}${alt}`,
       { route: best.route, label: best.label, steps: best.steps }
     );
   }

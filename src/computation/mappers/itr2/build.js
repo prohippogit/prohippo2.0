@@ -157,7 +157,8 @@ export function buildItr2(body, ctx) {
   paidRows.push(total(banner.refundDue > 0 ? "Refund Due" : "Tax Payable", banner.refundDue > 0 ? banner.refundDue : banner.balPayable));
 
   /* ---- I. Losses carried forward -------------------------------------------- */
-  const cflRows = carriedForwardRows(src, ctx);
+  const cfl = carriedForwardRows(src, ctx);
+  const cflRows = cfl.rows || [];
   src.num("PartB-TI.LossesOfCurrentYearCarriedFwd");
   src.claim("ScheduleCYLA");
   src.claim("ScheduleBFLA");
@@ -196,7 +197,7 @@ export function buildItr2(body, ctx) {
     section("TI", "Computation of Total Income", tiRows, { tone: "navy", omitIfAllNil: false }),
     section("TAX", "Computation of Tax Liability", tax.rows, { tone: "gold", omitIfAllNil: false, footnote: amtFootnote }),
     section("TAXES_PAID", "Taxes Paid & Prepaid Taxes", paidRows, { tone: "navy", omitIfAllNil: false }),
-    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy" }) : null,
+    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy", footnote: cfl.note }) : null,
   ];
 
   const doc = document({

@@ -170,7 +170,9 @@ export function buildItr3(body, ctx) {
 
   const cylaHeads = [
     ["house property loss", src.num("ScheduleCYLA.TotalCurYr.TotHPlossCurYr")],
-    ["business loss", src.num("ScheduleCYLA.TotalCurYr.TotBusLossSetoff")],
+    // TotalCurYr states the loss as TotBusLoss; TotBusLossSetoff is a field of
+    // TotalLossSetOff, so reading it here left every business loss unnamed.
+    ["business loss", src.num("ScheduleCYLA.TotalCurYr.TotBusLoss")],
     ["loss from other sources", src.num("ScheduleCYLA.TotalCurYr.TotOthSrcLossNoRaceHorse")],
   ].filter(([, v]) => v !== 0).map(([l]) => l);
   const cylaLabel = cylaHeads.length ? cylaHeads.join(" and ") : "loss";
@@ -235,7 +237,8 @@ export function buildItr3(body, ctx) {
   }
 
   /* ---- J. Losses carried forward -------------------------------------------- */
-  const cflRows = carriedForwardRows(src, ctx);
+  const cfl = carriedForwardRows(src, ctx);
+  const cflRows = cfl.rows || [];
   src.num("PartB-TI.LossesOfCurrentYearCarriedFwd");
   src.claim("ScheduleCYLA");
   src.claim("ScheduleBFLA");
@@ -290,7 +293,7 @@ export function buildItr3(body, ctx) {
     section("TI", "Computation of Total Income", tiRows, { tone: "navy", omitIfAllNil: false }),
     section("TAX", "Computation of Tax Liability", tax.rows, { tone: "gold", omitIfAllNil: false, footnote: amtFootnote }),
     section("TAXES_PAID", "Taxes Paid & Prepaid Taxes", paidRows, { tone: "navy", omitIfAllNil: false }),
-    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy" }) : null,
+    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy", footnote: cfl.note }) : null,
   ];
 
   const doc = document({

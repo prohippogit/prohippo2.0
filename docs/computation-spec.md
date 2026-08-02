@@ -579,6 +579,32 @@ Recorded so nobody has to rediscover them.
   reliably the assessment year. Identify the row by the filing date the return
   states, not by the key.
 
+**Schedule CFL states each business loss twice**
+- Every `LossCF…` block carries the same figure against `BrtFwdBusLoss` and
+  against `BusLossOthThanSpecLossCF`, and only the second enters the return's
+  own totals. Captioning both printed every business loss on the page twice, so
+  the rows added to double the subtotal beneath them. Restate `BrtFwdBusLoss`.
+- Match **every** key beginning `LossCF`, not just `LossCFCurrentAssmntYear…`:
+  the A.Y. 2024-25 return keeps a 5,65,132 business loss of 2016-17 in
+  `LossCFFromPrev3rdYearFromAY`, and a narrower match dropped it silently.
+- The rows will not always add to the carry-forward total — a loss listed as
+  brought forward may have been set off this year, or may no longer be available
+  to carry further. Both figures are the return's own; state both in a footnote
+  rather than smoothing over the gap.
+
+**Schedule UD — unabsorbed depreciation u/s 32(2)**
+- Not a loss, and not subject to the eight-year limit: it carries forward
+  without limit of time and sets off against any head. The return keeps it in
+  `ITR3ScheduleUD`, and the computation totals it apart from the losses.
+- `AmtBFUD` / `AmtDeprSOCY` are the working; `BalCFNY` per year and
+  `CurBalCFNY` for the current year are what actually carries forward, totalling
+  to `TotDepritBalCFNY`.
+
+**Schedule CYLA names the current year's loss in `TotalCurYr`**
+- `TotalCurYr.TotBusLoss`, not `TotBusLossSetoff` — that is a field of
+  `TotalLossSetOff`. Reading the wrong one left every business loss set-off
+  captioned as a bare "current year loss".
+
 **Schedule TDS3 — tax deducted by someone with no TAN**
 - A buyer of immovable property (s.194-IA), an individual tenant (s.194-IB) or
   a person paying under s.194M deducts against their own **PAN**. Those credits
@@ -774,6 +800,8 @@ test/fixtures/
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
   itr3-oldregime-marginal-relief-ay2022-23.json // NewTaxRegime, marginal relief, VI-A subtotals
   itr3-partner-cgloss-tds3-ay2023-24.json       // capital LOSS + losses c/f, Sch. TDS3, TCS, refund
+  itr3-fno-busloss-unabsdepr-ay2024-25.json     // BUSINESS LOSS, 6 years of loss c/f, Schedule UD
+  itr3-fno-bfloss-setoff-ay2026-27.json         // b/f loss set off u/s 72, depreciation fully absorbed
   itr4-…  itr1-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
@@ -850,6 +878,8 @@ than it is:
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2023-24 | ✓      | ✓    | ✓      | — not yet   |
+| ITR-3 | 2024-25 (F&O) | ✓ | ✓ (business) | — (nil) | — not yet |
+| ITR-3 | 2026-27 (F&O) | ✓ | —    | — (nil)   | — not yet |
 | ITR-3 | 2022-23 | ✓      | —    | — (level) | — not yet |
 
 The tax-payable path is written and rendered for both individual forms (the

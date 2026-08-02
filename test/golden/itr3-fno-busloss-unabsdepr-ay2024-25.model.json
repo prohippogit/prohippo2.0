@@ -1,0 +1,465 @@
+{
+ "meta": {
+  "form": "ITR3",
+  "assessmentYear": "2024-25",
+  "previousYear": "2023-24",
+  "schemaVersion": "Ver1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+ },
+ "assessee": {
+  "name": "SAMPLE NAME 1 SAMPLE NAME 2 SAMPLE NAME 3",
+  "pan": "AAAPZ1000A",
+  "status": "Individual",
+  "address": "C-2, SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 380007",
+  "email": "sample@example.com",
+  "mobile": "9800000001",
+  "residentialStatus": "Resident",
+  "dateOfFormation": "1973-04-23",
+  "facts": [
+   {
+    "label": "Status",
+    "value": "Individual"
+   },
+   {
+    "label": "Date of birth",
+    "value": "23 April 1973"
+   },
+   {
+    "label": "Residential status",
+    "value": "Resident"
+   },
+   {
+    "label": "Return filed under",
+    "value": "Section 139(1) — on or before the due date"
+   },
+   {
+    "label": "Tax regime",
+    "value": "New regime u/s 115BAC(1A) (default)"
+   },
+   {
+    "label": "Due date",
+    "value": "31 July 2024"
+   },
+   {
+    "label": "Business",
+    "value": "SAMPLE NAME 4"
+   },
+   {
+    "label": "E-mail / mobile",
+    "value": "sample@example.com\n+91 9800000001"
+   }
+  ],
+  "constitutionTitle": "",
+  "partners": []
+ },
+ "sections": [
+  {
+   "id": "BP",
+   "letter": "A",
+   "title": "Profits and Gains of Business or Profession",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Net profit before tax as per the profit & loss account",
+     "amount": -327038,
+     "ref": "Sch. BP"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Depreciation debited to the profit & loss account",
+     "amount": 244
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Depreciation allowable u/s 32",
+     "amount": 244,
+     "ref": "Sec. 32",
+     "note": "Block-wise workings are in Schedules DPM, DOA and DEP of the return"
+    },
+    {
+     "kind": "total",
+     "label": "Loss under the head Profits and Gains of Business or Profession",
+     "amount": 327038,
+     "isLoss": true
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "CG",
+   "letter": "B",
+   "title": "Capital Gains",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Short-term capital gains",
+     "amount": null,
+     "cols": {
+      "ref": "Sch. CG"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Full value of consideration — equity shares / units (STT paid)",
+     "amount": 34063
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Short-term Capital Gains",
+     "amount": 34063
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Capital Gains",
+     "amount": 34063
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "OS",
+   "letter": "C",
+   "title": "Income from Other Sources",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Interest from savings bank accounts",
+     "amount": 1510
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Other Sources",
+     "amount": 1510
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "TI",
+   "letter": "D",
+   "title": "Computation of Total Income",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "head",
+     "label": "Income from Salaries",
+     "amount": 0,
+     "ref": "Sch. S"
+    },
+    {
+     "kind": "head",
+     "label": "Income from House Property",
+     "amount": 0,
+     "ref": "Sch. HP"
+    },
+    {
+     "kind": "head",
+     "label": "Profits and Gains of Business or Profession",
+     "amount": 0,
+     "ref": "Sch. BP"
+    },
+    {
+     "kind": "head",
+     "label": "Capital Gains",
+     "amount": 34063,
+     "ref": "Sch. CG"
+    },
+    {
+     "kind": "head",
+     "label": "Income from Other Sources",
+     "amount": 1510,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total of Heads of Income",
+     "amount": 35573
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Set-off of current year business loss u/s 71",
+     "amount": 35573,
+     "ref": "Sch. CYLA"
+    },
+    {
+     "kind": "sub",
+     "label": "Balance after set-off of current year loss",
+     "amount": 0
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Total Income",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Deductions under Chapter VI-A",
+     "amount": 0,
+     "ref": "Sch. VI-A"
+    },
+    {
+     "kind": "total",
+     "label": "Total Income (rounded off u/s 288A)",
+     "amount": 0
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAX",
+   "letter": "E",
+   "title": "Computation of Tax Liability",
+   "tone": "gold",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Tax on income at the rates in force",
+     "amount": 0,
+     "ref": "Para A, Sch. I"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Tax on Total Income",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Rebate u/s 87A",
+     "amount": 0,
+     "ref": "Sec. 87A"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Surcharge",
+     "amount": 0,
+     "note": "Total income does not exceed ₹ 50 lakh"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Health & Education Cess @ 4%",
+     "amount": 0
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Tax Liability",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Relief u/s 89 / 90 / 90A / 91",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Total Tax and Interest Payable",
+     "amount": 0
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAXES_PAID",
+   "letter": "F",
+   "title": "Taxes Paid & Prepaid Taxes",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "subtotal",
+     "label": "Total Tax Deducted at Source",
+     "amount": 0,
+     "ref": "Sch. TDS"
+    },
+    {
+     "kind": "sub",
+     "label": "Advance Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Self-Assessment Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax Collected at Source",
+     "amount": 0,
+     "ref": "Sch. TCS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Taxes Paid",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Total Tax and Interest Payable",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Nothing further payable or refundable",
+     "amount": 0
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "CFL",
+   "letter": "G",
+   "title": "Losses Carried Forward to Subsequent Years",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Nature of loss",
+     "amount": null,
+     "cols": {
+      "ref": "Year it arose"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Business loss, other than speculative",
+     "amount": 565132,
+     "cols": {
+      "ref": "Return filed 23 July 2016"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Business loss, other than speculative",
+     "amount": 2446909,
+     "cols": {
+      "ref": "Return filed 23 July 2019"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Business loss, other than speculative",
+     "amount": 94856,
+     "cols": {
+      "ref": "Return filed 16 July 2022"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Business loss, other than speculative",
+     "amount": 830179,
+     "cols": {
+      "ref": "Return filed 22 November 2021"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Business loss, other than speculative",
+     "amount": 1513184,
+     "cols": {
+      "ref": "Return filed 24 June 2023"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Short-term capital loss",
+     "amount": 194592,
+     "cols": {
+      "ref": "Return filed 24 June 2023"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Business loss, other than speculative",
+     "amount": 291465,
+     "cols": {
+      "ref": "A.Y. 2024-25"
+     }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Business loss, other than speculative carried forward",
+     "amount": 5176593
+    },
+    {
+     "kind": "subtotal",
+     "label": "Short-term capital loss carried forward",
+     "amount": 194592
+    },
+    {
+     "kind": "total",
+     "label": "Total Loss Carried Forward",
+     "amount": 5371185
+    },
+    {
+     "kind": "columnHeader",
+     "label": "Allowance carried forward",
+     "amount": null,
+     "cols": {
+      "ref": "Year it arose"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Unabsorbed depreciation u/s 32(2)",
+     "amount": 407,
+     "cols": {
+      "ref": "A.Y. 2023-24"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Unabsorbed depreciation u/s 32(2)",
+     "amount": 244,
+     "cols": {
+      "ref": "A.Y. 2024-25"
+     }
+    },
+    {
+     "kind": "total",
+     "label": "Unabsorbed Depreciation Carried Forward u/s 32(2)",
+     "amount": 651
+    }
+   ],
+   "footnote": "The losses listed above total 59,36,968; of that, 53,71,836 is carried forward to subsequent years per the return.",
+   "omitIfAllNil": true
+  }
+ ],
+ "refund": null,
+ "payable": null,
+ "notes": [
+  {
+   "severity": "info",
+   "text": "This computation has been prepared from the ITR-3 return data (JSON) for A.Y. 2024-25 and the figures correspond to Schedule BP, Schedule CG, Schedule OS and Part B-TI / Part B-TTI of the return."
+  },
+  {
+   "severity": "info",
+   "text": "The return is filed under the new regime u/s 115BAC(1A) (default)."
+  },
+  {
+   "severity": "info",
+   "text": "Exempt income reported under Schedule EI: 17,465."
+  }
+ ],
+ "signatory": {
+  "name": "SAMPLE NAME 12",
+  "capacity": "Self",
+  "pan": "AAAPZ1000A",
+  "place": "SAMPLE PLACE 5",
+  "date": "2024-06-29"
+ },
+ "unmapped": []
+}

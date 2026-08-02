@@ -1041,7 +1041,7 @@ export function carriedForwardRows(src, ctx) {
   }
 
   if (rows.length || currentYear.length) {
-    rows.unshift(columnHeader("Assessment Year / Nature of loss", { ref: "Return for that year filed on" }));
+    rows.unshift(columnHeader("Assessment Year / Nature of loss", { ref: "Return for that year filed on", amt: "Amount (₹)" }));
     if (rows.length > 1) rows.push(subtotal("Total Brought Forward from Earlier Years", sum(broughtForward)));
     for (const [label, v] of currentYear) {
       rows.push(sub(`Add: Loss of the current year — ${label.toLowerCase()}`, v, { cols: { ref: `A.Y. ${ctx.ay}` } }));
@@ -1092,7 +1092,7 @@ function unabsorbedDepreciationRows(src, ctx) {
   src.restate(["ITR3ScheduleUD.TotBFUDepritAmt", "ITR3ScheduleUD.TotCurYrdepritSetoffInc",
     "ITR3ScheduleUD.TotBFUAllowAmt", "ITR3ScheduleUD.TotCurYrAllowSetoffInc"]);
   if (!rows.length || !total_) return { rows: [], total: 0 };
-  rows.unshift(columnHeader("Allowance carried forward", { ref: "Year it arose" }));
+  rows.unshift(columnHeader("Allowance carried forward", { ref: "Year it arose", amt: "Amount (₹)" }));
   rows.push(total("Unabsorbed Depreciation Carried Forward u/s 32(2)", total_));
   return { rows, total: total_ };
 }

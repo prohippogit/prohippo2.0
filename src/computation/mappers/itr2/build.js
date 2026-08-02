@@ -204,7 +204,7 @@ export function buildItr2(body, ctx) {
     section("TI", "Computation of Total Income", tiRows, { tone: "navy", omitIfAllNil: false }),
     section("TAX", "Computation of Tax Liability", tax.rows, { tone: "gold", omitIfAllNil: false, footnote: amtFootnote }),
     section("TAXES_PAID", "Taxes Paid & Prepaid Taxes", paidRows, { tone: "navy", omitIfAllNil: false }),
-    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy", footnote: cfl.note }) : null,
+    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy", layout: "table", footnote: cfl.note }) : null,
   ];
 
   const doc = document({

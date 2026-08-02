@@ -214,6 +214,7 @@ export interface Section {
   letter:   string;            // 'A', 'B', 'C' … assigned at build time, not hardcoded
   title:    string;            // 'Computation of Total Income'
   tone:     'navy' | 'gold' | 'slate';
+  layout?:  'table';           // absent = a working; see below
   rows:     Row[];
   footnote?: string;
   omitIfAllNil?: boolean;      // default true for head-specific sections
@@ -226,7 +227,10 @@ export interface Row {
   ref?:    string;             // 'Sch. BP', 'Sec. 57', 'Part A-P&L'
   amount:  number | null;      // null renders as blank, 0 renders as an em dash
   isLoss?: boolean;            // renders in red, wrapped in parentheses
-  cols?:   { ref: string };    // for tables where the middle column is data, not a ref
+  cols?:   { ref: string; amt?: string };
+  // `cols` marks a row whose middle column is data, not a source reference.
+  // `cols.amt` captions the amount column, which a column header cannot do
+  // through `amount` — that is a figure and renders as one (0 is an em dash).
 }
 
 export interface RefundBlock {
@@ -243,6 +247,24 @@ export interface Signatory {
 
 export interface UnmappedItem { path: string; value: number | string; }
 ```
+
+### `Section.layout` — a working or a ledger
+
+Most sections are **workings**: the rows are steps in an argument — a figure,
+what is added to it, what is taken off it, the result. They read down the page,
+the middle column is a source reference, and most rows do not use it.
+
+A section marked `layout: 'table'` is a **ledger**: every row is a record of the
+same kind and all three columns carry data on every one of them. Losses carried
+forward are the case in point — an assessment year, the date that year's return
+was filed, and an amount — and the reader is comparing one row against another.
+Those columns get keeplines, a banded heading and a rounded frame; a working
+keeps its floating rows.
+
+The mapper states the shape, the renderer decides what the shape looks like, and
+neither knows which *form* it is looking at — which is the rule §2 exists to
+keep. It is the same move §2 prescribes for rows: when the document needs a new
+kind of thing, the model gains a kind, not the renderer a branch.
 
 ### Why `amount: number | null`
 
@@ -361,6 +383,15 @@ Header band: 120° gradient navy-900 → navy-700 → navy-500, with two decorat
 circles (gold at 22% opacity, white at 7%) bleeding off the right edge.
 
 Cards must carry `break-inside: avoid` so a section never splits across pages.
+
+A section with `layout: 'table'` (§3) is ruled instead of floated: a 16 px
+rounded frame around the table, hairline keeplines between the three columns and
+between the rows, a `--row-bg` heading band in navy-700 small caps, and no row
+banding — the rules already separate the rows. The rounding lives on the frame,
+not the table: collapsed borders are what keep the keeplines single hairlines
+rather than double ones, and a table with collapsed borders will not round its
+own corners in Chromium. The frame clips them, which also rounds the navy total
+that closes the table.
 
 ---
 

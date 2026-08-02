@@ -495,7 +495,7 @@ export function mapItr5Ay2025(body, ctx) {
   }
 
   if (brought.length || current.length) {
-    cflRows.push(columnHeader("Assessment Year / Date of filing of return", { ref: "Nature" }));
+    cflRows.push(columnHeader("Assessment Year / Date of filing of return", { ref: "Nature", amt: "Amount (₹)" }));
   }
   for (const b of brought) {
     cflRows.push(sub(
@@ -596,7 +596,7 @@ export function mapItr5Ay2025(body, ctx) {
     }),
     section("TAX", "Computation of Tax Liability", taxRows, { tone: "gold", omitIfAllNil: false, footnote: amtFootnote }),
     section("TAXES_PAID", "Taxes Paid & Prepaid Taxes", paidRows, { tone: "navy", omitIfAllNil: false }),
-    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy", footnote: cflFootnote }) : null,
+    cflRows.length ? section("CFL", "Losses Carried Forward to Subsequent Years", cflRows, { tone: "navy", layout: "table", footnote: cflFootnote }) : null,
   ];
 
   const doc = document({

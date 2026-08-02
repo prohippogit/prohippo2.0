@@ -32,10 +32,15 @@ function renderRow(row) {
   const middle = row.cols ? esc(row.cols.ref) : esc(row.ref || "");
   const middleCls = row.cols ? "ref" : "ref";
 
+  // A column heading may caption the amount column too. It cannot do that
+  // through `amount`, which is a figure and renders as one — 0 would print an
+  // em dash and null prints nothing at all (§3).
+  const right = row.cols && row.cols.amt ? esc(row.cols.amt) : esc(amountText(row.amount, row.isLoss));
+
   return `<tr class="${cls.join(" ")}">
   <td class="label">${esc(row.label)}${row.note ? `<div class="note-line">${esc(row.note)}</div>` : ""}</td>
   <td class="${middleCls}">${middle}</td>
-  <td class="${amtCls.join(" ")}">${esc(amountText(row.amount, row.isLoss))}</td>
+  <td class="${amtCls.join(" ")}">${right}</td>
 </tr>`;
 }
 
@@ -50,9 +55,17 @@ function renderSection(s) {
     footnote = `Total income in words: ${words}`;
   }
 
+  /* A section the mapper marked as a ledger (§3 `layout`) is ruled like one:
+     the three columns get keeplines, the column header becomes a banded head,
+     and the whole thing sits in a rounded frame. That frame is a wrapper div,
+     not a radius on the table — a table with collapsed borders cannot round its
+     own corners in Chromium, so the frame clips them instead. */
+  const ledger = s.layout === "table";
+  const table = `<table class="rows${ledger ? " grid" : ""}">${s.rows.map(renderRow).join("\n")}</table>`;
+
   return `<div class="card">
   <div class="pill ${s.tone === "gold" ? "gold" : s.tone === "slate" ? "slate" : ""}">${esc(s.letter)} · ${esc(s.title)}</div>
-  <table class="rows">${s.rows.map(renderRow).join("\n")}</table>
+  ${ledger ? `<div class="grid-frame">${table}</div>` : table}
   ${footnote ? `<div class="footnote">${esc(footnote)}</div>` : ""}
 </div>`;
 }

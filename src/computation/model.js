@@ -32,12 +32,27 @@ export const subtotal = (label, amount, opts = {}) => clean({ kind: "subtotal", 
 export const total = (label, amount, opts = {}) => clean({ kind: "total", label, amount, ...opts });
 export const columnHeader = (label, cols) => clean({ kind: "columnHeader", label, amount: null, cols });
 
-/** A section of the computation. `letter` is assigned later — see finalise(). */
-export const section = (id, title, rows, opts = {}) => ({
+/* A section of the computation. `letter` is assigned later — see finalise().
+ *
+ * `layout` says what SHAPE the section is, not what it looks like — the look is
+ * the renderer's business (§2, §6). Two shapes exist:
+ *
+ *   (absent)  a working. Rows are steps in an argument: a figure, then what is
+ *             added to it, then what is taken off it, then the result. The
+ *             middle column is a source reference and most rows do not use it.
+ *   'table'   a ledger. Every row is a record of the same kind, and all three
+ *             columns carry data on every one of them — losses carried forward
+ *             are an assessment year, a filing date and an amount.
+ *
+ * A mapper marks the shape; the renderer decides that a ledger gets ruled
+ * columns and a working does not. Neither of them knows which FORM it is
+ * looking at, which is the rule §2 exists to keep. */
+export const section = (id, title, rows, opts = {}) => clean({
   id,
   letter: "",
   title,
   tone: opts.tone || "navy",
+  layout: opts.layout,
   rows: rows.filter(Boolean),
   footnote: opts.footnote || "",
   omitIfAllNil: opts.omitIfAllNil !== false,

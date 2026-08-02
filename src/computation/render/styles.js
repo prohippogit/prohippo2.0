@@ -154,6 +154,66 @@ tr.r-total .amt.loss { color: #FFC9C9; }
 .note-line { font-size: 8.5pt; color: var(--muted); margin-top: 2px; }
 .footnote { font-size: 8.5pt; color: var(--muted); margin-top: 8px; padding: 0 10px; }
 
+/* ---- ledger tables (Section.layout === 'table') -------------------------
+ *
+ * A working reads down the page — a figure, what is added to it, what is taken
+ * off it, the result — so its rows float as separate rounded bands with nothing
+ * ruling them into columns. A ledger reads ACROSS as well: losses carried
+ * forward are an assessment year, the date that year's return was filed and an
+ * amount, and the reader is comparing one row against another. Those want
+ * keeplines.
+ *
+ * The rounding lives on a frame around the table, not on the table. Collapsed
+ * borders are what make the keeplines single hairlines rather than double ones,
+ * and a table with collapsed borders will not round its own corners in
+ * Chromium; the frame clips them instead, which also rounds the navy total
+ * closing the table without any rule of its own. */
+.grid-frame {
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  overflow: hidden;
+}
+table.rows.grid { border-collapse: collapse; border-spacing: 0; }
+table.rows.grid td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+table.rows.grid td + td { border-left: 1px solid var(--hairline); }
+table.rows.grid tr:last-child td { border-bottom: 0; }
+/* The frame draws the outer edge; the cells must not draw it a second time. */
+table.rows.grid tr td:first-child, table.rows.grid tr td:last-child { border-radius: 0; }
+/* In a ledger the middle column is data — a filing date, the nature of the loss
+   — not a source reference, so it is set in ink rather than the muted grey a
+   working uses, and centred under its heading. */
+table.rows.grid td.ref {
+  width: 158px; text-align: center; padding-top: 9px;
+  white-space: nowrap; color: var(--ink);
+}
+
+/* The column heading — banded, and repeated where a ledger carries a second
+   table under the first (losses, then unabsorbed depreciation). */
+table.rows.grid tr.r-columnHeader td {
+  background: var(--row-bg);
+  color: var(--navy-700);
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 9px 12px;
+  border-top: 1px solid var(--hairline);
+  border-bottom-color: var(--hairline);
+}
+table.rows.grid tr.r-columnHeader td.ref, table.rows.grid tr.r-columnHeader td.amt {
+  color: var(--navy-700); font-size: 8pt;
+}
+/* The dates below it are kept on one line; the heading over them may wrap. */
+table.rows.grid tr.r-columnHeader td.ref { white-space: normal; }
+table.rows.grid tr:first-child td { border-top: 0; }
+
+/* Banding would fight the keeplines; the rules already separate the rows. */
+table.rows.grid tr.r-sub:nth-child(even) td { background: transparent; }
+table.rows.grid tr.r-sub.nil td { background: transparent; }
+
 /* ---- particulars ------------------------------------------------------- */
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 18px; }
 .fact .k { font-size: 8pt; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }

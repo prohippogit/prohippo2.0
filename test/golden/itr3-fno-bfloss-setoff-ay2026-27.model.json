@@ -329,13 +329,15 @@
    "letter": "G",
    "title": "Losses Carried Forward to Subsequent Years",
    "tone": "navy",
+   "layout": "table",
    "rows": [
     {
      "kind": "columnHeader",
      "label": "Assessment Year / Nature of loss",
      "amount": null,
      "cols": {
-      "ref": "Return for that year filed on"
+      "ref": "Return for that year filed on",
+      "amt": "Amount (₹)"
      }
     },
     {

@@ -16,7 +16,7 @@
 /** Form key (as detect() reports it) → assessment years with a mapper. */
 export const SUPPORTED = {
   ITR2: ["2025-26"],
-  ITR3: ["2025-26"],
+  ITR3: ["2025-26", "2024-25"],
   ITR5: ["2025-26"],
 };
 

@@ -24,6 +24,10 @@ const PERSON_KEYS = new Set([
   // ITR-3: Schedule IF names every firm the assessee is a partner in, and the
   // filing-status block names them again. A firm's name is its proprietors'.
   "FirmName", "NameOfFirm",
+  // A property sale names the buyer, and a free-text "nature of income" line
+  // routinely names the payer ("Interest from <company> Pvt Ltd"). Both are
+  // third parties who never agreed to appear in a public repository.
+  "NameOfBuyer", "OthNatOfInc", "SalOthNatOfInc", "OthersIncNature",
   // The TDS schedules name the same employer again under their own key.
   "EmployerOrDeductorOrCollecterName", "DeductorName", "CollecterName",
   "InsurerName",
@@ -35,6 +39,8 @@ const PLACE_KEYS = new Set([
   "AddrDetail", "ResidenceNo", "ResidenceName", "RoadOrStreet", "LocalityOrArea",
   "CityOrTownOrDistrict", "IntermediaryCity", "Place", "AddressDetail", "EmployerAddress",
   "CityOrTown", "State", "Country",
+  // A sold property's address identifies it on the public land record.
+  "AddressOfProperty",
 ]);
 const OPAQUE_KEYS = new Set([
   "Digest", "UDIN", "BankAccountNo", "IFSCCode", "AadhaarCardNo", "SWCreatedBy", "JSONCreatedBy",

@@ -191,6 +191,61 @@ const LTCG_BLOCKS = [
   ["NRISaleofForeignAsset", "assets acquired in foreign currency"],
 ];
 
+/* Land and building is the one class that does not share the s.48 shape.
+ *
+ * It carries the stamp-duty valuation alongside the consideration, because s.50C
+ * substitutes the higher of the two; an indexed cost of acquisition rather than a
+ * plain one; and the buyer's details, which are particulars rather than figures.
+ * A computation that showed only "full value of consideration" would hide a s.50C
+ * substitution, which is the single most contested figure in a property sale.
+ */
+function landAndBuildingWorking(src, base, indexed, rows) {
+  const list = src.peek(`${base}.SaleofLandBuildDtls`) || [];
+  let total = 0;
+  list.forEach((_, i) => {
+    const at = `${base}.SaleofLandBuildDtls[${i}]`;
+    const gain = src.num(`${at}.CapgainonAssets`);
+    const consideration = src.num(`${at}.FullConsideration`);
+    if (!gain && !consideration) return;
+    total += gain;
+
+    const stamp = src.num(`${at}.PropertyValuation`);
+    const adopted = src.num(`${at}.FullConsideration50C`);
+    const label = list.length > 1 ? `Full value of consideration — property ${i + 1}` : "Full value of consideration — land or building";
+    rows.push(sub(label, adopted || consideration, {
+      // s.50C only bites when the stamp value is the higher figure. Saying so
+      // where it happens, and staying quiet where it does not, is the whole
+      // point of carrying both numbers.
+      note: stamp > consideration
+        ? `Stamp-duty value ${inr(stamp)} adopted u/s 50C in place of the consideration of ${inr(consideration)}`
+        : undefined,
+    }));
+
+    const cost = src.num(`${at}.AquisitCost`);
+    const costIndexed = src.num(`${at}.AquisitCostIndex`);
+    if (indexed && costIndexed) {
+      rows.push(sub("Less: Indexed cost of acquisition", costIndexed, {
+        note: cost && cost !== costIndexed ? `Cost ${inr(cost)}, indexed` : undefined,
+      }));
+    } else if (cost) {
+      rows.push(sub("Less: Cost of acquisition", cost));
+    }
+    const improve = src.num(`${at}.ImproveCost`);
+    const improveIndexed = src.num(`${at}.ImproveCostIndex`);
+    if (improveIndexed) rows.push(sub("Less: Indexed cost of improvement", improveIndexed));
+    else if (improve) rows.push(sub("Less: Cost of improvement", improve));
+    const expense = src.num(`${at}.ExpOnTrans`);
+    if (expense) rows.push(sub("Less: Expenditure on transfer", expense));
+
+    // The buyers, their shares and the amounts against them restate the
+    // consideration already shown; they are a disclosure, not a step in the
+    // working.
+    src.claim(`${at}.TrnsfImmblPrprty`);
+    src.restate([`${at}.TotalDedn`, `${at}.Balance`, `${at}.DeductionUs54F`]);
+  });
+  return total;
+}
+
 /** One consideration → cost → gain working, for any block that carries a gain. */
 function assetWorking(src, base, caption, rows) {
   const gain = src.num(`${base}.CapgainonAssets`);
@@ -207,12 +262,45 @@ function assetWorking(src, base, caption, rows) {
   return gain;
 }
 
-export function capitalGainsRows(src, siRows) {
+/* How a head of capital gain splits across rates, from Part B-TI's own buckets.
+ *
+ * This is stated as RATES, not as sections. A subtotal captioned "u/s 111A"
+ * was correct for the first return we saw — where every rupee of short-term
+ * gain happened to be STT-paid equity — and wrong for the next one, where a
+ * land sale of 7,51,835 taxable at slab rates sat under the same caption. The
+ * section attribution belongs in the tax section, where Schedule SI states it
+ * against each figure and cannot be inferred wrongly.
+ *
+ * Which buckets exist varies by year: A.Y. 2024-25 has no 20% short-term and no
+ * 12.5% long-term, A.Y. 2025-26 added both. Reading whatever is non-zero means
+ * neither year needs its own branch.
+ */
+const ST_BUCKETS = [
+  ["ShortTerm15Per", "taxable at 15%"],
+  ["ShortTerm20Per", "taxable at 20%"],
+  ["ShortTerm30Per", "taxable at 30%"],
+  ["ShortTermAppRate", "taxable at the rates in force"],
+  ["ShortTermSplRateDTAA", "taxable at DTAA rates"],
+];
+const LT_BUCKETS = [
+  ["LongTerm10Per", "taxable at 10%"],
+  ["LongTerm12_5Per", "taxable at 12.5%"],
+  ["LongTerm20Per", "taxable at 20%"],
+  ["LongTermSplRateDTAA", "taxable at DTAA rates"],
+];
+
+function rateSplit(src, block, buckets, rows) {
+  const found = buckets
+    .map(([key, label]) => [label, src.num(`PartB-TI.CapGain.${block}.${key}`)])
+    .filter(([, v]) => v);
+  // One bucket is not a split — the subtotal above already says the whole of it,
+  // and the tax section names the rate. Two or more is worth breaking out.
+  if (found.length < 2) return;
+  for (const [label, v] of found) rows.push(sub(`— ${label}`, v));
+}
+
+export function capitalGainsRows(src) {
   const rows = [];
-  const rateFor = (code) => {
-    const row = (siRows || []).find((r) => String(r.SecCode) === code);
-    return row && row.SplRatePercent ? `${row.SplRatePercent}%` : "";
-  };
 
   /* -- short term -- */
   const stcgTotal = src.num("ScheduleCGFor23.ShortTermCapGainFor23.TotalSTCG");
@@ -225,6 +313,7 @@ export function capitalGainsRows(src, siRows) {
       assetWorking(src, `${at}.EquityMFonSTTDtls`, "equity shares / units (STT paid)", rows);
       src.restate([`${at}.TotalCapGainonassets`]);
     }
+    landAndBuildingWorking(src, "ScheduleCGFor23.ShortTermCapGainFor23.SaleofLandBuild", false, rows);
     for (const [block, caption] of STCG_BLOCKS) {
       assetWorking(src, `ScheduleCGFor23.ShortTermCapGainFor23.${block}`, caption, rows);
     }
@@ -232,7 +321,8 @@ export function capitalGainsRows(src, siRows) {
     if (deemed) rows.push(sub("Deemed short-term capital gain", deemed));
     const passThrough = src.num("ScheduleCGFor23.ShortTermCapGainFor23.PassThrIncNatureSTCG");
     if (passThrough) rows.push(sub("Pass-through short-term capital gain", passThrough));
-    rows.push(subtotal(`Short-term Capital Gain u/s 111A${rateFor("1A") ? ` (taxable at ${rateFor("1A")})` : ""}`, stcgTotal));
+    rows.push(subtotal("Total Short-term Capital Gains", stcgTotal));
+    rateSplit(src, "ShortTerm", ST_BUCKETS, rows);
   }
 
   /* -- long term -- */
@@ -244,6 +334,7 @@ export function capitalGainsRows(src, siRows) {
       rows.push(sub("Full value of consideration — equity shares / units u/s 112A", Number(s112a.SaleValue112A)));
       rows.push(sub("Less: Cost of acquisition", Number(s112a.Deductions112A || 0)));
     }
+    landAndBuildingWorking(src, "ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild", true, rows);
     for (const [block, caption] of LTCG_BLOCKS) {
       assetWorking(src, `ScheduleCGFor23.LongTermCapGain23.${block}`, caption, rows);
     }
@@ -252,11 +343,12 @@ export function capitalGainsRows(src, siRows) {
     const passThrough = src.num("ScheduleCGFor23.LongTermCapGain23.PassThrIncNatureLTCG");
     if (passThrough) rows.push(sub("Pass-through long-term capital gain", passThrough));
 
-    const be = src.num("ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferBE");
-    const ae = src.num("ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferAE");
-    rows.push(subtotal("Long-term Capital Gain u/s 112A", ltcgTotal));
-    if (be) rows.push(sub(`— taxable at ${rateFor("2A_BE") || "the pre-amendment rate"}`, be));
-    if (ae) rows.push(sub(`— taxable at ${rateFor("2A") || "the amended rate"}`, ae));
+    rows.push(subtotal("Total Long-term Capital Gains", ltcgTotal));
+    rateSplit(src, "LongTerm", LT_BUCKETS, rows);
+    src.restate([
+      "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferBE",
+      "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferAE",
+    ]);
   }
   // Deliberately NOT claiming the two subtrees wholesale. A class of asset this
   // builder does not recognise must surface in the review block (§8) rather than
@@ -316,7 +408,14 @@ export function otherSourcesRows(src) {
     const amt = Number(o.OthAmount ?? o.SalOthAmount ?? 0);
     if (amt) rows.push(sub(o.OthNatOfInc || o.SalNatureDesc || "Other income", amt));
   }
-  if (!otherInc.length && !otherGross.length) line("Any other income", "AnyOtherIncome");
+  if (!otherInc.length && !otherGross.length) {
+    line("Any other income", "AnyOtherIncome");
+  } else {
+    // The itemised rows above add up to this. Reading it anyway is what stops a
+    // 14,71,732 total appearing in the review block as an unexplained figure
+    // when the itemisation has already accounted for every rupee of it.
+    src.num(`${osPath}.AnyOtherIncome`);
+  }
   src.num(`${osPath}.OthersGross`);
 
   const gross = src.num(`${osPath}.GrossIncChrgblTaxAtAppRate`);
@@ -516,7 +615,9 @@ export function taxesPaidRows(src, { aggregate }) {
   if (byTanSection.size && !salaryTds.length) rows.push(columnHeader("Tax Deducted at Source — TAN of Deductor", { ref: "Gross Receipt" }));
   for (const g of [...byTanSection.values()].sort((a, b) => b.credit - a.credit)) {
     rows.push(sub(g.tan, g.credit, {
-      note: [tdsNature(g.section), `Sec. ${g.section}`, g.count > 1 ? `${g.count} entries` : ""].filter(Boolean).join(" · "),
+      // Some years' returns carry no section code at all. "Sec." with nothing
+      // after it is worse than saying nothing.
+      note: [tdsNature(g.section), g.section ? `Sec. ${g.section}` : "", g.count > 1 ? `${g.count} entries` : ""].filter(Boolean).join(" · "),
       cols: { ref: g.gross ? inr(g.gross) : "" },
     }));
   }

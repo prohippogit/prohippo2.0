@@ -9,6 +9,7 @@ import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee } from './invoicePdf';
 import { downloadLedgerPDF, ledgerPDFDataUri, downloadReceiptPDF, receiptPDFDataUri } from './ledgerPdf';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
+import VoiceHelpLineCard from './voiceAssistant';
 
 const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
 
@@ -1953,6 +1954,7 @@ export function SettingsPage() {
       </div>
 
       <div className="card-title mb-3" style={{fontSize: 15}}>Integrations</div>
+      <div style={{marginBottom: 16}}><VoiceHelpLineCard/></div>
       <div style={{marginBottom: 16}}><GoogleCalendarCard/></div>
       <div className="grid-split" style={{gap: 16}}>
         {integrations.map(i => (

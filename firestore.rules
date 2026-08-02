@@ -49,8 +49,14 @@ service cloud.firestore {
     }
 
     // Everything else is denied by default. That includes otpChallenges,
-    // deviceSessions, portalCreds, googleTokens, referralVisits and
-    // rateLimits, which only Admin-SDK functions ever touch.
+    // deviceSessions, portalCreds, googleTokens, referralVisits, rateLimits
+    // and voiceRateLimits, which only Admin-SDK functions ever touch.
+    //
+    // The voice agent needs no rule of its own: it reads users/{uid}/… under
+    // the practitioner's own subtree above, and writes its call log to
+    // users/{uid}/voiceCalls, which the same rule already covers. If this
+    // feature ever appears to need a rule here, something has reached outside
+    // users/{uid} and should be reconsidered instead.
     match /{document=**} {
       allow read, write: if false;
     }

@@ -536,8 +536,16 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
         secret: sarvamWebhookSecret.value(),
       });
       if (!auth.ok) {
-        console.warn("voice: webhook rejected —", auth.reason);
-        res.status(401).json({ error: "invalid signature" });
+        /* One string, not console.warn's varargs — the log viewer renders a
+           multi-argument warn as an empty line, which is worse than useless
+           when this is the only thing telling you why a call was refused.
+
+           The reason is echoed to the caller too. It names which CHECK failed,
+           never any part of the secret, and an attacker learns nothing from
+           "no-signature" that a 401 didn't already tell them. Whoever is
+           wiring this up gets the answer without hunting through logs. */
+        console.warn(`voice: webhook rejected — ${auth.reason}`);
+        res.status(401).json({ error: "unauthorized", reason: auth.reason });
         return;
       }
 

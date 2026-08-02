@@ -212,6 +212,23 @@ export const exemptAllowanceLabel = (code) => EXEMPT_ALLOWANCE[String(code || ""
    s.115BAC(1A) slabs and to nothing else — see §10. */
 export function regimeLabel(filingStatus) {
   const fs = filingStatus && typeof filingStatus === "object" ? filingStatus : {};
+
+  /* A.Y. 2022-23 and 2023-24 ask it the OTHER way round, as `NewTaxRegime`:
+     "Y" means the assessee opted INTO s.115BAC, "N" means they did not and are
+     on the old regime. Reading it with the same sense as `OptOutNewTaxRegime`
+     would state the wrong regime on the face of the document and make every
+     Chapter VI-A line below it look impossible.
+
+     Checked before it was trusted, as §10 requires: the A.Y. 2022-23 ITR-3 we
+     hold says "N" and states tax at normal rates of 10,17,521 on an aggregate of
+     40,25,070. That is the OLD-regime table for an assessee over 60 (exemption
+     3,00,000, then 5 / 20 / 30%) to the rupee; the s.115BAC table for that year
+     gives 9,45,021. Those years predate s.115BAC(1A), so the section is cited
+     without the sub-section. */
+  const opted = String(fs.NewTaxRegime ?? "").trim().toUpperCase();
+  if (opted === "Y") return "New regime u/s 115BAC — opted in";
+  if (opted === "N") return "Old regime — s.115BAC not opted for";
+
   const raw = fs.OptOutNewTaxRegime ?? fs.No_OptOutNewTaxReg;
   const v = String(raw ?? "").trim().toUpperCase();
   if (v === "Y") return "Old regime — opted out of s.115BAC(1A)";

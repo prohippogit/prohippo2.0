@@ -34,6 +34,10 @@ const PERSON_KEYS = new Set([
   // Schedule 112A names every scrip and fund sold. Not personal data, but a
   // portfolio is not something to publish on a client's behalf either.
   "ShareUnitName",
+  // Schedule 80G names the institutions donated to. Not the client's own name,
+  // but a named charity beside a named donor and an amount is a fact about the
+  // client that is not ours to publish.
+  "DoneeWithPanName", "DoneeWithoutPanName",
 ]);
 const PLACE_KEYS = new Set([
   "AddrDetail", "ResidenceNo", "ResidenceName", "RoadOrStreet", "LocalityOrArea",
@@ -86,16 +90,26 @@ export function anonymise(json) {
   // Free text, as opposed to a code or a flag sitting in a text field.
   const isProse = (v) => v.trim().length > 3 && /[A-Za-z]{3}/.test(v);
 
-  const walk = (node, key) => {
-    if (Array.isArray(node)) return node.map((v) => walk(v, key));
+  /* Some key names mean different things in different places. `Description` is
+     form boilerplate under Form_ITRn ("For indls and HUFs having income from a
+     proprietory business or profession"), and is a client's own words naming a
+     property under Schedule AL ("Bhat Residence"). Cataloguing it unscoped would
+     scrub the boilerplate too and leave a fixture nobody can read; leaving it
+     out let "Bhat" through, which the self-check caught. So a key may be listed
+     as `parent.key` when only that occurrence is personal. */
+  const SCOPED_PLACE_KEYS = new Set(["ImmovableDetails.Description"]);
+
+  const walk = (node, key, parentKey) => {
+    if (Array.isArray(node)) return node.map((v) => walk(v, key, parentKey));
     if (node && typeof node === "object") {
       const out = {};
-      for (const [k, v] of Object.entries(node)) out[k] = walk(v, k);
+      for (const [k, v] of Object.entries(node)) out[k] = walk(v, k, key);
       return out;
     }
     if (typeof node === "string") {
       if (PERSON_KEYS.has(key) && isProse(node)) return name(node);
       if (PLACE_KEYS.has(key) && isProse(node)) return where(node);
+      if (SCOPED_PLACE_KEYS.has(`${parentKey}.${key}`) && isProse(node)) return where(node);
       if (OPAQUE_KEYS.has(key) && node.trim()) return key === "EmailAddress" ? "sample@example.com" : mask(node);
       let s = node;
       for (const [from, to] of Object.entries(ids)) if (s.includes(from)) s = s.split(from).join(to);

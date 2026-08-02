@@ -129,11 +129,11 @@ export default function VoiceHelpLineCard() {
         </>
       ) : (
         <div className="muted" style={{fontSize: 12.5, lineHeight: 1.6}}>
-          Ring a number and ask ProHippo anything — where a screen is, what's listed this week,
-          which client hasn't paid. It answers in English, Hindi or Gujarati, reads only your own
-          records, and never changes anything.
+          Ask ProHippo anything out loud — where a screen is, what's listed this week, which
+          client hasn't paid. Tap to have it call you, or ring the line yourself. It answers in
+          English, Hindi or Gujarati, reads only your own records, and never changes anything.
           <br/><br/>
-          The number isn't switched on yet. Once it is, it will appear here.
+          It isn't switched on yet. Once it is, it will appear here.
         </div>
       )}
     </div>

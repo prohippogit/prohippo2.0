@@ -181,8 +181,14 @@ back:
 
 Until every required field is filled, `requestVoiceCallback` returns a clear
 "not switched on yet" error rather than posting a half-formed request at Sarvam.
-`src/voiceConfig.js` already carries the display number, so the Settings card is
-live as soon as the app deploys.
+
+**Then, last of all, flip `VOICE_LIVE` to `true` in `src/voiceConfig.js`.**
+
+That switch exists because Hosting deploys on every merge to the default branch
+while Cloud Functions go out by hand — so there is a window where the card is
+live in production and the callable it invokes is not. Knowing the number is not
+the same as being ready to answer it. Until the flag flips, the Settings card
+shows the feature as coming, which is true.
 
 The card shows **Call me** as the primary action and the dial-in number
 alongside it, and — the useful part — warns anyone whose mobile isn't linked

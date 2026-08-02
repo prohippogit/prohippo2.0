@@ -85,11 +85,12 @@ test("a business loss stated twice in the return is printed once", () => {
 
   const cfl = section(doc, "CFL");
   assert.equal(cfl.rows.filter((r) => r.amount === 2446909).length, 1);
-  // Seven losses across six years, then the two per-kind subtotals.
-  assert.equal(cfl.rows.filter((r) => r.kind === "sub").length, 7);
+  // Seven losses across six years, then the set-off line of the reconciliation.
+  assert.equal(cfl.rows.filter((r) => r.kind === "sub").length, 8);
   assert.deepEqual(
     cfl.rows.filter((r) => r.kind === "subtotal").map((r) => [r.label, r.amount]),
-    [["Business loss, other than speculative carried forward", 3668028],
+    [["Total Brought Forward from Earlier Years", 6645024],
+      ["Business loss, other than speculative carried forward", 3668028],
       ["Short-term capital loss carried forward", 189277]]
   );
   assert.equal(closing(cfl).amount, 3857305);
@@ -101,17 +102,51 @@ test("a loss in the differently-named earlier-year block is not dropped", () => 
   // in a LossCFCurrentAssmntYear… key. Matching only the latter dropped it
   // silently, because the schedule is claimed wholesale afterwards.
   assert.equal(body.ScheduleCFL.LossCFFromPrev3rdYearFromAY.CarryFwdLossDetail.BusLossOthThanSpecLossCF, 565132);
-  const r = section(doc, "CFL").rows.find((x) => x.amount === 565132);
+  const r = section(doc, "CFL").rows.find((x) => x.amount === 565132 && x.kind === "sub");
   assert.equal(r.label, "Business loss, other than speculative");
-  assert.equal(r.cols.ref, "Return filed 23 July 2016");
+  assert.equal(r.cols.ref, "23 July 2016");
+  // No year is derivable for this slot, and the row says so rather than guessing.
+  assert.match(r.note, /does not state the assessment year/);
 });
 
-test("the footnote states both totals where the rows do not add to the carry-forward", () => {
-  const { doc } = build("2024-25");
-  // The 2016-17 loss is listed as brought forward but is not carried further.
-  // Both figures are the return's own; which one a reader needs depends on the
-  // question, so the document states both rather than smoothing over the gap.
-  assert.match(section(doc, "CFL").footnote, /total 59,36,968; of that, 53,71,836 is carried forward/);
+test("the assessment year is named from the slot, verified against later returns", () => {
+  const { doc } = build("2026-27");
+  // Slot suffix N holds the loss of A.Y. (N-1)-N. Checked against this
+  // assessee's own consecutive returns: slot …2026 carries 12,74,083, which is
+  // the A.Y. 2025-26 return's own loss of 12,74,229 less that year's 146 of
+  // unabsorbed depreciation, and carries that return's filing date.
+  const rows = section(doc, "CFL").rows.filter((r) => /^A\.Y\. /.test(r.label));
+  assert.deepEqual(rows.map((r) => [r.label, r.amount, r.cols.ref]), [
+    ["A.Y. 2020-21 · Business loss, other than speculative", 94856, "16 July 2022"],
+    ["A.Y. 2021-22 · Business loss, other than speculative", 830179, "22 November 2021"],
+    ["A.Y. 2023-24 · Business loss, other than speculative", 1513184, "24 June 2023"],
+    ["A.Y. 2023-24 · Short-term capital loss", 194592, "24 June 2023"],
+    ["A.Y. 2024-25 · Business loss, other than speculative", 291221, "29 June 2024"],
+    ["A.Y. 2025-26 · Business loss, other than speculative", 1274083, "05 September 2025"],
+  ]);
+});
+
+test("the table reconciles brought forward, the year's loss, set-off and carry-forward", () => {
+  const a = build("2024-25").doc;
+  // 56,44,852 brought forward + 2,91,465 of this year - 5,65,132 not carried
+  // = 53,71,185. Every figure is one the return states.
+  assert.equal(row(a, "CFL", /^Total Brought Forward/).amount, 5644852);
+  assert.equal(row(a, "CFL", /^Add: Loss of the current year/).amount, 291465);
+  const lapsed = row(a, "CFL", /^Less: Loss of an earlier year not carried forward/);
+  assert.equal(lapsed.amount, 565132);
+  assert.match(lapsed.note, /neither set off this year nor carried to the next/);
+  assert.equal(5644852 + 291465 - 565132, 5371185);
+  assert.equal(closing(section(a, "CFL")).label, "Unabsorbed Depreciation Carried Forward u/s 32(2)");
+  assert.equal(row(a, "CFL", /^Total Loss Carried Forward/).amount, 5371185);
+
+  // 66,45,024 brought forward - 27,87,719 set off = 38,57,305, and nothing of an
+  // earlier year lapses, so that line is absent.
+  const b = build("2026-27").doc;
+  assert.equal(row(b, "CFL", /^Total Brought Forward/).amount, 6645024);
+  assert.equal(row(b, "CFL", /^Less: Set off against the income of the year/).amount, 2787719);
+  assert.ok(!section(b, "CFL").rows.some((r) => /not carried forward/.test(r.label)));
+  assert.equal(6645024 - 2787719, 3857305);
+  assert.equal(closing(section(b, "CFL")).amount, 3857305);
 });
 
 /* ---------------- unabsorbed depreciation ---------------- */
@@ -126,6 +161,7 @@ test("unabsorbed depreciation is carried forward under its own total", () => {
   assert.deepEqual(ud.map((r) => [r.amount, r.cols.ref]), [[407, "A.Y. 2023-24"], [244, "A.Y. 2024-25"]]);
   assert.equal(closing(section(doc, "CFL")).label, "Unabsorbed Depreciation Carried Forward u/s 32(2)");
   assert.equal(closing(section(doc, "CFL")).amount, 651);
+  assert.equal(row(doc, "CFL", /^Total Loss Carried Forward/).amount, 5371185);
 });
 
 test("unabsorbed depreciation fully absorbed leaves nothing to carry forward", () => {

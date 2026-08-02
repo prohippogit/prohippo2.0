@@ -494,23 +494,28 @@
    "rows": [
     {
      "kind": "columnHeader",
-     "label": "Nature of loss",
+     "label": "Assessment Year / Nature of loss",
      "amount": null,
      "cols": {
-      "ref": "Year it arose"
+      "ref": "Return for that year filed on"
      }
     },
     {
      "kind": "sub",
-     "label": "Long-term capital loss",
+     "label": "A.Y. 2021-22 · Long-term capital loss",
      "amount": 1731739,
      "cols": {
-      "ref": "Return filed 14 March 2022"
+      "ref": "14 March 2022"
      }
     },
     {
+     "kind": "subtotal",
+     "label": "Total Brought Forward from Earlier Years",
+     "amount": 1731739
+    },
+    {
      "kind": "sub",
-     "label": "Long-term capital loss",
+     "label": "Add: Loss of the current year — long-term capital loss",
      "amount": 883972,
      "cols": {
       "ref": "A.Y. 2023-24"

@@ -332,10 +332,10 @@
    "rows": [
     {
      "kind": "columnHeader",
-     "label": "Nature of loss",
+     "label": "Assessment Year / Nature of loss",
      "amount": null,
      "cols": {
-      "ref": "Year it arose"
+      "ref": "Return for that year filed on"
      }
     },
     {
@@ -343,56 +343,68 @@
      "label": "Business loss, other than speculative",
      "amount": 2446909,
      "cols": {
-      "ref": "Return filed 23 July 2019"
-     }
+      "ref": "23 July 2019"
+     },
+     "note": "The return does not state the assessment year for this row"
     },
     {
      "kind": "sub",
-     "label": "Business loss, other than speculative",
+     "label": "A.Y. 2020-21 · Business loss, other than speculative",
      "amount": 94856,
      "cols": {
-      "ref": "Return filed 16 July 2022"
+      "ref": "16 July 2022"
      }
     },
     {
      "kind": "sub",
-     "label": "Business loss, other than speculative",
+     "label": "A.Y. 2021-22 · Business loss, other than speculative",
      "amount": 830179,
      "cols": {
-      "ref": "Return filed 22 November 2021"
+      "ref": "22 November 2021"
      }
     },
     {
      "kind": "sub",
-     "label": "Business loss, other than speculative",
+     "label": "A.Y. 2023-24 · Business loss, other than speculative",
      "amount": 1513184,
      "cols": {
-      "ref": "Return filed 24 June 2023"
+      "ref": "24 June 2023"
      }
     },
     {
      "kind": "sub",
-     "label": "Short-term capital loss",
+     "label": "A.Y. 2023-24 · Short-term capital loss",
      "amount": 194592,
      "cols": {
-      "ref": "Return filed 24 June 2023"
+      "ref": "24 June 2023"
      }
     },
     {
      "kind": "sub",
-     "label": "Business loss, other than speculative",
+     "label": "A.Y. 2024-25 · Business loss, other than speculative",
      "amount": 291221,
      "cols": {
-      "ref": "Return filed 29 June 2024"
+      "ref": "29 June 2024"
      }
     },
     {
      "kind": "sub",
-     "label": "Business loss, other than speculative",
+     "label": "A.Y. 2025-26 · Business loss, other than speculative",
      "amount": 1274083,
      "cols": {
-      "ref": "Return filed 05 September 2025"
+      "ref": "05 September 2025"
      }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Brought Forward from Earlier Years",
+     "amount": 6645024
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Set off against the income of the year",
+     "amount": 2787719,
+     "ref": "Sch. BFLA"
     },
     {
      "kind": "subtotal",
@@ -410,7 +422,7 @@
      "amount": 3857305
     }
    ],
-   "footnote": "The losses listed above total 66,45,024; of that, 38,57,305 is carried forward to subsequent years per the return.",
+   "footnote": "",
    "omitIfAllNil": true
   }
  ],

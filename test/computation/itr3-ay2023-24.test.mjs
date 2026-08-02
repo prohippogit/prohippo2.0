@@ -96,15 +96,15 @@ test("losses carried forward total what the return carries forward, not this yea
   assert.equal(body.ScheduleCFL.TotalLossCFSummary.LossSummaryDetail.TotalLTCGPTILossCF, 2615711);
 
   const cfl = section(doc, "CFL");
-  const rows = cfl.rows.filter((r) => r.kind === "sub");
-  assert.deepEqual(rows.map((r) => [r.label, r.amount]), [
-    ["Long-term capital loss", 1731739],
-    ["Long-term capital loss", 883972],
-  ]);
-  // s.80 allows the carry-forward only where that year's return was filed in
-  // time, so the filing date is printed beside the loss it belongs to.
-  assert.equal(rows[0].cols.ref, "Return filed 14 March 2022");
-  assert.equal(rows[1].cols.ref, "A.Y. 2023-24");
+  // The A.Y. is named from the slot the return keeps the loss in, and the date
+  // that year's return was filed is printed beside it: s.80 allows the
+  // carry-forward only where that return was in time.
+  assert.deepEqual(
+    cfl.rows.filter((r) => r.kind === "sub").map((r) => [r.label, r.amount, r.cols && r.cols.ref]),
+    [["A.Y. 2021-22 · Long-term capital loss", 1731739, "14 March 2022"],
+      ["Add: Loss of the current year — long-term capital loss", 883972, "A.Y. 2023-24"]]
+  );
+  assert.equal(row(doc, "CFL", /^Total Brought Forward/).amount, 1731739);
   assert.equal(closing(cfl).amount, 2615711);
 });
 

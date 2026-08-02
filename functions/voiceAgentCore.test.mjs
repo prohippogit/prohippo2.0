@@ -385,6 +385,28 @@ test("the refusal reason distinguishes a missing token from a wrong one", () => 
   );
 });
 
+test("a trailing newline in the stored secret does not break the comparison", () => {
+  // `openssl rand -base64 32 | firebase functions:secrets:set ...` stores the
+  // newline openssl prints. Reading it back through $( ) strips it, so the
+  // sender and the function hold strings that differ by one invisible byte —
+  // which looks exactly like a wrong password in every log and screenshot.
+  for (const stored of [`${SECRET}\n`, `${SECRET}\r\n`, ` ${SECRET} `]) {
+    assert.equal(
+      verifyWebhook({ headers: { authorization: `Bearer ${SECRET}` }, rawBody: BODY, secret: stored }).ok,
+      true,
+      JSON.stringify(stored)
+    );
+  }
+  // And the same for the HMAC path, which signs with the stored value.
+  const sig = signPayload(SECRET, BODY);
+  assert.equal(
+    verifyWebhook({ headers: { "x-sarvam-signature": sig.hex }, rawBody: BODY, secret: `${SECRET}\n` }).ok,
+    true
+  );
+  // Whitespace-only is still no secret at all.
+  assert.equal(verifyWebhook({ headers: { authorization: "Bearer x" }, rawBody: BODY, secret: "   " }).reason, "no-secret");
+});
+
 test("a wrong or near-miss shared secret is refused", () => {
   for (const headers of [
     { authorization: "Bearer wrong-secret" },

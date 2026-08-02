@@ -20,7 +20,7 @@ import { sub, subtotal, total, columnHeader } from "../../model.js";
 import { longDate } from "../../format.js";
 import {
   specialRateLabel, viaLabel, viaOrder, viaRef, tdsSection, tdsNature,
-  salaryComponent, salaryComponentOrder, exemptAllowanceLabel,
+  salaryComponent, salaryComponentOrder, exemptAllowanceLabel, headOfIncome,
 } from "./labels.js";
 
 const inr = (v) => Number(v || 0).toLocaleString("en-IN");
@@ -473,7 +473,13 @@ export function capitalGainsRows(src) {
     if (deemed) rows.push(sub("Deemed short-term capital gain", deemed));
     const passThrough = src.num("ScheduleCGFor23.ShortTermCapGainFor23.PassThrIncNatureSTCG");
     if (passThrough) rows.push(sub("Pass-through short-term capital gain", passThrough));
-    rows.push(subtotal("Total Short-term Capital Gains", stcgTotal));
+    // A negative total is a LOSS, and the caption must say so — the renderer
+    // parenthesises the figure either way, but "Total Short-term Capital Gains
+    // (8,83,972)" is the wrong noun on a document somebody signs.
+    rows.push(subtotal(
+      stcgTotal < 0 ? "Total Short-term Capital Loss" : "Total Short-term Capital Gains",
+      Math.abs(stcgTotal), { isLoss: stcgTotal < 0 || undefined }
+    ));
     rateSplit(src, "ShortTerm", ST_BUCKETS, rows);
   }
 
@@ -498,7 +504,10 @@ export function capitalGainsRows(src) {
     const passThrough = src.num("ScheduleCGFor23.LongTermCapGain23.PassThrIncNatureLTCG");
     if (passThrough) rows.push(sub("Pass-through long-term capital gain", passThrough));
 
-    rows.push(subtotal("Total Long-term Capital Gains", ltcgTotal));
+    rows.push(subtotal(
+      ltcgTotal < 0 ? "Total Long-term Capital Loss" : "Total Long-term Capital Gains",
+      Math.abs(ltcgTotal), { isLoss: ltcgTotal < 0 || undefined }
+    ));
     rateSplit(src, "LongTerm", LT_BUCKETS, rows);
     src.restate([
       "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferBE",
@@ -522,7 +531,12 @@ export function capitalGainsRows(src) {
   src.claim("ScheduleVDA");
 
   const cgTotal = src.num("ScheduleCGFor23.TotScheduleCGFor23");
-  if (rows.length) rows.push(total("Income chargeable under the head Capital Gains", cgTotal));
+  if (rows.length) {
+    rows.push(total(
+      cgTotal < 0 ? "Loss under the head Capital Gains" : "Income chargeable under the head Capital Gains",
+      Math.abs(cgTotal), { isLoss: cgTotal < 0 || undefined }
+    ));
+  }
 
   src.num("ScheduleCGFor23.SumOfCGIncm");
   src.claim("ScheduleCGFor23.CurrYrLosses");
@@ -821,6 +835,37 @@ export function taxesPaidRows(src, { aggregate }) {
     }));
   }
 
+  /* Schedule TDS3 — tax deducted by someone who has no TAN.
+   *
+   * A buyer of immovable property (s.194-IA), an individual tenant (s.194-IB) or
+   * a person paying a contractor or professional (s.194M) deducts against their
+   * own PAN, so these credits appear in a schedule of their own and never in
+   * TDS1 or TDS2. On the A.Y. 2023-24 return this is the ONLY tax deducted at
+   * source: 45,900 on a property consideration of 45,90,000. Reading only TDS1
+   * and TDS2 printed a "Total Tax Deducted at Source — 45,900" with no row above
+   * it explaining where a rupee of it came from.
+   */
+  const tds3 = src.claim("ScheduleTDS3.TDS3onOthThanSalDtls") || [];
+  const tds3Rows = tds3
+    .map((t) => ({
+      pan: t.PANOfBuyerTenant || t.PANofTenant || t.PANOfOtherPerson || "",
+      head: headOfIncome(t.HeadOfIncome),
+      gross: Number(t.GrossAmount || 0),
+      credit: Number(t.TaxDeductCreditDtls?.TaxClaimedOwnHands || 0),
+    }))
+    .filter((g) => g.gross || g.credit)
+    .sort((a, b) => b.credit - a.credit || b.gross - a.gross);
+  if (tds3Rows.length) {
+    rows.push(columnHeader("Tax Deducted at Source — PAN of Buyer or Tenant", { ref: "Gross Receipt" }));
+    for (const g of tds3Rows) {
+      rows.push(sub(g.pan, g.credit, {
+        note: ["Deducted by a person not required to hold a TAN", g.head].filter(Boolean).join(" · "),
+        cols: { ref: g.gross ? inr(g.gross) : "" },
+      }));
+    }
+  }
+  src.num("ScheduleTDS3.TotalTDS3OnOthThanSal");
+
   const tds = src.num("PartB_TTI.TaxPaid.TaxesPaid.TDS");
   const tcs = src.num("PartB_TTI.TaxPaid.TaxesPaid.TCS");
   const advance = src.num("PartB_TTI.TaxPaid.TaxesPaid.AdvanceTax");
@@ -856,9 +901,97 @@ export function taxesPaidRows(src, { aggregate }) {
   src.num("ScheduleIT.TotalTaxPayments");
   src.claim("ScheduleIT");
 
+  /* Tax collected at source, by collector. Naming them costs two lines and is
+     the same information need the TDS rows serve: the A.Y. 2023-24 return
+     carries 13,573 collected by two motor dealers, and a bare total leaves a
+     reader with nothing to tie to a 26AS entry. */
+  const tcsRows = (src.claim("ScheduleTCS.TCS") || [])
+    .map((c) => ({
+      tan: c.EmployerOrDeductorOrCollectTAN || c.TAN || "",
+      credit: Number(c.TCSClaimedThisYearDtls?.TCSAmtCollOwnHand ?? c.TCSCurrFYDtls?.TCSAmtCollOwnHand ?? 0),
+    }))
+    .filter((c) => c.credit)
+    .sort((a, b) => b.credit - a.credit);
+  if (tcsRows.length) {
+    rows.push(columnHeader("Tax Collected at Source — TAN of Collector", { ref: "" }));
+    for (const c of tcsRows) rows.push(sub(c.tan, c.credit));
+  }
+  src.num("ScheduleTCS.TotalSchTCS");
+  src.claim("ScheduleTCS");
+
   rows.push(sub("Tax Collected at Source", tcs, { ref: "Sch. TCS" }));
   rows.push(subtotal("Total Taxes Paid", totalPaid));
   rows.push(sub("Less: Total Tax and Interest Payable", aggregate));
+  return rows;
+}
+
+/* ------------------------------------------------- losses carried forward ---
+ *
+ * Schedule CFL, which is the schedule a computation must NOT summarise from
+ * Part B-TI. `LossesOfCurrentYearCarriedFwd` is this year's loss alone: the
+ * A.Y. 2023-24 return states 8,83,972 there and 26,15,711 as the total actually
+ * carried forward, the difference being a long-term capital loss of 17,31,739
+ * still unabsorbed from an earlier year. Printing the first figure under the
+ * caption "Total Loss Carried Forward" understated by 17.3 lakh the relief this
+ * assessee can claim in future years.
+ *
+ * The date each earlier year's return was filed is printed beside its loss,
+ * because s.80 allows the carry-forward only where that return was filed in
+ * time — which is the first thing anyone checks about a brought-forward loss.
+ */
+const CFL_KINDS = [
+  ["TotalHPPTILossCF", "House property loss"],
+  ["BusLossOthThanSpecLossCF", "Business loss, other than speculative"],
+  ["BrtFwdBusLoss", "Business loss"],
+  ["LossFrmSpecBusCF", "Speculative business loss"],
+  ["LossFrmSpecifiedBusCF", "Loss of a specified business u/s 35AD"],
+  ["TotalSTCGPTILossCF", "Short-term capital loss"],
+  ["TotalLTCGPTILossCF", "Long-term capital loss"],
+  ["OthSrcLossRaceHorseCF", "Loss from owning and maintaining race horses"],
+];
+
+const cflKinds = (src, base) =>
+  CFL_KINDS.map(([key, label]) => [label, src.num(`${base}.${key}`)]).filter(([, v]) => v);
+
+export function carriedForwardRows(src, ctx) {
+  const rows = [];
+
+  // The earlier years, in the order the return lists them. Their keys carry a
+  // year-like suffix that is NOT reliably the assessment year, so the row is
+  // identified by the filing date the return does state.
+  const earlier = Object.keys(src.peek("ScheduleCFL") || {})
+    .filter((k) => /^LossCFCurrentAssmntYear/.test(k));
+  for (const k of earlier) {
+    const base = `ScheduleCFL.${k}.CarryFwdLossDetail`;
+    const filed = longDate(src.val(`${base}.DateOfFiling`));
+    for (const [label, v] of cflKinds(src, base)) {
+      rows.push(sub(label, v, { cols: { ref: filed ? `Return filed ${filed}` : "Brought forward" } }));
+    }
+    src.num(`${base}.AdjustAccTax115BACAmt`);
+  }
+
+  for (const [label, v] of cflKinds(src, "ScheduleCFL.CurrentAYloss.LossSummaryDetail")) {
+    rows.push(sub(label, v, { cols: { ref: `A.Y. ${ctx.ay}` } }));
+  }
+
+  // The closing figure is the return's own per-kind total, not this year's loss.
+  const totals = cflKinds(src, "ScheduleCFL.TotalLossCFSummary.LossSummaryDetail");
+  if (!rows.length || !totals.length) {
+    src.claim("ScheduleCFL");
+    return [];
+  }
+  rows.unshift(columnHeader("Nature of loss", { ref: "Year it arose" }));
+  // With more than one kind of loss the per-kind figure is what a later year
+  // needs, because each is set off only against its own head. With one kind the
+  // rows above already name it and a subtotal would just repeat the total.
+  if (totals.length > 1) {
+    for (const [label, v] of totals) rows.push(subtotal(`${label} carried forward`, v));
+  }
+  rows.push(total("Total Loss Carried Forward", totals.reduce((s, [, v]) => s + v, 0)));
+
+  // Whatever the walk above did not reach: the brought-forward summary the
+  // return states twice, and the set-off columns Schedule BFLA already showed.
+  src.claim("ScheduleCFL");
   return rows;
 }
 

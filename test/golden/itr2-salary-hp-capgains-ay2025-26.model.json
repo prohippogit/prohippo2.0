@@ -516,6 +516,19 @@
      "ref": "Sch. IT"
     },
     {
+     "kind": "columnHeader",
+     "label": "Tax Collected at Source — TAN of Collector",
+     "amount": null,
+     "cols": {
+      "ref": ""
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAA00000A",
+     "amount": 12673
+    },
+    {
      "kind": "sub",
      "label": "Tax Collected at Source",
      "amount": 12673,

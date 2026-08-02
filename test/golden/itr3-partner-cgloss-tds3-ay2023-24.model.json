@@ -1,0 +1,565 @@
+{
+ "meta": {
+  "form": "ITR3",
+  "assessmentYear": "2023-24",
+  "previousYear": "2022-23",
+  "schemaVersion": "Ver1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+ },
+ "assessee": {
+  "name": "SAMPLE NAME 1 SAMPLE NAME 2 SAMPLE NAME 3",
+  "pan": "AAAPZ1001A",
+  "status": "Individual",
+  "address": "E/37, SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 380005",
+  "email": "sample@example.com",
+  "mobile": "9800000001",
+  "residentialStatus": "Resident",
+  "dateOfFormation": "1956-06-01",
+  "facts": [
+   {
+    "label": "Status",
+    "value": "Individual"
+   },
+   {
+    "label": "Date of birth",
+    "value": "01 June 1956"
+   },
+   {
+    "label": "Residential status",
+    "value": "Resident"
+   },
+   {
+    "label": "Return filed under",
+    "value": "Section 139(1) — on or before the due date"
+   },
+   {
+    "label": "Tax regime",
+    "value": "Old regime — s.115BAC not opted for"
+   },
+   {
+    "label": "Due date",
+    "value": ""
+   },
+   {
+    "label": "Business",
+    "value": "SAMPLE NAME 5"
+   },
+   {
+    "label": "E-mail / mobile",
+    "value": "sample@example.com\n+91 9800000001"
+   }
+  ],
+  "constitutionTitle": "Partner in firms",
+  "partners": [
+   {
+    "name": "SAMPLE NAME 16",
+    "pan": "AAAFZ1000A",
+    "detail": "PAN AAAFZ1000A · Share 10%"
+   },
+   {
+    "name": "SAMPLE NAME 17",
+    "pan": "AAAFZ1003A",
+    "detail": "PAN AAAFZ1003A · Share 15%"
+   },
+   {
+    "name": "SAMPLE NAME 18",
+    "pan": "AAAFZ1004A",
+    "detail": "PAN AAAFZ1004A · Share 9%"
+   },
+   {
+    "name": "SAMPLE NAME 19",
+    "pan": "AAAFZ1005A",
+    "detail": "PAN AAAFZ1005A · Share 5%"
+   },
+   {
+    "name": "SAMPLE NAME 4",
+    "pan": "AAAFZ1002A",
+    "detail": "PAN AAAFZ1002A · Share 5% · audited u/s 44AB"
+   }
+  ]
+ },
+ "sections": [
+  {
+   "id": "SALARY",
+   "letter": "A",
+   "title": "Income from Salaries",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Salary as per section 17(1)",
+     "amount": 315304,
+     "ref": "Sch. S",
+     "note": "SAMPLE NAME 14 · Commuted pension"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Salary",
+     "amount": 315304
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Standard deduction u/s 16(ia)",
+     "amount": 50000,
+     "ref": "Sec. 16(ia)"
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Salaries",
+     "amount": 265304
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "BP",
+   "letter": "B",
+   "title": "Profits and Gains of Business or Profession",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Net profit before tax as per the profit & loss account",
+     "amount": 2388328,
+     "ref": "Sch. BP"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Income credited to the profit & loss account, assessable under salary",
+     "amount": 315304
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Income credited to the profit & loss account, assessable under capital gains",
+     "amount": 1560264
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Income credited to the profit & loss account, assessable under other sources",
+     "amount": 26269,
+     "note": "Being income from sources other than dividend"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Agriculture Income credited to the profit & loss account",
+     "amount": 212200
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Depreciation debited to the profit & loss account",
+     "amount": 944
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Depreciation allowable u/s 32",
+     "amount": 944,
+     "ref": "Sec. 32",
+     "note": "Block-wise workings are in Schedules DPM, DOA and DEP of the return"
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Profits and Gains of Business or Profession",
+     "amount": 274291,
+     "isLoss": false
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "CG",
+   "letter": "C",
+   "title": "Capital Gains",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Long-term capital gains",
+     "amount": null,
+     "cols": {
+      "ref": "Sch. CG"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Full value of consideration — land or building",
+     "amount": 4590000
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Indexed cost of acquisition",
+     "amount": 5473972,
+     "note": "Cost 33,07,536, indexed"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Long-term Capital Loss",
+     "amount": 883972,
+     "isLoss": true
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Capital Gains",
+     "amount": 0
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "OS",
+   "letter": "D",
+   "title": "Income from Other Sources",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Interest from savings bank accounts",
+     "amount": 26269
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Other Sources",
+     "amount": 26269
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "VIA",
+   "letter": "E",
+   "title": "Deductions under Chapter VI-A",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "u/s 80C — life insurance, provident fund, tuition fees etc.",
+     "amount": 150000,
+     "ref": "80C"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80D — health insurance premium",
+     "amount": 50000,
+     "ref": "80D"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80TTB — interest on deposits (senior citizens)",
+     "amount": 26269,
+     "ref": "80TTB"
+    },
+    {
+     "kind": "total",
+     "label": "Total deductions under Chapter VI-A",
+     "amount": 226269
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "TI",
+   "letter": "F",
+   "title": "Computation of Total Income",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "head",
+     "label": "Income from Salaries",
+     "amount": 265304,
+     "ref": "Sch. S"
+    },
+    {
+     "kind": "head",
+     "label": "Income from House Property",
+     "amount": 0,
+     "ref": "Sch. HP"
+    },
+    {
+     "kind": "head",
+     "label": "Profits and Gains of Business or Profession",
+     "amount": 274291,
+     "ref": "Sch. BP"
+    },
+    {
+     "kind": "head",
+     "label": "Capital Gains",
+     "amount": 0,
+     "ref": "Sch. CG"
+    },
+    {
+     "kind": "head",
+     "label": "Income from Other Sources",
+     "amount": 26269,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total of Heads of Income",
+     "amount": 565864
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Total Income",
+     "amount": 565864
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Deductions under Chapter VI-A",
+     "amount": 226269,
+     "ref": "Sch. VI-A"
+    },
+    {
+     "kind": "total",
+     "label": "Total Income (rounded off u/s 288A)",
+     "amount": 339600
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Net agricultural income, aggregated for rate purposes only",
+     "amount": 212200,
+     "ref": "Sch. EI",
+     "note": "Exempt u/s 10(1); it does not enter total income"
+    },
+    {
+     "kind": "sub",
+     "label": "Aggregate income on which the rate is determined",
+     "amount": 551800
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAX",
+   "letter": "G",
+   "title": "Computation of Tax Liability",
+   "tone": "gold",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Tax on income at the rates in force",
+     "amount": 20360,
+     "ref": "Para A, Sch. I"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Rebate on agricultural income aggregated for rate purposes",
+     "amount": 12440,
+     "note": "Agricultural income is exempt; it is aggregated only to fix the rate"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Tax on Total Income",
+     "amount": 7920
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Rebate u/s 87A",
+     "amount": 7920,
+     "ref": "Sec. 87A"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax after rebate",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Surcharge",
+     "amount": 0,
+     "note": "Total income does not exceed ₹ 50 lakh"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Health & Education Cess @ 4%",
+     "amount": 0
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Tax Liability",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Relief u/s 89 / 90 / 90A / 91",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Total Tax and Interest Payable",
+     "amount": 0
+    }
+   ],
+   "footnote": "Adjusted total income u/s 115JC is 3,39,600; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAXES_PAID",
+   "letter": "H",
+   "title": "Taxes Paid & Prepaid Taxes",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Tax Deducted at Source — PAN of Buyer or Tenant",
+     "amount": null,
+     "cols": {
+      "ref": "Gross Receipt"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAFZ1000A",
+     "amount": 45900,
+     "note": "Deducted by a person not required to hold a TAN · against Capital Gains",
+     "cols": {
+      "ref": "45,90,000"
+     }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Tax Deducted at Source",
+     "amount": 45900,
+     "ref": "Sch. TDS"
+    },
+    {
+     "kind": "sub",
+     "label": "Advance Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Self-Assessment Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "columnHeader",
+     "label": "Tax Collected at Source — TAN of Collector",
+     "amount": null,
+     "cols": {
+      "ref": ""
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAB00001A",
+     "amount": 7620
+    },
+    {
+     "kind": "sub",
+     "label": "AAAA00000A",
+     "amount": 5953
+    },
+    {
+     "kind": "sub",
+     "label": "Tax Collected at Source",
+     "amount": 13573,
+     "ref": "Sch. TCS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Taxes Paid",
+     "amount": 59473
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Total Tax and Interest Payable",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Refund Due",
+     "amount": 59470
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "CFL",
+   "letter": "I",
+   "title": "Losses Carried Forward to Subsequent Years",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Nature of loss",
+     "amount": null,
+     "cols": {
+      "ref": "Year it arose"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Long-term capital loss",
+     "amount": 1731739,
+     "cols": {
+      "ref": "Return filed 14 March 2022"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Long-term capital loss",
+     "amount": 883972,
+     "cols": {
+      "ref": "A.Y. 2023-24"
+     }
+    },
+    {
+     "kind": "total",
+     "label": "Total Loss Carried Forward",
+     "amount": 2615711
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  }
+ ],
+ "refund": {
+  "amount": 59470,
+  "bank": {
+   "name": "SAMPLE NAME 21",
+   "accountNo": "000000000000000",
+   "type": "",
+   "ifsc": "XXXX0000000"
+  }
+ },
+ "payable": null,
+ "notes": [
+  {
+   "severity": "info",
+   "text": "This computation has been prepared from the ITR-3 return data (JSON) for A.Y. 2023-24 and the figures correspond to Schedule S, Schedule BP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+  },
+  {
+   "severity": "info",
+   "text": "The return is filed under the old regime — s.115BAC not opted for."
+  },
+  {
+   "severity": "info",
+   "text": "Net agricultural income of 2,12,200 is exempt u/s 10(1) and has been aggregated with total income only to determine the rate of tax, the tax on it being allowed as a rebate above."
+  },
+  {
+   "severity": "info",
+   "text": "The assessee is a partner in 5 firms. Interest, salary, bonus and commission from a firm are chargeable under the head Business or Profession; the share of the firm's profit is exempt u/s 10(2A)."
+  }
+ ],
+ "signatory": {
+  "name": "SAMPLE NAME 22",
+  "capacity": "Self",
+  "pan": "AAAPZ1001A",
+  "place": "SAMPLE PLACE 5",
+  "date": "2023-10-27"
+ },
+ "unmapped": []
+}

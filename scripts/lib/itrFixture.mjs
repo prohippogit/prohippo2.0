@@ -38,6 +38,15 @@ const PERSON_KEYS = new Set([
   // but a named charity beside a named donor and an amount is a fact about the
   // client that is not ours to publish.
   "DoneeWithPanName", "DoneeWithoutPanName",
+  // Free text inside the profit & loss account, where an assessee describes a
+  // line in their own words: "Interest paid to firm - Shakti Builders" names a
+  // firm the client deals with. The mapper never reads Part A-P&L (it is an
+  // ignored subtree), so nothing is lost by replacing these.
+  //
+  // NOT here: OperatingRevenueName, which the business head DOES read and
+  // print ("Less: Agriculture Income credited to the profit & loss account").
+  // Renaming it would leave a fixture that no longer represents its own case.
+  "ExpenseNature", "NatureOfIncome",
 ]);
 const PLACE_KEYS = new Set([
   "AddrDetail", "ResidenceNo", "ResidenceName", "RoadOrStreet", "LocalityOrArea",
@@ -133,8 +142,15 @@ export function anonymise(json) {
     else if (typeof n === "string") values.push(n);
   };
   collect(clean);
-  const blob = values.join("\n");
-  const leaked = [...Object.keys(ids), ...people.keys(), ...places.keys()].filter((v) => blob.includes(v));
+
+  /* Case-INSENSITIVELY. A return states the same firm as "SHAKTI BUILDERS" in
+     Schedule IF and as "Interest paid to firm - Shakti Builders" in a P&L
+     description, and an exact-string check passed the second one through — the
+     leak was found by hand afterwards, which is precisely what this is meant to
+     make unnecessary. */
+  const blob = values.join("\n").toLowerCase();
+  const leaked = [...Object.keys(ids), ...people.keys(), ...places.keys()]
+    .filter((v) => blob.includes(String(v).toLowerCase()));
   if (leaked.length) {
     throw new Error(`anonymisation missed ${leaked.length} value(s), starting with: ${leaked.slice(0, 5).join(", ")}`);
   }

@@ -202,7 +202,9 @@ test("salary TDS is listed with the employer and the income it was deducted on",
   assert.equal(salary.amount, 547095);
   assert.equal(salary.cols.ref, "28,66,463");
   assert.equal(rows.find((r) => /^Total Tax Deducted at Source/.test(r.label)).amount, 553131);
-  assert.equal(rows.find((r) => /^Tax Collected at Source/.test(r.label)).amount, 12673);
+  // The collector is named above the total, the same way the deductors are.
+  assert.ok(rows.some((r) => r.kind === "columnHeader" && /^Tax Collected at Source — TAN/.test(r.label)));
+  assert.equal(rows.find((r) => r.label === "Tax Collected at Source").amount, 12673);
   assert.equal(rows.find((r) => /^Total Taxes Paid/.test(r.label)).amount, 565804);
 });
 

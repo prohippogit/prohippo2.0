@@ -85,7 +85,7 @@
      "label": "Salary as per section 17(1)",
      "amount": 480000,
      "ref": "Sch. S",
-     "note": "SAMPLE NAME 10"
+     "note": "SAMPLE NAME 10 · Basic salary"
     },
     {
      "kind": "subtotal",
@@ -416,7 +416,7 @@
     },
     {
      "kind": "sub",
-     "label": "Long-term capital gains u/s 112 — at 20%",
+     "label": "Long-term capital gains u/s 112, with indexation — at 20%",
      "amount": 71212,
      "note": "on 3,56,060",
      "ref": "Sch. SI"

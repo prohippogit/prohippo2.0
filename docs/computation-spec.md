@@ -513,12 +513,22 @@ Recorded so nobody has to rediscover them.
 
 **Salary (`ScheduleS`, ITR-2/3)**
 - `Salarys.NatureOfSalary.OthersIncDtls[].NatureDesc` is a numeric code table
-  ("1", "4", "7") that we do **not** decode. The statutory captions —
-  salary u/s 17(1), perquisites u/s 17(2), profits in lieu u/s 17(3) — are
-  carried in their own fields and are what a computation states. Guessing that
-  "4" means House Rent Allowance would put an unverified label on a signed
-  document; the exempt allowances carry readable codes (`10(13A)`) and those
-  are printed as given.
+  ("1", "4", "7"). These went **undecoded** while the only available source for
+  them would have been a guess — putting "House Rent Allowance" against code "4"
+  on a signed document because it looked right is exactly the failure this spec
+  exists to prevent. The department publishes the table itself, in the schema
+  downloadable from the e-filing portal, so the codes are now decoded **from
+  that**: `ITR2_2024_Main_V1.4.json`, `definitions.NatureOfSalaryDtlsType.
+  properties.NatureDesc` and its perquisite and profits-in-lieu siblings. The
+  same schema is the source for `ScheduleSI`'s `SecCode` table and for
+  `Verification.Capacity`. Decode from the schema or not at all; do not infer a
+  code's meaning from one return that happens to fit.
+- Components print **beneath** the statutory line they add up to, as
+  "— Basic salary". A single component equal to the whole line is not a
+  breakdown — its name goes in the line's note instead, so the same figure never
+  appears twice on consecutive rows.
+- The exempt allowances carry readable codes (`10(13A)`) and are printed as
+  given; only `OTH` and `EIC`, which are not sections, are named from the schema.
 - `DeductionUS16` is the total; `DeductionUnderSection16ia` (standard deduction)
   and `ProfessionalTaxUs16iii` are its parts and are shown separately.
 - `Section10_13A` carries the HRA working — actual HRA, rent paid, and the
@@ -626,6 +636,24 @@ Recorded so nobody has to rediscover them.
 - `IntrstPay` gains `FeeFurnish234I` alongside the s.234 interest.
 - `PersonalInfo` gains a `SecondaryAdd` flag and an `AlternateAddress` block.
 
+**What differs between A.Y. 2024-25 and 2025-26 (ITR-2)**
+- Capital gains: 2024-25 is the last year before the rate change, so Part B-TI
+  carries a 15% short-term and a 10% long-term bucket and no others, and
+  Schedule SI states one rate per head. Again nothing branches — a single bucket
+  simply produces no split.
+- It is the first year on either individual form where a return we hold is on
+  the **old regime**, so Chapter VI-A does real work: `UsrDeductUndChapVIA`
+  (claimed) and `DeductUndChapVIA` (allowed) genuinely differ, and both are
+  printed. A computation showing only the allowed figure hides an 80C claim of
+  2,64,597 cut to 1,50,000.
+- `ScheduleTDS2.TDSOthThanSalaryDtls[].TDSSection` is absent here too, and one
+  row carries neither a gross receipt nor a credit. A row with a receipt and no
+  deduction is kept — that is what a s.143(1) mismatch turns on — and a row with
+  neither is dropped.
+- `PartB_TTI.Refund.BankAccountDtls.AddtnlBankDetails[]` carries no
+  `UseForRefund` flag on any account. The first is shown, with a note saying the
+  return flagged none.
+
 **What differs between A.Y. 2024-25 and 2025-26 (ITR-3)**
 - The schedules are the same fields. What changes is the data, and all of it is
   read from the return: capital-gains rate buckets, the standard deduction under
@@ -636,9 +664,14 @@ Recorded so nobody has to rediscover them.
 - `ScheduleTDS2.TDSOthThanSalaryDtls[].TDSSection` is **absent** in the 2024-25
   return — all 42 rows. Print nothing rather than a bare "Sec.".
 
-**Capacity codes (`Verification.Declaration.Capacity`)**
-- `TR` = Trustee, `MP` = Managing Partner, `P` = Partner, `D` = Director,
-  `KA` = Karta, `S` = Self.
+**Capacity codes (`Verification.Capacity`)**
+- The code list differs by form and must be read from that form's schema, not
+  shared. ITR-2's enum is `S` (Self), `R` (Representative), `K` (Karta),
+  `A` (Authorised Signatory) — four codes, nothing else. The individual table
+  once carried `KA`, `AM` and `G`, none of which an ITR-2 can hold, so a real
+  Karta's return would have printed the bare code.
+- ITR-5 carries its own: `TR` = Trustee, `MP` = Managing Partner, `P` = Partner,
+  `D` = Director, `S` = Self.
 
 ---
 
@@ -650,6 +683,7 @@ test/fixtures/
   itr5-firm-house-property-loss-ay2025-26.json  // s.24(b) loss, b/f losses, 22 partners
   itr2-salary-hp-capgains-ay2025-26.json        // salary, s.24(b) loss, s.111A/112A, VI-A caps
   itr2-salary-112a-refund-ay2026-27.json        // one 112A rate, TDS over the liability → refund
+  itr2-oldregime-hploss-via-ay2024-25.json      // old regime, HP loss u/s 71, VI-A caps, refund
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr4-…  itr1-…                                 // add as forms are supported
@@ -686,6 +720,22 @@ fixture. Verify by walking the result's string *values* (not the serialised
 JSON, whose key names produce false positives) and asserting that no original
 identifier survives.
 
+### The department's schema is the second source
+
+The e-filing portal publishes the JSON schema for each form and year alongside
+the utilities (Downloads → Income Tax Returns). It is **not** a substitute for a
+real return: it says which fields may exist, never which ones this assessee
+used, so a mapper written from the schema alone has no way to know what a real
+filing puts a figure against, and no fixture to prove it against. Everything §11
+requires still comes from a return.
+
+What the schema *is* authoritative for is **what a code means**. Every enum in
+it carries a `description` listing its codes and their meanings — Schedule SI
+section codes, salary and perquisite component codes, capacity, property use,
+account type. Where this repo prints a caption for a code, that caption comes
+from the schema and cites it in a comment. A code we cannot find in a schema
+prints as itself (§5). No third option.
+
 Each fixture gets three tests: mapper produces the golden model; `validate()`
 passes against the source JSON; `unmapped` is empty.
 
@@ -700,6 +750,7 @@ than it is:
 | ITR-5 | 2025-26 | ✓      | ✓    | ✓      | ✓           |
 | ITR-2 | 2026-27 | ✓      | —    | ✓      | — not yet   |
 | ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
+| ITR-2 | 2024-25 | ✓      | ✓    | ✓      | — not yet   |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |
 

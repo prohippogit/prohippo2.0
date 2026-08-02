@@ -18,7 +18,10 @@
  */
 import { sub, subtotal, total, columnHeader } from "../../model.js";
 import { longDate } from "../../format.js";
-import { specialRateLabel, viaLabel, viaOrder, tdsSection, tdsNature } from "./labels.js";
+import {
+  specialRateLabel, viaLabel, viaOrder, viaRef, tdsSection, tdsNature,
+  salaryComponent, salaryComponentOrder, exemptAllowanceLabel,
+} from "./labels.js";
 
 const inr = (v) => Number(v || 0).toLocaleString("en-IN");
 
@@ -28,11 +31,38 @@ const inr = (v) => Number(v || 0).toLocaleString("en-IN");
  * profits in lieu u/s 17(3) make up gross salary; the allowances exempt under
  * s.10 come off it; then the two deductions s.16 allows.
  *
- * §10: the per-component breakdown inside NatureOfSalary uses a numeric code
- * table we deliberately do not decode. The captions used here are the return's
- * own fields; guessing that code "4" means House Rent Allowance would put an
- * unverified label on a signed document.
+ * §10: the per-component breakdown inside NatureOfSalary is stated by a numeric
+ * code. Those codes went undecoded for as long as the only source for them would
+ * have been a guess; the department publishes the table in its own schema, so
+ * each component is now named from it — see ./labels.js for the citation. The
+ * components are printed beneath the line they make up, in the same shape the
+ * capital-gains rate split uses, so the figure a reader ties to the return stays
+ * on the line above and the detail sits under it.
  */
+
+/**
+ * "— Basic salary 21,10,460" rows for one line of the salary working.
+ *
+ * Returns { rows, note }. A single component equal to the whole line is not a
+ * breakdown — printing the same figure twice on consecutive lines reads as an
+ * error — so its name comes back as a note for the line above instead. The same
+ * judgment the capital-gains rate split makes about a lone bucket.
+ */
+function componentRows(src, base, kind, parentAmount) {
+  const list = (src.claim(base) || [])
+    .filter((c) => Number(c.OthAmount || 0))
+    .sort((a, b) => salaryComponentOrder(kind, a.NatureDesc) - salaryComponentOrder(kind, b.NatureDesc));
+  const name = (c) => {
+    const named = salaryComponent(kind, c.NatureDesc);
+    // "Others" is a code the assessee describes in words; prefer their words.
+    return named && c.OthNatOfInc ? `${named} — ${c.OthNatOfInc}` : (named || c.OthNatOfInc || `component ${c.NatureDesc}`);
+  };
+  if (list.length === 1 && Number(list[0].OthAmount) === parentAmount) {
+    return { rows: [], note: name(list[0]) };
+  }
+  return { rows: list.map((c) => sub(`— ${name(c)}`, Number(c.OthAmount))), note: "" };
+}
+
 export function salaryRows(src) {
   const rows = [];
   const employers = src.peek("ScheduleS.Salaries") || [];
@@ -46,19 +76,31 @@ export function salaryRows(src) {
     const perquisites = src.num(at("ValueOfPerquisites"));
     const inLieu = src.num(at("ProfitsinLieuOfSalary"));
 
+    const nature = `ScheduleS.Salaries[${i}].Salarys`;
+    const salaryParts = componentRows(src, `${nature}.NatureOfSalary.OthersIncDtls`, "salary", salary17_1);
+    const perqParts = componentRows(src, `${nature}.NatureOfPerquisites.OthersIncDtls`, "perquisite", perquisites);
+    const lieuParts = componentRows(src, `${nature}.NatureOfProfitInLieuOfSalary.OthersIncDtls`, "inLieu", inLieu);
+
     if (many) rows.push(columnHeader(`Employer ${i + 1} — ${employerName}`, { ref: "" }));
     rows.push(sub("Salary as per section 17(1)", salary17_1, {
       ref: i === 0 && !many ? "Sch. S" : "",
-      note: many ? "" : employerName,
+      note: [many ? "" : employerName, salaryParts.note].filter(Boolean).join(" · "),
     }));
-    if (perquisites) rows.push(sub("Add: Value of perquisites u/s 17(2)", perquisites));
-    if (inLieu) rows.push(sub("Add: Profits in lieu of salary u/s 17(3)", inLieu));
+    rows.push(...salaryParts.rows);
+    if (perquisites) {
+      rows.push(sub("Add: Value of perquisites u/s 17(2)", perquisites, { note: perqParts.note || undefined }));
+      rows.push(...perqParts.rows);
+    }
+    if (inLieu) {
+      rows.push(sub("Add: Profits in lieu of salary u/s 17(3)", inLieu, { note: lieuParts.note || undefined }));
+      rows.push(...lieuParts.rows);
+    }
     if (many) rows.push(subtotal(`Gross salary — employer ${i + 1}`, gross));
-    // The per-component split and the individual perquisite lines are the same
-    // money already stated above, itemised for the return's own schedule.
-    src.claim(`ScheduleS.Salaries[${i}].Salarys.NatureOfSalary`);
-    src.claim(`ScheduleS.Salaries[${i}].Salarys.NatureOfPerquisites`);
-    src.claim(`ScheduleS.Salaries[${i}].Salarys.NatureOfProfitInLieuOfSalary`);
+    // Whatever the itemisation above did not reach — an empty wrapper, or a
+    // perquisite list on a return that states nil against s.17(2).
+    src.claim(`${nature}.NatureOfSalary`);
+    src.claim(`${nature}.NatureOfPerquisites`);
+    src.claim(`${nature}.NatureOfProfitInLieuOfSalary`);
     src.claim(`ScheduleS.Salaries[${i}].AddressDetail`);
     src.num(at("IncomeNotified89A"));
     src.num(at("IncomeNotifiedOther89A"));
@@ -68,8 +110,8 @@ export function salaryRows(src) {
   const grossSalary = src.num("ScheduleS.TotalGrossSalary");
   if (employers.length) rows.push(subtotal("Gross Salary", grossSalary));
 
-  // Allowances exempt under s.10, itemised by the code the return gives. These
-  // codes ARE readable ("10(13A)"), unlike the salary-component ones.
+  // Allowances exempt under s.10, itemised by the code the return gives. Here
+  // the code IS the section — "10(13A)" — so it is printed as given.
   const exemptRows = src.claim("ScheduleS.AllwncExemptUs10.AllwncExemptUs10Dtls") || [];
   const hra = src.claim("ScheduleS.Section10_13A") || {};
   for (const e of exemptRows) {
@@ -77,13 +119,18 @@ export function salaryRows(src) {
     if (!amt) continue;
     const code = String(e.SalNatureDesc || "").trim();
     const isHra = code === "10(13A)";
+    // Most codes here ARE the section, so they print as given. The two that are
+    // not — "OTH" and "EIC" — are named from the schema; see ./labels.js.
+    const named = exemptAllowanceLabel(code);
     rows.push(sub(
-      isHra ? "Less: House rent allowance exempt u/s 10(13A)" : `Less: Allowance exempt u/s ${code === "OTH" ? "10" : code}`,
+      isHra ? "Less: House rent allowance exempt u/s 10(13A)"
+        : named ? `Less: ${named}`
+          : `Less: Allowance exempt u/s ${code}`,
       amt,
       {
         note: isHra && hra.ActlHRARecv
           ? `HRA received ${inr(hra.ActlHRARecv)} · rent paid ${inr(hra.ActlRentPaid || 0)}`
-          : (code === "OTH" ? e.SalOthNatOfInc || "" : ""),
+          : (named ? e.SalOthNatOfInc || "" : ""),
       }
     ));
   }
@@ -482,7 +529,7 @@ export function chapterVIA(src) {
     const amt = Number(allowed[k]);
     const askedFor = Number(claimed[k] || 0);
     rows.push(sub(viaLabel(k), amt, {
-      ref: k.replace(/^Section/, ""),
+      ref: viaRef(k),
       note: askedFor > amt ? `Claimed ${inr(askedFor)}; restricted to the statutory limit` : undefined,
     }));
   }
@@ -615,8 +662,14 @@ export function taxesPaidRows(src, { aggregate }) {
     prev.count += 1;
     byTanSection.set(key, prev);
   }
-  if (byTanSection.size && !salaryTds.length) rows.push(columnHeader("Tax Deducted at Source — TAN of Deductor", { ref: "Gross Receipt" }));
-  for (const g of [...byTanSection.values()].sort((a, b) => b.credit - a.credit)) {
+  // A deductor entry with neither a receipt nor a credit says nothing. Rows with
+  // a gross but no credit DO stay: they are what a deductor reported against the
+  // PAN without deducting, which is exactly what a s.143(1) mismatch turns on.
+  const tdsRows = [...byTanSection.values()]
+    .filter((g) => g.gross || g.credit)
+    .sort((a, b) => b.credit - a.credit || b.gross - a.gross);
+  if (tdsRows.length && !salaryTds.length) rows.push(columnHeader("Tax Deducted at Source — TAN of Deductor", { ref: "Gross Receipt" }));
+  for (const g of tdsRows) {
     rows.push(sub(g.tan, g.credit, {
       // Some years' returns carry no section code at all. "Sec." with nothing
       // after it is worse than saying nothing.

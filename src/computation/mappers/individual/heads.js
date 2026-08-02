@@ -630,8 +630,13 @@ export function chapterVIA(src) {
   const claimed = src.claim("ScheduleVIA.UsrDeductUndChapVIA") || {};
   const allowed = src.claim("ScheduleVIA.DeductUndChapVIA") || {};
   const rows = [];
+  /* Anything named Tot… is a SUBTOTAL of the block, not a deduction in it. The
+     A.Y. 2022-23 ITR-3 carries TotPartBchapterVIA 2,02,250 and
+     TotPartCAandDchapterVIA 8,814 alongside the four real sections, and printing
+     them produced a "deduction under u/s TotPartBchapterVIA" line that
+     double-counted the whole of Part B. */
   const keys = Object.keys(allowed)
-    .filter((k) => k !== "TotalChapVIADeductions" && Number(allowed[k]) > 0)
+    .filter((k) => !/^Tot/.test(k) && Number(allowed[k]) > 0)
     .sort((a, b) => viaOrder(a) - viaOrder(b));
   for (const k of keys) {
     const amt = Number(allowed[k]);
@@ -734,11 +739,21 @@ function surchargeNote(src, at, onTI, totalIncome) {
   if (!total) return totalIncome <= 5000000 ? "Total income does not exceed ₹ 50 lakh" : undefined;
 
   const parts = [];
-  if (of("SurchargeOnAboveCrore")) parts.push("Total income exceeds ₹ 1 crore");
+  /* NOT "exceeds ₹ 1 crore", though the field is called SurchargeOnAboveCrore.
+     That name is the schema's label for the limb charged on total income, at
+     whatever rate the year's slab gives — the A.Y. 2022-23 ITR-3 fills it on a
+     total income of 51,43,580, which is nowhere near a crore. What IS certain is
+     the threshold at which any surcharge on an individual begins, and that is
+     read off this return's own total income rather than off a field name. */
+  if (totalIncome > 5000000) parts.push("Total income exceeds ₹ 50 lakh");
   // The surcharge on income taxable at special rates is charged apart, because
   // the rate on it is capped whatever the total income is.
   if (of("Surcharge25ofSI")) parts.push("Charged separately on the income taxable at special rates");
 
+  /* Marginal relief, where the return itself shows it: the charge cannot take
+     more than the income above the threshold. This is the return's own
+     subtraction between its before- and after-relief fields, not one worked out
+     here — 1,22,349 down to 1,00,506 on the A.Y. 2022-23 return. */
   const before = of("SurchargeOnAboveCroreBeforeMarginal") + of("Surcharge25ofSIBeforeMarginal");
   if (before > total) parts.push(`After marginal relief of ${inr(before - total)}`);
   return parts.length ? parts.join(" · ") : undefined;

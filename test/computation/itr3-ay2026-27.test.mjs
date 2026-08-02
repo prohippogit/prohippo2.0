@@ -164,7 +164,10 @@ test("the surcharge says why it is charged", () => {
   const { doc } = build();
   const sc = row(doc, "TAX", /^Add: Surcharge/);
   assert.equal(sc.amount, 201217);
-  assert.equal(sc.note, "Total income exceeds ₹ 1 crore");
+  // The threshold is read off this return's own total income, not off the field
+  // name `SurchargeOnAboveCrore` — which the A.Y. 2022-23 return fills on a
+  // total income of 51,43,580, nowhere near a crore.
+  assert.equal(sc.note, "Total income exceeds ₹ 50 lakh");
   // No marginal relief on this return — the return states the same figure before
   // and after it — so the note does not claim any.
   assert.ok(!/marginal relief/i.test(sc.note));

@@ -97,6 +97,7 @@ src/computation/
       ay2026-27.js     registration + a home for that year's divergences
       ay2025-26.js     ditto
       ay2024-25.js     ditto
+      ay2022-23.js     ditto
       build.js         the workings, shared by every year
       businessHead.js  Schedule BP — the head ITR-2 has no schedule for
     itr5/
@@ -550,8 +551,32 @@ Recorded so nobody has to rediscover them.
   s.115BAC(1A) slabs and to nothing else, and the agricultural-income rebate of
   5,500 confirms a basic exemption of 3,00,000. If a future return disagrees,
   re-derive it the same way rather than trusting the field name.
+- A.Y. 2022-23 and 2023-24 ask it a **third** way, as `NewTaxRegime`, and the
+  sense is the OPPOSITE of `OptOutNewTaxRegime`: `"Y"` means the assessee opted
+  **into** s.115BAC, `"N"` means they did not and are on the old regime. Read it
+  with the later years' sense and the document states the wrong regime on its
+  face, above a Chapter VI-A block that could not exist under the other one.
+  Verified: the A.Y. 2022-23 ITR-3 says `"N"` and states 10,17,521 on an
+  aggregate of 40,25,070, which is the old-regime table for an assessee over 60
+  to the rupee; s.115BAC for that year gives 9,45,021.
+- Three spellings, three senses, one rule: **never read a regime field by its
+  name alone.** Reconcile the return's own tax at normal rates against the slab
+  table before trusting it, and record the reconciliation where you read it.
 - ITR-5 uses `OptOldRegimeCurrAY` with the opposite sense, and firms have no
   such choice at all. Do not share one helper across the two.
+
+**Chapter VI-A carries its own subtotals inside the deduction block**
+- A.Y. 2022-23's `DeductUndChapVIA` holds `TotPartBchapterVIA` and
+  `TotPartCAandDchapterVIA` beside the real sections. Iterating the block's keys
+  printed them as deductions, so Part B was counted twice on the face of the
+  document while the closing total still tied. Skip every key named `Tot…`.
+
+**`SurchargeOnAboveCrore` is not "above a crore"**
+- It is the schema's name for the limb charged on total income, at whatever rate
+  the year's slab gives. The A.Y. 2022-23 ITR-3 fills it on a total income of
+  51,43,580. Say only what the return's own figures support: the ₹50 lakh
+  threshold, read off `TotalIncome`, and the marginal relief the return itself
+  shows as the difference between its `…BeforeMarginal` and final fields.
 
 **Part B-TTI is not laid out the same way in ITR-2 and ITR-3**
 - ITR-2 carries `Rebate87A`, `TaxPayableOnRebate`, `TotalSurcharge` and
@@ -718,6 +743,7 @@ test/fixtures/
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
+  itr3-oldregime-marginal-relief-ay2022-23.json // NewTaxRegime, marginal relief, VI-A subtotals
   itr4-…  itr1-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
@@ -744,6 +770,13 @@ lists deliberately rather than discovered by a reader of the repository.
 
 `--summary-only` prints the schema without writing anything, which is the right
 first step: **state the mapping plan from that output before writing a mapper.**
+
+A key may be catalogued as `parent.key` where the same name means different
+things in different places: `Description` is public form boilerplate under
+`Form_ITRn` and a client's own words naming a property under Schedule AL. Both
+that and `DoneeWithPanName` were found by the self-check refusing to write, which
+is the mechanism working — an uncatalogued field must stop the fixture, never
+reach the repository.
 
 Anonymise **by field name, never by a list of values.** A hand-written list is
 exactly the sort of thing that covers seven of a firm's twenty-two partners and
@@ -786,6 +819,7 @@ than it is:
 | ITR-3 | 2026-27 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |
+| ITR-3 | 2022-23 | ✓      | —    | — (level) | — not yet |
 
 The tax-payable path is written and rendered for both individual forms (the
 banner and the "Tax Payable" closing row), but no real return exercising it has

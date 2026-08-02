@@ -375,7 +375,7 @@
  "notes": [
   {
    "severity": "info",
-   "text": "This computation has been prepared from the ITR-2 return data (JSON) for A.Y. 2026-27 and the figures correspond to Schedule S, Schedule HP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+   "text": "This computation has been prepared from the ITR-2 return data (JSON) for A.Y. 2026-27 and the figures correspond to Schedule S, Schedule HP, Schedule CG, Schedule OS and Part B-TI / Part B-TTI of the return."
   },
   {
    "severity": "info",

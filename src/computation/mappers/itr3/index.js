@@ -6,10 +6,12 @@
  * and is wrong.
  */
 import { UnsupportedFormError } from "../../detect.js";
+import { mapItr3Ay2026 } from "./ay2026-27.js";
 import { mapItr3Ay2025 } from "./ay2025-26.js";
 import { mapItr3Ay2024 } from "./ay2024-25.js";
 
 const BY_YEAR = {
+  "2026-27": mapItr3Ay2026,
   "2025-26": mapItr3Ay2025,
   "2024-25": mapItr3Ay2024,
 };

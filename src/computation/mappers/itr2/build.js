@@ -30,7 +30,7 @@ import { reader, findUnmapped } from "../../unmapped.js";
 import { pyLabel, longDate } from "../../format.js";
 import {
   regimeLabel, capacityName, residentialStatus, personName, joinAddress,
-  filingSection, isNonOrdinaryFiling,
+  filingSection, isNonOrdinaryFiling, sourceSchedules,
 } from "../individual/labels.js";
 import {
   salaryRows, housePropertyRows, capitalGainsRows, otherSourcesRows,
@@ -171,7 +171,7 @@ export function buildItr2(body, ctx) {
   /* ---- notes ----------------------------------------------------------------- */
   notes.unshift({
     severity: "info",
-    text: `This computation has been prepared from the ITR-2 return data (JSON) for A.Y. ${ctx.ay} and the figures correspond to Schedule S, Schedule HP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return.`,
+    text: `This computation has been prepared from the ITR-2 return data (JSON) for A.Y. ${ctx.ay} and the figures correspond to ${sourceSchedules(body)} and Part B-TI / Part B-TTI of the return.`,
   });
   // Lower-case the first letter only. toLowerCase() on the whole label turns the
   // section reference into "s.115bac(1a)", which is not how a section is written

@@ -30,8 +30,12 @@
 const SI_SECTIONS = {
   1: "Tax on the accumulated balance of a recognised provident fund u/s 111",
   "1A": "Short-term capital gains u/s 111A",
-  21: "Long-term capital gains u/s 112, with indexation",
-  22: "Long-term capital gains u/s 112, at the proviso rate without indexation",
+  /* Not "with indexation", though the A.Y. 2024-25 schema words it that way.
+     The A.Y. 2026-27 ITR-3 carries code 21 at 12.5%, which is the amended s.112
+     rate charged WITHOUT indexation — so the qualifier is a year-dependent
+     claim, and the rate is printed alongside the caption anyway. */
+  21: "Long-term capital gains u/s 112",
+  22: "Long-term capital gains u/s 112, at the proviso rate",
   "21ciii": "Long-term capital gains u/s 112(1)(c)(iii) — unlisted securities of a non-resident",
   "2A": "Long-term capital gains u/s 112A",
   "5A1ai": "Dividend, interest and income from units purchased in foreign currency u/s 115A(1)(a)(i)",
@@ -212,6 +216,23 @@ export function regimeLabel(filingStatus) {
   const v = String(raw ?? "").trim().toUpperCase();
   if (v === "Y") return "Old regime — opted out of s.115BAC(1A)";
   if (v === "N") return "New regime u/s 115BAC(1A) (default)";
+
+  /* A.Y. 2026-27's ITR-3 asks neither. It asks instead whether Form 10-IEA was
+     filed — for this year (`F10IEACurrAYOldRegime`) or an earlier one
+     (`Form10IEAEarlierAYOldRegime`), because a business assessee who opts out
+     stays out until the option is withdrawn. Either "Y" is the old regime.
+
+     Verified, not inferred, on the both-"N" case: the A.Y. 2026-27 ITR-3 we hold
+     states tax at normal rates of 2,09,250 on an aggregate of 20,37,001, which
+     reconciles to the rupee against the s.115BAC(1A) slabs for that year
+     (nil / 5 / 10 / 15 / 20 / 25%) and against nothing else — the old-regime
+     slabs for an assessee of this age give 4,21,100. If a future return
+     disagrees, re-derive it the same way rather than trusting the field name. */
+  const current = String(fs.F10IEACurrAYOldRegime ?? "").trim().toUpperCase();
+  const earlier = String(fs.Form10IEAEarlierAYOldRegime ?? "").trim().toUpperCase();
+  if (current === "Y") return "Old regime — opted out of s.115BAC(1A) by Form 10-IEA filed for this year";
+  if (earlier === "Y") return "Old regime — opted out of s.115BAC(1A) by Form 10-IEA filed in an earlier year";
+  if (current === "N" || earlier === "N") return "New regime u/s 115BAC(1A) (default)";
   return "";
 }
 
@@ -283,6 +304,27 @@ export function residentialStatus(code) {
   return { RES: "Resident", NRI: "Non-Resident", NOR: "Resident but not ordinarily resident" }[
     String(code || "").trim().toUpperCase()
   ] || String(code || "");
+}
+
+/* Which schedules this return actually carries, for the note that says where
+   the figures came from. Naming Schedule S and Schedule HP on a return that has
+   neither — a proprietor with only business income and capital gains — tells a
+   reader to look for workings that do not exist. */
+const SOURCE_SCHEDULES = [
+  ["ScheduleS", "Schedule S"],
+  ["ScheduleHP", "Schedule HP"],
+  ["ITR3ScheduleBP", "Schedule BP"],
+  ["ScheduleCGFor23", "Schedule CG"],
+  ["ScheduleOS", "Schedule OS"],
+  ["ScheduleVIA", "Schedule VI-A"],
+];
+
+export function sourceSchedules(body) {
+  const b = body && typeof body === "object" ? body : {};
+  // Comma-separated, with no final "and" — the sentence this goes into ends
+  // "… and Part B-TI / Part B-TTI of the return", and two "and"s in a row read
+  // like a typo on a document somebody signs.
+  return SOURCE_SCHEDULES.filter(([key]) => b[key]).map(([, label]) => label).join(", ");
 }
 
 /** "PARIHAR" + "JAYANTSINH" + "RANJITSINH" → "Jayantsinh Ranjitsinh Parihar". */

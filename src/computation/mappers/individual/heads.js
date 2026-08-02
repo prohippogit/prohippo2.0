@@ -227,15 +227,18 @@ export function housePropertyRows(src) {
  * rather than asserted from a date.
  */
 const STCG_BLOCKS = [
-  ["SaleOnOtherAssets", "other assets"],
-  ["NRISecur115AD", "securities and units u/s 115AD"],
-  ["NRITransacSec48Dtl", "transactions taxable under the first proviso to s.48"],
+  [["SaleOnOtherAssets"], "other assets"],
+  [["NRISecur115AD"], "securities and units u/s 115AD"],
+  [["NRITransacSec48Dtl"], "transactions taxable under the first proviso to s.48"],
 ];
 const LTCG_BLOCKS = [
-  ["SaleofAssetNADtls", "assets other than those listed separately"],
-  ["SaleofBondsDebntr", "bonds or debentures"],
-  ["NRISaleOfEquityShareUs112A", "equity shares / units u/s 112A (non-resident)"],
-  ["NRISaleofForeignAsset", "assets acquired in foreign currency"],
+  // Two spellings, because the schema moved this block: A.Y. 2024-25 carries it
+  // flat as SaleofAssetNA, later years wrap it in SaleofAssetNADtls. Both are
+  // tried; see assetDetails() for why the shape inside is not assumed either.
+  [["SaleofAssetNADtls", "SaleofAssetNA"], "assets other than those listed separately"],
+  [["SaleofBondsDebntr"], "bonds or debentures"],
+  [["NRISaleOfEquityShareUs112A"], "equity shares / units u/s 112A (non-resident)"],
+  [["NRISaleofForeignAsset"], "assets acquired in foreign currency"],
 ];
 
 /* Land and building is the one class that does not share the s.48 shape.
@@ -293,19 +296,119 @@ function landAndBuildingWorking(src, base, indexed, rows) {
   return total;
 }
 
+/* Where a block's asset details actually sit.
+ *
+ * The same class of asset arrives in three shapes across the years we support:
+ *
+ *   A.Y. 2024-25  LongTermCapGain23.SaleofAssetNA               flat
+ *   A.Y. 2025-26  ....SaleofAssetNADtls.SaleofAssetNA_BE / _AE  split at 23 July 2024
+ *   A.Y. 2026-27  ....SaleofAssetNADtls.SaleofAssetNA           one again
+ *
+ * A table of paths per year would need editing every time the department moves a
+ * block, and would fail silently when nobody noticed — the 2026-27 return's
+ * 37,71,160 sale of unquoted shares surfaced in the review block for exactly
+ * that reason. So the shape is discovered instead: a node carrying the gain is a
+ * detail, a node whose children carry it is a wrapper.
+ */
+const isAssetDetail = (n) =>
+  n && typeof n === "object" && !Array.isArray(n) && ("CapgainonAssets" in n || "DeductSec48" in n);
+
+function assetDetails(src, base) {
+  const node = src.peek(base);
+  if (!node || typeof node !== "object") return [];
+  if (isAssetDetail(node)) return [{ path: base, when: "" }];
+  return Object.keys(node)
+    .filter((k) => isAssetDetail(node[k]))
+    .map((k) => ({
+      path: `${base}.${k}`,
+      // The suffix marks which side of the rate change the transfer fell on.
+      when: /_BE$/.test(k) ? "transferred before 23 July 2024"
+        : /_AE$/.test(k) ? "transferred on or after 23 July 2024" : "",
+    }));
+}
+
+/** Resolve a block to whichever of its spellings this year's return carries. */
+function blockBase(src, prefix, names) {
+  for (const n of names) if (src.peek(`${prefix}.${n}`)) return `${prefix}.${n}`;
+  return "";
+}
+
+/* Exemptions claimed against a gain — ss.54, 54B, 54EC, 54F. The section codes
+   are the schema's own enum; the grand total is what actually comes off. */
+function exemptionRows(src, base, rows) {
+  const claimed = src.claim(`${base}.ExemptionOrDednUs54.ExemptionOrDednUs54Dtls`) || [];
+  const total = src.num(`${base}.ExemptionOrDednUs54.ExemptionGrandTotal`);
+  if (!total) return;
+  const named = claimed.filter((e) => Number(e.ExemptionAmount || 0));
+  if (named.length === 1) {
+    rows.push(sub(`Less: Exemption u/s ${named[0].ExemptionSecCode}`, total, { ref: `Sec. ${named[0].ExemptionSecCode}` }));
+    return;
+  }
+  rows.push(sub("Less: Exemption claimed against the gain", total, {
+    note: named.length ? `Under ${named.map((e) => `s.${e.ExemptionSecCode} ${inr(e.ExemptionAmount)}`).join(", ")}` : undefined,
+  }));
+}
+
 /** One consideration → cost → gain working, for any block that carries a gain. */
-function assetWorking(src, base, caption, rows) {
+function assetWorking(src, base, caption, rows, when) {
   const gain = src.num(`${base}.CapgainonAssets`);
   const consideration = src.num(`${base}.FullConsideration`);
   if (!gain && !consideration) return 0;
-  rows.push(sub(`Full value of consideration — ${caption}`, consideration));
+
+  /* s.50CA is to unquoted shares what s.50C is to land: where the fair market
+     value worked out under rule 11UA exceeds what was actually received, the
+     FMV is substituted. The return carries all three figures; a computation
+     showing only "full value of consideration" would hide the substitution,
+     which is the figure an assessment argues about. */
+  const unqReceived = src.num(`${base}.FullValueConsdRecvUnqshr`);
+  const unqFmv = src.num(`${base}.FairMrktValueUnqshr`);
+  const unqAdopted = src.num(`${base}.FullValueConsdSec50CA`);
+  src.num(`${base}.FullValueConsdOthUnqshr`);
+
+  rows.push(sub(`Full value of consideration — ${caption}`, consideration, {
+    note: [
+      when,
+      unqAdopted && unqFmv > unqReceived
+        ? `Fair market value of the unquoted shares ${inr(unqFmv)} substituted u/s 50CA for the consideration of ${inr(unqReceived)}`
+        : "",
+    ].filter(Boolean).join(" · ") || undefined,
+  }));
   const cost = src.num(`${base}.DeductSec48.AquisitCost`);
   const improve = src.num(`${base}.DeductSec48.ImproveCost`);
   const expense = src.num(`${base}.DeductSec48.ExpOnTrans`);
   if (cost) rows.push(sub("Less: Cost of acquisition", cost));
   if (improve) rows.push(sub("Less: Cost of improvement", improve));
   if (expense) rows.push(sub("Less: Expenditure on transfer", expense));
-  src.restate([`${base}.DeductSec48.TotalDedn`, `${base}.BalanceCG`]);
+  // s.94(7) / 94(8): a loss on dividend or bonus stripping is not allowed, so
+  // the return adds it back on the way from the balance to the chargeable gain.
+  const stripped = src.num(`${base}.LossSec94of7Or94of8`);
+  if (stripped) {
+    rows.push(sub("Add: Loss disallowed u/s 94(7) / 94(8)", stripped, {
+      note: "Dividend or bonus stripping — the loss is not allowed",
+    }));
+  }
+  exemptionRows(src, base, rows);
+  src.restate([`${base}.DeductSec48.TotalDedn`, `${base}.BalanceCG`, `${base}.DeemedStcgOnAssets`]);
+  return gain;
+}
+
+/* A slump sale is not a s.48 working at all: s.50B charges the excess of the
+   consideration over the NET WORTH of the undertaking, and rule 11UAE fixes the
+   consideration itself. Neither figure is a cost of acquisition, so it gets its
+   own three lines rather than being forced into the shape above. */
+function slumpSaleWorking(src, base, rows) {
+  const gain = src.num(`${base}.CapgainonAssets`);
+  const consideration = src.num(`${base}.FullConsideration`);
+  if (!gain && !consideration) return 0;
+  const fmvE2 = src.num(`${base}.FMV11UAEii`);
+  const fmvE3 = src.num(`${base}.FMV11UAEiii`);
+  rows.push(sub("Full value of consideration — slump sale u/s 50B", consideration, {
+    ref: "Sec. 50B",
+    note: fmvE2 || fmvE3 ? `Fair market value under rule 11UAE: ${inr(Math.max(fmvE2, fmvE3))}` : undefined,
+  }));
+  rows.push(sub("Less: Net worth of the undertaking transferred", src.num(`${base}.NetWorthOfDivision`)));
+  exemptionRows(src, base, rows);
+  src.restate([`${base}.SlumpBalance`]);
   return gain;
 }
 
@@ -361,8 +464,10 @@ export function capitalGainsRows(src) {
       src.restate([`${at}.TotalCapGainonassets`]);
     }
     landAndBuildingWorking(src, "ScheduleCGFor23.ShortTermCapGainFor23.SaleofLandBuild", false, rows);
-    for (const [block, caption] of STCG_BLOCKS) {
-      assetWorking(src, `ScheduleCGFor23.ShortTermCapGainFor23.${block}`, caption, rows);
+    slumpSaleWorking(src, "ScheduleCGFor23.ShortTermCapGainFor23.SlumpSaleInStcg", rows);
+    for (const [names, caption] of STCG_BLOCKS) {
+      const base = blockBase(src, "ScheduleCGFor23.ShortTermCapGainFor23", names);
+      for (const d of base ? assetDetails(src, base) : []) assetWorking(src, d.path, caption, rows, d.when);
     }
     const deemed = src.num("ScheduleCGFor23.ShortTermCapGainFor23.TotalAmtDeemedStcg");
     if (deemed) rows.push(sub("Deemed short-term capital gain", deemed));
@@ -382,8 +487,11 @@ export function capitalGainsRows(src) {
       rows.push(sub("Less: Cost of acquisition", Number(s112a.Deductions112A || 0)));
     }
     landAndBuildingWorking(src, "ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild", true, rows);
-    for (const [block, caption] of LTCG_BLOCKS) {
-      assetWorking(src, `ScheduleCGFor23.LongTermCapGain23.${block}`, caption, rows);
+    const slump = blockBase(src, "ScheduleCGFor23.LongTermCapGain23", ["SlumpSaleInLtcgDtls.SlumpSaleInLtcg", "SlumpSaleInLtcg"]);
+    if (slump) slumpSaleWorking(src, slump, rows);
+    for (const [names, caption] of LTCG_BLOCKS) {
+      const base = blockBase(src, "ScheduleCGFor23.LongTermCapGain23", names);
+      for (const d of base ? assetDetails(src, base) : []) assetWorking(src, d.path, caption, rows, d.when);
     }
     const deemed = src.num("ScheduleCGFor23.LongTermCapGain23.TotalAmtDeemedLtcg");
     if (deemed) rows.push(sub("Deemed long-term capital gain", deemed));
@@ -593,9 +701,7 @@ export function taxRows(src, { siRows, totalIncome }) {
   const afterRebate = pick("TaxPayableOnRebate");
   rows.push(sub("Less: Rebate u/s 87A", rebate87A, { ref: "Sec. 87A" }));
   if (rebate87A) rows.push(sub("Tax after rebate", afterRebate));
-  rows.push(sub("Add: Surcharge", pick("TotalSurcharge"), {
-    note: totalIncome <= 5000000 ? "Total income does not exceed ₹ 50 lakh" : undefined,
-  }));
+  rows.push(sub("Add: Surcharge", pick("TotalSurcharge"), { note: surchargeNote(src, at, onTI, totalIncome) }));
   rows.push(sub("Add: Health & Education Cess @ 4%", pick("EducationCess")));
   rows.push(subtotal("Gross Tax Liability", src.num(`${at}.GrossTaxPayable`)));
 
@@ -614,6 +720,28 @@ export function taxRows(src, { siRows, totalIncome }) {
 
   src.claim(`${at}.TaxPayableOnDeemedTI`);
   return { rows, aggregate };
+}
+
+/* Why there is a surcharge, or why there is not — and what marginal relief did.
+ *
+ * A surcharge row carrying a lakh with no explanation is the line a client asks
+ * about first. The return states the charge before marginal relief and after it
+ * in parallel fields, so the relief is a subtraction of two figures the return
+ * itself makes, not one this document works out. */
+function surchargeNote(src, at, onTI, totalIncome) {
+  const of = (key) => (onTI[key] === undefined ? src.num(`${at}.${key}`) : Number(onTI[key] || 0));
+  const total = of("TotalSurcharge");
+  if (!total) return totalIncome <= 5000000 ? "Total income does not exceed ₹ 50 lakh" : undefined;
+
+  const parts = [];
+  if (of("SurchargeOnAboveCrore")) parts.push("Total income exceeds ₹ 1 crore");
+  // The surcharge on income taxable at special rates is charged apart, because
+  // the rate on it is capped whatever the total income is.
+  if (of("Surcharge25ofSI")) parts.push("Charged separately on the income taxable at special rates");
+
+  const before = of("SurchargeOnAboveCroreBeforeMarginal") + of("Surcharge25ofSIBeforeMarginal");
+  if (before > total) parts.push(`After marginal relief of ${inr(before - total)}`);
+  return parts.length ? parts.join(" · ") : undefined;
 }
 
 /** "s.234B 5,049 · s.234C 6,051" — which interest, not just how much. */
@@ -691,7 +819,11 @@ export function taxesPaidRows(src, { aggregate }) {
 
   // Advance tax and self-assessment tax are one challan each. Listing them lets
   // a reader tie the figure to a receipt without opening the return.
-  const challans = src.claim("ScheduleIT.TaxPayment") || [];
+  // In date order. The return lists challans in whatever order they were keyed,
+  // which puts a March instalment above a June one and makes a reader check the
+  // dates twice to see that the advance tax was paid when it was due.
+  const challans = [...(src.claim("ScheduleIT.TaxPayment") || [])]
+    .sort((a, b) => String(a.DateDep || "").localeCompare(String(b.DateDep || "")));
   if (challans.length && (advance || selfAssessment)) {
     rows.push(columnHeader("Advance Tax and Self-Assessment Tax — BSR code / challan", { ref: "Date" }));
     for (const c of challans) {

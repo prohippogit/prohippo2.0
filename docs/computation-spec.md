@@ -90,12 +90,14 @@ src/computation/
       index.js         detects AY, delegates
       ay2026-27.js     registration + a home for that year's divergences
       ay2025-26.js     ditto
-      build.js         the workings, shared by both years
+      ay2024-25.js     ditto
+      build.js         the workings, shared by every year
     itr3/
       index.js
-      ay2025-26.js     registration + a home for that year's divergences
+      ay2026-27.js     registration + a home for that year's divergences
+      ay2025-26.js     ditto
       ay2024-25.js     ditto
-      build.js         the workings, shared by both years
+      build.js         the workings, shared by every year
       businessHead.js  Schedule BP — the head ITR-2 has no schedule for
     itr5/
       index.js
@@ -636,6 +638,35 @@ Recorded so nobody has to rediscover them.
 - `IntrstPay` gains `FeeFurnish234I` alongside the s.234 interest.
 - `PersonalInfo` gains a `SecondaryAdd` flag and an `AlternateAddress` block.
 
+**What differs between A.Y. 2025-26 and 2026-27 (ITR-3)**
+- The regime is asked as neither `OptOutNewTaxRegime` nor `No_OptOutNewTaxReg`.
+  It is asked as **Form 10-IEA flags**: `F10IEACurrAYOldRegime` for this year and
+  `Form10IEAEarlierAYOldRegime` for an earlier one, because a business assessee
+  who opts out stays out until the option is withdrawn. Either `"Y"` is the old
+  regime. Verified on the both-`"N"` case the same way §10 requires everywhere
+  else: 2,09,250 on an aggregate of 20,37,001 is the s.115BAC(1A) table for
+  A.Y. 2026-27 and nothing else — the old-regime slabs give 4,21,100.
+- Schedule CG moved the "other assets" block again. See the note on
+  `SaleofAssetNA` below; the mapper discovers the shape rather than reading a
+  path.
+- `TotAfterAddToPLDeprOthSpecInc` is left nil on a return whose adjusted profit
+  is 16,65,434. A nil subtotal there is a field the utility did not fill, not a
+  nil profit, so it is not printed.
+
+**Schedule CG's "other assets" block moves between years**
+- A.Y. 2024-25 carries it flat as `LongTermCapGain23.SaleofAssetNA`; 2025-26
+  wraps it as `SaleofAssetNADtls.SaleofAssetNA_BE` / `_AE`, split at the 23 July
+  2024 rate change; 2026-27 puts a single `SaleofAssetNADtls.SaleofAssetNA` back.
+- A fixed path silently missed the 2026-27 return's 37,71,160 sale of unquoted
+  shares, which surfaced in the review block instead. The mapper now **discovers
+  the shape**: a node carrying `CapgainonAssets` or `DeductSec48` is a detail, a
+  node whose children carry them is a wrapper. Prefer this to a per-year table
+  wherever the department has moved a block once already.
+- The block carries the **s.50CA** figures alongside — consideration received for
+  unquoted shares, the rule 11UA fair market value, and the higher of the two
+  actually adopted. s.50CA is to unquoted shares what s.50C is to land, and the
+  substitution is printed as a note where it bites, for the same reason.
+
 **What differs between A.Y. 2024-25 and 2025-26 (ITR-2)**
 - Capital gains: 2024-25 is the last year before the rate change, so Part B-TI
   carries a 15% short-term and a 10% long-term bucket and no others, and
@@ -686,6 +717,7 @@ test/fixtures/
   itr2-oldregime-hploss-via-ay2024-25.json      // old regime, HP loss u/s 71, VI-A caps, refund
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
+  itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
   itr4-…  itr1-…                                 // add as forms are supported
 test/golden/
   <fixture-name>.model.json                   // expected ComputationDocument
@@ -751,6 +783,7 @@ than it is:
 | ITR-2 | 2026-27 | ✓      | —    | ✓      | — not yet   |
 | ITR-2 | 2025-26 | ✓      | ✓    | ✓      | — not yet   |
 | ITR-2 | 2024-25 | ✓      | ✓    | ✓      | — not yet   |
+| ITR-3 | 2026-27 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2025-26 | ✓      | —    | — (level) | — not yet |
 | ITR-3 | 2024-25 | ✓      | —    | — (level) | — not yet |
 

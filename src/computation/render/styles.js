@@ -202,6 +202,17 @@ tr.r-total .amt.loss { color: #FFC9C9; }
 .review td { font-size: 8pt; padding: 2px 0; font-family: ui-monospace, monospace; }
 .review td:last-child { text-align: right; font-weight: 700; }
 
+/* ---- the standing declaration ------------------------------------------
+   Full width under the notes and signature, set apart by a rule rather than a
+   panel: it is a term of the document, not a finding about the return. Kept
+   with the block above it so it can never print alone on a trailing page. */
+.declaration {
+  break-inside: avoid; break-before: avoid;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--hairline);
+  font-size: 8pt; line-height: 1.5; color: var(--muted);
+}
+.declaration strong { color: var(--navy-700); letter-spacing: .04em; text-transform: uppercase; font-size: 7.5pt; margin-right: 4px; }
+
 @page { size: A4; margin: 12mm 11mm 16mm 11mm; }
 `;
 }

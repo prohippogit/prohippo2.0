@@ -575,9 +575,31 @@ Recorded so nobody has to rediscover them.
 - Name the kind of loss, and print the date each earlier year's return was
   filed beside it: s.80 allows the carry-forward only where that return was in
   time, which is the first thing anyone checks about a brought-forward loss.
-- The `LossCFCurrentAssmntYear…` keys carry a year-like suffix that is NOT
-  reliably the assessment year. Identify the row by the filing date the return
-  states, not by the key.
+**The assessment year a Schedule CFL slot belongs to**
+- The numeric suffix on `LossCFCurrentAssmntYear2026` is the year the assessment
+  year ENDS in, so that slot holds the loss of A.Y. 2025-26. **Verified, not
+  assumed** — against one assessee's five consecutive returns, which is the only
+  evidence that can settle it: slot `…2024` carries 15,13,184 + 1,94,592, being
+  the A.Y. 2023-24 return's own loss; `…2025` carries 2,91,221, being the
+  A.Y. 2024-25 return's; `…2026` carries 12,74,083, being the A.Y. 2025-26
+  return's. Each differs from that return's stated loss only by that year's
+  unabsorbed depreciation, which moves into Schedule UD, and each carries that
+  return's own filing date.
+- `LossCFCurrentAssmntYear` **without a suffix** and `LossCFFromPrev3rdYearFromAY`
+  carry no derivable year — the eight-year window slides, so a fixed name cannot
+  mean a fixed year. Those rows print the filing date and say on the row that the
+  return does not state the year, rather than inferring one from the date.
+- Print the date that year's return was filed beside every row: s.80 allows the
+  carry-forward only where that return was in time.
+
+**The carry-forward reconciles, and the table shows it**
+- Four figures, all the return's own: `TotalOfBFLossesEarlierYrs` brought
+  forward, plus `CurrentAYloss`, less `AdjTotBFLossInBFLA` set off in the year,
+  equals `TotalLossCFSummary` carried forward.
+- Where they do not close, the difference is a loss the return lists as brought
+  forward, does not set off, and does not carry forward. Give it a line of its
+  own rather than leaving a reader to find it by subtracting — 5,65,132 on the
+  A.Y. 2024-25 return.
 
 **Schedule CFL states each business loss twice**
 - Every `LossCF…` block carries the same figure against `BrtFwdBusLoss` and

@@ -957,6 +957,31 @@ const CFL_KINDS = [
 const cflKinds = (src, base) =>
   CFL_KINDS.map(([key, label]) => [label, src.num(`${base}.${key}`)]).filter(([, v]) => v);
 
+/* The assessment year a Schedule CFL slot belongs to.
+ *
+ * The numeric suffix on `LossCFCurrentAssmntYear2026` is the year the assessment
+ * year ENDS in, so that slot holds the loss of A.Y. 2025-26. This is not read off
+ * the name and hoped for — it is checked against the assessee's own consecutive
+ * returns, which is the only evidence that can settle it:
+ *
+ *   slot …2024  15,13,184 + 1,94,592   = the A.Y. 2023-24 return's own loss
+ *   slot …2025   2,91,221              = the A.Y. 2024-25 return's own loss
+ *   slot …2026  12,74,083              = the A.Y. 2025-26 return's own loss
+ *
+ * each differing only by that year's unabsorbed depreciation, which moves into
+ * Schedule UD, and each carrying that return's own filing date.
+ *
+ * `LossCFCurrentAssmntYear` without a suffix, and `LossCFFromPrev3rdYearFromAY`,
+ * carry no year that can be derived — the window of eight years slides, so a
+ * fixed name cannot mean a fixed year. Those rows are identified by the filing
+ * date the return does state, and say so rather than guessing. */
+function cflAssessmentYear(key) {
+  const m = /^LossCFCurrentAssmntYear(\d{4})$/.exec(key);
+  if (!m) return "";
+  const end = Number(m[1]);
+  return `A.Y. ${end - 1}-${String(end).slice(2)}`;
+}
+
 export function carriedForwardRows(src, ctx) {
   const rows = [];
 
@@ -970,32 +995,59 @@ export function carriedForwardRows(src, ctx) {
    * The suffix on those keys is year-like but is NOT reliably the assessment
    * year, so each row is identified by the filing date the return does state. */
   const earlier = Object.keys(src.peek("ScheduleCFL") || {}).filter((k) => /^LossCF/.test(k));
-  let listed = 0;
   for (const k of earlier) {
     const base = `ScheduleCFL.${k}.CarryFwdLossDetail`;
     const filed = longDate(src.val(`${base}.DateOfFiling`));
+    const ay = cflAssessmentYear(k);
     for (const [label, v] of cflKinds(src, base)) {
-      listed += v;
-      rows.push(sub(label, v, { cols: { ref: filed ? `Return filed ${filed}` : "Brought forward" } }));
+      rows.push(sub(ay ? `${ay} · ${label}` : label, v, {
+        cols: { ref: filed || "" },
+        note: ay ? undefined : "The return does not state the assessment year for this row",
+      }));
     }
     src.restate([`${base}.BrtFwdBusLoss`, `${base}.AdjustAccTax115BACAmt`]);
   }
 
-  for (const [label, v] of cflKinds(src, "ScheduleCFL.CurrentAYloss.LossSummaryDetail")) {
-    listed += v;
-    rows.push(sub(label, v, { cols: { ref: `A.Y. ${ctx.ay}` } }));
+  /* The reconciliation, every figure of it the return's own.
+   *
+   *   brought forward from earlier years   ScheduleCFL.TotalOfBFLossesEarlierYrs
+   * + the loss of this year                ScheduleCFL.CurrentAYloss
+   * − set off against this year's income   ScheduleCFL.AdjTotBFLossInBFLA
+   * = carried forward                      ScheduleCFL.TotalLossCFSummary
+   *
+   * Where those four do not close, the difference is a loss the return lists as
+   * brought forward, does not set off, and does not carry forward. It gets a
+   * line of its own rather than being left for a reader to find by subtracting:
+   * on the A.Y. 2024-25 return it is 5,65,132. */
+  const broughtForward = cflKinds(src, "ScheduleCFL.TotalOfBFLossesEarlierYrs.LossSummaryDetail");
+  const currentYear = cflKinds(src, "ScheduleCFL.CurrentAYloss.LossSummaryDetail");
+  const setOff = cflKinds(src, "ScheduleCFL.AdjTotBFLossInBFLA.LossSummaryDetail");
+  const totals = cflKinds(src, "ScheduleCFL.TotalLossCFSummary.LossSummaryDetail");
+  const sum = (xs) => xs.reduce((s, [, v]) => s + v, 0);
+  const lossTotal = sum(totals);
+
+  const ud = unabsorbedDepreciationRows(src, ctx);
+  if (!rows.length && !currentYear.length && !ud.rows.length) {
+    src.claim("ScheduleCFL");
+    src.claim("ITR3ScheduleUD");
+    return { rows: [], note: "" };
   }
 
-  // The closing figure is the return's own per-kind total, not this year's loss.
-  const totals = cflKinds(src, "ScheduleCFL.TotalLossCFSummary.LossSummaryDetail");
-  const lossTotal = totals.reduce((s, [, v]) => s + v, 0);
-  const ud = unabsorbedDepreciationRows(src, ctx);
-  if ((!rows.length || !totals.length) && !ud.rows.length) {
-    src.claim("ScheduleCFL");
-    return [];
-  }
-  if (rows.length) {
-    rows.unshift(columnHeader("Nature of loss", { ref: "Year it arose" }));
+  if (rows.length || currentYear.length) {
+    rows.unshift(columnHeader("Assessment Year / Nature of loss", { ref: "Return for that year filed on" }));
+    if (rows.length > 1) rows.push(subtotal("Total Brought Forward from Earlier Years", sum(broughtForward)));
+    for (const [label, v] of currentYear) {
+      rows.push(sub(`Add: Loss of the current year — ${label.toLowerCase()}`, v, { cols: { ref: `A.Y. ${ctx.ay}` } }));
+    }
+    if (sum(setOff)) {
+      rows.push(sub("Less: Set off against the income of the year", sum(setOff), { ref: "Sch. BFLA" }));
+    }
+    const lapsed = sum(broughtForward) + sum(currentYear) - sum(setOff) - lossTotal;
+    if (lapsed) {
+      rows.push(sub("Less: Loss of an earlier year not carried forward", lapsed, {
+        note: "Listed above as brought forward, but neither set off this year nor carried to the next",
+      }));
+    }
     // With more than one kind of loss the per-kind figure is what a later year
     // needs, because each is set off only against its own head. With one kind the
     // rows above already name it and a subtotal would just repeat the total.
@@ -1006,20 +1058,9 @@ export function carriedForwardRows(src, ctx) {
   }
   rows.push(...ud.rows);
 
-  /* The rows above will not always add to the total, and the difference is a
-     fact worth stating rather than smoothing over: a loss listed as brought
-     forward may no longer be available to carry further. The A.Y. 2024-25
-     return lists 54,50,260 of earlier-year business loss and carries 51,76,593
-     of it forward. Both figures are the return's own; which of them a reader
-     needs depends on the question they are asking. */
-  const carried = lossTotal + ud.total;
-  const note = listed + ud.total !== carried
-    ? `The losses listed above total ${inr(listed + ud.total)}; of that, ${inr(carried)} is carried forward to subsequent years per the return.`
-    : "";
-
   src.claim("ScheduleCFL");
   src.claim("ITR3ScheduleUD");
-  return { rows, note };
+  return { rows, note: "" };
 }
 
 /* Unabsorbed depreciation u/s 32(2) — ITR3ScheduleUD.

@@ -1,20 +1,20 @@
 {
  "meta": {
   "form": "ITR3",
-  "assessmentYear": "2025-26",
-  "previousYear": "2024-25",
+  "assessmentYear": "2026-27",
+  "previousYear": "2025-26",
   "schemaVersion": "Ver1.0",
   "generatedAt": "2026-01-01T00:00:00.000Z"
  },
  "assessee": {
   "name": "SAMPLE NAME 1 SAMPLE NAME 2 SAMPLE NAME 3",
-  "pan": "AAAPZ1007A",
+  "pan": "AAAPZ1000A",
   "status": "Individual",
-  "address": "SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 382019",
+  "address": "SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, SAMPLE PLACE 6, 382345",
   "email": "sample@example.com",
   "mobile": "9800000001",
   "residentialStatus": "Resident",
-  "dateOfFormation": "1971-06-01",
+  "dateOfFormation": "1958-07-31",
   "facts": [
    {
     "label": "Status",
@@ -22,7 +22,7 @@
    },
    {
     "label": "Date of birth",
-    "value": "01 June 1971"
+    "value": "31 July 1958"
    },
    {
     "label": "Residential status",
@@ -38,96 +38,132 @@
    },
    {
     "label": "Due date",
-    "value": "31 October 2025"
+    "value": "31 August 2026"
    },
    {
     "label": "Business",
-    "value": "SAMPLE NAME 11"
-   },
-   {
-    "label": "Directorships",
-    "value": "Director in 3 companies"
+    "value": "SAMPLE NAME 4"
    },
    {
     "label": "E-mail / mobile",
     "value": "sample@example.com\n+91 9800000001"
    }
   ],
-  "constitutionTitle": "Partner in firms",
-  "partners": [
-   {
-    "name": "SAMPLE NAME 4",
-    "pan": "AAAFZ1006A",
-    "detail": "PAN AAAFZ1006A · Share 15% · Capital balance 51,25,281"
-   },
-   {
-    "name": "SAMPLE NAME 5",
-    "pan": "AAAFZ1004A",
-    "detail": "PAN AAAFZ1004A · Share 2.5% · Capital balance 3,97,824 · audited u/s 44AB"
-   },
-   {
-    "name": "SAMPLE NAME 6",
-    "pan": "AAAFZ1003A",
-    "detail": "PAN AAAFZ1003A · Share 3% · Capital balance 1,01,05,331 · audited u/s 44AB"
-   },
-   {
-    "name": "SAMPLE NAME 7",
-    "pan": "AAAFZ1005A",
-    "detail": "PAN AAAFZ1005A · Share 12%"
-   }
-  ]
+  "constitutionTitle": "",
+  "partners": []
  },
  "sections": [
   {
-   "id": "SALARY",
+   "id": "BP",
    "letter": "A",
-   "title": "Income from Salaries",
+   "title": "Profits and Gains of Business or Profession",
    "tone": "navy",
    "rows": [
     {
      "kind": "sub",
-     "label": "Salary as per section 17(1)",
-     "amount": 600000,
-     "ref": "Sch. S",
-     "note": "SAMPLE NAME 12 · Basic salary"
-    },
-    {
-     "kind": "subtotal",
-     "label": "Gross Salary",
-     "amount": 600000
+     "label": "Net profit before tax as per the profit & loss account",
+     "amount": 10877536,
+     "ref": "Sch. BP"
     },
     {
      "kind": "sub",
-     "label": "Less: Standard deduction u/s 16(ia)",
-     "amount": 75000,
-     "ref": "Sec. 16(ia)"
+     "label": "Less: Income credited to the profit & loss account, assessable under capital gains",
+     "amount": 8850661
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Income credited to the profit & loss account, assessable under other sources",
+     "amount": 364035,
+     "note": "Being income from sources other than dividend"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Depreciation debited to the profit & loss account",
+     "amount": 402986
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Depreciation allowable u/s 32",
+     "amount": 400392,
+     "ref": "Sec. 32",
+     "note": "Block-wise workings are in Schedules DPM, DOA and DEP of the return"
     },
     {
      "kind": "total",
-     "label": "Income chargeable under the head Salaries",
-     "amount": 525000
+     "label": "Income chargeable under the head Profits and Gains of Business or Profession",
+     "amount": 1665434,
+     "isLoss": false
     }
    ],
    "footnote": "",
    "omitIfAllNil": true
   },
   {
-   "id": "BP",
+   "id": "CG",
    "letter": "B",
-   "title": "Profits and Gains of Business or Profession",
+   "title": "Capital Gains",
    "tone": "navy",
    "rows": [
     {
+     "kind": "columnHeader",
+     "label": "Short-term capital gains",
+     "amount": null,
+     "cols": {
+      "ref": "Sch. CG"
+     }
+    },
+    {
      "kind": "sub",
-     "label": "Income not credited to the profit & loss account — interest from firms in which the assessee is a partner",
-     "amount": 572009,
-     "ref": "Sch. BP"
+     "label": "Full value of consideration — equity shares / units (STT paid)",
+     "amount": 835867
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Cost of acquisition",
+     "amount": 772329
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Short-term Capital Gains",
+     "amount": 63538
+    },
+    {
+     "kind": "columnHeader",
+     "label": "Long-term capital gains",
+     "amount": null,
+     "cols": {
+      "ref": "Sch. 112A"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Full value of consideration — equity shares / units u/s 112A",
+     "amount": 22302570
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Cost of acquisition",
+     "amount": 14447213
+    },
+    {
+     "kind": "sub",
+     "label": "Full value of consideration — assets other than those listed separately",
+     "amount": 3771160
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Cost of acquisition",
+     "amount": 2545635
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Long-term Capital Gains",
+     "amount": 9080893
     },
     {
      "kind": "total",
-     "label": "Income chargeable under the head Profits and Gains of Business or Profession",
-     "amount": 572009,
-     "isLoss": false
+     "label": "Income chargeable under the head Capital Gains",
+     "amount": 9144431
     }
    ],
    "footnote": "",
@@ -142,39 +178,33 @@
     {
      "kind": "sub",
      "label": "Dividend income",
-     "amount": 12735,
+     "amount": 7532,
      "ref": "Sch. OS"
     },
     {
      "kind": "sub",
      "label": "Interest from savings bank accounts",
-     "amount": 11823
+     "amount": 71458
     },
     {
      "kind": "sub",
      "label": "Interest on term / fixed deposits",
-     "amount": 101005
+     "amount": 29993
     },
     {
      "kind": "sub",
      "label": "Interest received from others",
-     "amount": 1454493
+     "amount": 262584
     },
     {
      "kind": "subtotal",
      "label": "Gross income chargeable under Other Sources",
-     "amount": 1580056
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Deductions u/s 57",
-     "amount": 575623,
-     "ref": "Sec. 57"
+     "amount": 371567
     },
     {
      "kind": "total",
      "label": "Income chargeable under the head Other Sources",
-     "amount": 1004433
+     "amount": 371567
     }
    ],
    "footnote": "",
@@ -189,7 +219,7 @@
     {
      "kind": "head",
      "label": "Income from Salaries",
-     "amount": 525000,
+     "amount": 0,
      "ref": "Sch. S"
     },
     {
@@ -201,30 +231,30 @@
     {
      "kind": "head",
      "label": "Profits and Gains of Business or Profession",
-     "amount": 572009,
+     "amount": 1665434,
      "ref": "Sch. BP"
     },
     {
      "kind": "head",
      "label": "Capital Gains",
-     "amount": 0,
+     "amount": 9144431,
      "ref": "Sch. CG"
     },
     {
      "kind": "head",
      "label": "Income from Other Sources",
-     "amount": 1004433,
+     "amount": 371567,
      "ref": "Sch. OS"
     },
     {
      "kind": "subtotal",
      "label": "Total of Heads of Income",
-     "amount": 2101442
+     "amount": 11181432
     },
     {
      "kind": "subtotal",
      "label": "Gross Total Income",
-     "amount": 2101442
+     "amount": 11181432
     },
     {
      "kind": "sub",
@@ -235,19 +265,18 @@
     {
      "kind": "total",
      "label": "Total Income (rounded off u/s 288A)",
-     "amount": 2101440
+     "amount": 11181432
     },
     {
      "kind": "sub",
-     "label": "Add: Net agricultural income, aggregated for rate purposes only",
-     "amount": 110000,
-     "ref": "Sch. EI",
-     "note": "Exempt u/s 10(1); it does not enter total income"
+     "label": "of which, income taxable at special rates",
+     "amount": 9144431,
+     "ref": "Sch. SI"
     },
     {
      "kind": "sub",
-     "label": "Aggregate income on which the rate is determined",
-     "amount": 2211440
+     "label": "balance taxable at the rates in force",
+     "amount": 2037001
     }
    ],
    "footnote": "",
@@ -262,19 +291,34 @@
     {
      "kind": "sub",
      "label": "Tax on income at the rates in force",
-     "amount": 353432,
+     "amount": 209250,
      "ref": "Para A, Sch. I"
     },
     {
      "kind": "sub",
-     "label": "Less: Rebate on agricultural income aggregated for rate purposes",
-     "amount": 5500,
-     "note": "Agricultural income is exempt; it is aggregated only to fix the rate"
+     "label": "Short-term capital gains u/s 111A — at 20%",
+     "amount": 12708,
+     "note": "on 63,538",
+     "ref": "Sch. SI"
+    },
+    {
+     "kind": "sub",
+     "label": "Long-term capital gains u/s 112 — at 12.5%",
+     "amount": 153191,
+     "note": "on 12,25,525",
+     "ref": "Sch. SI"
+    },
+    {
+     "kind": "sub",
+     "label": "Long-term capital gains u/s 112A — at 12.5%",
+     "amount": 966296,
+     "note": "on 78,55,368",
+     "ref": "Sch. SI"
     },
     {
      "kind": "subtotal",
      "label": "Tax on Total Income",
-     "amount": 347932
+     "amount": 1341445
     },
     {
      "kind": "sub",
@@ -285,18 +329,18 @@
     {
      "kind": "sub",
      "label": "Add: Surcharge",
-     "amount": 0,
-     "note": "Total income does not exceed ₹ 50 lakh"
+     "amount": 201217,
+     "note": "Total income exceeds ₹ 1 crore"
     },
     {
      "kind": "sub",
      "label": "Add: Health & Education Cess @ 4%",
-     "amount": 13917
+     "amount": 61706
     },
     {
      "kind": "subtotal",
      "label": "Gross Tax Liability",
-     "amount": 361849
+     "amount": 1604368
     },
     {
      "kind": "sub",
@@ -306,16 +350,16 @@
     {
      "kind": "sub",
      "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
-     "amount": 11100,
-     "note": "s.234B 5,049 · s.234C 6,051"
+     "amount": 75299,
+     "note": "s.234B 36,172 · s.234C 39,127"
     },
     {
      "kind": "total",
      "label": "Total Tax and Interest Payable",
-     "amount": 372949
+     "amount": 1679667
     }
    ],
-   "footnote": "Alternate Minimum Tax u/s 115JC is Nil, so tax under the regular provisions of 3,61,849 is payable.",
+   "footnote": "Alternate Minimum Tax u/s 115JC is Nil, so tax under the regular provisions of 16,04,368 is payable.",
    "omitIfAllNil": false
   },
   {
@@ -334,35 +378,26 @@
     },
     {
      "kind": "sub",
-     "label": "AAAB00001A",
-     "amount": 30000,
-     "note": "Interest other than interest on securities · Sec. 194A",
-     "cols": {
-      "ref": "3,00,000"
-     }
-    },
-    {
-     "kind": "sub",
      "label": "AAAA00000A",
-     "amount": 15603,
+     "amount": 0,
      "note": "Interest other than interest on securities · Sec. 194A",
      "cols": {
-      "ref": "1,56,025"
+      "ref": "84"
      }
     },
     {
      "kind": "sub",
      "label": "AAAC00002A",
-     "amount": 10100,
-     "note": "Interest other than interest on securities · Sec. 194A · 36 entries",
+     "amount": 0,
+     "note": "Income in respect of units · Sec. 194K",
      "cols": {
-      "ref": "1,01,005"
+      "ref": "82"
      }
     },
     {
      "kind": "subtotal",
      "label": "Total Tax Deducted at Source",
-     "amount": 55703,
+     "amount": 0,
      "ref": "Sch. TDS"
     },
     {
@@ -375,38 +410,54 @@
     },
     {
      "kind": "sub",
-     "label": "0000000 · 99999",
+     "label": "0000000 · 9999",
      "amount": 250000,
      "cols": {
-      "ref": "13 December 2024"
+      "ref": "05 June 2025"
      }
     },
     {
      "kind": "sub",
-     "label": "0000000 · 999",
-     "amount": 560,
+     "label": "0000000 · 99999",
+     "amount": 150000,
      "cols": {
-      "ref": "01 December 2025"
+      "ref": "09 September 2025"
      }
     },
     {
      "kind": "sub",
-     "label": "0000000 · 999",
-     "amount": 66690,
+     "label": "0000000 · 99999",
+     "amount": 300000,
      "cols": {
-      "ref": "01 December 2025"
+      "ref": "07 January 2026"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "0000000 · 9999",
+     "amount": 400000,
+     "cols": {
+      "ref": "08 July 2026"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "0000000 · 99999",
+     "amount": 579667,
+     "cols": {
+      "ref": "12 July 2026"
      }
     },
     {
      "kind": "sub",
      "label": "Advance Tax Paid",
-     "amount": 250000,
+     "amount": 700000,
      "ref": "Sch. IT"
     },
     {
      "kind": "sub",
      "label": "Self-Assessment Tax Paid",
-     "amount": 67250,
+     "amount": 979667,
      "ref": "Sch. IT"
     },
     {
@@ -418,12 +469,12 @@
     {
      "kind": "subtotal",
      "label": "Total Taxes Paid",
-     "amount": 372953
+     "amount": 1679667
     },
     {
      "kind": "sub",
      "label": "Less: Total Tax and Interest Payable",
-     "amount": 372949
+     "amount": 1679667
     },
     {
      "kind": "total",
@@ -440,27 +491,19 @@
  "notes": [
   {
    "severity": "info",
-   "text": "This computation has been prepared from the ITR-3 return data (JSON) for A.Y. 2025-26 and the figures correspond to Schedule S, Schedule HP, Schedule BP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+   "text": "This computation has been prepared from the ITR-3 return data (JSON) for A.Y. 2026-27 and the figures correspond to Schedule BP, Schedule CG, Schedule OS and Part B-TI / Part B-TTI of the return."
   },
   {
    "severity": "info",
    "text": "The return is filed under the new regime u/s 115BAC(1A) (default)."
-  },
-  {
-   "severity": "info",
-   "text": "Net agricultural income of 1,10,000 is exempt u/s 10(1) and has been aggregated with total income only to determine the rate of tax, the tax on it being allowed as a rebate above."
-  },
-  {
-   "severity": "info",
-   "text": "The assessee is a partner in 4 firms. Interest, salary, bonus and commission from a firm are chargeable under the head Business or Profession; the share of the firm's profit is exempt u/s 10(2A)."
   }
  ],
  "signatory": {
-  "name": "SAMPLE NAME 14",
+  "name": "SAMPLE NAME 48",
   "capacity": "Self",
-  "pan": "AAAPZ1007A",
-  "place": "SAMPLE PLACE 8",
-  "date": "2025-12-01"
+  "pan": "AAAPZ1000A",
+  "place": "SAMPLE PLACE 6",
+  "date": "2026-07-12"
  },
  "unmapped": []
 }

@@ -42,7 +42,7 @@ import { reader, findUnmapped } from "../../unmapped.js";
 import { pyLabel, longDate } from "../../format.js";
 import {
   regimeLabel, capacityName, residentialStatus, personName, joinAddress,
-  filingSection, isNonOrdinaryFiling,
+  filingSection, isNonOrdinaryFiling, sourceSchedules,
 } from "../individual/labels.js";
 import {
   salaryRows, housePropertyRows, capitalGainsRows, otherSourcesRows,
@@ -249,7 +249,7 @@ export function buildItr3(body, ctx) {
   /* ---- notes ----------------------------------------------------------------- */
   notes.unshift({
     severity: "info",
-    text: `This computation has been prepared from the ITR-3 return data (JSON) for A.Y. ${ctx.ay} and the figures correspond to Schedule S, Schedule HP, Schedule BP, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return.`,
+    text: `This computation has been prepared from the ITR-3 return data (JSON) for A.Y. ${ctx.ay} and the figures correspond to ${sourceSchedules(body)} and Part B-TI / Part B-TTI of the return.`,
   });
   if (regime) {
     notes.push({ severity: "info", text: `The return is filed under the ${regime[0].toLowerCase()}${regime.slice(1)}.` });

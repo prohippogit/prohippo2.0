@@ -42,6 +42,11 @@ const SUBTREES = [
   "ScheduleICDS", // ICDS adjustments, already inside the Schedule BP figure
   "CreationInfo", // utility version numbers
   "ScheduleAMTC", // AMT credit brought forward/set off; shown only when AMT bites
+  // Assets and liabilities, disclosed once total income exceeds ₹ 50 lakh. It is
+  // a statement of what the assessee owns on 31 March, and no figure in it enters
+  // the computation of income — jewellery of 40 lakh in the review block would be
+  // a false alarm on every large return, which is worse than useless.
+  "ScheduleAL",
 ];
 
 /* Numeric leaves that are identifiers, rates or dates rather than amounts. */

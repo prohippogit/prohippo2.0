@@ -35,11 +35,19 @@ const OTHER_HEAD_CREDITS = [
   ["HouseProperty", "house property"],
   ["CapitalGains", "capital gains"],
   ["OtherSources", "other sources"],
-  ["Dividend", "dividend"],
-  ["OtherThanDividend", "sources other than dividend"],
   ["Us115BBF", "royalty on patents u/s 115BBF"],
   ["Us115BBG", "carbon credits u/s 115BBG"],
   ["115BBH", "virtual digital assets u/s 115BBH"],
+];
+
+/* `Dividend` and `OtherThanDividend` are the two PARTS of `OtherSources`, not
+   two more credits beside it — the A.Y. 2026-27 return states 3,64,035 against
+   `OtherSources` and the same 3,64,035 against `OtherThanDividend`, and only one
+   of them is subtracted on the way to the adjusted profit. Listing all three as
+   "Less:" lines would have printed a working that does not add up. */
+const OTHER_SOURCES_PARTS = [
+  ["Dividend", "dividend"],
+  ["OtherThanDividend", "sources other than dividend"],
 ];
 
 /* Presumptive sections. The P&L figure for such a business is taken out and the
@@ -130,7 +138,15 @@ export function businessRows(src) {
   n("PLUs44sChapXIIG");
 
   for (const [key, what] of OTHER_HEAD_CREDITS) {
-    line(`Less: Income credited to the profit & loss account, assessable under ${what}`, n(`IncRecCredPLOthHeadDtls.${key}`));
+    const amt = n(`IncRecCredPLOthHeadDtls.${key}`);
+    // The parts of "other sources", where the return breaks it down and the
+    // breakdown says something the parent line does not.
+    const parts = key !== "OtherSources" ? []
+      : OTHER_SOURCES_PARTS.map(([k, w]) => [w, n(`IncRecCredPLOthHeadDtls.${k}`)]).filter(([, v]) => v);
+    line(`Less: Income credited to the profit & loss account, assessable under ${what}`, amt, {
+      note: parts.length === 1 && parts[0][1] === amt ? `Being income from ${parts[0][0]}` : undefined,
+    });
+    if (parts.length > 1) for (const [w, v] of parts) rows.push(sub(`— ${w}`, v));
   }
   for (const [suffix, , sec] of PRESUMPTIVE) {
     line(`Less: Profit of the business covered u/s ${sec}, as per the profit & loss account`, n(`ProfitLossInclRefrdSec.ProfitLoss${suffix}`));
@@ -209,8 +225,12 @@ export function businessRows(src) {
   } else if (anyOther) {
     rows.push(sub(add("income not credited to the profit & loss account"), anyOther));
   }
+  // Only where the return states one. A.Y. 2026-27's ITR-3 leaves this field nil
+  // on a return whose adjusted profit is 16,65,434, and a subtotal reading "nil"
+  // between the depreciation lines and that total is not a nil profit — it is a
+  // field the utility did not fill, and printing it says something untrue.
   const afterAdditions = n("TotAfterAddToPLDeprOthSpecInc");
-  if (rows.length > 1) rows.push(subtotal("Profit after the additions above", afterAdditions));
+  if (rows.length > 1 && afterAdditions) rows.push(subtotal("Profit after the additions above", afterAdditions));
 
   /* -- further deductions ----------------------------------------------------- */
   let anyDeduction = false;

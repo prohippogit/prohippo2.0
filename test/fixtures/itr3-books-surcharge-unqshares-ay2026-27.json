@@ -1,0 +1,5424 @@
+{
+ "ITR": {
+  "ITR3": {
+   "CreationInfo": {
+    "SWVersionNo": "20.0.0.0",
+    "SWCreatedBy": "XX00000000",
+    "JSONCreatedBy": "XX00000000",
+    "JSONCreationDate": "2026-07-12",
+    "IntermediaryCity": "SAMPLE PLACE 1",
+    "Digest": "XXX0X00XX0XXXXXXXXXX0XXXXXXXXXXXXXXXXXXXXX0="
+   },
+   "Form_ITR3": {
+    "FormName": "ITR-3",
+    "Description": "For indls and HUFs having income from  a proprietory business or profession",
+    "AssessmentYear": "2026",
+    "SchemaVer": "Ver1.0",
+    "FormVer": "Ver1.0"
+   },
+   "PartA_GEN1": {
+    "PersonalInfo": {
+     "AssesseeName": {
+      "FirstName": "SAMPLE NAME 1",
+      "MiddleName": "SAMPLE NAME 2",
+      "SurNameOrOrgName": "SAMPLE NAME 3"
+     },
+     "PAN": "AAAPZ1000A",
+     "Address": {
+      "ResidenceNo": "SAMPLE PLACE 2",
+      "ResidenceName": "SAMPLE PLACE 3",
+      "RoadOrStreet": "SAMPLE PLACE 4",
+      "LocalityOrArea": "SAMPLE PLACE 5",
+      "CityOrTownOrDistrict": "SAMPLE PLACE 6",
+      "StateCode": "11",
+      "CountryCode": "91",
+      "PinCode": 382345,
+      "CountryCodeMobile": 91,
+      "MobileNo": 9800000001,
+      "EmailAddress": "sample@example.com"
+     },
+     "SecondaryAdd": "Y",
+     "AlternateAddress": {
+      "ResidenceNo": "SAMPLE PLACE 2",
+      "ResidenceName": "SAMPLE PLACE 3",
+      "RoadOrStreet": "SAMPLE PLACE 4",
+      "LocalityOrArea": "SAMPLE PLACE 5",
+      "CityOrTownOrDistrict": "SAMPLE PLACE 6",
+      "StateCode": "11",
+      "CountryCode": "91",
+      "PinCode": 382345
+     },
+     "DOB": "1958-07-31",
+     "Status": "I",
+     "AadhaarCardNo": "000000000000"
+    },
+    "FilingStatus": {
+     "ReturnFileSec": 11,
+     "IncFrmBusOrProf": "Y",
+     "Form10IEAEarlierAYOldRegime": "N",
+     "F10IEACurrAYOldRegime": "N",
+     "SeventhProvisio139": "N",
+     "ResidentialStatus": "RES",
+     "ConditionsResStatus": "1",
+     "BenefitUs115HFlg": "N",
+     "PortugeseCC5A": "N",
+     "AsseseeRepFlg": "N",
+     "CompDirectorPrvYrFlg": "N",
+     "PartnerInFirmFlg": "N",
+     "HeldUnlistedEqShrPrYrFlg": "N",
+     "ForeignExchangeFlag": "N",
+     "FiiFpiFlag": "N",
+     "ItrFilingDueDate": "2026-08-31"
+    }
+   },
+   "PartA_GEN2": {
+    "AuditInfo": {
+     "LiableSec44AAflg": "N",
+     "IncDclrdUs": "N",
+     "TotalSalesExcOneCr": "Upto1CR",
+     "LiableSec44ABflg": "N",
+     "LiableSec92Eflg": "N",
+     "AccountAuditFlag": "N"
+    },
+    "NatOfBus": {
+     "NatureOfBusiness": [
+      {
+       "Code": "18010",
+       "TradeName1": "SAMPLE NAME 4"
+      }
+     ]
+    }
+   },
+   "PARTA_BS": {
+    "FundSrc": {
+     "PropFund": {
+      "PropCap": 81258957,
+      "ResrNSurp": {
+       "RevResr": 0,
+       "CapResr": 0,
+       "StatResr": 0,
+       "OthResr": 0,
+       "TotResrNSurp": 0
+      },
+      "TotPropFund": 81258957
+     },
+     "LoanFunds": {
+      "SecrLoan": {
+       "ForeignCurrLoan": 0,
+       "RupeeLoan": {
+        "FrmBank": 0,
+        "FrmOthrs": 0,
+        "TotRupeeLoan": 0
+       },
+       "TotSecrLoan": 0
+      },
+      "UnsecrLoan": {
+       "FrmBank": 0,
+       "FrmOthrs": 9894940,
+       "TotUnSecrLoan": 9894940
+      },
+      "TotLoanFund": 9894940
+     },
+     "DeferredTax": 0,
+     "Advances": {
+      "TotalAdvances": 0
+     },
+     "TotFundSrc": 91153897
+    },
+    "FundApply": {
+     "FixedAsset": {
+      "GrossBlock": 45797566,
+      "Depreciation": 402986,
+      "NetBlock": 45394580,
+      "CapWrkProg": 0,
+      "TotFixedAsset": 45394580
+     },
+     "Investments": {
+      "LongTermInv": {
+       "GovtOthSecQuoted": 0,
+       "GovOthSecUnQoted": 40274858,
+       "TotLongTermInv": 40274858
+      },
+      "TradeInv": {
+       "EquityShares": 0,
+       "PreferShares": 0,
+       "Debenture": 0,
+       "TotTradeInv": 0
+      },
+      "TotInvestments": 40274858
+     },
+     "CurrAssetLoanAdv": {
+      "CurrAsset": {
+       "Inventories": {
+        "StoresConsumables": 0,
+        "RawMatl": 0,
+        "StkInProcess": 0,
+        "FinOrTradGood": 0,
+        "TotInventries": 0
+       },
+       "SndryDebtors": 463055,
+       "CashOrBankBal": {
+        "CashinHand": 5601,
+        "BankBal": 1784691,
+        "TotCashOrBankBal": 1790292
+       },
+       "OthCurrAsset": 0,
+       "TotCurrAsset": 2253347
+      },
+      "LoanAdv": {
+       "AdvRecoverable": 0,
+       "Deposits": 3238612,
+       "BalWithRevAuth": 0,
+       "TotLoanAdv": 3238612
+      },
+      "TotCurrAssetLoanAdv": 5491959,
+      "CurrLiabilitiesProv": {
+       "CurrLiabilities": {
+        "SundryCred": 7500,
+        "LiabForLeasedAsset": 0,
+        "AccrIntonLeasedAsset": 0,
+        "AccrIntNotDue": 0,
+        "TotCurrLiabilities": 7500
+       },
+       "Provisions": {
+        "ITProvision": 0,
+        "ELSuperAnnGratProvision": 0,
+        "OthProvision": 0,
+        "TotProvisions": 0
+       },
+       "TotCurrLiabilitiesProvision": 7500
+      },
+      "NetCurrAsset": 5484459
+     },
+     "MiscAdjust": {
+      "MiscExpndr": 0,
+      "DefTaxAsset": 0,
+      "AccumaltedLosses": 0,
+      "TotMiscAdjust": 0
+     },
+     "TotFundApply": 91153897
+    },
+    "NoBooksOfAccBS": {
+     "TotSundryDbtAmt": 0,
+     "TotSundryCrdAmt": 0,
+     "TotStkInTradAmt": 0,
+     "CashBalAmt": 0
+    }
+   },
+   "ManufacturingAccount": {
+    "OpeningInventory": {
+     "OpngInvntryTotal": 0,
+     "DirectExpenses": 0,
+     "TotalFactoryOverheads": 0,
+     "TotalDebtsManfctrngAcc": 0
+    },
+    "ClosingStock": {
+     "ClsngStckTotal": 0
+    },
+    "CostOfGoodsPrdcd": 0
+   },
+   "TradingAccount": {
+    "SaleOfServices": 4592363,
+    "OperatingRevenueTotal": 0,
+    "SalesGrossReceiptsTotal": 4592363,
+    "ExciseCustomsVAT": {
+     "TotExciseCustomsVAT": 0
+    },
+    "TotRevenueFrmOperations": 4592363,
+    "TardingAccTotCred": 4592363,
+    "DirectExpenses": 0,
+    "DirectExpensesTotal": 0,
+    "DutyTaxPay": {
+     "ExciseCustomsVAT": {
+      "TotExciseCustomsVAT": 0
+     }
+    },
+    "GoodsCostPrdcdFrmMA": 0,
+    "GrossProfitFrmBusProf": 4592363
+   },
+   "PARTA_PL": {
+    "CreditsToPL": {
+     "GrossProfitTrnsfFrmTrdAcc": 4592363,
+     "OthIncome": {
+      "RentInc": 0,
+      "Comissions": 0,
+      "Dividends": 0,
+      "InterestInc": 364035,
+      "ProfitOnSaleFixedAsset": 0,
+      "ProfitOnInvChrSTT": 8850660,
+      "ProfitOnOthInv": 0,
+      "ProfitOnCurrFluct": 0,
+      "ProfitOnCnvInvntryToCapAsst": 0,
+      "ProfitOnAgriIncome": 0,
+      "OtherIncDtls": [
+       {
+        "NatureOfIncome": "Other Income",
+        "Amount": 6651
+       }
+      ],
+      "MiscOthIncome": 6651,
+      "TotOthIncome": 9221346
+     },
+     "TotCreditsToPL": 13813709
+    },
+    "DebitsToPL": {
+     "Freight": 0,
+     "ConsumptionOfStores": 0,
+     "PowerFuel": 38620,
+     "RentExpdr": 0,
+     "RepairsBldg": 0,
+     "RepairMach": 0,
+     "EmployeeComp": {
+      "SalsWages": 660000,
+      "Bonus": 55000,
+      "MedExpReimb": 0,
+      "LeaveEncash": 0,
+      "LeaveTravelBenft": 0,
+      "ContToSuperAnnFund": 0,
+      "ContToPF": 0,
+      "ContToGratFund": 0,
+      "ContToOthFund": 0,
+      "OthEmpBenftExpdr": 0,
+      "TotEmployeeComp": 715000,
+      "AnyCompPaidToNonRes": "N"
+     },
+     "Insurances": {
+      "MedInsur": 0,
+      "LifeInsur": 0,
+      "KeyManInsur": 0,
+      "OthInsur": 15245,
+      "TotInsurances": 15245
+     },
+     "StaffWelfareExp": 0,
+     "Entertainment": 0,
+     "Hospitality": 0,
+     "Conference": 0,
+     "SalePromoExp": 0,
+     "Advertisement": 0,
+     "CommissionExpdrDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "Total": 0
+     },
+     "RoyalityDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "Total": 0
+     },
+     "ProfessionalConstDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 0,
+      "Total": 0
+     },
+     "HotelBoardLodge": 0,
+     "TravelExp": 0,
+     "ForeignTravelExp": 0,
+     "ConveyanceExp": 102200,
+     "TelephoneExp": 10105,
+     "GuestHouseExp": 0,
+     "ClubExp": 0,
+     "FestivalCelebExp": 0,
+     "Scholarship": 0,
+     "Gift": 0,
+     "Donation": 0,
+     "RatesTaxesPays": {
+      "ExciseCustomsVAT": {
+       "UnionExciseDuty": 0,
+       "ServiceTax": 0,
+       "VATorSaleTax": 0,
+       "CentralGoodServiceTax": 0,
+       "StateGoodServiceTax": 0,
+       "IntegratedGoodServiceTax": 0,
+       "UnionTerrGoodServiceTax": 0,
+       "OthDutyTaxCess": 0,
+       "TotExciseCustomsVAT": 0
+      }
+     },
+     "AuditFee": 0,
+     "OtherExpensesDtls": [
+      {
+       "ExpenseNature": "Other Exps.",
+       "Amount": 479866
+      }
+     ],
+     "OtherExpenses": 479866,
+     "BadDebtDtls": {
+      "BadDebtAmtDtlsTotal": 0,
+      "OthersPANNotAvlblDtlTotal": 0,
+      "OthersAmtLt1Lakh": 0,
+      "BadDebt": 0
+     },
+     "ProvForBadDoubtDebt": 0,
+     "OthProvisionsExpdr": 0,
+     "PBIDTA": 12452673,
+     "InterestExpdrtDtls": {
+      "NonResOtherCompany": 0,
+      "Others": 1172151,
+      "InterestExpdr": 1172151
+     },
+     "DepreciationAmort": 402986,
+     "PBT": 10877536
+    },
+    "TaxProvAppr": {
+     "ProvForCurrTax": 0,
+     "ProvDefTax": 0,
+     "ProfitAfterTax": 10877536,
+     "BalBFPrevYr": 0,
+     "AmtAvlAppr": 10877536,
+     "TrfToReserves": 0,
+     "ProprietorAccBalTrf": 10877536
+    },
+    "PersumptiveInc44AD": {
+     "GrsTrnOverOrReceipt": 0,
+     "TotPersumptiveInc44AD": 0
+    },
+    "PersumptiveInc44ADA": {
+     "GrsReceipt": 0
+    },
+    "TotalNumOfMonths": 0,
+    "TotalPrsumptvIncUs44EGoods": 0,
+    "TotalPrsumptvIncUs44E": 0,
+    "NoBooksOfAccPL": {
+     "GrossReceipt": 0,
+     "GrsRcptAccPayeeOrBankMode": 0,
+     "GrsRcptOtherMode": 0,
+     "GrossProfit": 0,
+     "Expenses": 0,
+     "NetProfit": 0,
+     "GrossReceiptPrf": 0,
+     "GrsRcptAccPayeeOrBankModePrf": 0,
+     "GrsRcptOtherModePrf": 0,
+     "GrossProfitPrf": 0,
+     "ExpensesPrf": 0,
+     "NetProfitPrf": 0,
+     "TotBusinessProfession": 0
+    },
+    "TurnverFrmSpecActivity": 0,
+    "NetIncomeFrmSpecActivity": 0
+   },
+   "PARTA_OI": {
+    "MethodOfAcct": "MERC",
+    "ChangeInAcctMethFlg": "N",
+    "ProfDeviatDueAcctMeth": 0,
+    "DecProOrIncLossUs145_2": 0,
+    "MethodOfValClgStk": {
+     "ValRawMaterial": "1",
+     "ValFinishedGoods": "1",
+     "ChngStockValMetFlg": "N",
+     "EffectOnPL": 0,
+     "DecProOrIncLossUs145_A": 0
+    },
+    "NoCredToPLAmt": {
+     "Section28Items": 0,
+     "ProformaCreditsDue": 0,
+     "PrevYrEscalClaim": 0,
+     "OthItemInc": 0,
+     "CapReceipt": 0,
+     "TotNoCredToPLAmt": 0
+    },
+    "AmtDisallUs36": {
+     "StkInsurPrem": 0,
+     "EmpHealthInsurPrem": 0,
+     "EmpBonusCommSum": 0,
+     "IntOnBorrCap": 0,
+     "ZeroCoupBondDisc": 0,
+     "RecogPFContribAmt": 0,
+     "AppSuperAnnFundAmt": 0,
+     "PensionSchemeSec80CCD": 0,
+     "AppGratFundAmt": 0,
+     "OthFundAmt": 0,
+     "EmpContributionCredits": 0,
+     "BadDebtDoubtAmt": 0,
+     "BadDebtDoubtProvn": 0,
+     "SpecResrvTranfr": 0,
+     "FamPlanPromoExp": 0,
+     "SecuritiesPaidAmt": 0,
+     "MrktLossOthExpLossICDS": 0,
+     "OthDisallowances": 0,
+     "TotAmtDisallUs36": 0
+    },
+    "AmtDisallUs37": {
+     "CapitalNatureExp": 0,
+     "PersonalExp": 0,
+     "BusOrProfessnExp": 0,
+     "PoliticPartyExp": 0,
+     "LawVoilatPenalExp": 0,
+     "OthPenalFineExp": 0,
+     "OffenceExp": 0,
+     "ContigentLiability": 0,
+     "OthAmtNotAllowUs37": 0,
+     "TotAmtDisallUs37": 0
+    },
+    "AmtDisallUs40": {
+     "NonCompChapXVIIBAmt": 0,
+     "NonComp40aiiChapXVIIBAmt": 0,
+     "NonComp40aibChapXVIIBAmt": 0,
+     "NonComp40aiiiChapXVIIBAmt": 0,
+     "TaxAmtOnProfits": 0,
+     "WTAmt": 0,
+     "RolyatyOrServiceFee": 0,
+     "IntSalBonPartner": 0,
+     "OthDisallow": 0,
+     "TotAmtDisallUs40": 0,
+     "AmtDisallUs40PyNowAll": 0
+    },
+    "AmtDisallUs40A": {
+     "AmtPaidUs40A2b": 0,
+     "AmtGT20kCash": 0,
+     "ProvPmtGrat": 0,
+     "ContToSetupTrust": 0,
+     "OthDisallow": 0,
+     "TotAmtDisallUs40A": 0
+    },
+    "AmtDisallUs43BPyNowAll": {
+     "AmtUs43B": {
+      "TaxDutyCesAmt": 0,
+      "ContToEmpPFSFGF": 0,
+      "EmpBonusComm": 0,
+      "IntPayaleToFI": 0,
+      "SumPayaleLoanBrToFinComp": 0,
+      "IntPayaleToFISchBank": 0,
+      "LeaveEncashPayable": 0,
+      "TotAmtUs43b": 0
+     }
+    },
+    "AmtDisall43B": {
+     "AmtUs43B": {
+      "TaxDutyCesAmt": 0,
+      "ContToEmpPFSFGF": 0,
+      "EmpBonusComm": 0,
+      "IntPayaleToFI": 0,
+      "SumPayaleLoanBrToFinComp": 0,
+      "IntPayaleToFISchBank": 0,
+      "LeaveEncashPayable": 0,
+      "TotAmtUs43b": 0
+     }
+    },
+    "AmtExciseCustomsVATOutstanding": {
+     "ExciseCustomsVAT": {
+      "UnionExciseDuty": 0,
+      "ServiceTax": 0,
+      "VATorSaleTax": 0,
+      "CentralGoodServiceTax": 0,
+      "StateGoodServiceTax": 0,
+      "IntegratedGoodServiceTax": 0,
+      "UnionTerrGoodServiceTax": 0,
+      "OthDutyTaxCess": 0,
+      "TotExciseCustomsVAT": 0
+     }
+    },
+    "DeemedProfUs33ABs": 0,
+    "ProfTaxAmtUs41": 0,
+    "PriorAmtIncCrDrPL": 0,
+    "AmountOfExpDisAllwUs14A": 0,
+    "InterestDisAllowUs23SMEAct": 0,
+    "ScheduleTPSAFlg": "N"
+   },
+   "ITR3ScheduleBP": {
+    "BusinessIncOthThanSpec": {
+     "ProfBfrTaxPL": 10877536,
+     "NetPLFromSpecBus": 0,
+     "NetPLFromSpecifiedBus": 0,
+     "IncRecCredPLOthHeadDtls": {
+      "Salary": 0,
+      "HouseProperty": 0,
+      "CapitalGains": 8850661,
+      "OtherSources": 364035,
+      "Dividend": 0,
+      "OtherThanDividend": 364035,
+      "Us115BBF": 0,
+      "Us115BBG": 0,
+      "115BBH": 0
+     },
+     "PLUs44sChapXIIG": 0,
+     "ProfitLossInclRefrdSec": {
+      "ProfitLossUs44AD": 0,
+      "ProfitLossUs44ADA": 0,
+      "ProfitLossUs44AE": 0,
+      "ProfitLossUs44B": 0,
+      "ProfitLossUs44BB": 0,
+      "ProfitLossUs44BBA": 0,
+      "ProfitLossUs44BBC": 0,
+      "ProfitLossUs44BBD": 0,
+      "ProfitLossUs44DA": 0
+     },
+     "TotalProfitFrmActCvrd": 0,
+     "ProfitFrmActCvrd": {
+      "ProfitFrmActCvrdUndrRule7": 0,
+      "ProfitFrmActCvrdUndrRule7A": 0,
+      "ProfitFrmActCvrdUndrRule7B1": 0,
+      "ProfitFrmActCvrdUndrRule7B1A": 0,
+      "ProfitFrmActCvrdUndrRule8": 0
+     },
+     "IncCredPL": {
+      "FirmShareInc": 0,
+      "AOPBOISharInc": 0,
+      "OtherExmptIncDtl": {
+       "OperatingDividendName": "Dividend",
+       "OperatingDividendAmt": 0
+      },
+      "OthExempInc": 0,
+      "TotExempIncPL": 0
+     },
+     "BalancePLOthThanSpecBus": 1662840,
+     "ExpDebToPLOthHeadDtls": {
+      "Salary": 0,
+      "HouseProperty": 0,
+      "CapitalGains": 0,
+      "OtherSources": 0,
+      "Us115BBF": 0,
+      "Us115BBG": 0,
+      "115BBH": 0
+     },
+     "ExpDebToPLExemptInc": 0,
+     "ExpDebToPLExemptIncDisAllwUs14A": 0,
+     "TotExpDebPL": 0,
+     "AdjustedPLOthThanSpecBus": 1662840,
+     "DepreciationDebPLCosAct": 402986,
+     "DepreciationAllowITAct32": {
+      "DepreciationAllowUs32_1_ii": 400392,
+      "DepreciationAllowUs32_1_i": 0,
+      "TotDeprAllowITAct": 400392
+     },
+     "AdjustPLAfterDeprOthSpecInc": 1665434,
+     "AmtDebPLDisallowUs36": 0,
+     "AmtDebPLDisallowUs37": 0,
+     "AmtDebPLDisallowUs40": 0,
+     "AmtDebPLDisallowUs40A": 0,
+     "AmtDebPLDisallowUs43B": 0,
+     "InterestDisAllowUs23SMEAct": 0,
+     "DeemIncUs41": 0,
+     "DeemIncUs3380HHD80IA": 0,
+     "DeemIncUs43CA": 0,
+     "OthItemDisallowUs28To44DA": 0,
+     "AnyOthIncNotInclInExpDisallowPL": 0,
+     "AnyOthIncNotInclInSalary": 0,
+     "AnyOthIncNotInclInBonus": 0,
+     "AnyOthIncNotInclInCommission": 0,
+     "AnyOthIncNotInclInInterest": 0,
+     "AnyOthIncNotInclInOthers": 0,
+     "IncProfDecLossAccICDSAdj": 0,
+     "TotAfterAddToPLDeprOthSpecInc": 0,
+     "DeductUs32_1_iii": 0,
+     "DebPLUs35ExcessAmt": 0,
+     "AmtDisallUs40NowAllow": 0,
+     "AmtDisallUs43BNowAllow": 0,
+     "AnyOthAmtAllDeduct": 0,
+     "DecProfIncLossAccICDSAdj": 0,
+     "TotDeductionAmts": 0,
+     "PLAftAdjDedBusOthThanSpec": 1665434,
+     "DeemedProfitBusUs": {
+      "Section44AD": 0,
+      "Section44ADA": 0,
+      "Section44AE": 0,
+      "Section44B": 0,
+      "Section44BB": 0,
+      "Section44BBA": 0,
+      "Section44BBC": 0,
+      "Section44BBD": 0,
+      "Section44DA": 0,
+      "TotDeemedProfitBusUs": 0
+     },
+     "NetPLAftAdjBusOthThanSpec": 1665434,
+     "NetPLBusOthThanSpec7A7B7C": 1665434,
+     "ChrgblIncUndrRule7": 0,
+     "DeemedChrgblIncUndrRule7A": 0,
+     "DeemedChrgblIncUndrRule7B1": 0,
+     "DeemedChrgblIncUndrRule7B1A": 0,
+     "DeemedChrgblIncUndrRule8": 0,
+     "IncomeOtherThanRule": 1665434,
+     "BalIncDeemedFrmAgri": 0
+    },
+    "SpecBusinessInc": {
+     "NetPLFrmSpecBus": 0,
+     "AdditionUs28to44DA": 0,
+     "DeductUs28to44DA": 0,
+     "AdjustedPLFrmSpecuBus": 0
+    },
+    "SpecifiedBusinessInc": {
+     "NetPLFrmSpecifiedBus": 0,
+     "AddSec28to44DA": 0,
+     "DedSec28to44DAOTDedSec35AD": 0,
+     "ProfitLossSpecifiedBusiness": 0,
+     "PLFrmSpecifiedBus": 0
+    },
+    "IncChrgUnHdProftGain": 1665434,
+    "BusSetoffCurrYr": {
+     "LossSetOffOnBusLoss": 0,
+     "SpeculativeInc": {
+      "IncOfCurYrUnderThatHead": 0,
+      "BusLossSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     },
+     "SpecifiedInc": {
+      "IncOfCurYrUnderThatHead": 0,
+      "BusLossSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     },
+     "TotLossSetOffOnBus": 0,
+     "LossRemainSetOffOnBus": 0
+    }
+   },
+   "ScheduleDPM": {
+    "PlantMachinery": {
+     "Rate15": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 2669023,
+       "Total": 2669023,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 2669023,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 400353,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 400353,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 400353,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 2268670
+      }
+     },
+     "Rate30": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "Total": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     },
+     "Rate40": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "Total": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     },
+     "Rate45": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "Total": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     }
+    }
+   },
+   "ScheduleDOA": {
+    "Land": {
+     "DepreciationDetail": {
+      "WDVFirstDay": 0,
+      "WDVLastDay": 0
+     }
+    },
+    "Building": {
+     "Rate5": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     },
+     "Rate10": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     },
+     "Rate40": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     }
+    },
+    "FurnitureFittings": {
+     "Rate10": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 390,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 390,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 39,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 39,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 39,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 351
+      }
+     }
+    },
+    "IntangibleAssets": {
+     "Rate25": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     }
+    },
+    "Ships": {
+     "Rate20": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 0,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 0,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 0,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 0,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 0,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 0
+      }
+     }
+    }
+   },
+   "ScheduleDEP": {
+    "SummaryFromDeprSch": {
+     "PlantMachinerySummary": {
+      "DeprBlockTot15Percent": 400353,
+      "DeprBlockTot30Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "DeprBlockTot45Percent": 0,
+      "TotPlntMach": 400353
+     },
+     "BuildingSummary": {
+      "DeprBlockTot5Percent": 0,
+      "DeprBlockTot10Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "TotBuildng": 0
+     },
+     "FurnitureSummary": 39,
+     "TotalDepreciation": 400392
+    }
+   },
+   "ScheduleCGFor23": {
+    "ShortTermCapGainFor23": {
+     "SlumpSaleInStcg": {
+      "FMV11UAEii": 0,
+      "FMV11UAEiii": 0,
+      "FullConsideration": 0,
+      "NetWorthOfDivision": 0,
+      "CapgainonAssets": 0
+     },
+     "EquityMFonSTT": [
+      {
+       "MFSectionCode": "1A",
+       "EquityMFonSTTDtls": {
+        "FullConsideration": 835867,
+        "DeductSec48": {
+         "AquisitCost": 772329,
+         "ImproveCost": 0,
+         "ExpOnTrans": 0,
+         "TotalDedn": 772329
+        },
+        "BalanceCG": 63538,
+        "LossSec94of7Or94of8": 0,
+        "CapgainonAssets": 63538
+       }
+      }
+     ],
+     "NRITransacSec48Dtl": {
+      "NRItaxSTTPaid": 0,
+      "NRItaxSTTNotPaid": 0
+     },
+     "NRISecur115AD": {
+      "FullValueConsdRecvUnqshr": 0,
+      "FairMrktValueUnqshr": 0,
+      "FullValueConsdSec50CA": 0,
+      "FullValueConsdOthUnqshr": 0,
+      "FullConsideration": 0,
+      "DeductSec48": {
+       "AquisitCost": 0,
+       "ImproveCost": 0,
+       "ExpOnTrans": 0,
+       "TotalDedn": 0
+      },
+      "BalanceCG": 0,
+      "LossSec94of7Or94of8": 0,
+      "CapgainonAssets": 0
+     },
+     "SaleOnOtherAssets": {
+      "FullValueConsdRecvUnqshr": 0,
+      "FairMrktValueUnqshr": 0,
+      "FullValueConsdSec50CA": 0,
+      "FullValueConsdOthUnqshr": 0,
+      "FullConsideration": 0,
+      "DeductSec48": {
+       "AquisitCost": 0,
+       "ImproveCost": 0,
+       "ExpOnTrans": 0,
+       "TotalDedn": 0
+      },
+      "BalanceCG": 0,
+      "LossSec94of7Or94of8": 0,
+      "DeemedStcgOnAssets": 0,
+      "ExemptionOrDednUs54": {
+       "ExemptionGrandTotal": 0
+      },
+      "CapgainonAssets": 0
+     },
+     "UnutilizedStcgFlag": "N",
+     "TotalAmtDeemedStcg": 0,
+     "PassThrIncNatureSTCG": 0,
+     "PassThrIncNatureSTCG30Per": 0,
+     "PassThrIncNatureSTCGAppRate": 0,
+     "TotalAmtNotTaxUsDTAAStcg": 0,
+     "TotalAmtTaxUsDTAAStcg": 0,
+     "TotalSTCG": 63538
+    },
+    "LongTermCapGain23": {
+     "SlumpSaleInLtcgDtls": {
+      "SlumpSaleInLtcg": {
+       "FMV11UAEii": 0,
+       "FMV11UAEiii": 0,
+       "FullConsideration": 0,
+       "NetWorthOfDivision": 0,
+       "SlumpBalance": 0,
+       "ExemptionOrDednUs54": {
+        "ExemptionGrandTotal": 0
+       },
+       "CapgainonAssets": 0
+      }
+     },
+     "SaleOfEquityShareUs112A": {
+      "BalanceCG": 7855368,
+      "DeductionUs54F": 0,
+      "CapgainonAssets": 7855368
+     },
+     "NRISaleOfEquityShareUs112A": {
+      "BalanceCG": 0,
+      "DeductionUs54F": 0,
+      "CapgainonAssets": 0
+     },
+     "NRISaleofForeignAsset": {
+      "SaleonSpecAsset": 0,
+      "DednSpecAssetus115": 0,
+      "BalonSpeciAsset": 0
+     },
+     "SaleofAssetNADtls": {
+      "SaleofAssetNA": {
+       "FullValueConsdRecvUnqshr": 0,
+       "FairMrktValueUnqshr": 0,
+       "FullValueConsdSec50CA": 0,
+       "FullValueConsdOthUnqshr": 3771160,
+       "FullConsideration": 3771160,
+       "DeductSec48": {
+        "AquisitCost": 2545635,
+        "ImproveCost": 0,
+        "ExpOnTrans": 0,
+        "TotalDedn": 2545635
+       },
+       "BalanceCG": 1225525,
+       "ExemptionOrDednUs54": {
+        "ExemptionGrandTotal": 0
+       },
+       "CapgainonAssets": 1225525
+      }
+     },
+     "UnutilizedLtcgFlag": "N",
+     "TotalAmtDeemedLtcg": 0,
+     "PassThrIncNatureLTCG": 0,
+     "TotalAmtNotTaxUsDTAALtcg": 0,
+     "TotalAmtTaxUsDTAALtcg": 0,
+     "TotalLTCG": 9080893
+    },
+    "SumOfCGIncm": 9144431,
+    "IncmFromVDATrnsf": 0,
+    "TotScheduleCGFor23": 9144431,
+    "DeducClaimInfo": {
+     "TotDeductClaim": 0
+    },
+    "CurrYrLosses": {
+     "InLossSetOff": {
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff12_5Per": 0,
+      "LtclSetOffDTAARate": 0
+     },
+     "InStcg20Per": {
+      "CurrYearIncome": 63538,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "CurrYrCapGain": 63538
+     },
+     "InStcg30Per": {
+      "CurrYearIncome": 0,
+      "StclSetoff20Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InStcgAppRate": {
+      "CurrYearIncome": 0,
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffDTAARate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InStcgDTAARate": {
+      "CurrYearIncome": 0,
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "CurrYrCapGain": 0
+     },
+     "InLtcg12_5Per": {
+      "CurrYearIncome": 9080893,
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOffDTAARate": 0,
+      "CurrYrCapGain": 9080893
+     },
+     "InLtcgDTAARate": {
+      "CurrYearIncome": 0,
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff12_5Per": 0,
+      "CurrYrCapGain": 0
+     },
+     "TotLossSetOff": {
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff12_5Per": 0,
+      "LtclSetOffDTAARate": 0
+     },
+     "LossRemainSetOff": {
+      "StclSetoff20Per": 0,
+      "StclSetoff30Per": 0,
+      "StclSetoffAppRate": 0,
+      "StclSetoffDTAARate": 0,
+      "LtclSetOff12_5Per": 0,
+      "LtclSetOffDTAARate": 0
+     }
+    },
+    "AccruOrRecOfCG": {
+     "ShortTermUnder20Per": {
+      "DateRange": {
+       "Upto15Of6": 63538,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "ShortTermUnder30Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "ShortTermUnderAppRate": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "ShortTermUnderDTAARate": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "LongTermUnder12_5Per": {
+      "DateRange": {
+       "Upto15Of6": 8399071,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 681822,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "LongTermUnderDTAARate": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     },
+     "VDATrnsfGainsUnder30Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
+     }
+    }
+   },
+   "Schedule112A": {
+    "Schedule112ADtls": [
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 5",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 613.35,
+      "TotSaleValue": 30667,
+      "CostAcqWithoutIndx": 3730,
+      "AcquisitionCost": 3730,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 3730,
+      "Balance": 26937
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 6",
+      "NumSharesUnits": 250,
+      "SalePricePerShareUnit": 226.39,
+      "TotSaleValue": 56597,
+      "CostAcqWithoutIndx": 0,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 0,
+      "Balance": 56597
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 7",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 127.65,
+      "TotSaleValue": 12765,
+      "CostAcqWithoutIndx": 9275,
+      "AcquisitionCost": 9275,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 9275,
+      "Balance": 3490
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 7",
+      "NumSharesUnits": 150,
+      "SalePricePerShareUnit": 127.65,
+      "TotSaleValue": 19147,
+      "CostAcqWithoutIndx": 11468,
+      "AcquisitionCost": 11467.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 11468,
+      "Balance": 7679
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 8",
+      "NumSharesUnits": 400,
+      "SalePricePerShareUnit": 359.65,
+      "TotSaleValue": 143860,
+      "CostAcqWithoutIndx": 39620,
+      "AcquisitionCost": 39620,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 39620,
+      "Balance": 104240
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 9",
+      "NumSharesUnits": 400,
+      "SalePricePerShareUnit": 443.8,
+      "TotSaleValue": 177520,
+      "CostAcqWithoutIndx": 44760,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 44760,
+      "FairMktValuePerShareunit": 111.9,
+      "TotFairMktValueCapAst": 44760,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 44760,
+      "Balance": 132760
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 10",
+      "NumSharesUnits": 40,
+      "SalePricePerShareUnit": 6320.83,
+      "TotSaleValue": 252833,
+      "CostAcqWithoutIndx": 42120,
+      "AcquisitionCost": 42120,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 42120,
+      "Balance": 210713
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 11",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 502.66,
+      "TotSaleValue": 25133,
+      "CostAcqWithoutIndx": 1818,
+      "AcquisitionCost": 1817.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 1818,
+      "Balance": 23315
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 12",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 82.66,
+      "TotSaleValue": 8266,
+      "CostAcqWithoutIndx": 5955,
+      "AcquisitionCost": 5955,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 5955,
+      "Balance": 2311
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 13",
+      "NumSharesUnits": 1000,
+      "SalePricePerShareUnit": 17.82,
+      "TotSaleValue": 17820,
+      "CostAcqWithoutIndx": 12900,
+      "AcquisitionCost": 12900,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 12900,
+      "Balance": 4920
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 13",
+      "NumSharesUnits": 500,
+      "SalePricePerShareUnit": 17.82,
+      "TotSaleValue": 8910,
+      "CostAcqWithoutIndx": 6925,
+      "AcquisitionCost": 6925,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6925,
+      "Balance": 1985
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 14",
+      "NumSharesUnits": 75,
+      "SalePricePerShareUnit": 157.2,
+      "TotSaleValue": 11790,
+      "CostAcqWithoutIndx": 0,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 0,
+      "Balance": 11790
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 15",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 380,
+      "TotSaleValue": 19000,
+      "CostAcqWithoutIndx": 10970,
+      "AcquisitionCost": 10970,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 10970,
+      "Balance": 8030
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 15",
+      "NumSharesUnits": 75,
+      "SalePricePerShareUnit": 380,
+      "TotSaleValue": 28500,
+      "CostAcqWithoutIndx": 16770,
+      "AcquisitionCost": 16770,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 16770,
+      "Balance": 11730
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 700,
+      "SalePricePerShareUnit": 397.15,
+      "TotSaleValue": 278005,
+      "CostAcqWithoutIndx": 149065,
+      "AcquisitionCost": 149065,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 149065,
+      "Balance": 128940
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 17,
+      "SalePricePerShareUnit": 397.15,
+      "TotSaleValue": 6751,
+      "CostAcqWithoutIndx": 4029,
+      "AcquisitionCost": 4029,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 4029,
+      "Balance": 2722
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 183,
+      "SalePricePerShareUnit": 397.15,
+      "TotSaleValue": 72678,
+      "CostAcqWithoutIndx": 43371,
+      "AcquisitionCost": 43371,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 43371,
+      "Balance": 29307
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 397.15,
+      "TotSaleValue": 19857,
+      "CostAcqWithoutIndx": 11910,
+      "AcquisitionCost": 11910,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 11910,
+      "Balance": 7947
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 397.15,
+      "TotSaleValue": 19857,
+      "CostAcqWithoutIndx": 11700,
+      "AcquisitionCost": 11700,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 11700,
+      "Balance": 8157
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 17",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 177.7,
+      "TotSaleValue": 8885,
+      "CostAcqWithoutIndx": 6603,
+      "AcquisitionCost": 6602.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6603,
+      "Balance": 2282
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 18",
+      "NumSharesUnits": 40,
+      "SalePricePerShareUnit": 380.95,
+      "TotSaleValue": 15238,
+      "CostAcqWithoutIndx": 6564,
+      "AcquisitionCost": 6564,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6564,
+      "Balance": 8674
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 18",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 380.95,
+      "TotSaleValue": 38095,
+      "CostAcqWithoutIndx": 15325,
+      "AcquisitionCost": 15325,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 15325,
+      "Balance": 22770
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 18",
+      "NumSharesUnits": 10,
+      "SalePricePerShareUnit": 380.95,
+      "TotSaleValue": 3809,
+      "CostAcqWithoutIndx": 1832,
+      "AcquisitionCost": 1832,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 1832,
+      "Balance": 1977
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 18",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 380.95,
+      "TotSaleValue": 19047,
+      "CostAcqWithoutIndx": 11002,
+      "AcquisitionCost": 11001.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 11002,
+      "Balance": 8045
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 19",
+      "NumSharesUnits": 5,
+      "SalePricePerShareUnit": 2638.9,
+      "TotSaleValue": 13194,
+      "CostAcqWithoutIndx": 4242,
+      "AcquisitionCost": 4241.75,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 4242,
+      "Balance": 8952
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 19",
+      "NumSharesUnits": 20,
+      "SalePricePerShareUnit": 2638.9,
+      "TotSaleValue": 52778,
+      "CostAcqWithoutIndx": 17538,
+      "AcquisitionCost": 17538,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 17538,
+      "Balance": 35240
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 19",
+      "NumSharesUnits": 35,
+      "SalePricePerShareUnit": 2638.9,
+      "TotSaleValue": 92361,
+      "CostAcqWithoutIndx": 28861,
+      "AcquisitionCost": 28861,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 28861,
+      "Balance": 63500
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 19",
+      "NumSharesUnits": 15,
+      "SalePricePerShareUnit": 2638.9,
+      "TotSaleValue": 39583,
+      "CostAcqWithoutIndx": 13463,
+      "AcquisitionCost": 13462.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 13463,
+      "Balance": 26120
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 19",
+      "NumSharesUnits": 25,
+      "SalePricePerShareUnit": 2638.9,
+      "TotSaleValue": 65972,
+      "CostAcqWithoutIndx": 23318,
+      "AcquisitionCost": 23317.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 23318,
+      "Balance": 42654
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 20",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 849.95,
+      "TotSaleValue": 42497,
+      "CostAcqWithoutIndx": 33825,
+      "AcquisitionCost": 33825,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 33825,
+      "Balance": 8672
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 21",
+      "NumSharesUnits": 500,
+      "SalePricePerShareUnit": 135.65,
+      "TotSaleValue": 67825,
+      "CostAcqWithoutIndx": 0,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 0,
+      "Balance": 67825
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 22",
+      "NumSharesUnits": 400,
+      "SalePricePerShareUnit": 27.11,
+      "TotSaleValue": 10844,
+      "CostAcqWithoutIndx": 5380,
+      "AcquisitionCost": 5380,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 5380,
+      "Balance": 5464
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 23",
+      "NumSharesUnits": 2250,
+      "SalePricePerShareUnit": 54.67,
+      "TotSaleValue": 123007,
+      "CostAcqWithoutIndx": 10575,
+      "AcquisitionCost": 10575,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 10575,
+      "Balance": 112432
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 24",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 185.4,
+      "TotSaleValue": 9270,
+      "CostAcqWithoutIndx": 6180,
+      "AcquisitionCost": 6180,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6180,
+      "Balance": 3090
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 6",
+      "NumSharesUnits": 250,
+      "SalePricePerShareUnit": 223.35,
+      "TotSaleValue": 55837,
+      "CostAcqWithoutIndx": 0,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 0,
+      "Balance": 55837
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 7",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 126.5,
+      "TotSaleValue": 6325,
+      "CostAcqWithoutIndx": 3823,
+      "AcquisitionCost": 3822.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 3823,
+      "Balance": 2502
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 7",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 126.5,
+      "TotSaleValue": 6325,
+      "CostAcqWithoutIndx": 3950,
+      "AcquisitionCost": 3950,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 3950,
+      "Balance": 2375
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 7",
+      "NumSharesUnits": 150,
+      "SalePricePerShareUnit": 126.5,
+      "TotSaleValue": 18975,
+      "CostAcqWithoutIndx": 11243,
+      "AcquisitionCost": 11242.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 11243,
+      "Balance": 7732
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 8",
+      "NumSharesUnits": 20,
+      "SalePricePerShareUnit": 364.9,
+      "TotSaleValue": 7298,
+      "CostAcqWithoutIndx": 1981,
+      "AcquisitionCost": 1981,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 1981,
+      "Balance": 5317
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 8",
+      "NumSharesUnits": 300,
+      "SalePricePerShareUnit": 364.9,
+      "TotSaleValue": 109470,
+      "CostAcqWithoutIndx": 29805,
+      "AcquisitionCost": 29805,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 29805,
+      "Balance": 79665
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 8",
+      "NumSharesUnits": 80,
+      "SalePricePerShareUnit": 364.9,
+      "TotSaleValue": 29192,
+      "CostAcqWithoutIndx": 6968,
+      "AcquisitionCost": 6968,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6968,
+      "Balance": 22224
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 9",
+      "NumSharesUnits": 400,
+      "SalePricePerShareUnit": 440.2,
+      "TotSaleValue": 176080,
+      "CostAcqWithoutIndx": 44760,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 44760,
+      "FairMktValuePerShareunit": 111.9,
+      "TotFairMktValueCapAst": 44760,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 44760,
+      "Balance": 131320
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 11",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 484.26,
+      "TotSaleValue": 24213,
+      "CostAcqWithoutIndx": 1818,
+      "AcquisitionCost": 1817.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 1818,
+      "Balance": 22395
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 12",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 79.3,
+      "TotSaleValue": 7930,
+      "CostAcqWithoutIndx": 5955,
+      "AcquisitionCost": 5955,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 5955,
+      "Balance": 1975
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 13",
+      "NumSharesUnits": 1500,
+      "SalePricePerShareUnit": 17.39,
+      "TotSaleValue": 26085,
+      "CostAcqWithoutIndx": 20775,
+      "AcquisitionCost": 20775,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 20775,
+      "Balance": 5310
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 14",
+      "NumSharesUnits": 75,
+      "SalePricePerShareUnit": 157.09,
+      "TotSaleValue": 11781,
+      "CostAcqWithoutIndx": 0,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 0,
+      "Balance": 11781
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 25",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 373.8,
+      "TotSaleValue": 18690,
+      "CostAcqWithoutIndx": 7750,
+      "AcquisitionCost": 7750,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 7750,
+      "Balance": 10940
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 15",
+      "NumSharesUnits": 125,
+      "SalePricePerShareUnit": 377.55,
+      "TotSaleValue": 47193,
+      "CostAcqWithoutIndx": 27950,
+      "AcquisitionCost": 27950,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 27950,
+      "Balance": 19243
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 392.95,
+      "TotSaleValue": 39295,
+      "CostAcqWithoutIndx": 23650,
+      "AcquisitionCost": 23650,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 23650,
+      "Balance": 15645
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 200,
+      "SalePricePerShareUnit": 392.95,
+      "TotSaleValue": 78590,
+      "CostAcqWithoutIndx": 46800,
+      "AcquisitionCost": 46800,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 46800,
+      "Balance": 31790
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 200,
+      "SalePricePerShareUnit": 392.95,
+      "TotSaleValue": 78590,
+      "CostAcqWithoutIndx": 47590,
+      "AcquisitionCost": 47590,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 47590,
+      "Balance": 31000
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 200,
+      "SalePricePerShareUnit": 392.95,
+      "TotSaleValue": 78590,
+      "CostAcqWithoutIndx": 55760,
+      "AcquisitionCost": 55760,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 55760,
+      "Balance": 22830
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 16",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 392.95,
+      "TotSaleValue": 39295,
+      "CostAcqWithoutIndx": 27970,
+      "AcquisitionCost": 27970,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 27970,
+      "Balance": 11325
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 17",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 161.85,
+      "TotSaleValue": 8092,
+      "CostAcqWithoutIndx": 6603,
+      "AcquisitionCost": 6602.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6603,
+      "Balance": 1489
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 5",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 624.9,
+      "TotSaleValue": 31245,
+      "CostAcqWithoutIndx": 3730,
+      "AcquisitionCost": 3730,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 3730,
+      "Balance": 27515
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 26",
+      "NumSharesUnits": 100,
+      "SalePricePerShareUnit": 421.15,
+      "TotSaleValue": 42115,
+      "CostAcqWithoutIndx": 20725,
+      "AcquisitionCost": 20725,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 20725,
+      "Balance": 21390
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 18",
+      "NumSharesUnits": 200,
+      "SalePricePerShareUnit": 380.15,
+      "TotSaleValue": 76030,
+      "CostAcqWithoutIndx": 44006,
+      "AcquisitionCost": 44006,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 44006,
+      "Balance": 32024
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 19",
+      "NumSharesUnits": 75,
+      "SalePricePerShareUnit": 2673.54,
+      "TotSaleValue": 200515,
+      "CostAcqWithoutIndx": 69953,
+      "AcquisitionCost": 69952.5,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 69953,
+      "Balance": 130562
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 20",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 841.9,
+      "TotSaleValue": 42095,
+      "CostAcqWithoutIndx": 33825,
+      "AcquisitionCost": 33825,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 33825,
+      "Balance": 8270
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 21",
+      "NumSharesUnits": 500,
+      "SalePricePerShareUnit": 136.15,
+      "TotSaleValue": 68075,
+      "CostAcqWithoutIndx": 0,
+      "AcquisitionCost": 0,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 0,
+      "Balance": 68075
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 22",
+      "NumSharesUnits": 400,
+      "SalePricePerShareUnit": 26.42,
+      "TotSaleValue": 10568,
+      "CostAcqWithoutIndx": 5380,
+      "AcquisitionCost": 5380,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 5380,
+      "Balance": 5188
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 27",
+      "NumSharesUnits": 1,
+      "SalePricePerShareUnit": 765.6,
+      "TotSaleValue": 765,
+      "CostAcqWithoutIndx": 584,
+      "AcquisitionCost": 584.4,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 584,
+      "Balance": 181
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 27",
+      "NumSharesUnits": 45,
+      "SalePricePerShareUnit": 765.6,
+      "TotSaleValue": 34452,
+      "CostAcqWithoutIndx": 23744,
+      "AcquisitionCost": 23744.25,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 23744,
+      "Balance": 10708
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 23",
+      "NumSharesUnits": 250,
+      "SalePricePerShareUnit": 54.66,
+      "TotSaleValue": 13665,
+      "CostAcqWithoutIndx": 1175,
+      "AcquisitionCost": 1175,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 1175,
+      "Balance": 12490
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 23",
+      "NumSharesUnits": 2000,
+      "SalePricePerShareUnit": 54.66,
+      "TotSaleValue": 109320,
+      "CostAcqWithoutIndx": 10500,
+      "AcquisitionCost": 10500,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 10500,
+      "Balance": 98820
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 24",
+      "NumSharesUnits": 50,
+      "SalePricePerShareUnit": 181.81,
+      "TotSaleValue": 9090,
+      "CostAcqWithoutIndx": 6180,
+      "AcquisitionCost": 6180,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 6180,
+      "Balance": 2910
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 28",
+      "NumSharesUnits": 3298,
+      "SalePricePerShareUnit": 363.66,
+      "TotSaleValue": 1199350,
+      "CostAcqWithoutIndx": 801447,
+      "AcquisitionCost": 801446.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0,
+      "TotalDeductions": 801447,
+      "Balance": 397903
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 29",
+      "NumSharesUnits": 8299,
+      "SalePricePerShareUnit": 64.17,
+      "TotSaleValue": 532546,
+      "CostAcqWithoutIndx": 496546,
+      "AcquisitionCost": 496545.52,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 5.33,
+      "TotalDeductions": 496551,
+      "Balance": 35995
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 30",
+      "NumSharesUnits": 349.61,
+      "SalePricePerShareUnit": 1430.17,
+      "TotSaleValue": 500001,
+      "CostAcqWithoutIndx": 198987,
+      "AcquisitionCost": 37022.14,
+      "LTCGBeforelower6and11": 198987,
+      "FairMktValuePerShareunit": 569.17,
+      "TotFairMktValueCapAst": 198987,
+      "ExpExclCnctTransfer": 5,
+      "TotalDeductions": 198992,
+      "Balance": 301009
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 31",
+      "NumSharesUnits": 23649.31,
+      "SalePricePerShareUnit": 70.71,
+      "TotSaleValue": 1672242,
+      "CostAcqWithoutIndx": 1513868,
+      "AcquisitionCost": 1513868.15,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 16.72,
+      "TotalDeductions": 1513885,
+      "Balance": 158357
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 32",
+      "NumSharesUnits": 5038.05,
+      "SalePricePerShareUnit": 496.23,
+      "TotSaleValue": 2500031,
+      "CostAcqWithoutIndx": 2091675,
+      "AcquisitionCost": 2091674.71,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 25,
+      "TotalDeductions": 2091700,
+      "Balance": 408331
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X000X0",
+      "ShareUnitName": "SAMPLE NAME 33",
+      "NumSharesUnits": 108769.19,
+      "SalePricePerShareUnit": 19.71,
+      "TotSaleValue": 2143840,
+      "CostAcqWithoutIndx": 1902007,
+      "AcquisitionCost": 1902007.09,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 21.44,
+      "TotalDeductions": 1902028,
+      "Balance": 241812
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 34",
+      "NumSharesUnits": 1347.91,
+      "SalePricePerShareUnit": 130.14,
+      "TotSaleValue": 175417,
+      "CostAcqWithoutIndx": 100000,
+      "AcquisitionCost": 100000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 1.75,
+      "TotalDeductions": 100002,
+      "Balance": 75415
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 35",
+      "NumSharesUnits": 4887.07,
+      "SalePricePerShareUnit": 101.47,
+      "TotSaleValue": 495890,
+      "CostAcqWithoutIndx": 200000,
+      "AcquisitionCost": 200000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 4.96,
+      "TotalDeductions": 200005,
+      "Balance": 295885
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 35",
+      "NumSharesUnits": 8414.3,
+      "SalePricePerShareUnit": 101.47,
+      "TotSaleValue": 853799,
+      "CostAcqWithoutIndx": 352222,
+      "AcquisitionCost": 249999.99,
+      "LTCGBeforelower6and11": 352222,
+      "FairMktValuePerShareunit": 41.86,
+      "TotFairMktValueCapAst": 352222,
+      "ExpExclCnctTransfer": 8.54,
+      "TotalDeductions": 352231,
+      "Balance": 501568
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 36",
+      "NumSharesUnits": 2009.18,
+      "SalePricePerShareUnit": 174.2,
+      "TotSaleValue": 349999,
+      "CostAcqWithoutIndx": 165737,
+      "AcquisitionCost": 122209.78,
+      "LTCGBeforelower6and11": 165737,
+      "FairMktValuePerShareunit": 82.49,
+      "TotFairMktValueCapAst": 165737,
+      "ExpExclCnctTransfer": 3.5,
+      "TotalDeductions": 165741,
+      "Balance": 184258
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 37",
+      "NumSharesUnits": 689.39,
+      "SalePricePerShareUnit": 77.19,
+      "TotSaleValue": 53214,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.53,
+      "TotalDeductions": 25001,
+      "Balance": 28213
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 37",
+      "NumSharesUnits": 12097.24,
+      "SalePricePerShareUnit": 77.19,
+      "TotSaleValue": 933785,
+      "CostAcqWithoutIndx": 430000,
+      "AcquisitionCost": 430000.03,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 9.34,
+      "TotalDeductions": 430009,
+      "Balance": 503776
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000XX0000",
+      "ShareUnitName": "SAMPLE NAME 38",
+      "NumSharesUnits": 86157.8,
+      "SalePricePerShareUnit": 19.48,
+      "TotSaleValue": 1678353,
+      "CostAcqWithoutIndx": 1200000,
+      "AcquisitionCost": 1199999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 16.78,
+      "TotalDeductions": 1200017,
+      "Balance": 478336
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 36",
+      "NumSharesUnits": 4065.46,
+      "SalePricePerShareUnit": 172.18,
+      "TotSaleValue": 699990,
+      "CostAcqWithoutIndx": 335359,
+      "AcquisitionCost": 219551.05,
+      "LTCGBeforelower6and11": 335359,
+      "FairMktValuePerShareunit": 82.49,
+      "TotFairMktValueCapAst": 335359,
+      "ExpExclCnctTransfer": 7,
+      "TotalDeductions": 335366,
+      "Balance": 364624
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00X00",
+      "ShareUnitName": "SAMPLE NAME 39",
+      "NumSharesUnits": 13446.33,
+      "SalePricePerShareUnit": 42.06,
+      "TotSaleValue": 565552,
+      "CostAcqWithoutIndx": 470000,
+      "AcquisitionCost": 469999.93,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 5.66,
+      "TotalDeductions": 470006,
+      "Balance": 95546
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 40",
+      "NumSharesUnits": 2311.25,
+      "SalePricePerShareUnit": 150.36,
+      "TotSaleValue": 347519,
+      "CostAcqWithoutIndx": 310000,
+      "AcquisitionCost": 309999.94,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 3.48,
+      "TotalDeductions": 310003,
+      "Balance": 37516
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2418.97,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87203,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.87,
+      "TotalDeductions": 58301,
+      "Balance": 28902
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2279.01,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 82158,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.82,
+      "TotalDeductions": 58301,
+      "Balance": 23857
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2503.09,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 90236,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.9,
+      "TotalDeductions": 58301,
+      "Balance": 31935
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2375.59,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 85640,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.86,
+      "TotalDeductions": 58301,
+      "Balance": 27339
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2480.73,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 89430,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.89,
+      "TotalDeductions": 58301,
+      "Balance": 31129
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2495.59,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 89966,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.9,
+      "TotalDeductions": 58301,
+      "Balance": 31665
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2452.55,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 88414,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.88,
+      "TotalDeductions": 58301,
+      "Balance": 30113
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2320.74,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 83662,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.84,
+      "TotalDeductions": 58301,
+      "Balance": 25361
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2403.01,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 86628,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.87,
+      "TotalDeductions": 58301,
+      "Balance": 28327
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2376.56,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 85674,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.86,
+      "TotalDeductions": 58301,
+      "Balance": 27373
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2316.13,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 83496,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.83,
+      "TotalDeductions": 58301,
+      "Balance": 25195
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2377.53,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 85709,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.86,
+      "TotalDeductions": 58301,
+      "Balance": 27408
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2423.99,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87384,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.87,
+      "TotalDeductions": 58301,
+      "Balance": 29083
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2307.88,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 83199,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.83,
+      "TotalDeductions": 58301,
+      "Balance": 24898
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2427.02,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87494,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.87,
+      "TotalDeductions": 58301,
+      "Balance": 29193
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2338.43,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 84300,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.84,
+      "TotalDeductions": 58301,
+      "Balance": 25999
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2438.19,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87896,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.88,
+      "TotalDeductions": 58301,
+      "Balance": 29595
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2423.99,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87384,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.87,
+      "TotalDeductions": 58301,
+      "Balance": 29083
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2352.59,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 84810,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.85,
+      "TotalDeductions": 58301,
+      "Balance": 26509
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2415.96,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87095,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.87,
+      "TotalDeductions": 58301,
+      "Balance": 28794
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2428.03,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 87530,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.88,
+      "TotalDeductions": 58301,
+      "Balance": 29229
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2376.56,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 85674,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.86,
+      "TotalDeductions": 58301,
+      "Balance": 27373
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2453.58,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 88451,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58299.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.88,
+      "TotalDeductions": 58301,
+      "Balance": 30150
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 41",
+      "NumSharesUnits": 2541.29,
+      "SalePricePerShareUnit": 36.05,
+      "TotSaleValue": 91613,
+      "CostAcqWithoutIndx": 58300,
+      "AcquisitionCost": 58300.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.92,
+      "TotalDeductions": 58301,
+      "Balance": 33312
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 240.48,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 25976,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.26,
+      "TotalDeductions": 12000,
+      "Balance": 13976
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 259.28,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 28007,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.28,
+      "TotalDeductions": 12000,
+      "Balance": 16007
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 251.1,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 27123,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.27,
+      "TotalDeductions": 12000,
+      "Balance": 15123
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 254.3,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 27469,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.27,
+      "TotalDeductions": 12000,
+      "Balance": 15469
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 242.36,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 26179,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.26,
+      "TotalDeductions": 12000,
+      "Balance": 14179
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 1083.56,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 117046,
+      "CostAcqWithoutIndx": 50000,
+      "AcquisitionCost": 49999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 1.17,
+      "TotalDeductions": 50001,
+      "Balance": 67045
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 242.62,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 26207,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 11999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.26,
+      "TotalDeductions": 12000,
+      "Balance": 14207
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 259.18,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 27996,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 11999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.28,
+      "TotalDeductions": 12000,
+      "Balance": 15996
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 16.65,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 1798,
+      "CostAcqWithoutIndx": 847,
+      "AcquisitionCost": 847,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.02,
+      "TotalDeductions": 847,
+      "Balance": 951
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 242.11,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 26152,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 11999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.26,
+      "TotalDeductions": 12000,
+      "Balance": 14152
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 249.61,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 26962,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.27,
+      "TotalDeductions": 12000,
+      "Balance": 14962
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 254.79,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 27522,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.28,
+      "TotalDeductions": 12000,
+      "Balance": 15522
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 257.89,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 27857,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.28,
+      "TotalDeductions": 12000,
+      "Balance": 15857
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 252.51,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 27276,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 11999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.27,
+      "TotalDeductions": 12000,
+      "Balance": 15276
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 260.12,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 28098,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 11999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.28,
+      "TotalDeductions": 12000,
+      "Balance": 16098
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 42",
+      "NumSharesUnits": 262.13,
+      "SalePricePerShareUnit": 108.02,
+      "TotSaleValue": 28315,
+      "CostAcqWithoutIndx": 12000,
+      "AcquisitionCost": 12000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.28,
+      "TotalDeductions": 12000,
+      "Balance": 16315
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 43",
+      "NumSharesUnits": 2755.16,
+      "SalePricePerShareUnit": 170.53,
+      "TotSaleValue": 469837,
+      "CostAcqWithoutIndx": 334436,
+      "AcquisitionCost": 334436.11,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 4.7,
+      "TotalDeductions": 334441,
+      "Balance": 135396
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 43",
+      "NumSharesUnits": 176.86,
+      "SalePricePerShareUnit": 170.53,
+      "TotSaleValue": 30159,
+      "CostAcqWithoutIndx": 21599,
+      "AcquisitionCost": 21599.37,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.3,
+      "TotalDeductions": 21599,
+      "Balance": 8560
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 92.23,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8480,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4480
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 88.7,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8155,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4155
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 93.37,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8585,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4585
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 103.5,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9516,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.1,
+      "TotalDeductions": 4000,
+      "Balance": 5516
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 100.56,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9246,
+      "CostAcqWithoutIndx": 4254,
+      "AcquisitionCost": 4253.76,
+      "LTCGBeforelower6and11": 4253,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4253,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4254,
+      "Balance": 4992
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 93.74,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8619,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4619
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 88.84,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8168,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4168
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 90.2,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8293,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4293
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 81.2,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 7466,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.07,
+      "TotalDeductions": 4000,
+      "Balance": 3466
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 99.07,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9109,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 5109
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 63.19,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 5810,
+      "CostAcqWithoutIndx": 2673,
+      "AcquisitionCost": 2673.04,
+      "LTCGBeforelower6and11": 2672,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 2672,
+      "ExpExclCnctTransfer": 0.06,
+      "TotalDeductions": 2673,
+      "Balance": 3137
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 90.66,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8336,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4336
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 77.84,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 7157,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.07,
+      "TotalDeductions": 4000,
+      "Balance": 3157
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 91.59,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8421,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4421
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 98.35,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9043,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 5043
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 93.79,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8623,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 3967,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 3967,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4623
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 100.73,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9262,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 5262
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 82.04,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 7543,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 3543
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 88.45,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8132,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4132
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 96.23,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8848,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4848
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 92.3,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8486,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4486
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 83.33,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 7662,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 3662
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 90.32,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8304,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4304
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 101.24,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9309,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 5309
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 93.9,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8634,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4634
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 99.94,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9189,
+      "CostAcqWithoutIndx": 4227,
+      "AcquisitionCost": 4227.28,
+      "LTCGBeforelower6and11": 4227,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4227,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4227,
+      "Balance": 4962
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 80.26,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 7379,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.07,
+      "TotalDeductions": 4000,
+      "Balance": 3379
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 90.3,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8303,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.98,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4303
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 99.44,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9143,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 5143
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 51.54,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 4739,
+      "CostAcqWithoutIndx": 2408,
+      "AcquisitionCost": 2407.79,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.05,
+      "TotalDeductions": 2408,
+      "Balance": 2331
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 97.24,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8941,
+      "CostAcqWithoutIndx": 4113,
+      "AcquisitionCost": 4113.37,
+      "LTCGBeforelower6and11": 4113,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4113,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4113,
+      "Balance": 4828
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 102.24,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 9400,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 5400
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 96.69,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8890,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4890
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 92.52,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8507,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.09,
+      "TotalDeductions": 4000,
+      "Balance": 4507
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 89.08,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8190,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 4000.02,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4190
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 88.21,
+      "SalePricePerShareUnit": 91.95,
+      "TotSaleValue": 8110,
+      "CostAcqWithoutIndx": 4000,
+      "AcquisitionCost": 3999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.08,
+      "TotalDeductions": 4000,
+      "Balance": 4110
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 107.28,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 9697,
+      "CostAcqWithoutIndx": 4538,
+      "AcquisitionCost": 4537.85,
+      "LTCGBeforelower6and11": 4537,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4537,
+      "ExpExclCnctTransfer": 0.1,
+      "TotalDeductions": 4538,
+      "Balance": 5159
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 128.49,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11614,
+      "CostAcqWithoutIndx": 5435,
+      "AcquisitionCost": 5435.29,
+      "LTCGBeforelower6and11": 5435,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5435,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5435,
+      "Balance": 6179
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 120.29,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10873,
+      "CostAcqWithoutIndx": 5088,
+      "AcquisitionCost": 5088.35,
+      "LTCGBeforelower6and11": 5088,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5088,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5088,
+      "Balance": 5785
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 121.04,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10940,
+      "CostAcqWithoutIndx": 5120,
+      "AcquisitionCost": 5119.86,
+      "LTCGBeforelower6and11": 5119,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5119,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5120,
+      "Balance": 5820
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 157.84,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 14267,
+      "CostAcqWithoutIndx": 6677,
+      "AcquisitionCost": 6676.51,
+      "LTCGBeforelower6and11": 6676,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 6676,
+      "ExpExclCnctTransfer": 0.14,
+      "TotalDeductions": 6677,
+      "Balance": 7590
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 128.83,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11644,
+      "CostAcqWithoutIndx": 5450,
+      "AcquisitionCost": 5449.67,
+      "LTCGBeforelower6and11": 5449,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5449,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5450,
+      "Balance": 6194
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 133.74,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12088,
+      "CostAcqWithoutIndx": 5657,
+      "AcquisitionCost": 5657.12,
+      "LTCGBeforelower6and11": 5657,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5657,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5657,
+      "Balance": 6431
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 164.67,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 14884,
+      "CostAcqWithoutIndx": 6966,
+      "AcquisitionCost": 6965.63,
+      "LTCGBeforelower6and11": 6965,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 6965,
+      "ExpExclCnctTransfer": 0.15,
+      "TotalDeductions": 6966,
+      "Balance": 7918
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 121.09,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10945,
+      "CostAcqWithoutIndx": 5122,
+      "AcquisitionCost": 5122.19,
+      "LTCGBeforelower6and11": 5122,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5122,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5122,
+      "Balance": 5823
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 124.68,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11269,
+      "CostAcqWithoutIndx": 5274,
+      "AcquisitionCost": 5273.92,
+      "LTCGBeforelower6and11": 5273,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5273,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5274,
+      "Balance": 5995
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 143.76,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12994,
+      "CostAcqWithoutIndx": 6081,
+      "AcquisitionCost": 6081.13,
+      "LTCGBeforelower6and11": 6081,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 6081,
+      "ExpExclCnctTransfer": 0.13,
+      "TotalDeductions": 6081,
+      "Balance": 6913
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 122.78,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11098,
+      "CostAcqWithoutIndx": 5194,
+      "AcquisitionCost": 5193.67,
+      "LTCGBeforelower6and11": 5193,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5193,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5194,
+      "Balance": 5904
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 135.01,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12203,
+      "CostAcqWithoutIndx": 5711,
+      "AcquisitionCost": 5711.05,
+      "LTCGBeforelower6and11": 5710,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5710,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5711,
+      "Balance": 6492
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 128.67,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11630,
+      "CostAcqWithoutIndx": 5443,
+      "AcquisitionCost": 5442.65,
+      "LTCGBeforelower6and11": 5442,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5442,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5443,
+      "Balance": 6187
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 115.46,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10436,
+      "CostAcqWithoutIndx": 4884,
+      "AcquisitionCost": 4884.12,
+      "LTCGBeforelower6and11": 4883,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4883,
+      "ExpExclCnctTransfer": 0.1,
+      "TotalDeductions": 4884,
+      "Balance": 5552
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 128.6,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11624,
+      "CostAcqWithoutIndx": 5440,
+      "AcquisitionCost": 5439.9,
+      "LTCGBeforelower6and11": 5439,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5439,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5440,
+      "Balance": 6184
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 120.11,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10856,
+      "CostAcqWithoutIndx": 5081,
+      "AcquisitionCost": 5080.56,
+      "LTCGBeforelower6and11": 5080,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5080,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5081,
+      "Balance": 5775
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 117.01,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10576,
+      "CostAcqWithoutIndx": 4950,
+      "AcquisitionCost": 4949.69,
+      "LTCGBeforelower6and11": 4949,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4949,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 4950,
+      "Balance": 5626
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 140.06,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12660,
+      "CostAcqWithoutIndx": 5925,
+      "AcquisitionCost": 5924.79,
+      "LTCGBeforelower6and11": 5924,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5924,
+      "ExpExclCnctTransfer": 0.13,
+      "TotalDeductions": 5925,
+      "Balance": 6735
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 142.62,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12891,
+      "CostAcqWithoutIndx": 6033,
+      "AcquisitionCost": 6032.78,
+      "LTCGBeforelower6and11": 6032,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 6032,
+      "ExpExclCnctTransfer": 0.13,
+      "TotalDeductions": 6033,
+      "Balance": 6858
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 130.75,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11818,
+      "CostAcqWithoutIndx": 5531,
+      "AcquisitionCost": 5530.89,
+      "LTCGBeforelower6and11": 5530,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5530,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5531,
+      "Balance": 6287
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 133.37,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12055,
+      "CostAcqWithoutIndx": 5642,
+      "AcquisitionCost": 5641.51,
+      "LTCGBeforelower6and11": 5641,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5641,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5642,
+      "Balance": 6413
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 105.76,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 9559,
+      "CostAcqWithoutIndx": 4474,
+      "AcquisitionCost": 4473.51,
+      "LTCGBeforelower6and11": 4473,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4473,
+      "ExpExclCnctTransfer": 0.1,
+      "TotalDeductions": 4474,
+      "Balance": 5085
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 132.73,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11997,
+      "CostAcqWithoutIndx": 5615,
+      "AcquisitionCost": 5614.6,
+      "LTCGBeforelower6and11": 5614,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5614,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5615,
+      "Balance": 6382
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 125.81,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11371,
+      "CostAcqWithoutIndx": 5322,
+      "AcquisitionCost": 5321.8,
+      "LTCGBeforelower6and11": 5321,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5321,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5322,
+      "Balance": 6049
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 152.7,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 13802,
+      "CostAcqWithoutIndx": 6459,
+      "AcquisitionCost": 6459.38,
+      "LTCGBeforelower6and11": 6459,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 6459,
+      "ExpExclCnctTransfer": 0.14,
+      "TotalDeductions": 6459,
+      "Balance": 7343
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 141.36,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12777,
+      "CostAcqWithoutIndx": 5979,
+      "AcquisitionCost": 5979.4,
+      "LTCGBeforelower6and11": 5979,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5979,
+      "ExpExclCnctTransfer": 0.13,
+      "TotalDeductions": 5979,
+      "Balance": 6798
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 129.14,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11672,
+      "CostAcqWithoutIndx": 5463,
+      "AcquisitionCost": 5462.79,
+      "LTCGBeforelower6and11": 5462,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5462,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5463,
+      "Balance": 6209
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 129.91,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11742,
+      "CostAcqWithoutIndx": 5495,
+      "AcquisitionCost": 5495.27,
+      "LTCGBeforelower6and11": 5495,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5495,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5495,
+      "Balance": 6247
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 111.52,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 10080,
+      "CostAcqWithoutIndx": 4717,
+      "AcquisitionCost": 4717.46,
+      "LTCGBeforelower6and11": 4717,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4717,
+      "ExpExclCnctTransfer": 0.1,
+      "TotalDeductions": 4717,
+      "Balance": 5363
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 131.81,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11914,
+      "CostAcqWithoutIndx": 5576,
+      "AcquisitionCost": 5575.52,
+      "LTCGBeforelower6and11": 5575,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5575,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5576,
+      "Balance": 6338
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 133,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12021,
+      "CostAcqWithoutIndx": 5626,
+      "AcquisitionCost": 5626.07,
+      "LTCGBeforelower6and11": 5625,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5625,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5626,
+      "Balance": 6395
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 1078.44,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 97480,
+      "CostAcqWithoutIndx": 45618,
+      "AcquisitionCost": 45618.21,
+      "LTCGBeforelower6and11": 45618,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 45618,
+      "ExpExclCnctTransfer": 0.97,
+      "TotalDeductions": 45619,
+      "Balance": 51861
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 143.1,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 12934,
+      "CostAcqWithoutIndx": 6053,
+      "AcquisitionCost": 6053.26,
+      "LTCGBeforelower6and11": 6053,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 6053,
+      "ExpExclCnctTransfer": 0.13,
+      "TotalDeductions": 6053,
+      "Balance": 6881
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 130.14,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11763,
+      "CostAcqWithoutIndx": 5505,
+      "AcquisitionCost": 5504.88,
+      "LTCGBeforelower6and11": 5504,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5504,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5505,
+      "Balance": 6258
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 126.33,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11418,
+      "CostAcqWithoutIndx": 5344,
+      "AcquisitionCost": 5343.63,
+      "LTCGBeforelower6and11": 5343,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5343,
+      "ExpExclCnctTransfer": 0.11,
+      "TotalDeductions": 5344,
+      "Balance": 6074
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 106.74,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 9648,
+      "CostAcqWithoutIndx": 4515,
+      "AcquisitionCost": 4515.26,
+      "LTCGBeforelower6and11": 4515,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 4515,
+      "ExpExclCnctTransfer": 0.1,
+      "TotalDeductions": 4515,
+      "Balance": 5133
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 36.92,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 3337,
+      "CostAcqWithoutIndx": 1562,
+      "AcquisitionCost": 1561.94,
+      "LTCGBeforelower6and11": 1561,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 1561,
+      "ExpExclCnctTransfer": 0.03,
+      "TotalDeductions": 1562,
+      "Balance": 1775
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 170.38,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 15400,
+      "CostAcqWithoutIndx": 7207,
+      "AcquisitionCost": 7207.21,
+      "LTCGBeforelower6and11": 7207,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 7207,
+      "ExpExclCnctTransfer": 0.15,
+      "TotalDeductions": 7207,
+      "Balance": 8193
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00000",
+      "ShareUnitName": "SAMPLE NAME 44",
+      "NumSharesUnits": 132.64,
+      "SalePricePerShareUnit": 90.39,
+      "TotSaleValue": 11989,
+      "CostAcqWithoutIndx": 5611,
+      "AcquisitionCost": 5610.92,
+      "LTCGBeforelower6and11": 5610,
+      "FairMktValuePerShareunit": 42.3,
+      "TotFairMktValueCapAst": 5610,
+      "ExpExclCnctTransfer": 0.12,
+      "TotalDeductions": 5611,
+      "Balance": 6378
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1434.73,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 33515,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.34,
+      "TotalDeductions": 25000,
+      "Balance": 8515
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1327.32,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 31006,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 24999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.31,
+      "TotalDeductions": 25000,
+      "Balance": 6006
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1488.29,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 34766,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.35,
+      "TotalDeductions": 25000,
+      "Balance": 9766
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1342.72,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 31365,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 24999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.31,
+      "TotalDeductions": 25000,
+      "Balance": 6365
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1321.43,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 30868,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.31,
+      "TotalDeductions": 25000,
+      "Balance": 5868
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1372.58,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 32063,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 24999.99,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.32,
+      "TotalDeductions": 25000,
+      "Balance": 7063
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1337.83,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 31251,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.31,
+      "TotalDeductions": 25000,
+      "Balance": 6251
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1341.42,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 31335,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.31,
+      "TotalDeductions": 25000,
+      "Balance": 6335
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1340.99,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 31325,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.31,
+      "TotalDeductions": 25000,
+      "Balance": 6325
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1380.31,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 32244,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.32,
+      "TotalDeductions": 25000,
+      "Balance": 7244
+     },
+     {
+      "ShareOnOrBefore": "BE",
+      "ISINCode": "XXX000X00XX0",
+      "ShareUnitName": "SAMPLE NAME 45",
+      "NumSharesUnits": 1377.27,
+      "SalePricePerShareUnit": 23.36,
+      "TotSaleValue": 32173,
+      "CostAcqWithoutIndx": 25000,
+      "AcquisitionCost": 25000.01,
+      "LTCGBeforelower6and11": 0,
+      "FairMktValuePerShareunit": 0,
+      "TotFairMktValueCapAst": 0,
+      "ExpExclCnctTransfer": 0.32,
+      "TotalDeductions": 25000,
+      "Balance": 7173
+     }
+    ],
+    "SaleValue112A": 22302570,
+    "CostAcqWithoutIndx112A": 14447035,
+    "AcquisitionCost112A": 13933985,
+    "LTCGBeforelowerB1B2112A": 1418413,
+    "FairMktValueCapAst112A": 1418413,
+    "ExpExclCnctTransfer112A": 177,
+    "Deductions112A": 14447213,
+    "Balance112A": 7855368
+   },
+   "ScheduleOS": {
+    "IncOthThanOwnRaceHorse": {
+     "GrossIncChrgblTaxAtAppRate": 371567,
+     "DividendGross": 7532,
+     "DividendOthThan22e": 7532,
+     "Dividend22e": 0,
+     "InterestGross": 364035,
+     "IntrstFrmSavingBank": 71458,
+     "IntrstFrmTermDeposit": 29993,
+     "IntrstFrmIncmTaxRefund": 0,
+     "NatofPassThrghIncome": 0,
+     "IntrstFrmOthers": 262584,
+     "RentFromMachPlantBldgs": 0,
+     "Tot562x": 0,
+     "Aggrtvaluewithoutcons562x": 0,
+     "Immovpropwithoutcons562x": 0,
+     "Immovpropinadeqcons562x": 0,
+     "Anyotherpropwithoutcons562x": 0,
+     "Anyotherpropinadeqcons562x": 0,
+     "FamilyPension": 0,
+     "AnyOtherIncome": 0,
+     "IncChargeableSpecialRates": 0,
+     "LtryPzzlChrgblUs115BB": 0,
+     "IncChrgblUs115BBE": 0,
+     "CashCreditsUs68": 0,
+     "UnExplndInvstmntsUs69": 0,
+     "UnExplndMoneyUs69A": 0,
+     "UnDsclsdInvstmntsUs69B": 0,
+     "UnExplndExpndtrUs69C": 0,
+     "AmtBrwdRepaidOnHundiUs69D": 0,
+     "TaxAccumulatedBalRecPF": {
+      "TotalIncomeBenefit": 0,
+      "TotalTaxBenefit": 0
+     },
+     "OthersGross": 0,
+     "PassThrIncOSChrgblSplRate": 0,
+     "IncChargblSplRateOS": {
+      "TotalAmtTaxUsDTAASchOs": 0
+     },
+     "Deductions": {
+      "Depreciation": 0,
+      "TotDeductions": 0
+     },
+     "BalanceNoRaceHorse": 371567
+    },
+    "TotOthSrcNoRaceHorse": 371567,
+    "IncFromOwnHorse": {
+     "Receipts": 0,
+     "DeductSec57": 0,
+     "BalanceOwnRaceHorse": 0
+    },
+    "IncChargeable": 371567,
+    "IncFrmLottery": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "IncFrmOnGames": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Upto15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115BBDA": {
+     "DateRange": {
+      "Upto15Of6": 7532,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115BBDAaiii": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115A1ai": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115A1aA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Upto15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115AC": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115ACA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115AD1i": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "NOT89A": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendDTAA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    }
+   },
+   "ScheduleCYLA": {
+    "Salary": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "HP": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "BusProfExclSpecProf": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 1665434,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 1665434
+     }
+    },
+    "SpeculativeInc": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "SpecifiedInc": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCG20Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 63538,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 63538
+     }
+    },
+    "STCG30Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCGAppRate": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "STCGDTAARate": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "LTCG12_5Per": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 9080893,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 9080893
+     }
+    },
+    "LTCGDTAARate": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "OthSrcExclRaceHorse": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 371567,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "IncOfCurYrAfterSetOff": 371567
+     }
+    },
+    "OthSrcRaceHorse": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "IncOSDTAA": {
+     "IncCYLA": {
+      "IncOfCurYrUnderThatHead": 0,
+      "HPlossCurYrSetoff": 0,
+      "BusLossSetoff": 0,
+      "OthSrcLossNoRaceHorseSetoff": 0,
+      "IncOfCurYrAfterSetOff": 0
+     }
+    },
+    "TotalCurYr": {
+     "TotHPlossCurYr": 0,
+     "TotBusLoss": 0,
+     "TotOthSrcLossNoRaceHorse": 0
+    },
+    "TotalLossSetOff": {
+     "TotHPlossCurYrSetoff": 0,
+     "TotBusLossSetoff": 0,
+     "TotOthSrcLossNoRaceHorseSetoff": 0
+    },
+    "LossRemAftSetOff": {
+     "BalHPlossCurYrAftSetoff": 0,
+     "BalBusLossAftSetoff": 0,
+     "BalOthSrcLossNoRaceHorseAftSetoff": 0
+    }
+   },
+   "ScheduleBFLA": {
+    "Salary": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "HP": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "BusProfExclSpecProf": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 1665434,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 1665434
+     }
+    },
+    "SpeculativeInc": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "SpecifiedInc": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCG20Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 63538,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 63538
+     }
+    },
+    "STCG30Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCGAppRate": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "STCGDTAARate": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "LTCG12_5Per": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 9080893,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 9080893
+     }
+    },
+    "LTCGDTAARate": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "OthSrcExclRaceHorse": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 371567,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 371567
+     }
+    },
+    "OthSrcRaceHorse": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFlossPrevYrUndSameHeadSetoff": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "IncOSDTAA": {
+     "IncBFLA": {
+      "IncOfCurYrUndHeadFromCYLA": 0,
+      "BFUnabsorbedDeprSetoff": 0,
+      "BFAllUs35Cl4Setoff": 0,
+      "IncOfCurYrAfterSetOffBFLosses": 0
+     }
+    },
+    "TotalBFLossSetOff": {
+     "TotBFLossSetoff": 0,
+     "TotUnabsorbedDeprSetoff": 0,
+     "TotAllUs35cl4Setoff": 0
+    },
+    "IncomeOfCurrYrAftCYLABFLA": 11181432
+   },
+   "ScheduleCFL": {
+    "TotalOfBFLossesEarlierYrs": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 0,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 0,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    },
+    "AdjTotBFLossInBFLA": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 0,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 0,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    },
+    "CurrentAYloss": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 0,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 0,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    },
+    "TotalLossCFSummary": {
+     "LossSummaryDetail": {
+      "TotalHPPTILossCF": 0,
+      "BusLossOthThanSpecLossCF": 0,
+      "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
+      "TotalSTCGPTILossCF": 0,
+      "TotalLTCGPTILossCF": 0,
+      "OthSrcLossRaceHorseCF": 0
+     }
+    }
+   },
+   "ScheduleAMTC": {
+    "TaxSection115JC": 0,
+    "TaxOthProvisions": 1604368,
+    "AmtTaxCreditAvailable": 1604368,
+    "ScheduleAMTCDtls": [
+     {
+      "AssYr": "2013-14",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2014-15",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2015-16",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2016-17",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2017-18",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2018-19",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2019-20",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2020-21",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2021-22",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2022-23",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2023-24",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2024-25",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2025-26",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     }
+    ],
+    "CurrAssYr": "2026-27",
+    "CurrYrAmtCreditFwd": 0,
+    "CurrYrCreditCarryFwd": 0,
+    "TotAMTGross": 0,
+    "TotSetOffEys": 0,
+    "TotBalBF": 0,
+    "TotAmtCreditUtilisedCY": 0,
+    "TotBalAMTCreditCF": 0,
+    "TaxSection115JD": 0,
+    "AmtLiabilityAvailable": 0
+   },
+   "ScheduleSI": {
+    "SplCodeRateTax": [
+     {
+      "SecCode": "1",
+      "SplRatePercent": 1,
+      "SplRateInc": 0,
+      "SplRateIncTax": 0
+     },
+     {
+      "SecCode": "1A",
+      "SplRatePercent": 20,
+      "SplRateInc": 63538,
+      "SplRateIncTax": 12708
+     },
+     {
+      "SecCode": "21",
+      "SplRatePercent": 12.5,
+      "SplRateInc": 1225525,
+      "SplRateIncTax": 153191
+     },
+     {
+      "SecCode": "2A",
+      "SplRatePercent": 12.5,
+      "SplRateInc": 7855368,
+      "SplRateIncTax": 966296
+     }
+    ],
+    "TotSplRateInc": 9144431,
+    "TotSplRateIncTax": 1132195
+   },
+   "ScheduleEI": {
+    "InterestInc": 0,
+    "NetAgriIncOrOthrIncRule7": 0,
+    "IncChrgblAsPerDTAA": 0,
+    "PassThrIncNotChrgblTax": 0,
+    "TotalExemptInc": 0
+   },
+   "ScheduleTR1": {
+    "TotalTaxPaidOutsideIndia": 0,
+    "TotalTaxReliefOutsideIndia": 0,
+    "TaxReliefOutsideIndiaDTAA": 0,
+    "TaxReliefOutsideIndiaNotDTAA": 0,
+    "TaxPaidOutsideIndFlg": "NO"
+   },
+   "ScheduleAL": {
+    "MovableAsset": {
+     "DepositsInBank": 0,
+     "SharesAndSecurities": 0,
+     "InsurancePolicies": 0,
+     "LoansAndAdvancesGiven": 0,
+     "CashInHand": 0,
+     "JewelleryBullionEtc": 0,
+     "ArchCollDrawPaintSulpArt": 0,
+     "VehiclYachtsBoatsAircrafts": 0
+    },
+    "InterstAOPFlag": "N",
+    "LiabilityInRelatAssets": 0
+   },
+   "PartB-TI": {
+    "Salaries": 0,
+    "IncomeFromHP": 0,
+    "ProfBusGain": {
+     "ProfGainNoSpecBus": 1665434,
+     "ProfGainSpecBus": 0,
+     "ProfGainSpecifiedBus": 0,
+     "ProfIncome115BBF": 0,
+     "TotProfBusGain": 1665434
+    },
+    "CapGain": {
+     "ShortTerm": {
+      "ShortTerm20Per": 63538,
+      "ShortTerm30Per": 0,
+      "ShortTermAppRate": 0,
+      "ShortTermSplRateDTAA": 0,
+      "TotalShortTerm": 63538
+     },
+     "LongTerm": {
+      "LongTerm12_5Per": 9080893,
+      "LongTermSplRateDTAA": 0,
+      "TotalLongTerm": 9080893
+     },
+     "ShortTermLongTermTotal": 9144431,
+     "CapGains30Per115BBH": 0,
+     "TotalCapGains": 9144431
+    },
+    "IncFromOS": {
+     "OtherSrcThanOwnRaceHorse": 371567,
+     "IncChargblSplRate": 0,
+     "FromOwnRaceHorse": 0,
+     "TotIncFromOS": 371567
+    },
+    "TotalTI": 11181432,
+    "CurrentYearLoss": 0,
+    "BalanceAfterSetoffLosses": 11181432,
+    "BroughtFwdLossesSetoff": 0,
+    "GrossTotalIncome": 11181432,
+    "IncChargeTaxSplRate111A112": 9144431,
+    "DeductionsUndSchVIADtl": {
+     "PartBchapterVIA": 0,
+     "PartCchapterVIA": 0,
+     "TotDeductUndSchVIA": 0
+    },
+    "DeductionsUnder10Aor10AA": 0,
+    "TotalIncome": 11181432,
+    "IncChargeableTaxSplRates": 9144431,
+    "NetAgricultureIncomeOrOtherIncomeForRate": 0,
+    "AggregateIncome": 2037001,
+    "LossesOfCurrentYearCarriedFwd": 0,
+    "DeemedIncomeUs115JC": 0
+   },
+   "PartB_TTI": {
+    "ComputationOfTaxLiability": {
+     "TaxPayableOnDeemedTI": {
+      "TaxDeemedTISec115JC": 0,
+      "SurchargeOnAboveCrore": 0,
+      "EducationCess": 0,
+      "TotalTax": 0
+     },
+     "TaxPayableOnTI": {
+      "TaxAtNormalRatesOnAggrInc": 209250,
+      "TaxAtSpecialRates": 1132195,
+      "RebateOnAgriInc": 0,
+      "TaxPayableOnTotInc": 1341445,
+      "Rebate87A": 0,
+      "TaxPayableOnRebate": 1341445,
+      "Surcharge25ofSI": 0,
+      "Surcharge25ofSIBeforeMarginal": 0,
+      "SurchargeOnAboveCroreBeforeMarginal": 201217,
+      "SurchargeOnAboveCrore": 201217,
+      "TotalSurcharge": 201217,
+      "EducationCess": 61706,
+      "GrossTaxLiability": 1604368
+     },
+     "GrossTaxPayable": 1604368,
+     "GrossTaxPay": {
+      "TaxInc17": 1604368,
+      "TaxDeferred17": 0,
+      "TaxDeferredPayableCY": 0
+     },
+     "CreditUS115JD": 0,
+     "TaxPayAfterCreditUs115JD": 1604368,
+     "TaxRelief": {
+      "Section89": 0,
+      "Section90": 0,
+      "Section91": 0,
+      "TotTaxRelief": 0
+     },
+     "NetTaxLiability": 1604368,
+     "IntrstPay": {
+      "IntrstPayUs234A": 0,
+      "IntrstPayUs234B": 36172,
+      "IntrstPayUs234C": 39127,
+      "LateFilingFee234F": 0,
+      "FeeFurnish234I": 0,
+      "TotalIntrstPay": 75299
+     },
+     "AggregateTaxInterestLiability": 1679667
+    },
+    "TaxPaid": {
+     "TaxesPaid": {
+      "AdvanceTax": 700000,
+      "TDS": 0,
+      "TCS": 0,
+      "SelfAssessmentTax": 979667,
+      "TotalTaxesPaid": 1679667
+     },
+     "BalTaxPayable": 0
+    },
+    "Refund": {
+     "RefundDue": 0,
+     "BankAccountDtls": {
+      "BankDtlsFlag": "Y",
+      "AddtnlBankDetails": [
+       {
+        "IFSCCode": "XXXX0000000",
+        "BankName": "SAMPLE NAME 46",
+        "BankAccountNo": "000000000000",
+        "AccountType": "SB",
+        "UseForRefund": "true"
+       },
+       {
+        "IFSCCode": "XXXX0XXX000",
+        "BankName": "SAMPLE NAME 47",
+        "BankAccountNo": "000000000000",
+        "AccountType": "SB",
+        "UseForRefund": "false"
+       }
+      ]
+     }
+    },
+    "AssetOutIndiaFlag": "NO"
+   },
+   "ScheduleIT": {
+    "TaxPayment": [
+     {
+      "BSRCode": "0000000",
+      "DateDep": "2026-01-07",
+      "SrlNoOfChaln": 99999,
+      "Amt": 300000
+     },
+     {
+      "BSRCode": "0000000",
+      "DateDep": "2026-07-08",
+      "SrlNoOfChaln": 9999,
+      "Amt": 400000
+     },
+     {
+      "BSRCode": "0000000",
+      "DateDep": "2025-09-09",
+      "SrlNoOfChaln": 99999,
+      "Amt": 150000
+     },
+     {
+      "BSRCode": "0000000",
+      "DateDep": "2026-07-12",
+      "SrlNoOfChaln": 99999,
+      "Amt": 579667
+     },
+     {
+      "BSRCode": "0000000",
+      "DateDep": "2025-06-05",
+      "SrlNoOfChaln": 9999,
+      "Amt": 250000
+     }
+    ],
+    "TotalTaxPayments": 1679667
+   },
+   "ScheduleTDS2": {
+    "TDSOthThanSalaryDtls": [
+     {
+      "TDSCreditName": "S",
+      "TANOfDeductor": "AAAC00002A",
+      "TDSSection": "94K",
+      "TaxDeductCreditDtls": {
+       "TaxClaimedOwnHands": 0
+      },
+      "GrossAmount": 82,
+      "HeadOfIncome": "OS",
+      "AmtCarriedFwd": 0
+     },
+     {
+      "TDSCreditName": "S",
+      "TANOfDeductor": "AAAB00001A",
+      "TDSSection": "94K",
+      "TaxDeductCreditDtls": {
+       "TaxClaimedOwnHands": 0
+      },
+      "HeadOfIncome": "OS",
+      "AmtCarriedFwd": 0
+     },
+     {
+      "TDSCreditName": "S",
+      "TANOfDeductor": "AAAA00000A",
+      "TDSSection": "94A",
+      "TaxDeductCreditDtls": {
+       "TaxClaimedOwnHands": 0
+      },
+      "GrossAmount": 84,
+      "HeadOfIncome": "OS",
+      "AmtCarriedFwd": 0
+     }
+    ],
+    "TotalTDSonOthThanSals": 0
+   },
+   "Verification": {
+    "Declaration": {
+     "AssesseeVerName": "SAMPLE NAME 48",
+     "FatherName": "SAMPLE NAME 49",
+     "AssesseeVerPAN": "AAAPZ1000A"
+    },
+    "Capacity": "S",
+    "Date": "2026-07-12",
+    "Place": "SAMPLE PLACE 6"
+   }
+  }
+ }
+}

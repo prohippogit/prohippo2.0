@@ -753,17 +753,55 @@ const pick = (obj, ...paths) => {
   return undefined;
 };
 
-function parseRequest(body) {
+/*
+ * Envelope keys — everything that is ABOUT the call rather than an argument to
+ * a tool. Used to tell the two apart when the body arrives flat (see below).
+ */
+const ENVELOPE_KEYS = new Set([
+  "event", "event_type", "type", "webhook_event",
+  "tool_name", "toolname", "function_name", "name", "tool", "function",
+  "arguments", "parameters", "tool_arguments", "toolarguments", "input",
+  "call_id", "callid", "session_id", "sessionid", "conversation_id", "conversationid", "id",
+  "from", "from_number", "fromnumber", "caller", "caller_id", "callerid", "customer_number",
+  "user_config", "user_phone_number", "call", "session", "data", "metadata",
+  "webhook_config", "agent_variables", "app_config", "variables", "session_token",
+  "transcript", "messages", "conversation", "duration", "duration_seconds", "durationsec",
+  "language", "language_code", "locale", "utterance", "query_text", "user_message",
+  "last_user_message", "text",
+]);
+
+/*
+ * `pathname` is the webhook's own URL path, and on Sarvam it is what carries
+ * the tool's identity.
+ *
+ * Sarvam's API-tool form builds a FLAT body out of the fields you declare —
+ * `{"query": "raise a bill"}` — with no wrapper naming which tool produced it.
+ * That is fine for a single-purpose endpoint and useless for a dispatcher, so
+ * each tool is registered with its own URL suffix:
+ *
+ *   .../sarvamVoiceWebhook/find_feature
+ *   .../sarvamVoiceWebhook/upcoming_hearings
+ *
+ * The last path segment names the tool. A body-level name still wins if one is
+ * present, so anything that does send a wrapper keeps working.
+ */
+function parseRequest(body, pathname = "") {
   const b = body && typeof body === "object" ? body : {};
   const event = String(
     pick(b, "event", "event_type", "type", "webhook_event", "data.event") || ""
   ).toLowerCase();
 
+  const fromPath = String(pathname || "")
+    .split("?")[0]
+    .split("/")
+    .filter(Boolean)
+    .pop();
+
   const toolName = pick(
     b,
     "tool_name", "toolName", "tool.name", "function_name", "function.name",
     "name", "data.tool_name", "data.function.name"
-  );
+  ) || (fromPath && isKnownTool(fromPath) ? fromPath : undefined);
 
   let args = pick(
     b,
@@ -774,6 +812,16 @@ function parseRequest(body) {
     try { args = JSON.parse(args); } catch { args = { query: args }; }
   }
   if (!args || typeof args !== "object" || Array.isArray(args)) args = {};
+
+  /* No wrapper? Then the body IS the arguments — Sarvam's normal shape. Take
+     every key that isn't call metadata, so `{"query": "raise a bill"}` becomes
+     `{query: "raise a bill"}` and a stray `event` or `call_id` alongside it
+     doesn't get handed to a tool as if the agent had chosen it. */
+  if (!Object.keys(args).length) {
+    for (const [k, v] of Object.entries(b)) {
+      if (!ENVELOPE_KEYS.has(k.toLowerCase())) args[k] = v;
+    }
+  }
 
   /* `user_config.user_phone_number` is the platform's own name for the person
      on the other end — it is what you supply when triggering an outbound call,

@@ -575,6 +575,42 @@ test("start and end events are told apart across naming conventions", () => {
   }
 });
 
+test("the URL path names the tool when the body is flat — Sarvam's actual shape", () => {
+  // Sarvam's API-tool form sends only the fields you declared, with no wrapper.
+  const p = parseRequest({ query: "raise a bill" }, "/sarvamVoiceWebhook/find_feature");
+  assert.equal(p.kind, "tool");
+  assert.equal(p.toolName, "find_feature");
+  assert.equal(p.args.query, "raise a bill");
+});
+
+test("call metadata alongside a flat body is not mistaken for a tool argument", () => {
+  const p = parseRequest(
+    { days: 7, call_id: "c1", language: "hi-IN", user_config: { user_phone_number: "+919825011234" } },
+    "/sarvamVoiceWebhook/upcoming_hearings"
+  );
+  assert.deepEqual(p.args, { days: 7 });
+  assert.equal(p.callId, "c1");
+  assert.equal(p.phone, "+919825011234");
+});
+
+test("a tool with no arguments still routes off the path", () => {
+  const p = parseRequest({}, "/sarvamVoiceWebhook/today_brief");
+  assert.equal(p.toolName, "today_brief");
+  assert.deepEqual(p.args, {});
+});
+
+test("an unrecognised path is not treated as a tool name", () => {
+  // Otherwise a typo'd URL becomes an invented tool rather than a clean refusal.
+  const p = parseRequest({ event: "call.started" }, "/sarvamVoiceWebhook/nonsense");
+  assert.equal(p.toolName, null);
+  assert.equal(p.kind, "session-start");
+});
+
+test("a body-level tool name still wins over the path", () => {
+  const p = parseRequest({ tool_name: "open_tasks" }, "/sarvamVoiceWebhook/find_feature");
+  assert.equal(p.toolName, "open_tasks");
+});
+
 test("an unknown tool name still parses as a tool — so the dispatcher can refuse it", () => {
   const p = parseRequest({ tool_name: "drop_database", arguments: {} });
   assert.equal(p.kind, "tool");

@@ -7,8 +7,10 @@
  */
 import { UnsupportedFormError } from "../../detect.js";
 import { mapItr2Ay2025 } from "./ay2025-26.js";
+import { mapItr2Ay2026 } from "./ay2026-27.js";
 
 const BY_YEAR = {
+  "2026-27": mapItr2Ay2026,
   "2025-26": mapItr2Ay2025,
 };
 

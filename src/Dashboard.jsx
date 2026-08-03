@@ -346,18 +346,27 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
             const hasFutureHearing = due && due >= today;
             const isSel = selected.has(n.id);
             return (
-              <div key={n.id} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderRadius: 11, background: isSel ? "var(--p-lavender-2)" : "transparent"}}>
+              /* Wraps rather than squeezes: on a narrow window the buttons drop
+                 to a second line instead of eating into the name. */
+              <div key={n.id} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderRadius: 11, background: isSel ? "var(--p-lavender-2)" : "transparent", flexWrap: "wrap"}}>
                 <Check checked={isSel} onChange={() => toggle(n.id)}/>
-                <div style={{flex: 1, minWidth: 0, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open the notice record">
-                  <div className="between" style={{gap: 8}}>
-                    <span className="strong" style={{fontSize: 13.5, color: "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.assessee ? titleCase(n.assessee) : "—"}</span>
-                    <div className="center" style={{gap: 6, flexShrink: 0}}>
-                      {n.section && <span className="pill pill-muted">u/s {n.section}</span>}
-                      {hasFutureHearing && <span className="pill pill-pink"><Icon name="calendar" size={10}/>{fmtDate(due)}</span>}
-                    </div>
+                {/* The assessee's name gets a line to itself.
+                    It shared one with the section and hearing pills, which are
+                    fixed-width and never shrink — so on a row carrying a
+                    deadline pill and three buttons the name was the only thing
+                    left that could give, and it gave until it read "Manis…".
+                    The name is the one thing on this row nobody can act
+                    without. The pills drop to the meta line, which has room. */}
+                <div style={{flex: 1, minWidth: 190, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open the notice record">
+                  <div style={{fontSize: 14.5, fontWeight: 800, color: "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                    {n.assessee ? titleCase(n.assessee) : "—"}
                   </div>
-                  <div className="muted" style={{fontSize: 11.5, marginTop: 3}}>
-                    AY {n.ay || "—"}{n.din ? ` · DIN …${String(n.din).slice(-6)}` : ""}{n.date ? ` · ${fmtDate(n.date)}` : ""}
+                  <div className="center" style={{gap: 6, marginTop: 4, justifyContent: "flex-start", flexWrap: "wrap"}}>
+                    {n.section && <span className="pill pill-muted">u/s {n.section}</span>}
+                    {hasFutureHearing && <span className="pill pill-pink"><Icon name="calendar" size={10}/>{fmtDate(due)}</span>}
+                    <span className="muted" style={{fontSize: 11.5}}>
+                      AY {n.ay || "—"}{n.din ? ` · DIN …${String(n.din).slice(-6)}` : ""}{n.date ? ` · ${fmtDate(n.date)}` : ""}
+                    </span>
                   </div>
                 </div>
                 {/* The notice itself. Where the portal PDF is on file it opens

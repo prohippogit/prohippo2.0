@@ -44,6 +44,31 @@ export function saveBlob(blob, filename) {
 }
 
 /**
+ * Open one Storage object in a new tab, for READING rather than filing.
+ *
+ * The deliberate opposite of downloadFromStorage: there, a viewer is the failure
+ * mode; here it is the point. Deciding what to do about a notice means reading
+ * it first, and a practitioner working through the review list wants the notice
+ * on screen next to the list, not twelve PDFs in their Downloads folder. The
+ * browser's own viewer has a save button for the moment they do want the file.
+ *
+ * @param storagePath  the object's path, as recorded on the Firestore document
+ * @returns true if a tab was opened
+ */
+export async function openFromStorage(storagePath) {
+  if (!storagePath) return false;
+  let url;
+  try {
+    url = await getDownloadURL(storageRef(storage, storagePath));
+  } catch (err) {
+    console.error("open: couldn't resolve", storagePath, err);
+    throw err; // the file is missing or unreadable — the caller should say so
+  }
+  window.open(url, "_blank", "noopener");
+  return true;
+}
+
+/**
  * Download one Storage object to the user's computer.
  *
  * @param storagePath  the object's path, as recorded on the Firestore document

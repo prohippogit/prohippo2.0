@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { openFromStorage } from './downloadFile';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 import { appealableOrders } from './appeals';
@@ -271,6 +272,13 @@ function Check({ checked, onChange }) {
 // Popup opened from the dashboard's "Notices · Awaiting review" card — the
 // notices worth acting on now (recent, or with an upcoming hearing). Each can
 // be ticked read individually or in bulk.
+//
+// Every action here asks the practitioner to DECIDE something — is this read,
+// does it need documents from the client — and none of those decisions can be
+// taken off a one-line summary. So the notice itself is one click away in both
+// the forms it exists in: the PDF the portal issued, opened for reading, and
+// the record it was filed as. A list that only offers "mark as read" is asking
+// someone to sign off on something they have not seen.
 function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
   const { updateNotice, notify } = useData();
   const [selected, setSelected] = React.useState(() => new Set());
@@ -299,13 +307,23 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
     notify(ids.length > 1 ? `${ids.length} notices marked as read` : "Marked as read");
   };
 
+  // The PDF the portal issued. Opened for reading, not saved — see
+  // openFromStorage in downloadFile.js for why this one goes the other way.
+  const viewPdf = async (n) => {
+    try {
+      await openFromStorage(n.storagePath);
+    } catch {
+      notify("That PDF could not be opened — try the notice record", "alert");
+    }
+  };
+
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{maxWidth: 640, padding: "22px 24px"}} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" style={{maxWidth: 700, padding: "22px 24px"}} onClick={(e) => e.stopPropagation()}>
         <div className="between" style={{alignItems: "flex-start", gap: 12, marginBottom: 12}}>
           <div>
             <div style={{fontSize: 17, fontWeight: 800}}>Notices · Awaiting review</div>
-            <div className="card-sub" style={{marginTop: 2}}>{rows.length} recent or with an upcoming hearing · tick to mark as read</div>
+            <div className="card-sub" style={{marginTop: 2}}>{rows.length} recent or with an upcoming hearing · read the PDF or open the record, then tick as read</div>
           </div>
           <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 10, flexShrink: 0}} title="Close" onClick={onClose}><Icon name="x" size={15}/></button>
         </div>
@@ -330,9 +348,9 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
             return (
               <div key={n.id} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderRadius: 11, background: isSel ? "var(--p-lavender-2)" : "transparent"}}>
                 <Check checked={isSel} onChange={() => toggle(n.id)}/>
-                <div style={{flex: 1, minWidth: 0, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open to review">
+                <div style={{flex: 1, minWidth: 0, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open the notice record">
                   <div className="between" style={{gap: 8}}>
-                    <span className="strong" style={{fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.assessee ? titleCase(n.assessee) : "—"}</span>
+                    <span className="strong" style={{fontSize: 13.5, color: "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.assessee ? titleCase(n.assessee) : "—"}</span>
                     <div className="center" style={{gap: 6, flexShrink: 0}}>
                       {n.section && <span className="pill pill-muted">u/s {n.section}</span>}
                       {hasFutureHearing && <span className="pill pill-pink"><Icon name="calendar" size={10}/>{fmtDate(due)}</span>}
@@ -342,6 +360,18 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
                     AY {n.ay || "—"}{n.din ? ` · DIN …${String(n.din).slice(-6)}` : ""}{n.date ? ` · ${fmtDate(n.date)}` : ""}
                   </div>
                 </div>
+                {/* The notice itself. Where the portal PDF is on file it opens
+                    for reading; where it isn't, the record is still one click
+                    away — an absent button would read as a broken one. */}
+                {n.storagePath ? (
+                  <button className="btn btn-ghost btn-xs" title="Open the notice PDF in a new tab" onClick={() => viewPdf(n)}>
+                    <Icon name="doc" size={12}/>PDF
+                  </button>
+                ) : (
+                  <button className="btn btn-ghost btn-xs" title="No PDF on file — open the notice record" onClick={() => onOpenNotice(n)}>
+                    <Icon name="edit" size={12}/>Open
+                  </button>
+                )}
                 {!n.isOrder && <AskDocsButton notice={n}/>}
                 <button className="btn btn-ghost btn-xs" disabled={busy} title="Mark as read" onClick={() => markRead([n.id])}>
                   <Icon name="check" size={12}/>Read

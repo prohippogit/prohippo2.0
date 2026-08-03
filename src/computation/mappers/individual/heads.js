@@ -650,6 +650,7 @@ export function otherSourcesRows(src) {
 export function chapterVIA(src) {
   const claimed = src.claim("ScheduleVIA.UsrDeductUndChapVIA") || {};
   const allowed = src.claim("ScheduleVIA.DeductUndChapVIA") || {};
+  const contributions = politicalContributionRows(src);
   const rows = [];
   /* Anything named Tot… is a SUBTOTAL of the block, not a deduction in it. The
      A.Y. 2022-23 ITR-3 carries TotPartBchapterVIA 2,02,250 and
@@ -662,18 +663,84 @@ export function chapterVIA(src) {
   for (const k of keys) {
     const amt = Number(allowed[k]);
     const askedFor = Number(claimed[k] || 0);
-    rows.push(sub(viaLabel(k), amt, {
-      ref: viaRef(k),
-      note: askedFor > amt ? `Claimed ${inr(askedFor)}; restricted to the statutory limit` : undefined,
-    }));
+    const note = [
+      askedFor > amt ? `Claimed ${inr(askedFor)}; restricted to the statutory limit` : "",
+      k === "Section80GGC" && contributions.length ? "Each contribution is itemised below" : "",
+    ].filter(Boolean).join(". ");
+    rows.push(sub(viaLabel(k), amt, { ref: viaRef(k), note: note || undefined }));
   }
   const allowedTotal = src.num("ScheduleVIA.DeductUndChapVIA.TotalChapVIADeductions");
   if (rows.length) rows.push(total("Total deductions under Chapter VI-A", allowedTotal));
+  // After the total, never before it: these are the particulars of a deduction
+  // already counted, and rows between the deductions and their total would make
+  // the arithmetic on the page look wrong to anyone adding it up.
+  if (rows.length) rows.push(...contributions);
   // Schedules 80C / 80D / 80G itemise what the summary above already totals.
   for (const s of ["Schedule80C", "Schedule80D", "Schedule80G", "Schedule80GGA", "Schedule80DD", "Schedule80U", "Schedule80IA", "Schedule80IB", "Schedule80IC", "Schedule80IE", "Schedule80P"]) {
     src.claim(s);
   }
   return { rows, allowedTotal, claimedTotal: Number(claimed.TotalChapVIADeductions || 0) };
+}
+
+/* --------------------------------------- contributions to a political party --
+ *
+ * Schedule 80GGC states each contribution separately — the date, whether it was
+ * paid in cash or through the banking channel, the bank reference, and the
+ * amount — where the Chapter VI-A block above states only the total.
+ *
+ * Those particulars are printed rather than claimed away, because they are the
+ * particulars this deduction is asked about. s.80GGC allows nothing paid in
+ * cash, the contribution must be to a party registered under s.29A of the
+ * Representation of the People Act, and the Department has been reopening these
+ * claims on the strength of the date and the payment reference. A reader
+ * checking one should not have to go back to the JSON for them.
+ *
+ * Nothing here is a wholesale `claim`. Every figure the schedule carries is read
+ * by name, so a field a later schema adds still surfaces under §8 instead of
+ * being swallowed by a subtree claim that was written before it existed.
+ */
+function politicalContributionRows(src) {
+  const list = src.peek("Schedule80GGC.Schedule80GGCDetails") || [];
+  const rows = [];
+
+  list.forEach((_, i) => {
+    const at = `Schedule80GGC.Schedule80GGCDetails[${i}]`;
+    const cash = src.num(`${at}.DonationAmtCash`);
+    const banked = src.num(`${at}.DonationAmtOtherMode`);
+    const paid = src.num(`${at}.DonationAmt`);
+    const eligible = src.num(`${at}.EligibleDonationAmt`);
+    const ref = src.val(`${at}.TransactionRefNum`);
+    const ifsc = src.val(`${at}.IFSCCode`);
+    const date = longDate(src.val(`${at}.DonationDate`));
+    if (!paid && !eligible) return;
+
+    // The eligible figure is the one that enters the deduction. Where the return
+    // states a larger contribution than it claims, both are shown — the reader
+    // is entitled to know a part of it was not allowed, and why.
+    rows.push(sub(date || `Contribution ${i + 1}`, eligible || paid, {
+      cols: { ref: cash && !banked ? "Cash" : "Banking channel" },
+      note: [
+        cash && banked ? `Of which ${inr(cash)} in cash` : "",
+        paid !== eligible ? `Contributed ${inr(paid)}; claimed ${inr(eligible)}` : "",
+        ref ? `Ref. ${ref}` : "",
+        ifsc ? `IFSC ${ifsc}` : "",
+      ].filter(Boolean).join(" · ") || undefined,
+    }));
+  });
+
+  src.restate([
+    "Schedule80GGC.TotalDonationAmtCash80GGC",
+    "Schedule80GGC.TotalDonationAmtOtherMode80GGC",
+    "Schedule80GGC.TotalDonationsUs80GGC",
+  ]);
+  if (!rows.length) return [];
+
+  rows.unshift(columnHeader("Contributions claimed u/s 80GGC — date of payment", {
+    ref: "Mode of payment", amt: "Amount (₹)",
+  }));
+  rows.push(subtotal("Total Contributions Claimed u/s 80GGC",
+    src.num("Schedule80GGC.TotalEligibleDonationAmt80GGC")));
+  return rows;
 }
 
 /* --------------------------------------------------------- tax liability ---

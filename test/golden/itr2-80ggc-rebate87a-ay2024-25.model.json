@@ -1,0 +1,537 @@
+{
+ "meta": {
+  "form": "ITR2",
+  "assessmentYear": "2024-25",
+  "previousYear": "2023-24",
+  "schemaVersion": "Ver1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+ },
+ "assessee": {
+  "name": "SAMPLE NAME 1 SAMPLE NAME 2 SAMPLE NAME 3",
+  "pan": "AAAPZ1000A",
+  "status": "Individual",
+  "address": "AT, SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 384210",
+  "email": "sample@example.com",
+  "mobile": "9800000001",
+  "residentialStatus": "Resident",
+  "dateOfFormation": "1965-06-01",
+  "facts": [
+   {
+    "label": "Status",
+    "value": "Individual"
+   },
+   {
+    "label": "Date of birth",
+    "value": "01 June 1965"
+   },
+   {
+    "label": "Residential status",
+    "value": "Resident"
+   },
+   {
+    "label": "Return filed under",
+    "value": "Section 139(1) — on or before the due date"
+   },
+   {
+    "label": "Tax regime",
+    "value": "Old regime — opted out of s.115BAC(1A)"
+   },
+   {
+    "label": "Due date",
+    "value": "31 July 2024"
+   },
+   {
+    "label": "E-mail / mobile",
+    "value": "sample@example.com\n+91 9800000001"
+   }
+  ],
+  "partners": []
+ },
+ "sections": [
+  {
+   "id": "SALARY",
+   "letter": "A",
+   "title": "Income from Salaries",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Salary as per section 17(1)",
+     "amount": 1256867,
+     "ref": "Sch. S",
+     "note": "SAMPLE NAME 4 · Basic salary"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Salary",
+     "amount": 1256867
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Standard deduction u/s 16(ia)",
+     "amount": 50000,
+     "ref": "Sec. 16(ia)"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Tax on employment u/s 16(iii)",
+     "amount": 2400,
+     "ref": "Sec. 16(iii)"
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Salaries",
+     "amount": 1204467
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "CG",
+   "letter": "B",
+   "title": "Capital Gains",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Short-term capital gains",
+     "amount": null,
+     "cols": {
+      "ref": "Sch. CG"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "Full value of consideration — equity shares / units (STT paid)",
+     "amount": 36862
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Cost of acquisition",
+     "amount": 29010
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Short-term Capital Gains",
+     "amount": 7852
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Capital Gains",
+     "amount": 7852
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "OS",
+   "letter": "C",
+   "title": "Income from Other Sources",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Interest from savings bank accounts",
+     "amount": 6449
+    },
+    {
+     "kind": "sub",
+     "label": "Interest on term / fixed deposits",
+     "amount": 7562
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross income chargeable under Other Sources",
+     "amount": 14011
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Other Sources",
+     "amount": 14011
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "VIA",
+   "letter": "D",
+   "title": "Deductions under Chapter VI-A",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "u/s 80C — life insurance, provident fund, tuition fees etc.",
+     "amount": 150000,
+     "ref": "80C"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80CCD(1B) — additional contribution to NPS",
+     "amount": 50000,
+     "ref": "80CCD(1B)"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80GGC — contribution to a political party",
+     "amount": 520000,
+     "ref": "80GGC",
+     "note": "Each contribution is itemised below"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80TTA — interest on deposits in a savings account",
+     "amount": 6449,
+     "ref": "80TTA"
+    },
+    {
+     "kind": "total",
+     "label": "Total deductions under Chapter VI-A",
+     "amount": 726449
+    },
+    {
+     "kind": "columnHeader",
+     "label": "Contributions claimed u/s 80GGC — date of payment",
+     "amount": null,
+     "cols": {
+      "ref": "Mode of payment",
+      "amt": "Amount (₹)"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "20 February 2024",
+     "amount": 200000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. XXXXX00000000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "sub",
+     "label": "27 February 2024",
+     "amount": 320000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. XXXXX00000000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Contributions Claimed u/s 80GGC",
+     "amount": 520000
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "TI",
+   "letter": "E",
+   "title": "Computation of Total Income",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "head",
+     "label": "Income from Salaries",
+     "amount": 1204467,
+     "ref": "Sch. S"
+    },
+    {
+     "kind": "head",
+     "label": "Income from House Property",
+     "amount": 0,
+     "ref": "Sch. HP"
+    },
+    {
+     "kind": "head",
+     "label": "Capital Gains",
+     "amount": 7852,
+     "ref": "Sch. CG"
+    },
+    {
+     "kind": "head",
+     "label": "Income from Other Sources",
+     "amount": 14011,
+     "ref": "Sch. OS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total of Heads of Income",
+     "amount": 1226330
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Total Income",
+     "amount": 1226330
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Deductions under Chapter VI-A",
+     "amount": 726449,
+     "ref": "Sch. VI-A"
+    },
+    {
+     "kind": "total",
+     "label": "Total Income (rounded off u/s 288A)",
+     "amount": 499880
+    },
+    {
+     "kind": "sub",
+     "label": "of which, income taxable at special rates",
+     "amount": 7852,
+     "ref": "Sch. SI"
+    },
+    {
+     "kind": "sub",
+     "label": "balance taxable at the rates in force",
+     "amount": 492028
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAX",
+   "letter": "F",
+   "title": "Computation of Tax Liability",
+   "tone": "gold",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Tax on income at the rates in force",
+     "amount": 12101,
+     "ref": "Para A, Sch. I"
+    },
+    {
+     "kind": "sub",
+     "label": "Short-term capital gains u/s 111A — at 15%",
+     "amount": 1178,
+     "note": "on 7,852",
+     "ref": "Sch. SI"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Tax on Total Income",
+     "amount": 13279
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Rebate u/s 87A",
+     "amount": 12500,
+     "ref": "Sec. 87A"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax after rebate",
+     "amount": 779
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Surcharge",
+     "amount": 0,
+     "note": "Total income does not exceed ₹ 50 lakh"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Health & Education Cess @ 4%",
+     "amount": 31
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Tax Liability",
+     "amount": 810
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Relief u/s 89 / 90 / 90A / 91",
+     "amount": 0
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Total Tax and Interest Payable",
+     "amount": 810
+    }
+   ],
+   "footnote": "Adjusted total income u/s 115JC is 4,99,880; as no deduction under Chapter VI-A Part C or s.10AA has been claimed, Alternate Minimum Tax is Nil and no AMT credit arises.",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAXES_PAID",
+   "letter": "G",
+   "title": "Taxes Paid & Prepaid Taxes",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Tax Deducted at Source — TAN of Deductor",
+     "amount": null,
+     "cols": {
+      "ref": "Gross Receipt"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,12,450"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,12,450"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,12,450"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,12,450"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,12,450"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,06,506"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 2000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,06,506"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "XXXX00000X",
+     "amount": 1000,
+     "note": "SAMPLE NAME 7 · Salary · Sec. 192",
+     "cols": {
+      "ref": "1,06,506"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAA00000A",
+     "amount": 0,
+     "note": "2 entries",
+     "cols": {
+      "ref": "7,562"
+     }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Tax Deducted at Source",
+     "amount": 15000,
+     "ref": "Sch. TDS"
+    },
+    {
+     "kind": "sub",
+     "label": "Advance Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Self-Assessment Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax Collected at Source",
+     "amount": 0,
+     "ref": "Sch. TCS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Taxes Paid",
+     "amount": 15000
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Total Tax and Interest Payable",
+     "amount": 810
+    },
+    {
+     "kind": "total",
+     "label": "Refund Due",
+     "amount": 14190
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  }
+ ],
+ "refund": {
+  "amount": 14190,
+  "bank": {
+   "name": "SAMPLE NAME 5",
+   "accountNo": "00000000000",
+   "type": "SB",
+   "ifsc": "XXXX0000000"
+  }
+ },
+ "payable": null,
+ "notes": [
+  {
+   "severity": "info",
+   "text": "This computation has been prepared from the ITR-2 return data (JSON) for A.Y. 2024-25 and the figures correspond to Schedule S, Schedule CG, Schedule OS, Schedule VI-A and Part B-TI / Part B-TTI of the return."
+  },
+  {
+   "severity": "attention",
+   "text": "No bank account is flagged for the refund in the return; the first account listed is shown."
+  },
+  {
+   "severity": "info",
+   "text": "The return is filed under the old regime — opted out of s.115BAC(1A)."
+  }
+ ],
+ "signatory": {
+  "name": "SAMPLE NAME 8",
+  "capacity": "Self",
+  "pan": "AAAPZ1000A",
+  "place": "",
+  "date": ""
+ },
+ "unmapped": []
+}

@@ -66,6 +66,10 @@ const OPAQUE_KEYS = new Set([
   // A DIN identifies a named director on a public register; a challan's BSR
   // code and serial number together identify one payment from one bank branch.
   "DIN", "BSRCode",
+  // Schedule 80GGC carries the bank reference of each contribution to a
+  // political party. It identifies one transfer between two named accounts, and
+  // the computation prints it — so it has to be masked, not dropped.
+  "TransactionRefNum",
 ]);
 // NOT here on purpose: GSTINNo. A GSTIN embeds the PAN, so masking the whole
 // string destroys a shape the mapper displays; replacing the PAN inside it

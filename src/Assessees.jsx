@@ -19,6 +19,7 @@ import { noticeFilename, returnOrderFilename, returnDocFilename } from './downlo
 // not ride in the main bundle.
 import { computationAvailability } from './computation/supported';
 import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
+import { describeVariance, BASELINE_LABEL } from './intimations';
 
 // Build the incremental-sync hints from what's already on file for one PAN, so
 // a re-sync only fetches what's genuinely new instead of re-downloading it all:
@@ -820,7 +821,28 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       if (!payload || payload.assesseeId !== a.id) return;
       if (payload.kind !== "return" && payload.kind !== "returnForm") return;
       try {
-        await ingestPortalSyncMessage(payload);
+        const res = await ingestPortalSyncMessage(payload);
+        /* Say it at the moment it is found.
+         *
+         * The dashboard card is the standing record, but a practitioner who
+         * kicked off a sync and is watching THIS screen should not have to
+         * navigate away to learn that CPC has just raised a demand on the year
+         * that came in. Only the red case interrupts: an extra refund and an
+         * agreed return are both good news that can wait for the card.
+         *
+         * The wording names no baseline on purpose. A year can carry both an
+         * intimation judged against the return and a rectification judged
+         * against that intimation, and the total spans both — "more payable
+         * after CPC's processing" is true of either, where "more than the
+         * return claimed" would not be. The per-order line on the table below
+         * says which is which. */
+        const v = res?.data?.variances;
+        if (v && v.red > 0) {
+          notify(
+            `A.Y. ${payload.return?.ay || ""} — ${fmtINR(v.additionalDemand)} more payable after CPC's processing`.trim(),
+            "alert"
+          );
+        }
       } catch (e) {
         console.error("return ingest failed", e);
         notify("Couldn't save a return from the portal.", "alert");
@@ -1603,6 +1625,44 @@ function portalAmount(v) {
   return n;
 }
 
+/* What the order did to this year's position, under the order it did it to.
+ *
+ * The amount alone would be worse than nothing here: a s.154 order is measured
+ * against the intimation it rectified and a s.143(1) against the return as
+ * filed, so the SAME rupee figure describes two different events. The baseline
+ * is therefore part of the sentence, never a tooltip.
+ *
+ * Computed at ingest by functions/returnVariance.js — this only renders it.
+ * Orders synced before the feature existed carry no variance and get no line,
+ * rather than a line saying nothing. */
+function VarianceLine({ variance }) {
+  if (!variance) return null;
+  const tone = variance.flag === "red" ? { fg: "#B23B3B", bg: "#FDECEC" }
+    : variance.flag === "green" ? { fg: "#13795C", bg: "#E7F7F0" }
+      : { fg: "var(--p-text-3)", bg: "var(--p-line-2)" };
+  const signed = variance.amount != null && variance.flag !== "neutral" && variance.flag !== "unknown"
+    ? `${variance.amount < 0 ? "−" : "+"}${fmtINR(Math.abs(variance.amount))}`
+    : null;
+
+  return (
+    <div className="center" style={{gap: 6, justifyContent: "flex-start", flexWrap: "wrap", marginTop: 6}}>
+      {signed && (
+        <span style={{background: tone.bg, color: tone.fg, borderRadius: 7, padding: "2px 7px", fontWeight: 800, fontSize: 11.5}}>
+          {signed}
+        </span>
+      )}
+      <span style={{fontSize: 11.5, color: tone.fg}} title={BASELINE_LABEL[variance.baseline?.kind] || ""}>
+        {describeVariance(variance)}
+      </span>
+      {variance.adjusted && (
+        <span className="pill pill-muted" title="CPC set this refund off against an earlier demand u/s 245 — it is not being paid out">
+          adjusted u/s 245
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputation, busyKey }) {
   const [openAy, setOpenAy] = React.useState(null);
   const rows = [...(returns || [])].sort((x, y) => String(y.ay || "").localeCompare(String(x.ay || "")));
@@ -1760,6 +1820,7 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
                                   </div>
                                   <div className="muted" style={{fontSize: 12, marginTop: 4}}>{o.statusDesc}</div>
                                   {o.orderDate && <div className="muted" style={{fontSize: 11, marginTop: 2}}>Order dated {fmtDateLong(o.orderDate)}</div>}
+                                  <VarianceLine variance={o.variance}/>
                                 </div>
                               ))}
                             </div>

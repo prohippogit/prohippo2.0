@@ -754,6 +754,18 @@ Recorded so nobody has to rediscover them.
   computation states the allowed figure and notes the claim where the two
   differ — a s.80C claim of 2,28,513 restricted to 1,50,000 is exactly what a
   reader wants to see, and showing only one of the two hides it.
+- The itemising schedules — `Schedule80C`, `Schedule80D`, `Schedule80G`,
+  `Schedule80GGA` — restate what the block above already totals, and are claimed
+  wholesale. **`Schedule80GGC` is the exception and is printed.** It carries the
+  date of each contribution to a political party, whether it was paid in cash or
+  through the banking channel, the bank reference and the IFSC. s.80GGC allows
+  nothing paid in cash, and the Department is reopening these claims in bulk on
+  the strength of exactly those particulars, so they go on the face of the
+  computation instead of into a subtree claim. They print **after** the Chapter
+  VI-A total — they are particulars of a deduction already counted, and rows
+  between the deductions and their total make the column stop adding up.
+- Nothing in `Schedule80GGC` is claimed wholesale: every figure is read by name,
+  so a field a later schema adds still surfaces under §8.
 
 **Special rates (`ScheduleSI`)**
 - Drives the tax section's special-rate rows: each entry gives the section code,
@@ -876,6 +888,7 @@ test/fixtures/
   itr2-oldregime-hploss-via-ay2024-25.json      // old regime, HP loss u/s 71, VI-A caps, refund
   itr2-salary-hploss-refund-ay2023-24.json      // ifLetOut "N", s.10 "OTH" allowance, refund
   itr2-salary-80ggc-level-ay2022-23.json        // closes LEVEL, s.80GGC, perquisite by code
+  itr2-80ggc-rebate87a-ay2024-25.json           // Schedule 80GGC itemised, rebate 87A, monthly TDS
   itr3-partner-salary-agri-ay2025-26.json       // partner in 4 firms, agri income, 38 TDS rows
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares

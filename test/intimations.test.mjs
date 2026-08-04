@@ -397,3 +397,25 @@ test("the page shows every year on file, not just the dashboard's six months", (
   assert.equal(intimationVariances(data, { today: TODAY }).length, 0, "too old for the card");
   assert.equal(allIntimations(data).length, 1, "still rectifiable, so it belongs on the page");
 });
+
+/* ============================================================================
+   The cause vocabulary lives in two places — CAUSES here for the UI, CAUSE_IDS
+   in functions/intimationReading.js for the model's schema — because one is ESM
+   in the browser bundle and the other is CommonJS in Cloud Functions.
+
+   Duplication is fine; DRIFT is not. An id only the model knows would key a
+   by-cause group nothing can render, and an id only the UI knows would never be
+   suggested. This test is the reason the duplication is safe.
+   ============================================================================ */
+import { createRequire } from "node:module";
+const requireCjs = createRequire(import.meta.url);
+const { CAUSE_IDS } = requireCjs("../functions/intimationReading.js");
+const { CAUSES: UI_CAUSES } = await import("../src/intimations.js");
+
+test("the model's cause vocabulary matches the one the UI can render", () => {
+  assert.deepEqual(
+    [...CAUSE_IDS].sort(),
+    UI_CAUSES.map((c) => c.id).sort(),
+    "functions/intimationReading.js and src/intimations.js have drifted apart"
+  );
+});

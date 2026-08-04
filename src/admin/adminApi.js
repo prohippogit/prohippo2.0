@@ -55,6 +55,7 @@ export const FEATURE_LABEL = {
   // render its raw key instead of a name.
   parseNotice: "Notice parsing (retired)",
   summarizeNotice: "Order summaries",
+  readIntimation: "Intimation breakdowns",
   extractDocuments: "Document extraction",
   clientMessage: "Client messages",
   login: "Login & signup",

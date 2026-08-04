@@ -35,10 +35,13 @@ import React from "react";
 import { Icon, EmptyState, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
 import { useData } from "./store";
 import { openFromStorage } from "./downloadFile";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "./firebase";
 import {
   allIntimations, groupByAssessee, groupByCause, practiceSummary, matchesFilter,
   clocksFor, refundPosition, describeVariance, SECTION_LABEL,
-  DECISIONS, CAUSES, FILTERS, REFUND_CHASE_DAYS,
+  DECISIONS, CAUSES, CAUSE_LABEL, FILTERS, REFUND_CHASE_DAYS,
+  changedLines, readingTrust, pendingCauseSuggestion,
 } from "./intimations";
 
 const FLAG_TONE = {
@@ -90,6 +93,26 @@ export default function Intimations({ onOpenAssessee }) {
       await updateReturn(row.returnId, write);
     } finally {
       setBusy(false);
+    }
+  };
+
+  /* Read one order's comparison table. ON DEMAND ONLY — one button, one order,
+     one paid call. There is deliberately no "read them all": a practice with
+     200 clients would be a thousand reads nobody asked for, and the value of
+     this is in the handful that are actually in dispute. */
+  const [reading, setReading] = React.useState("");
+  const readOrder = async (row) => {
+    if (reading) return;
+    setReading(row.key);
+    try {
+      await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
+        returnId: row.returnId, commRefNo: row.commRefNo,
+      });
+      notify("Order read — check the breakdown against the PDF");
+    } catch (e) {
+      notify(e?.message?.slice(0, 140) || "Couldn't read that order", "alert");
+    } finally {
+      setReading("");
     }
   };
 
@@ -216,8 +239,10 @@ export default function Intimations({ onOpenAssessee }) {
                       row={row}
                       showAssessee={grouping === "cause"}
                       busy={busy}
+                      readingNow={reading === row.key}
                       onTrack={(patch) => setTracking(row, patch)}
                       onViewPdf={() => viewPdf(row)}
+                      onRead={() => readOrder(row)}
                     />
                   ))}
                 </div>
@@ -260,7 +285,7 @@ function Stat({ label, value, sub, color }) {
  * The variance and its baseline sit on the collapsed line because they are the
  * whole point; the clocks and the tracking fields open on demand, because a
  * list where every row is six lines tall is a list nobody scrolls. */
-function IntimationRow({ row, showAssessee, busy, onTrack, onViewPdf }) {
+function IntimationRow({ row, showAssessee, busy, readingNow, onTrack, onViewPdf, onRead }) {
   const [open, setOpen] = React.useState(false);
   const v = row.variance;
   const tone = FLAG_TONE[v?.flag] || FLAG_TONE.unknown;
@@ -292,6 +317,15 @@ function IntimationRow({ row, showAssessee, busy, onTrack, onViewPdf }) {
           <div style={{fontSize: 12.5, marginTop: 4, color: v?.flag === "unknown" ? "var(--p-text-3)" : "var(--p-text-2)"}}>
             {describeVariance(v)}{row.statusDesc ? ` · ${row.statusDesc}` : ""}
           </div>
+          {/* What the order itself says moved. Only shown once the read has been
+              checked against the portal's own figure — an unreconciled headline
+              is exactly the kind of confident sentence nobody should skim. */}
+          {row.reading?.headline && readingTrust(row.reading) === "ok" && (
+            <div className="center" style={{gap: 6, marginTop: 4, justifyContent: "flex-start"}}>
+              <Icon name="sparkle" size={11}/>
+              <span style={{fontSize: 12.5, fontWeight: 600, color: "var(--p-primary-2)"}}>{row.reading.headline}</span>
+            </div>
+          )}
           {(appealLive || refund.state === "overdue" || clocks.disposal?.overdue) && (
             <div className="center" style={{gap: 10, marginTop: 5, justifyContent: "flex-start", flexWrap: "wrap"}}>
               {appealLive && (
@@ -332,7 +366,22 @@ function IntimationRow({ row, showAssessee, busy, onTrack, onViewPdf }) {
         </select>
 
         {row.storagePath && !row.locked ? (
-          <button className="btn btn-ghost btn-xs" title="Open the order PDF" onClick={onViewPdf}><Icon name="doc" size={12}/>PDF</button>
+          <>
+            <button className="btn btn-ghost btn-xs" title="Open the order PDF" onClick={onViewPdf}><Icon name="doc" size={12}/>PDF</button>
+            {/* One order, one paid read, only when asked. A read already on file
+                is re-runnable — CPC formats change and a bad read should not be
+                permanent — but it never happens on its own. */}
+            <button
+              className="btn btn-ghost btn-xs"
+              disabled={readingNow}
+              title={row.reading
+                ? "Read this order again — replaces the breakdown below"
+                : "Read the order's comparison table and show which line moved"}
+              onClick={onRead}
+            >
+              <Icon name="sparkle" size={12}/>{readingNow ? "Reading…" : row.reading ? "Re-read" : "Read order"}
+            </button>
+          </>
         ) : (
           <span className="muted" style={{fontSize: 11}} title={row.lockReason || "No readable PDF on file"}>No PDF</span>
         )}
@@ -374,8 +423,9 @@ function IntimationRow({ row, showAssessee, busy, onTrack, onViewPdf }) {
             </div>
           </div>
 
-          <div style={{flex: "1 1 260px", minWidth: 240}}>
+          <div style={{flex: "1 1 300px", minWidth: 260}}>
             <Eyebrow>Why CPC differed</Eyebrow>
+            <ReadingPanel row={row} busy={busy} readingNow={readingNow} onRead={onRead} onTrack={onTrack}/>
             <select
               value={row.cause}
               disabled={busy}
@@ -472,6 +522,108 @@ function Clock({ label, deadline, note, daysLeft, urgency }) {
             {" · "}{daysLeft < 0 ? `${Math.abs(daysLeft)} days past` : `${daysLeft} days left`}
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* What the order's own comparison table says, once somebody has asked for it.
+ *
+ * THE TRUST BANNER IS NOT DECORATION. The figures here were read by a model out
+ * of a PDF, and the one thing that makes them safe to look at is that the
+ * order's own bottom line was checked against the figure the portal separately
+ * recorded. Where those agree the table is shown plainly; where they do not it
+ * is shown under a warning, because a practitioner will otherwise advise a
+ * client off a number nobody verified. There is no middle setting on purpose —
+ * "probably right" would be read as "right". */
+function ReadingPanel({ row, busy, readingNow, onRead, onTrack }) {
+  const reading = row.reading;
+
+  if (!reading) {
+    return (
+      <div style={{marginBottom: 10}}>
+        <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5, marginBottom: 7}}>
+          The order prints the return's figures against CPC's, side by side. Reading it shows which line moved
+          {row.storagePath && !row.locked ? "" : " — but there is no readable PDF for this one"}.
+        </div>
+        <button className="btn btn-secondary btn-xs" disabled={readingNow || !row.storagePath || row.locked} onClick={onRead}>
+          <Icon name="sparkle" size={12}/>{readingNow ? "Reading…" : "Read the order"}
+        </button>
+      </div>
+    );
+  }
+
+  const trust = readingTrust(reading);
+  const moved = changedLines(reading);
+  const suggestion = pendingCauseSuggestion(row);
+
+  return (
+    <div style={{marginBottom: 10}}>
+      {trust !== "ok" && (
+        <div style={{
+          background: trust === "broken" ? "#FDECEC" : "#FFF3D6",
+          color: trust === "broken" ? "#B23B3B" : "#B07512",
+          borderRadius: 9, padding: "8px 10px", fontSize: 11.5, lineHeight: 1.5, marginBottom: 8, fontWeight: 600,
+        }}>
+          <Icon name="alert" size={11}/>{" "}
+          {trust === "broken" ? "This read does not reconcile. " : "This read could not be checked. "}
+          {reading.reconcileNote}
+        </div>
+      )}
+
+      {moved.length > 0 ? (
+        <div style={{overflowX: "auto"}}>
+          <table className="tbl" style={{fontSize: 12}}>
+            <thead>
+              <tr>
+                <th>Head</th>
+                <th style={{textAlign: "right"}}>As returned</th>
+                <th style={{textAlign: "right"}}>As computed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {moved.map((l, i) => {
+                const diff = l.asComputed - l.asReturned;
+                return (
+                  <tr key={`${l.head}-${i}`}>
+                    <td>
+                      {l.head}
+                      {l.remark && <div className="muted" style={{fontSize: 10.5}}>{l.remark}</div>}
+                    </td>
+                    <td style={{textAlign: "right", whiteSpace: "nowrap"}}>{fmtINR(l.asReturned)}</td>
+                    <td style={{textAlign: "right", whiteSpace: "nowrap", color: diff < 0 ? "#B23B3B" : "#13795C", fontWeight: 700}}>
+                      {fmtINR(l.asComputed)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="muted" style={{fontSize: 11.5}}>
+          The read found no line where the two columns differ. If the order plainly shows one, re-read it or open the PDF.
+        </div>
+      )}
+
+      {/* A suggested tag is a suggestion until somebody says otherwise. It has
+          to be accepted before it counts, because the by-cause grouping is what
+          decides which clients get treated as sharing one legal position. */}
+      {suggestion && (
+        <div className="center" style={{gap: 8, marginTop: 10, padding: "8px 10px", background: "var(--p-card-tint)", borderRadius: 9, flexWrap: "wrap"}}>
+          <span style={{fontSize: 11.5}}>
+            Suggested cause: <b>{CAUSE_LABEL[suggestion]}</b>
+          </span>
+          <button className="btn btn-primary btn-xs" style={{marginLeft: "auto"}} disabled={busy} onClick={() => onTrack({ cause: suggestion })}>
+            <Icon name="check" size={11}/>Accept
+          </button>
+        </div>
+      )}
+
+      <div className="muted" style={{fontSize: 10.5, marginTop: 8, lineHeight: 1.5}}>
+        Read from the order PDF on {fmtDateLong(String(reading.at || "").slice(0, 10))}. Verify against the order before acting on it.
+        {" "}
+        <button className="btn btn-ghost btn-xs" disabled={readingNow} onClick={onRead} style={{padding: "2px 6px"}}>Re-read</button>
       </div>
     </div>
   );

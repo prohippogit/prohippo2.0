@@ -42,6 +42,9 @@ const recordSpend = require("./spend").makeMeter({ db });
    rectification is measured against the intimation it rectified. */
 const { readTaxPosition } = require("./itrTaxPosition");
 const { computeVariances, summariseVariances, VARIANCE_ENGINE } = require("./returnVariance");
+/* Reading the intimation's own comparison table — on demand, never on a sync,
+   and never able to change the flag the arithmetic above settled. */
+const { normaliseReading, CAUSE_IDS } = require("./intimationReading");
 
 /* ---------- where these functions run ----------------------------------------
  * Firestore for this project lives in asia-south1 (Mumbai) — but these functions
@@ -784,6 +787,183 @@ async function callGeminiDocuments(model, apiKey, files, meta = {}) {
     });
   }
 }
+
+/* ---------- reading an intimation's comparison table -----------------------
+ *
+ * A s.143(1) intimation prints the assessee's figures and CPC's side by side.
+ * Phase 1 of this feature already knows how much the bottom line moved, from
+ * the portal's own demand/refund figures — this reads WHICH LINE moved, which
+ * the PDF is the only source of.
+ *
+ * ON DEMAND ONLY. There is no trigger and no sync hook: a practice with 200
+ * clients and five years apiece would be a thousand reads nobody asked for.
+ * Somebody presses a button on one order and pays for one read.
+ *
+ * The result can never change the flag — see functions/intimationReading.js for
+ * why, and for the reconciliation that catches a plausible-but-wrong read.
+ * -------------------------------------------------------------------------- */
+
+const INTIMATION_PROMPT = `You are a chartered accountant reading ONE Indian income-tax intimation u/s 143(1) or rectification order u/s 154 issued by CPC.
+
+The document contains a table comparing the figures the taxpayer put in the return of income against the figures computed by CPC. Column headings are usually "As provided by taxpayer in Return of Income" and "As computed under section 143(1)". Read that table.
+
+Return, in "lines", one entry for EVERY row where the two columns differ, PLUS the main totals even where they agree (gross total income, total income, tax on total income, and each interest head under 234A/234B/234C). For each: "head" exactly as printed, "asReturned", "asComputed", and "remark" if CPC printed a reason or remark against that row.
+
+Then read the order's own closing position, as separate POSITIVE amounts:
+- "demandRaised": the net amount payable determined by CPC. 0 if none.
+- "refundDetermined": the net refund determined by CPC. 0 if none.
+- "taxPayableAsReturned": the balance tax payable per the return, from the taxpayer's column. 0 if none.
+- "refundClaimedAsReturned": the refund claimed per the return, from the taxpayer's column. 0 if none.
+
+"headline": ONE short sentence naming what changed and by how much, e.g. "80C deduction of Rs 1,50,000 disallowed" or "TDS credit of Rs 32,000 not allowed". If several things changed, name the largest.
+
+"cause": the single best fit from this list, by id:
+- arithmetic — an arithmetical error in the return
+- incorrect-claim — an incorrect claim apparent from information in the return
+- loss-late-return — loss disallowed because the return was filed late
+- audit-report — a disallowance indicated in the audit report but not in the return
+- 80ac — a Chapter VI-A deduction disallowed because the return was filed late (s.80AC)
+- form-26as — income appearing in Form 26AS / AIS but not returned
+- tds-credit — TDS or TCS credit mismatch or not allowed
+- challan — advance tax or self-assessment tax credit not given
+- deduction-viA — a Chapter VI-A deduction disallowed for any other reason
+- rebate-87a — rebate u/s 87A denied
+- interest-234 — the difference is interest u/s 234A/234B/234C only
+- fee-234f — late filing fee u/s 234F
+- exemption — an exemption or relief disallowed
+- other — none of the above
+
+RULES. Report figures EXACTLY as printed, in rupees, without sign, without commas. NEVER calculate a figure that is not printed, and NEVER infer one from another. Return null for anything not clearly printed — a blank is correct, an invented number is harmful. Do not comment on whether CPC is right; only report what the document says.`;
+
+const INTIMATION_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    lines: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          head: { type: "STRING" },
+          asReturned: { type: "NUMBER", nullable: true },
+          asComputed: { type: "NUMBER", nullable: true },
+          remark: { type: "STRING", nullable: true },
+        },
+        required: ["head"],
+      },
+    },
+    demandRaised: { type: "NUMBER", nullable: true },
+    refundDetermined: { type: "NUMBER", nullable: true },
+    taxPayableAsReturned: { type: "NUMBER", nullable: true },
+    refundClaimedAsReturned: { type: "NUMBER", nullable: true },
+    headline: { type: "STRING", nullable: true },
+    cause: { type: "STRING", nullable: true, enum: CAUSE_IDS },
+  },
+  required: ["lines"],
+};
+
+async function callGeminiIntimation(model, apiKey, files, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const body = {
+      contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: INTIMATION_PROMPT }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: INTIMATION_SCHEMA, temperature: 0 },
+    };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    usage = json?.usageMetadata;
+    const out = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+    try {
+      ok = true;
+      return JSON.parse(out);
+    } catch {
+      throw new HttpsError("internal", "Gemini returned malformed JSON.");
+    }
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      feature: "readIntimation",
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
+  }
+}
+
+/* Read one order's comparison table and store it on that order.
+ *
+ * Written back onto the `orders` array entry, next to its variance, because it
+ * describes the DOCUMENT rather than anything the practitioner decided — and
+ * because ingestPortalReturn merges each order over what it already held, so a
+ * field stored here survives every later sync.
+ */
+exports.readIntimationOrder = onCall(
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 120, memory: "512MiB", maxInstances: 5 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+    const { returnId, commRefNo } = request.data || {};
+    if (!returnId || !commRefNo) throw new HttpsError("invalid-argument", "returnId and commRefNo are required.");
+
+    const ref = db.doc(`users/${uid}/returns/${returnId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "That return is not on file.");
+
+    const data = snap.data() || {};
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const index = orders.findIndex((o) => o && String(o.commRefNo) === String(commRefNo));
+    if (index < 0) throw new HttpsError("not-found", "That order is not on this return.");
+
+    const order = orders[index];
+    if (!order.storagePath || order.locked) {
+      throw new HttpsError(
+        "failed-precondition",
+        order.lockReason === "request-only"
+          ? "CPC only sends this year's order by e-mail, so there is no PDF here to read."
+          : "There is no readable PDF for this order."
+      );
+    }
+
+    let buf;
+    try {
+      [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(order.storagePath).download();
+    } catch (e) {
+      throw new HttpsError("not-found", "Couldn't read the order PDF from Storage: " + ((e && e.message) || e));
+    }
+    if (buf.length > MAX_TOTAL_BYTES) {
+      throw new HttpsError("invalid-argument", "That order PDF is too large to read (over 9 MB).");
+    }
+
+    const raw = await callGeminiIntimation(
+      PRIMARY_MODEL,
+      geminiApiKey.value(),
+      [{ mimeType: "application/pdf", data: buf.toString("base64") }],
+      { uid }
+    );
+    const reading = normaliseReading(raw, { variance: order.variance || null });
+
+    // Rewrite just this order, leaving every other entry and its variance alone.
+    const next = orders.slice();
+    next[index] = { ...order, reading };
+    await ref.set({ orders: next }, { merge: true });
+
+    return { ok: true, reading };
+  }
+);
 
 exports.extractNoticeDocuments = onCall(
   { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 120, memory: "512MiB", maxInstances: 5 },

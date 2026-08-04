@@ -12,7 +12,7 @@ Every paid outbound call in the codebase, all writing the same shape through
 
 | Vendor | Where | Billing unit | Attributed to |
 |---|---|---|---|
-| Gemini | `callGeminiSummary`, `callGeminiDocuments` | tokens in + out, per model | the signed-in practice |
+| Gemini | `callGeminiSummary`, `callGeminiDocuments`, `callGeminiIntimation` | tokens in + out, per model | the signed-in practice |
 | 2Factor | `sendSmsOtp` — **AUTOGEN only** | 1 SMS credit | nobody (login) |
 | Resend | `sendEmailOtp` | 1 email | nobody (login) |
 | Resend | `sendViaResend` (client messages) | 1 email | the signed-in practice |

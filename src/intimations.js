@@ -146,6 +146,10 @@ export function intimationVariances(data, opts = {}) {
         tracking: tracked[o.commRefNo] || null,
         decision: (tracked[o.commRefNo] || {}).decision || "pending",
         cause: (tracked[o.commRefNo] || {}).cause || "",
+        /* The AI read of the order's own comparison table, when somebody has
+           asked for one. Stored on the order beside its variance, because it
+           describes the document rather than anything we decided. */
+        reading: o.reading || null,
       });
     }
   }
@@ -479,3 +483,38 @@ export const FILTERS = [
   "All", "Needs a decision", "More payable", "In the assessee's favour",
   "Refund awaited", "Rectification filed", "Not yet tagged",
 ];
+
+/* ---------------- the AI read of the comparison table ---------------- */
+
+/* Only the lines where the two columns actually moved — what there is to argue
+   about. Mirrors changedLines() in functions/intimationReading.js; the client
+   re-derives it rather than storing it twice. */
+export function changedLines(reading) {
+  return (reading?.lines || []).filter(
+    (l) => l.asReturned !== null && l.asComputed !== null && Math.abs(l.asComputed - l.asReturned) > 1
+  );
+}
+
+/* How much weight the screen may put on a read.
+ *
+ *   "ok"        the order's own total matched the portal's figure — two
+ *               independent sources agreeing, so the table can be shown plainly
+ *   "unchecked" no total could be read, so nothing contradicts it and nothing
+ *               confirms it
+ *   "broken"    the two disagree; show the table only under a warning
+ *
+ * There is deliberately no "probably fine". A practitioner advises clients off
+ * this, and a maybe would be read as a yes. */
+export function readingTrust(reading) {
+  if (!reading) return null;
+  if (reading.reconciles === true) return "ok";
+  if (reading.reconciles === false) return "broken";
+  return "unchecked";
+}
+
+/** A cause the model proposed and nobody has accepted yet. */
+export function pendingCauseSuggestion(row) {
+  const s = row.reading?.suggestedCause;
+  if (!s || row.cause) return "";           // already tagged by hand — leave it
+  return CAUSE_LABEL[s] ? s : "";
+}

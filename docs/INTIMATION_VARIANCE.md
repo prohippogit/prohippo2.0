@@ -37,11 +37,31 @@ means the flag:
 - works retroactively across every order already synced, and
 - cannot be wrong in the way a model can be wrong.
 
-The head-wise breakdown is Phase 2 and belongs alongside `summarizePortalNotice`.
-When it lands, **the AI must not set the flag** — it should fill in the
-explanation and be checked against these figures, with a disagreement surfaced
-as "does not reconcile" rather than silently overriding a number the portal
-stated.
+### The head-wise breakdown (`readIntimationOrder`)
+
+That rule held when the breakdown landed. `readIntimationOrder` reads the
+order's own comparison table — the return's figures against CPC's, line by line
+— and **cannot touch the flag**. What makes it safe to look at is the
+reconciliation in `functions/intimationReading.js`: the model is also asked for
+the order's own bottom line, and that has to equal the demand or refund the
+portal separately recorded, to the rupee. Two independent sources for one
+number; they agree only if the read was faithful.
+
+Where they disagree the breakdown is kept but marked as not reconciling, and the
+screen says so instead of showing a confident table nobody checked. A read that
+cannot be checked at all is a third state, and none of the three is called
+"probably right" — that would be read as "right".
+
+It runs **on demand only**: one button, one order, one paid call. There is no
+sync hook, because a practice with 200 clients and five years apiece would be a
+thousand reads nobody asked for.
+
+The suggested cause is stored as `suggestedCause` with `causeAccepted: false`
+and does nothing until a practitioner accepts it on screen — the by-cause
+grouping decides which clients are treated as sharing a legal position, which is
+too consequential to happen automatically. Its vocabulary is duplicated between
+`functions/intimationReading.js` and `src/intimations.js` (CommonJS and ESM),
+with a test in `test/intimations.test.mjs` pinning the two together.
 
 ## A s.154 order is not compared against the return
 
@@ -133,5 +153,6 @@ anything:
 
 ```
 node --test functions/itrTaxPosition.test.mjs functions/returnVariance.test.mjs
+node --test functions/intimationReading.test.mjs
 node --test test/intimations.test.mjs        # also covered by npm test
 ```

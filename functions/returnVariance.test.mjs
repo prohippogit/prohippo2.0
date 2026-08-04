@@ -12,13 +12,13 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { computeVariances, summariseVariances, cpcNet } = require("./returnVariance.js");
+const { computeVariances, summariseVariances, cpcNet, cpcPosition, VARIANCE_ENGINE } = require("./returnVariance.js");
 
 /* Default status is 61 — "processed, demand determined" — so a fixture carrying
    a demand is self-consistent. Fixtures carrying a refund set activityCd: "62". */
 const order = (o) => ({ commRefNo: "REF1", section: "143(1)", activityCd: "61", orderDate: "2025-06-10", demand: "", refund: "", ...o });
 const position = (netPayable) => ({ netPayable, balTaxPayable: netPayable < 0 ? -netPayable : 0, refundDue: netPayable > 0 ? netPayable : 0 });
-const only = (orders, pos) => computeVariances(orders, pos)[0].variance;
+const only = (orders, pos, at = 0) => computeVariances(orders, pos)[at].variance;
 
 /* ---------------- the net position ---------------- */
 
@@ -212,6 +212,71 @@ test("a position with a null net is not treated as zero", () => {
   assert.equal(v.flag, "unknown");
 });
 
+/* ---------------- the order's own printed figure ----------------
+ *
+ * A real A.Y. 2024-25 intimation arrived under status 61 — "processed, demand
+ * determined" — with both amount fields empty. The status said a demand
+ * existed; the ₹6,540 was printed only in the PDF. The row read "not compared"
+ * beside a document stating the figure in bold on page one.
+ */
+
+const read = (netAsComputed, over = {}) => ({ engine: 3, netAsComputed, reconciles: null, ...over });
+
+test("where the portal sent no amount, the order's own total is used", () => {
+  const v = only([order({ demand: "", refund: "", reading: read(-6540) })], position(0));
+  assert.equal(v.cpcNet, -6540);
+  assert.equal(v.source, "document", "and it says where it got that from");
+  assert.equal(v.flag, "red");
+  assert.equal(v.amount, -6540);
+});
+
+test("a portal figure is never overridden by a read", () => {
+  /* The department's own systems against a model reading a page. There is no
+     contest, and averaging them or preferring the later one would be worse than
+     either. */
+  const v = only([order({ demand: "10000", reading: read(-99999) })], position(0));
+  assert.equal(v.cpcNet, -10000);
+  assert.equal(v.source, "portal");
+});
+
+test("a read that failed its reconciliation is not evidence", () => {
+  const v = only([order({ demand: "", reading: read(-6540, { reconciles: false }) })], position(0));
+  assert.equal(v.cpcNet, null);
+  assert.equal(v.flag, "unknown");
+});
+
+test("a read with no bottom line supplies nothing", () => {
+  const v = only([order({ demand: "", reading: read(null) })], position(0));
+  assert.equal(v.cpcNet, null);
+  assert.equal(v.flag, "unknown");
+});
+
+test("a nil order still reads as nil, not as whatever the PDF said", () => {
+  // Status 63 is CPC stating "no demand, no refund". That IS a figure.
+  const v = only([order({ activityCd: "63", reading: read(-6540) })], position(0));
+  assert.equal(v.cpcNet, 0);
+  assert.equal(v.source, "portal");
+});
+
+test("a document-sourced figure can serve as a s.154 baseline", () => {
+  const v = only(
+    [
+      order({ commRefNo: "A", demand: "", reading: read(-200000) }),
+      order({ commRefNo: "B", section: "154", orderDate: "2025-09-01", refund: "40000", activityCd: "72" }),
+    ],
+    position(40000),
+    1
+  );
+  assert.equal(v.baseline.kind, "order");
+  assert.equal(v.amount, 240000, "the rectification put right a demand we only knew from the PDF");
+});
+
+test("cpcPosition reports the figure and its provenance together", () => {
+  assert.deepEqual(cpcPosition(order({ demand: "500" })), { net: -500, source: "portal" });
+  assert.deepEqual(cpcPosition(order({ demand: "", reading: read(700) })), { net: 700, source: "document" });
+  assert.deepEqual(cpcPosition(order({ demand: "" })), { net: null, source: "" });
+});
+
 /* ---------------- refunds adjusted u/s 245 ---------------- */
 
 test("an adjusted refund is marked, and still judged on its own figures", () => {
@@ -244,7 +309,7 @@ test("input order and every original field survive", () => {
   assert.equal(out[0].storagePath, "p/a.pdf");
   assert.equal(out[0].locked, true);
   assert.equal(out[0].commRefNo, "A");
-  assert.equal(out[0].variance.engine, 2);
+  assert.equal(out[0].variance.engine, VARIANCE_ENGINE);
 });
 
 test("no orders is an empty array, not a throw", () => {

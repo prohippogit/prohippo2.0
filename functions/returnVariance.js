@@ -9,6 +9,9 @@
  *                   the activity row's own detail blob and is stored on the
  *                   order as `demand` / `refund` (connector/src/main/
  *                   portalReturns.js → functions/index.js ingestPortalReturn).
+ *                   Where the portal sent a status but NO amount, the order's
+ *                   own printed total stands in — see documentNet() for the
+ *                   rule and why it is strictly second.
  *   The assessee's  the net position the return itself closed at, read by
  *   side            functions/itrTaxPosition.js from the filed ITR JSON.
  *
@@ -48,8 +51,10 @@
 
    2 — the order's position is read from its CPC STATUS instead of by netting
        the demand and refund fields against each other. Engine 1 reported a
-       ₹1,83,744 demand on an intimation that raised none. */
-const VARIANCE_ENGINE = 2;
+       ₹1,83,744 demand on an intimation that raised none.
+   3 — where the portal sent NO figure at all, the order's own printed total is
+       used instead, from the AI read. `variance.source` records which it was. */
+const VARIANCE_ENGINE = 3;
 
 /* Differences at or below this are not reported.
  *
@@ -117,9 +122,10 @@ const OUTCOME_BY_ACTIVITY = {
   613: "refund", // later variant of 75
 };
 
-/* The order's position, on the sign convention used everywhere here: positive
-   is money coming back. Null means the order did not tell us. */
-function cpcNet(order) {
+/* The order's position AS THE PORTAL STATED IT, on the sign convention used
+   everywhere here: positive is money coming back. Null means the portal did not
+   tell us. */
+function portalNet(order) {
   const demand = amount(order && order.demand);
   const refund = amount(order && order.refund);
   const outcome = OUTCOME_BY_ACTIVITY[Number(order && order.activityCd)];
@@ -140,10 +146,56 @@ function cpcNet(order) {
   return refund ? refund : -demand;
 }
 
-function unknown(note, cpc) {
+/* The order's position AS THE ORDER ITSELF PRINTS IT, from the AI read.
+ *
+ * WHY THIS EXISTS, AND WHY IT IS SECOND. The portal's activity feed carries a
+ * status for every order but not always an amount: a real A.Y. 2024-25
+ * intimation arrived under status 61 — "processed, demand determined" — with
+ * both amount fields empty, and the ₹6,540 demand printed only in the PDF. The
+ * status said a demand existed and we could not say how much, so the row read
+ * "not compared" beside a document that states the figure in bold on page one.
+ *
+ * SO THE RULE IS: only where the portal gave nothing. A portal figure is never
+ * overridden, corrected or averaged with a read one — it came from the
+ * department's own systems and a model reading a PDF does not get to argue with
+ * it. What is on offer here is a number where there was none.
+ *
+ * A read that FAILED its reconciliation is not evidence and is refused: it has
+ * already been shown to disagree with a figure we could check. A read that could
+ * not be checked is accepted, because "unchecked" is the normal state for
+ * exactly the orders this is for — there was no portal figure to check against.
+ * `variance.source` carries which it was, all the way to the screen, so a
+ * document-sourced figure is visibly weaker rather than silently equal.
+ */
+function documentNet(order) {
+  const r = order && order.reading;
+  if (!r || typeof r !== "object") return null;
+  if (r.reconciles === false) return null;
+  const n = r.netAsComputed;
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+/** The order's position and where it came from. */
+function cpcPosition(order) {
+  const portal = portalNet(order);
+  if (portal !== null) return { net: portal, source: "portal" };
+  const doc = documentNet(order);
+  if (doc !== null) return { net: doc, source: "document" };
+  return { net: null, source: "" };
+}
+
+/** The order's position alone. Kept for callers that only want the figure. */
+function cpcNet(order) {
+  return cpcPosition(order).net;
+}
+
+function unknown(note, cpc, source) {
   return {
     engine: VARIANCE_ENGINE,
     cpcNet: cpc === undefined ? null : cpc,
+    // "portal" | "document" | "" — where cpcNet came from. Empty when there is
+    // no figure at all.
+    source: source || "",
     amount: null,
     flag: "unknown",
     direction: "unknown",
@@ -172,7 +224,7 @@ function varianceFor(entry, priors, position) {
       ...unknown(
         amount(order.demand) && amount(order.refund)
           ? "The portal recorded both a demand and a refund against this order under a status we do not recognise, so which one belongs to this order cannot be told apart."
-          : "The portal recorded this order without a demand or refund figure.",
+          : "The portal recorded this order without a demand or refund figure. Reading the order itself will take the figure off the document.",
         null
       ),
       adjusted,
@@ -212,7 +264,8 @@ function varianceFor(entry, priors, position) {
           String(order.section || "") === "154"
             ? "No earlier order and no filed return on file to compare this rectification against."
             : "The filed return's own tax position could not be read, so there is nothing to compare against.",
-          entry.net
+          entry.net,
+          entry.source
         ),
         direction,
         adjusted,
@@ -228,6 +281,7 @@ function varianceFor(entry, priors, position) {
   return {
     engine: VARIANCE_ENGINE,
     cpcNet: entry.net,
+    source: entry.source || "portal",
     baseline,
     amount: diff,
     flag,
@@ -254,7 +308,7 @@ function computeVariances(orders, position) {
      orders sharing a date (or having none) — an unstable sort here would make
      the same input produce different baselines on different runs. */
   const seq = list
-    .map((order, i) => ({ order: order || {}, i, net: cpcNet(order), date: String((order && order.orderDate) || "") }))
+    .map((order, i) => ({ order: order || {}, i, ...cpcPosition(order), date: String((order && order.orderDate) || "") }))
     .sort((a, b) => (a.date === b.date ? a.i - b.i : a.date < b.date ? -1 : 1));
 
   const byIndex = new Map();
@@ -283,6 +337,9 @@ module.exports = {
   OUTCOME_BY_ACTIVITY,
   summariseVariances,
   cpcNet,
+  cpcPosition,
+  portalNet,
+  documentNet,
   amount,
   VARIANCE_ENGINE,
   MATERIALITY_RUPEES,

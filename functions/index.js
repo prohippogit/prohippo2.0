@@ -817,12 +817,20 @@ async function callGeminiDocuments(model, apiKey, files, meta = {}) {
  * the portal's own demand/refund figures — this reads WHICH LINE moved, which
  * the PDF is the only source of.
  *
- * ON DEMAND ONLY. There is no trigger and no sync hook: a practice with 200
- * clients and five years apiece would be a thousand reads nobody asked for.
- * Somebody presses a button on one order and pays for one read.
+ * ON DEMAND by default, or automatically for red-flagged orders once a practice
+ * switches that on (onReturnWritten, below). Either way it is one read of one
+ * order: a practice with 200 clients and five years apiece would otherwise be a
+ * thousand reads nobody asked for.
  *
- * The result can never change the flag — see functions/intimationReading.js for
- * why, and for the reconciliation that catches a plausible-but-wrong read.
+ * WHAT IT MAY AND MAY NOT DO TO THE FLAG. It may never disagree with a figure
+ * the portal stated — that comes from the department's own systems and a model
+ * reading a page does not get to argue with it, so the reconciliation in
+ * functions/intimationReading.js catches a plausible-but-wrong read instead. But
+ * where the portal sent a STATUS AND NO AMOUNT, the read is the only source
+ * there is, and refusing it left orders reading "not compared" beside a document
+ * stating the figure on page one. So the order is put back through the variance
+ * engine afterwards, which takes the read's total in that one case and records
+ * `variance.source = "document"` so the screen can say where it came from.
  * -------------------------------------------------------------------------- */
 
 const INTIMATION_PROMPT = `You are a chartered accountant reading ONE Indian income-tax intimation u/s 143(1) or rectification order u/s 154 issued by CPC.
@@ -831,11 +839,15 @@ The document contains a table comparing the figures the taxpayer put in the retu
 
 Return, in "lines", one entry for EVERY row where the two columns differ, PLUS the main totals even where they agree (gross total income, total income, tax on total income, and each interest head under 234A/234B/234C). For each: "head" exactly as printed, "asReturned", "asComputed", and "remark" if CPC printed a reason or remark against that row.
 
+A CELL PRINTED AS 0, "0", "-", "Nil" or "NA" IS THE NUMBER ZERO. Report it as 0, never as null. Use null ONLY where the row has no figure in that column at all. This matters: a row moving from 0 to 6,538 is the whole finding, and reporting the 0 as null hides it.
+
 Then read the order's own closing position, as separate POSITIVE amounts:
 - "demandRaised": the net amount payable determined by CPC. 0 if none.
 - "refundDetermined": the net refund determined by CPC. 0 if none.
 - "taxPayableAsReturned": the balance tax payable per the return, from the taxpayer's column. 0 if none.
 - "refundClaimedAsReturned": the refund claimed per the return, from the taxpayer's column. 0 if none.
+
+The closing position is printed twice and both must agree: in the last row of the comparison table ("Net Amount Payable" / "Refundable"), and in the banner near the top of the order ("You have a Demand for A.Y. ..., Amount of Demand: Rs ..." or "A refund of Rs ... has been determined"). Read the banner where the table's last row is unclear. Report it even when it is the only figure you can read.
 
 "headline": ONE short sentence naming what changed and by how much, e.g. "80C deduction of Rs 1,50,000 disallowed" or "TDS credit of Rs 32,000 not allowed". If several things changed, name the largest.
 
@@ -994,12 +1006,22 @@ exports.readIntimationOrder = onCall(
     );
     const reading = normaliseReading(raw, { variance: order.variance || null });
 
-    // Rewrite just this order, leaving every other entry and its variance alone.
     const next = orders.slice();
     next[index] = { ...order, reading, readingError: "" };
-    await ref.set({ orders: next }, { merge: true });
 
-    return { ok: true, reading };
+    /* Recompute the year's variances over the new reading.
+     *
+     * Almost always a no-op: the portal's figure wins wherever it exists, so the
+     * read changes nothing. It earns its place on the orders where the portal
+     * sent a status and no amount — those said "not compared" until now, and the
+     * read is what supplies the figure (returnVariance.js documentNet). The
+     * WHOLE year is recomputed rather than this one order because a s.154 order
+     * is measured against the order before it: a figure appearing on an earlier
+     * order becomes the baseline for a later one. */
+    const withVariance = computeVariances(next, data.returnPosition || null);
+    await ref.set({ orders: withVariance }, { merge: true });
+
+    return { ok: true, reading, variance: withVariance[index].variance };
   }
 );
 
@@ -1458,7 +1480,12 @@ exports.onReturnWritten = onDocumentWritten(
       }
       changed = true;
     }
-    if (changed) await after.ref.set({ orders: next }, { merge: true });
+    /* Through the variance engine on the way out, for the same reason the
+       button's path does: a read can supply a figure the portal never sent.
+       Re-entrancy is unaffected — every order touched above now carries a
+       `reading` or a `readingError`, so the next firing finds nothing eligible
+       whatever the recompute does to the flags. */
+    if (changed) await after.ref.set({ orders: computeVariances(next, data.returnPosition || null) }, { merge: true });
   }
 );
 

@@ -10,7 +10,7 @@ that were made deliberately.
 
 | | where it comes from |
 |---|---|
-| **CPC's position** | the activity row's own detail blob — `computedDemndAmt` / `computedRefndAmt`, stored on the order as `demand` / `refund` (`connector/src/main/portalReturns.js` → `ingestPortalReturn`) |
+| **CPC's position** | the activity row's own detail blob — `computedDemndAmt` / `computedRefndAmt`, stored on the order as `demand` / `refund` (`connector/src/main/portalReturns.js` → `ingestPortalReturn`); failing that, the order's own printed total (see below) |
 | **The assessee's position** | the filed ITR JSON already in Storage, read by `functions/itrTaxPosition.js` |
 
 **CPC's figure is read from the order's STATUS, never by netting the two fields
@@ -22,6 +22,32 @@ for line and whose own words are *"There is no payment due."* The status says
 which figure belongs to the order (`OUTCOME_BY_ACTIVITY`), so it is asked. An
 unrecognised status carrying both figures reports "could not be compared" rather
 than guessing.
+
+### When the portal sends a status and no amount
+
+A real A.Y. 2024-25 intimation arrived under status 61 — *processed, demand
+determined* — with both amount fields empty. The status said a demand existed
+and nothing said how much, so the row read "not compared" beside a document
+printing **₹6,540** in bold on page one. That is a gap the practitioner can see,
+which is the right failure, but it is still a gap.
+
+So where the portal gave **nothing**, `documentNet()` takes the order's own
+printed total from the AI read. Three rules keep it honest:
+
+- **only where the portal gave nothing.** A portal figure is never overridden,
+  corrected or averaged with a read one.
+- **a read that failed its reconciliation is refused.** It has already been shown
+  to disagree with a figure that could be checked. A read that could not be
+  checked is accepted, because "unchecked" is the normal state for exactly the
+  orders this is for — there was no portal figure to check against.
+- **`variance.source` records which it was** (`"portal"` / `"document"` / `""`),
+  all the way to the screen, so a document-sourced figure is visibly weaker
+  rather than silently equal. The order card labels it *"per the order — the
+  portal sent no amount"*.
+
+And the reconciliation refuses to check a read against a figure that came from a
+read: both numbers would be the same read of the same page, and "reconciles"
+would dress one unverified source up as two agreeing ones.
 
 Both are **net of taxes paid**, and both use one sign convention, set once and
 never varied:
@@ -51,7 +77,8 @@ means the flag:
 
 That rule held when the breakdown landed. `readIntimationOrder` reads the
 order's own comparison table — the return's figures against CPC's, line by line
-— and **cannot touch the flag**. What makes it safe to look at is the
+— and **cannot contradict the flag** (it can only supply one where the portal
+gave no figure at all, under the rules above). What makes it safe to look at is the
 reconciliation in `functions/intimationReading.js`: the model is also asked for
 the order's own bottom line, and that has to equal the demand or refund the
 portal separately recorded, to the rupee. Two independent sources for one
@@ -180,6 +207,30 @@ Orders can be ticked off. The tick is a map on the return document
 (`varianceReviewed: { "<commRefNo>": true }`), not a flag inside the orders
 array — the sync owns that array and rewrites it wholesale, so a flag stored
 inside it would be erased the next time CPC issued anything for the year.
+
+## Who is doing it
+
+An intimation can be allocated to a member of staff, and the allocation lives in
+the same per-order map as every other decision (`intimationTracking`), for the
+same reason: `assignedTo`, `assignedAt`, `workDone`, `doneAt`.
+
+**The roster is derived, not managed.** Staff is free text everywhere else in
+ProHippo — on the assessee, on a matter, on a hearing — so `staffRoster()`
+collects every name already in use anywhere and offers them through a
+`<datalist>`. A name not on the list is simply typed, which is what makes "add
+the staff if they are not in the list" free rather than a feature. Names fold
+case-insensitively (`staffKey`) with the first spelling winning, so "Priya" and
+"priya" are one person's workload rather than two half-answers.
+
+**"Done" is not the decision.** The decision is what the practice resolved to do
+about the order — rectify, appeal, accept. `workDone` is whether the person given
+the job has carried it out. A rectification can be decided on Monday and filed on
+Friday, and a page conflating the two would show the Monday state all week. Only
+allocated work can be marked done, and unassigning clears the tick with it.
+
+The **By staff** view groups on this, leading with what is still open rather than
+what has ever been done, and unallocated is a group of its own that always sorts
+last — nobody has picked it up, so it is a to-do list, not a workload.
 
 ## Tests
 

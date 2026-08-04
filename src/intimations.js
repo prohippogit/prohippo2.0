@@ -150,6 +150,10 @@ export function intimationVariances(data, opts = {}) {
            asked for one. Stored on the order beside its variance, because it
            describes the document rather than anything we decided. */
         reading: o.reading || null,
+        /* Who in the practice is doing this one, and whether they have finished.
+           Same map as every other decision — see `tracking` above. */
+        assignedTo: (tracked[o.commRefNo] || {}).assignedTo || "",
+        workDone: Boolean((tracked[o.commRefNo] || {}).workDone),
       });
     }
   }
@@ -188,7 +192,15 @@ export function varianceSummary(rows) {
 /* Must match VARIANCE_ENGINE in functions/returnVariance.js — the two are pinned
    together by a test. Raising it there and here is what makes every stored
    variance recompute on the next page load. */
-export const VARIANCE_ENGINE = 2;
+export const VARIANCE_ENGINE = 3;
+
+/* Where CPC's figure came from. A practitioner acting on a number is entitled to
+   know whether the department stated it or a model read it off a page.
+   `""` is neither — there is no figure. */
+export const SOURCE_LABEL = {
+  portal: "as the portal recorded it",
+  document: "read from the order itself — the portal sent no figure",
+};
 
 /** True when the practice holds orders that have never been through the variance
  *  engine, OR were computed by an older one — the one-shot backfill reads this.
@@ -431,7 +443,12 @@ export function groupByAssessee(rows) {
     const pending = g.rows.filter((r) => r.decision === "pending").length;
     const atStake = g.rows.reduce((sum, r) => sum + Math.abs(r.variance?.flag === "red" ? (r.variance.amount || 0) : 0), 0);
     const years = [...new Set(g.rows.map((r) => r.ay).filter(Boolean))].sort().reverse();
-    return { ...g, pending, atStake, years, count: g.rows.length };
+    // Who is carrying this client's orders — normally one name, which is the
+    // point: allocation is by person, and a client split across three people is
+    // worth seeing on the list rather than inside it.
+    const staff = [...new Set(g.rows.map((r) => r.assignedTo).filter(Boolean))];
+    const unallocated = g.rows.filter((r) => !r.assignedTo).length;
+    return { ...g, pending, atStake, years, staff, unallocated, count: g.rows.length };
   });
   return groups.sort((a, b) =>
     (b.pending - a.pending) || (b.atStake - a.atStake) || String(a.assessee).localeCompare(String(b.assessee))
@@ -463,6 +480,69 @@ export function groupByCause(rows) {
     .sort((a, b) => (!a.cause) - (!b.cause) || b.assessees - a.assessees || b.count - a.count);
 }
 
+/* ---------------- who is doing it ---------------- */
+
+/* The people this practice already puts work to.
+ *
+ * NOT A MANAGED LIST, deliberately. Staff is free text everywhere else in the
+ * app — on the assessee, on a matter, on a hearing — and a practice of four
+ * people should not have to set up a roster before it can allocate one
+ * intimation. So the roster is DERIVED: every name already in use anywhere,
+ * offered as suggestions, with a new name typed straight in. That is what makes
+ * "he can even add the staff if it's not in the list" free rather than a
+ * feature.
+ *
+ * The cost of free text is spelling: "Priya" and "priya" would be two people.
+ * Names are matched case-insensitively and the FIRST spelling seen wins, so a
+ * second entry of the same name folds into the first instead of splitting a
+ * staff member's workload across two rows.
+ */
+export function staffRoster(data, rows = []) {
+  const byKey = new Map();
+  const add = (name) => {
+    const n = String(name || "").trim();
+    if (!n) return;
+    const key = n.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, n);
+  };
+  // Names already carrying intimation work come first — this page's own history
+  // is the best guess at who does this page's work.
+  for (const r of rows) add(r.assignedTo);
+  for (const a of data.assessees || []) add(a.staff);
+  for (const m of data.matters || []) add(m.staff);
+  for (const h of data.hearings || []) add(h.staff);
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** The roster key a name folds onto, so two spellings are one person. */
+export const staffKey = (name) => String(name || "").trim().toLowerCase();
+
+/* The rows grouped by who is doing them.
+ *
+ * The question this answers is the one a principal actually asks — "what is
+ * Priya sitting on, and has she finished it" — so each group carries how much is
+ * still open, not just how much exists. Unassigned is a group of its own and
+ * sorts last: it is a to-do list rather than somebody's workload.
+ */
+export function groupByStaff(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = staffKey(row.assignedTo);
+    if (!byKey.has(key)) byKey.set(key, { key, staff: row.assignedTo || "", rows: [] });
+    byKey.get(key).rows.push(row);
+  }
+  return [...byKey.values()]
+    .map((g) => ({
+      ...g,
+      count: g.rows.length,
+      done: g.rows.filter((r) => r.workDone).length,
+      open: g.rows.filter((r) => !r.workDone).length,
+      assessees: new Set(g.rows.map((r) => r.assesseeId || r.assessee)).size,
+      atStake: g.rows.reduce((s, r) => s + (r.variance?.flag === "red" ? Math.abs(r.variance.amount || 0) : 0), 0),
+    }))
+    .sort((a, b) => (!a.key) - (!b.key) || b.open - a.open || b.count - a.count);
+}
+
 /** Practice-wide counts for the page header. */
 export function practiceSummary(rows) {
   const out = {
@@ -471,12 +551,19 @@ export function practiceSummary(rows) {
     appealOpen: 0, appealLapsing: 0,
     refundAwaited: 0, refundOverdue: 0, refundAwaitedAmount: 0, refundStale: 0,
     disposalOverdue: 0, untagged: 0,
+    allocated: 0, unallocated: 0, workOpen: 0, workDone: 0,
   };
   const names = new Set();
   for (const row of rows) {
     names.add(row.assesseeId || row.assessee);
     if (row.decision === "pending") out.pending += 1;
     if (!row.cause) out.untagged += 1;
+    if (row.assignedTo) {
+      out.allocated += 1;
+      if (row.workDone) out.workDone += 1; else out.workOpen += 1;
+    } else {
+      out.unallocated += 1;
+    }
 
     const v = row.variance;
     if (v?.flag === "red") out.additionalDemand += Math.abs(v.amount || 0);
@@ -511,6 +598,11 @@ export function matchesFilter(row, filter) {
     case "Appeal window open": { const a = clocksFor(row).appeal; return a.urgency === "open" || a.urgency === "soon" || a.urgency === "urgent"; }
     case "Rectification filed": return row.decision === "rectify" && Boolean(row.tracking?.rectFiledOn);
     case "Not yet tagged": return !row.cause;
+    case "Not allocated": return !row.assignedTo;
+    /* Allocated and not yet finished. Distinct from "Needs a decision": that is
+       work nobody has taken up, this is work somebody is holding. A principal
+       chasing the second should not have the first mixed into it. */
+    case "With staff": return Boolean(row.assignedTo) && !row.workDone;
     default: return true;
   }
 }
@@ -518,6 +610,7 @@ export function matchesFilter(row, filter) {
 export const FILTERS = [
   "All", "Needs a decision", "More payable", "In the assessee's favour",
   "Appeal window open", "Refund awaited", "Rectification filed", "Not yet tagged",
+  "Not allocated", "With staff",
 ];
 
 /* ---------------- the AI read of the comparison table ---------------- */

@@ -25,6 +25,10 @@
  *     → one client's ORDERS, one row per assessment year
  *       → one order's full card, in a pop-up
  *
+ * Two views cut the same rows a different way: BY CAUSE, which puts every client
+ * hit by the same CPC adjustment together, and BY STAFF, which answers what each
+ * person is holding and how much of it they have finished.
+ *
  * The visual language is deliberately the Matters tab's — the lavender stage,
  * white rows with a coloured left bar, the "View →" chip that fills on hover —
  * because this is the same kind of work and should not feel like a new app.
@@ -39,15 +43,15 @@
  *   figures the department stated, and here the two must not be confusable.
  */
 import React from "react";
-import { Icon, EmptyState, Modal, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
+import { Icon, EmptyState, Modal, Avatar, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
 import { useData } from "./store";
 import { openFromStorage } from "./downloadFile";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "./firebase";
 import {
-  allIntimations, groupByAssessee, groupByCause, practiceSummary, matchesFilter,
-  clocksFor, refundPosition, describeVariance, staleRefunds,
-  DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS,
+  allIntimations, groupByAssessee, groupByCause, groupByStaff, practiceSummary, matchesFilter,
+  clocksFor, refundPosition, describeVariance, staleRefunds, staffRoster,
+  DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS, SOURCE_LABEL,
   changedLines, readingTrust, pendingCauseSuggestion, bulkClearable,
 } from "./intimations";
 
@@ -99,6 +103,9 @@ export default function Intimations() {
   const filtered = React.useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
   const summary = React.useMemo(() => practiceSummary(rows), [rows]);
   const clients = React.useMemo(() => groupByAssessee(filtered), [filtered]);
+  /* Every name the practice already puts work to, from anywhere in the app —
+     so allocating the first intimation needs no set-up. */
+  const roster = React.useMemo(() => staffRoster(data, rows), [data, rows]);
 
   /* Name or PAN, case- and space-insensitive. A practitioner searching for a
      client types either without thinking about which. */
@@ -243,6 +250,15 @@ export default function Intimations() {
             <Stat label="More payable" value={fmtINR(summary.additionalDemand)} sub="than the returns claimed" colour="#B23B3B"/>
             <Stat label="In the assessee's favour" value={fmtINR(summary.extraRefund)} sub="over the returns claimed" colour="#13795C"/>
             <Stat label="Refund awaited" value={summary.refundAwaited + summary.refundOverdue} sub={summary.refundOverdue ? `${summary.refundOverdue} over 30 days` : "determined, not yet received"} colour={summary.refundOverdue ? "#B23B3B" : "var(--p-text-2)"}/>
+            {/* Allocation, stated as work still IN HAND rather than work
+                allocated: the number a principal wants is what has not come
+                back yet. */}
+            <Stat
+              label="With staff"
+              value={summary.workOpen}
+              sub={summary.unallocated ? `${summary.unallocated} not allocated to anybody` : summary.workDone ? `${summary.workDone} marked done` : "all allocated"}
+              colour={summary.workOpen ? "var(--p-primary-2)" : "var(--p-text-2)"}
+            />
           </div>
 
           {(summary.appealLapsing > 0 || summary.disposalOverdue > 0) && (
@@ -310,6 +326,10 @@ export default function Intimations() {
               title="Every client hit by the same CPC adjustment — one position to research, not one per client">
               By cause
             </span>
+            <span className={`fchip ${view === "staff" ? "active" : ""}`} onClick={() => setView("staff")}
+              title="What each person is holding, and how much of it they have finished">
+              By staff
+            </span>
           </div>
         )}
       </div>
@@ -335,12 +355,15 @@ export default function Intimations() {
         />
         : view === "clients"
           ? <ClientList clients={shown} search={search} onOpen={(c) => setOpenClient(c.key)}/>
-          : <CauseList groups={groupByCause(filtered)} onOpenRow={(r) => setOpenRow(r.key)}/>}
+          : view === "staff"
+            ? <StaffList groups={groupByStaff(filtered)} onOpenRow={(r) => setOpenRow(r.key)}/>
+            : <CauseList groups={groupByCause(filtered)} onOpenRow={(r) => setOpenRow(r.key)}/>}
 
       {row && (
         <OrderModal
           row={row}
           busy={busy}
+          roster={roster}
           readingNow={readingKey === row.key}
           onClose={() => setOpenRow(null)}
           onTrack={(patch) => setTracking(row, patch)}
@@ -393,7 +416,7 @@ function Stat({ label, value, sub, colour }) {
 
 /* ---------------- level 1: the clients ---------------- */
 
-const CLIENT_GRID = "minmax(180px, 1fr) 126px 92px 150px 104px 104px";
+const CLIENT_GRID = "minmax(170px, 1fr) 126px 76px 150px 116px 96px 96px";
 
 function ClientList({ clients, search, onOpen }) {
   if (clients.length === 0) {
@@ -407,7 +430,7 @@ function ClientList({ clients, search, onOpen }) {
     <div className="matters-surface" style={{overflowX: "auto"}}>
       <div className="col" style={{gap: 10, minWidth: 720}}>
         <div style={{display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
-          <span>Assessee</span><span>PAN</span><span>Orders</span><span>Position</span><span>To decide</span><span/>
+          <span>Assessee</span><span>PAN</span><span>Orders</span><span>Position</span><span>With</span><span>To decide</span><span/>
         </div>
         {clients.map((c) => {
           // A client's own colour comes from what they need, not from a type:
@@ -436,6 +459,7 @@ function ClientList({ clients, search, onOpen }) {
                   ? <span className="pill" style={{background: "#FDECEC", color: "#B23B3B", fontWeight: 700}}>{fmtINR(c.atStake)} more payable</span>
                   : <span className="muted" style={{fontSize: 12}}>Nothing adverse</span>}
               </span>
+              <span style={{minWidth: 0}}><StaffCell staff={c.staff} unallocated={c.unallocated}/></span>
               <span>
                 {c.pending
                   ? <span className="pill" style={{background: "#FFF3D6", color: "#B07512", fontWeight: 700}}>{c.pending}</span>
@@ -448,6 +472,92 @@ function ClientList({ clients, search, onOpen }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/* Who is carrying this. The mint avatar is the app's own convention for a staff
+   member — the same one the Matters table, the Hearings list and the assessee
+   card use — so a name means a person here too without anybody being told.
+   First name only: the column is 96px and a surname does not identify anybody
+   in a practice of six that a first name does not. */
+function StaffCell({ staff, unallocated }) {
+  if (!staff?.length) {
+    return <span className="muted" style={{fontSize: 11.5}}>Not allocated</span>;
+  }
+  return (
+    <span className="center" style={{gap: 6, justifyContent: "flex-start", minWidth: 0}}>
+      <Avatar name={staff[0]} color="mint" size="sm"/>
+      <span style={{fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+        {staff.length > 1 ? `${staff.length} people` : staff[0].split(" ")[0]}
+        {unallocated > 0 && <span className="muted"> +{unallocated}</span>}
+      </span>
+    </span>
+  );
+}
+
+/* ---------------- the by-staff view ---------------- */
+
+/* What each person is holding.
+ *
+ * The counts are OPEN first and finished second, because the question a
+ * principal opens this for is "what is still with Priya", not "what has Priya
+ * ever done". The unallocated group is last and is styled as work rather than
+ * as somebody's list — nobody has picked it up yet.
+ */
+function StaffList({ groups, onOpenRow }) {
+  if (!groups.length) return <div className="card"><EmptyState icon="users" title="Nothing under this filter"/></div>;
+  return (
+    <div className="col" style={{gap: 12}}>
+      {groups.map((g) => (
+        <div key={g.key || "unallocated"} className="card" style={{padding: 0, overflow: "hidden"}}>
+          <div className="between" style={{padding: "13px 18px", background: g.key ? "var(--p-card-tint)" : "transparent", gap: 12, flexWrap: "wrap"}}>
+            <div className="center" style={{gap: 10, justifyContent: "flex-start"}}>
+              {g.key ? <Avatar name={g.staff} color="mint"/> : <Icon name="alert" size={16}/>}
+              <div>
+                <div style={{fontSize: 14.5, fontWeight: 800}}>{g.staff || "Not allocated to anybody"}</div>
+                <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>
+                  {g.count} order{g.count !== 1 ? "s" : ""} · {g.assessees} assessee{g.assessees !== 1 ? "s" : ""}
+                  {g.atStake > 0 ? ` · ${fmtINR(g.atStake)} more payable` : ""}
+                </div>
+              </div>
+            </div>
+            <span className="center" style={{gap: 7}}>
+              {g.open > 0 && (
+                <span className="pill" style={{background: "#FFF3D6", color: "#B07512", fontWeight: 700}}>{g.open} still open</span>
+              )}
+              {g.done > 0 && (
+                <span className="pill" style={{background: "#E7F7F0", color: "#13795C", fontWeight: 700}}>{g.done} done</span>
+              )}
+            </span>
+          </div>
+          <div>
+            {g.rows.map((r) => {
+              const tone = toneOf(r.variance);
+              return (
+                <div
+                  key={r.key}
+                  className="between row-link"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onOpenRow(r)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenRow(r); } }}
+                  style={{padding: "10px 18px", borderTop: "1px solid var(--p-line-2)", cursor: "pointer", gap: 12, flexWrap: "wrap"}}
+                >
+                  <span style={{fontSize: 12.5}}>
+                    {r.workDone && <Icon name="check" size={12}/>}{" "}
+                    <b style={{opacity: r.workDone ? 0.6 : 1}}>{titleCase(r.assessee) || r.pan}</b>
+                    <span className="muted"> · A.Y. {r.ay} · u/s {r.section} · {DECISION_LABEL[r.decision]}</span>
+                  </span>
+                  <span style={{background: tone.bg, color: tone.fg, borderRadius: 7, padding: "2px 7px", fontWeight: 800, fontSize: 12}}>
+                    {signed(r.variance) || tone.word}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -493,7 +603,7 @@ function CpcAmount({ variance, size = 15 }) {
   );
 }
 
-const ORDER_GRID = "112px 72px 84px minmax(190px, 1fr) 118px 128px 96px";
+const ORDER_GRID = "104px 68px 82px minmax(180px, 1fr) 118px 104px 122px 92px";
 
 function OrderList({ client, readingKey, onOpen }) {
   const ordered = [...client.rows].sort((a, b) =>
@@ -501,9 +611,9 @@ function OrderList({ client, readingKey, onOpen }) {
 
   return (
     <div className="matters-surface" style={{overflowX: "auto"}}>
-      <div className="col" style={{gap: 10, minWidth: 880}}>
+      <div className="col" style={{gap: 10, minWidth: 960}}>
         <div style={{display: "grid", gridTemplateColumns: ORDER_GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
-          <span>Order</span><span>A.Y.</span><span>Dated</span><span>What it did</span><span>Demand / Refund</span><span>Decision</span><span/>
+          <span>Order</span><span>A.Y.</span><span>Dated</span><span>What it did</span><span>Demand / Refund</span><span>With</span><span>Decision</span><span/>
         </div>
         {ordered.map((r) => {
           const accent = accentFor(r.section);
@@ -543,6 +653,14 @@ function OrderList({ client, readingKey, onOpen }) {
                 </span>
               </span>
               <span><CpcAmount variance={r.variance}/></span>
+              <span style={{minWidth: 0}}>
+                <StaffCell staff={r.assignedTo ? [r.assignedTo] : []} unallocated={0}/>
+                {r.assignedTo && (
+                  <span style={{fontSize: 10, fontWeight: 700, display: "block", marginTop: 2, color: r.workDone ? "#13795C" : "#B07512"}}>
+                    {r.workDone ? "done" : "in hand"}
+                  </span>
+                )}
+              </span>
               <span>
                 <span style={{display: "inline-block", background: tone.bg, color: tone.fg, borderRadius: 8, padding: "3px 8px", fontWeight: 800, fontSize: 12}}>
                   {amt || tone.word}
@@ -614,7 +732,7 @@ function CauseList({ groups, onOpenRow }) {
 
 /* ---------------- one order, in full ---------------- */
 
-function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf }) {
+function OrderModal({ row, busy, roster, readingNow, onClose, onTrack, onRead, onViewPdf }) {
   const accent = accentFor(row.section);
   const tone = toneOf(row.variance);
   const clocks = clocksFor(row);
@@ -644,8 +762,15 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
           </div>
           <div className="center" style={{gap: 16}}>
             <div style={{textAlign: "right"}}>
-              <div className="muted" style={{fontSize: 9.5, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase"}}>CPC determined</div>
+              <div className="muted" style={{fontSize: 9.5, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase"}}>
+                CPC determined{row.variance?.source === "document" ? " · per the order" : ""}
+              </div>
               <CpcAmount variance={row.variance} size={19}/>
+              {row.variance?.source === "document" && (
+                <div className="muted" style={{fontSize: 10, marginTop: 2, maxWidth: 210}}>
+                  The portal sent no amount — this was read off the order itself.
+                </div>
+              )}
             </div>
             <span style={{background: tone.bg, color: tone.fg, borderRadius: 9, padding: "6px 12px", fontWeight: 800, fontSize: 14, whiteSpace: "nowrap"}}>
               {amt || tone.word}
@@ -694,6 +819,11 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
         {row.reading?.outstandingDemands?.length > 0 && <ArrearsPanel reading={row.reading}/>}
 
         <div>
+          <Eyebrow>Allocation</Eyebrow>
+          <AllocationPanel row={row} busy={busy} roster={roster} onTrack={onTrack}/>
+        </div>
+
+        <div>
           <Eyebrow>Tracking</Eyebrow>
           <div className="row" style={{gap: 12, flexWrap: "wrap"}}>
             {(row.decision === "rectify" || row.tracking?.rectFiledOn) && (
@@ -730,7 +860,7 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
               status {row.activityCd || "—"} · {row.statusDesc || "no description"}<br/>
               demand field {row.demand === "" || row.demand == null ? "—" : fmtINR(Number(row.demand))} ·
               refund field {row.refund === "" || row.refund == null ? "—" : fmtINR(Number(row.refund))}<br/>
-              read as {row.variance?.cpcNet == null ? "not comparable" : `${row.variance.cpcNet < 0 ? "payable" : "refundable"} ${fmtINR(Math.abs(row.variance.cpcNet))}`} (engine {row.variance?.engine ?? "—"})
+              read as {row.variance?.cpcNet == null ? "not comparable" : `${row.variance.cpcNet < 0 ? "payable" : "refundable"} ${fmtINR(Math.abs(row.variance.cpcNet))}`} (engine {row.variance?.engine ?? "—"}{row.variance?.source ? `, ${SOURCE_LABEL[row.variance.source] || row.variance.source}` : ""})
               {row.returnPosition?.netPayable != null && <> · return closed at {row.returnPosition.netPayable < 0 ? "payable" : "refundable"} {fmtINR(Math.abs(row.returnPosition.netPayable))}</>}
             </div>
           </details>
@@ -742,6 +872,95 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
         </div>
       </div>
     </Modal>
+  );
+}
+
+/* Who is doing this one, and have they finished.
+ *
+ * A TEXT BOX WITH SUGGESTIONS, NOT A DROP-DOWN. Staff is free text everywhere
+ * else in ProHippo — on the assessee, the matter, the hearing — and a drop-down
+ * here would be the only place in the app where a name has to exist before it
+ * can be used. So the roster is offered through a datalist: every name already
+ * in use is one click away, and a new one is simply typed. That is the whole of
+ * "he can even add the staff if it's not in the list".
+ *
+ * Only assigned work can be marked done. Something nobody is holding cannot be
+ * finished by anybody, and a tick with no name against it is a claim the page
+ * cannot answer questions about a week later.
+ *
+ * The tick is deliberately NOT the same thing as the decision beside it. A
+ * decision is what the PRACTICE has resolved to do about the order — rectify,
+ * appeal, accept; "done" is whether the person given the job has carried it out.
+ * A rectification can be decided on Monday and filed on Friday, and a page that
+ * conflated the two would show the Monday state all week.
+ */
+function AllocationPanel({ row, busy, roster, onTrack }) {
+  const listId = "intimation-staff-roster";
+  const assigned = row.assignedTo || "";
+
+  const assign = (name) => {
+    const value = String(name || "").trim();
+    if (value === assigned) return;
+    onTrack(
+      value
+        ? { assignedTo: value, assignedAt: new Date().toISOString() }
+        // Unassigning clears the tick with it, rather than leaving "done" hanging
+        // against nobody.
+        : { assignedTo: "", assignedAt: "", workDone: false, doneAt: "" }
+    );
+  };
+
+  return (
+    <div>
+      <datalist id={listId}>
+        {roster.map((name) => <option key={name} value={name}/>)}
+      </datalist>
+      <div className="row" style={{gap: 12, flexWrap: "wrap", alignItems: "flex-end"}}>
+        <div style={{flex: "1 1 240px"}}>
+          <div className="muted" style={{fontSize: 11, marginBottom: 3}}>Assigned to</div>
+          <div className="center" style={{gap: 8, justifyContent: "flex-start"}}>
+            {assigned && <Avatar name={assigned} color="mint" size="sm"/>}
+            <input
+              type="text"
+              list={listId}
+              defaultValue={assigned}
+              key={assigned}
+              disabled={busy}
+              placeholder="Type a name, or pick from your staff"
+              onBlur={(e) => assign(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+              style={{flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 9, border: "1px solid var(--p-line)", fontSize: 12.5}}
+            />
+            {assigned && (
+              <button className="btn btn-ghost btn-xs" disabled={busy} title="Take this off them" onClick={() => assign("")}>
+                <Icon name="x" size={12}/>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{flex: "1 1 200px"}}>
+          <div className="muted" style={{fontSize: 11, marginBottom: 3}}>Progress</div>
+          {assigned ? (
+            <button
+              className={`btn btn-sm ${row.workDone ? "btn-secondary" : "btn-primary"}`}
+              disabled={busy}
+              onClick={() => onTrack({ workDone: !row.workDone, doneAt: row.workDone ? "" : new Date().toISOString() })}
+            >
+              <Icon name="check" size={13}/>
+              {row.workDone ? "Done — reopen" : "Mark the work done"}
+            </button>
+          ) : (
+            <span className="muted" style={{fontSize: 11.5}}>Assign it to somebody first.</span>
+          )}
+        </div>
+      </div>
+      {row.workDone && row.tracking?.doneAt && (
+        <div className="muted" style={{fontSize: 10.5, marginTop: 6}}>
+          Marked done on {fmtDateLong(String(row.tracking.doneAt).slice(0, 10))}.
+        </div>
+      )}
+    </div>
   );
 }
 

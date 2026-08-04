@@ -24,8 +24,12 @@ import {
 const TODAY = "2026-08-03";
 
 const variance = (flag, amount, kind = "return") => ({
-  engine: 2,
+  // Whatever the current engine is: a fixture pinned to a number turns every
+  // engine bump into a fake failure here, and the real pin is the test below
+  // that ties this module's constant to the backend's.
+  engine: VARIANCE_ENGINE,
   cpcNet: -1000,
+  source: "portal",
   baseline: kind ? { kind, ref: kind === "order" ? "PREV" : "", net: 0 } : null,
   amount,
   flag,
@@ -459,4 +463,93 @@ test("the model's cause vocabulary matches the one the UI can render", () => {
     UI_CAUSES.map((c) => c.id).sort(),
     "functions/intimationReading.js and src/intimations.js have drifted apart"
   );
+});
+
+/* ============================================================================
+   Allocation — who in the practice is doing this one.
+
+   Staff is free text everywhere in ProHippo, so the roster is DERIVED rather
+   than managed. What has to hold is that two spellings of one name are one
+   person: otherwise a principal asking "what is with Priya" gets half an
+   answer, which is worse than no answer.
+   ============================================================================ */
+import { staffRoster, groupByStaff, staffKey } from "../src/intimations.js";
+
+const assigned = (name, done = false) => ({ decision: "pending", assignedTo: name, workDone: done });
+
+test("the roster is every name already in use anywhere in the practice", () => {
+  const data = {
+    assessees: [{ staff: "Priya Mehta" }, { staff: "" }],
+    matters: [{ staff: "Arjun Desai" }],
+    hearings: [{ staff: "Priya Mehta" }],
+  };
+  assert.deepEqual(staffRoster(data), ["Arjun Desai", "Priya Mehta"], "deduplicated and sorted");
+});
+
+test("a name typed only on this page joins the roster", () => {
+  // The whole of "he can even add the staff if it's not in the list": a name
+  // used once here is offered everywhere here afterwards.
+  const rows = [{ assignedTo: "Riya Kapoor" }];
+  assert.deepEqual(staffRoster({ assessees: [{ staff: "Priya Mehta" }] }, rows), ["Priya Mehta", "Riya Kapoor"]);
+});
+
+test("two spellings of one name are one person, and the first spelling wins", () => {
+  assert.equal(staffKey(" Priya Mehta "), "priya mehta");
+  assert.deepEqual(
+    staffRoster({ assessees: [{ staff: "Priya Mehta" }, { staff: "priya mehta" }] }),
+    ["Priya Mehta"]
+  );
+});
+
+test("by staff, the count that leads is what is still open", () => {
+  const rows = allIntimations({ returns: [
+    trackedReturn({ id: "r1", orders: [ord({ commRefNo: "A" }), ord({ commRefNo: "B" }), ord({ commRefNo: "C" })],
+      intimationTracking: { A: assigned("Priya Mehta"), B: assigned("Priya Mehta", true) } }),
+  ] });
+  const groups = groupByStaff(rows);
+  assert.equal(groups[0].staff, "Priya Mehta");
+  assert.deepEqual([groups[0].count, groups[0].open, groups[0].done], [2, 1, 1]);
+  assert.equal(groups[1].staff, "", "unallocated is a group of its own");
+  assert.equal(groups[1].count, 1);
+});
+
+test("unallocated sorts last however much of it there is", () => {
+  const rows = allIntimations({ returns: [
+    trackedReturn({ id: "r1", orders: ["A", "B", "C", "D"].map((c) => ord({ commRefNo: c })),
+      intimationTracking: { A: assigned("Priya Mehta") } }),
+  ] });
+  const groups = groupByStaff(rows);
+  assert.equal(groups[groups.length - 1].staff, "", "three unallocated still do not outrank one person's work");
+});
+
+test("allocation filters separate work nobody holds from work somebody does", () => {
+  const rows = allIntimations({ returns: [
+    trackedReturn({ id: "r1", orders: [ord({ commRefNo: "A" }), ord({ commRefNo: "B" }), ord({ commRefNo: "C" })],
+      intimationTracking: { A: assigned("Priya Mehta"), B: assigned("Priya Mehta", true) } }),
+  ] });
+  assert.deepEqual(rows.filter((r) => matchesFilter(r, "Not allocated")).map((r) => r.commRefNo), ["C"]);
+  assert.deepEqual(rows.filter((r) => matchesFilter(r, "With staff")).map((r) => r.commRefNo), ["A"],
+    "finished work is not still with anybody");
+});
+
+test("the header counts work in hand, not work allocated", () => {
+  const rows = allIntimations({ returns: [
+    trackedReturn({ id: "r1", orders: [ord({ commRefNo: "A" }), ord({ commRefNo: "B" }), ord({ commRefNo: "C" })],
+      intimationTracking: { A: assigned("Priya Mehta"), B: assigned("Priya Mehta", true) } }),
+  ] });
+  const s = practiceSummary(rows);
+  assert.deepEqual(
+    { allocated: s.allocated, unallocated: s.unallocated, workOpen: s.workOpen, workDone: s.workDone },
+    { allocated: 2, unallocated: 1, workOpen: 1, workDone: 1 }
+  );
+});
+
+test("a client row says who is carrying it and how much nobody is", () => {
+  const rows = allIntimations({ returns: [
+    trackedReturn({ id: "r1", orders: [ord({ commRefNo: "A" }), ord({ commRefNo: "B" })],
+      intimationTracking: { A: assigned("Priya Mehta") } }),
+  ] });
+  const [group] = groupByAssessee(rows);
+  assert.deepEqual(group.staff, ["Priya Mehta"]);
+  assert.equal(group.unallocated, 1);
 });

@@ -37,8 +37,10 @@
 
    2 — also reads the order's outstanding-demand annexures.
    3 — a printed 0 is read as zero rather than as a blank, and a read is never
-       reconciled against a figure that came from a read. */
-const READING_ENGINE = 3;
+       reconciled against a figure that came from a read.
+   4 — reads the s.244A interest and the total refundable, so the figure the
+       client actually receives can be shown. */
+const READING_ENGINE = 4;
 
 /* Rupees. The portal reports whole rupees and so does the order, so anything
    above this is a genuine disagreement rather than rounding. Deliberately
@@ -90,6 +92,52 @@ function netOf(payable, receivable) {
   const recv = num(receivable);
   if (pay === null && recv === null) return null;
   return (recv || 0) - (pay || 0);
+}
+
+/* WHAT THE CLIENT ACTUALLY RECEIVES, which is not what the portal reports.
+ *
+ * The order computes the refund by netting the tax against the taxes paid, and
+ * THEN adds interest u/s 244A and restates the total. The portal's
+ * `computedRefndAmt` is the FIRST of those figures; the taxpayer's bank receives
+ * the second.
+ *
+ * A real A.Y. 2024-25 order: refund on the computation ₹2,28,838, interest u/s
+ * 244A ₹3,432, total refundable ₹2,32,270. The app showed ₹2,28,838 and the
+ * client had ₹2,32,270 in the bank, and nothing on the screen joined the two.
+ *
+ * THE VARIANCE DOES NOT MOVE, and must not. The return's own column against
+ * s.244A is printed "N/A" — a return never claims interest on its own refund —
+ * so measuring ₹2,32,270 against the ₹2,29,840 claimed would compare a refund
+ * WITH interest against one WITHOUT, report ₹2,430 "in the assessee's favour",
+ * and hide a real ₹1,002 disallowance behind statutory interest. Interest is
+ * compensation for CPC's delay, not CPC agreeing with the return. So this is
+ * carried alongside, for display, and never reaches returnVariance.js.
+ *
+ * The order prints all three figures, so the third is checked against the first
+ * two rather than computed from them — a model that misread one of them says so
+ * instead of producing a total that adds up because we made it add up.
+ */
+function refundLadder(r, netAsComputed) {
+  const interest = num(r.interestOnRefund);
+  const total = num(r.totalRefundable);
+
+  // A demand order has neither, and a refund order printing no 244A row simply
+  // earned no interest. Both are "nothing more to say", not a gap.
+  if (interest === null && total === null) {
+    return { interestOnRefund: null, receivable: null, ladderNote: "" };
+  }
+
+  const receivable = total !== null ? total : (netAsComputed || 0) + (interest || 0);
+  const implied = (netAsComputed || 0) + (interest || 0);
+  const adds = total === null || Math.abs(total - implied) <= RECONCILE_TOLERANCE;
+
+  return {
+    interestOnRefund: interest,
+    receivable,
+    ladderNote: adds
+      ? ""
+      : `The order's refund (${netAsComputed}) plus its s.244A interest (${interest || 0}) does not come to the total it states (${total}). One of the three was misread — check the order.`,
+  };
 }
 
 /**
@@ -146,6 +194,7 @@ function normaliseReading(raw, context = {}) {
     lines,
     netAsReturned,
     netAsComputed,
+    ...refundLadder(r, netAsComputed),
     headline: text(r.headline, 200),
     outstandingDemands: outstanding,
     // Split, not summed together: money already taken from this refund is a
@@ -233,6 +282,7 @@ function changedLines(reading) {
 module.exports = {
   normaliseReading,
   reconcile,
+  refundLadder,
   changedLines,
   netOf,
   CAUSE_IDS,

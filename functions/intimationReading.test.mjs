@@ -225,7 +225,82 @@ test("an absurd annexure is capped", () => {
 /* Pinned so that changing the prompt, the schema or the reconciliation without
    bumping the engine fails here — a stored reading has to be findable by the
    rules it was written under. */
-test("the reading engine is 3 now that a read can supply the figure", () => {
-  assert.equal(READING_ENGINE, 3);
-  assert.equal(normaliseReading(good(), { variance: variance() }).engine, 3);
+test("a stored reading carries the engine that wrote it", () => {
+  assert.equal(normaliseReading(good(), { variance: variance() }).engine, READING_ENGINE);
+});
+
+/* ============================================================================
+   What the client actually receives.
+
+   Worked from a real A.Y. 2024-25 order (Keshav Associates, AASFK5239P). Three
+   figures, all correct, that the screen showed as one:
+
+     2,29,840   refund claimed in the return          (line 26, taxpayer column)
+     2,28,838   refund CPC computed                   (line 26, CPC column)
+     + 3,432    interest u/s 244A                     (line 28)
+     2,32,270   total refundable                      (lines 30 and 32)
+
+   The ₹1,002 shortfall is the ₹1,000 fee u/s 234F plus ₹2 of s.288B rounding,
+   and it is real. So is the ₹2,32,270 in the client's bank.
+   ============================================================================ */
+
+const keshav = (over = {}) => ({
+  lines: [{ head: "Fee u/s 234F", asReturned: 0, asComputed: 1000 }],
+  refundClaimedAsReturned: 229840,
+  taxPayableAsReturned: 0,
+  refundDetermined: 228838,
+  demandRaised: 0,
+  interestOnRefund: 3432,
+  totalRefundable: 232270,
+  cause: "fee-234f",
+  ...over,
+});
+
+test("the refund plus its s.244A interest is what the client receives", () => {
+  const out = normaliseReading(keshav(), { variance: variance({ cpcNet: 228838, amount: -1002 }) });
+  assert.equal(out.netAsComputed, 228838, "still the portal-comparable figure");
+  assert.equal(out.interestOnRefund, 3432);
+  assert.equal(out.receivable, 232270);
+  assert.equal(out.ladderNote, "");
+});
+
+test("the flag is still measured on the refund, never on the receivable", () => {
+  /* Measuring 2,32,270 against the 2,29,840 claimed would report ₹2,430 in the
+     assessee's favour and bury a real ₹1,002 disallowance under statutory
+     interest. A return never claims interest on its own refund — the order
+     prints "N/A" in that column — so the two are not comparable. */
+  const out = normaliseReading(keshav(), { variance: variance({ cpcNet: 228838, amount: -1002 }) });
+  assert.equal(out.reconciles, true, "the read still checks against the portal's 2,28,838");
+  assert.equal(out.flag, undefined);
+  assert.equal(out.amount, undefined);
+});
+
+test("a total that does not equal refund plus interest says so", () => {
+  // The order prints all three, so the third is CHECKED rather than computed —
+  // a model misreading one of them must not produce a total that adds up
+  // because we made it add up.
+  const out = normaliseReading(keshav({ totalRefundable: 999999 }), { variance: variance({ cpcNet: 228838 }) });
+  assert.match(out.ladderNote, /does not come to the total/);
+  assert.equal(out.receivable, 999999, "the order's own figure is still what is reported");
+});
+
+test("a demand order has no ladder beyond its own figure", () => {
+  const out = normaliseReading(good(), { variance: variance() });
+  assert.equal(out.interestOnRefund, null);
+  assert.equal(out.receivable, null);
+  assert.equal(out.ladderNote, "");
+});
+
+test("a refund order with no s.244A row earns no interest, which is not a gap", () => {
+  const out = normaliseReading(
+    keshav({ interestOnRefund: null, totalRefundable: 228838 }),
+    { variance: variance({ cpcNet: 228838 }) }
+  );
+  assert.equal(out.interestOnRefund, null);
+  assert.equal(out.receivable, 228838);
+  assert.equal(out.ladderNote, "");
+});
+
+test("the reading engine is 4 now that the receivable is read", () => {
+  assert.equal(READING_ENGINE, 4);
 });

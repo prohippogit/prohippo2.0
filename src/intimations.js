@@ -613,6 +613,93 @@ export const FILTERS = [
   "Not allocated", "With staff",
 ];
 
+/* ---------------- the three figures, in one ladder ---------------- */
+
+/* WHY THIS EXISTS.
+ *
+ * One real order put three different rupee figures in front of a practitioner
+ * and joined none of them up:
+ *
+ *   ₹2,29,840  the refund the return claimed
+ *   ₹2,28,838  the refund CPC computed — what the portal reports, so what the
+ *              flag is measured on
+ *   ₹2,32,270  what reached the client's bank, being the second plus ₹3,432 of
+ *              interest u/s 244A
+ *
+ * Every one of them is correct. The screen showed the middle one under the
+ * heading "CPC determined", flagged the ₹1,002 shortfall in red, and left the
+ * user to work out why their client had been paid more than either number. That
+ * is a page failing at its job even though every figure on it was right.
+ *
+ * So the ladder is stated in full, in order, and the last line is the one a
+ * practitioner says out loud to a client. The middle line keeps the flag,
+ * because that is the only pair of figures that is like for like: a return never
+ * claims interest on its own refund, so measuring the last line against the
+ * first would report money "in the assessee's favour" and bury a real
+ * disallowance underneath statutory interest.
+ *
+ * Interest is only known once the order has been read — the portal never sends
+ * it — so the ladder is two rungs before a read and four after. `final.fromRead`
+ * says which, and the UI says so too rather than letting the headline figure
+ * change silently under the same label.
+ */
+export function positionLadder(row) {
+  const v = row.variance;
+  if (!v || v.cpcNet === null || v.cpcNet === undefined) return null;
+
+  const reading = row.reading || null;
+  const interest = typeof reading?.interestOnRefund === "number" ? reading.interestOnRefund : null;
+  const receivable = typeof reading?.receivable === "number" ? reading.receivable : null;
+
+  /* A position of exactly nil is neither a refund nor a demand, and calling it
+     either puts a ₹0 under a label that asserts something the figures do not.
+     It gets its own wording rather than being rounded into one side. */
+  const baselineLabel = (net, fromOrder) => {
+    if (net === 0) return fromOrder ? "The previous order — nothing either way" : "The return as filed — nothing either way";
+    if (fromOrder) return net > 0 ? "Refund per the previous order" : "Payable per the previous order";
+    return net > 0 ? "Refund claimed in the return" : "Tax payable per the return";
+  };
+
+  const rungs = [];
+  if (v.baseline && typeof v.baseline.net === "number") {
+    rungs.push({
+      id: "baseline",
+      label: baselineLabel(v.baseline.net, v.baseline.kind === "order"),
+      net: v.baseline.net,
+    });
+  }
+  rungs.push({
+    id: "cpc",
+    label: v.cpcNet === 0 ? "CPC computed nothing either way" : v.cpcNet > 0 ? "Refund CPC computed" : "Demand CPC raised",
+    net: v.cpcNet,
+    // The one comparison the flag rests on, so the row carries it.
+    delta: typeof v.amount === "number" ? v.amount : null,
+  });
+  if (interest) {
+    rungs.push({ id: "interest", label: "Interest u/s 244A on the refund", net: interest, addend: true });
+  }
+
+  const finalNet = receivable === null ? v.cpcNet : receivable;
+  return {
+    rungs,
+    final: {
+      label: finalNet === 0 ? "Nothing due either way" : finalNet > 0 ? "Refundable to the client" : "Payable by the client",
+      net: finalNet,
+      // True when the last line came off the PDF rather than out of the portal —
+      // the same provenance rule variance.source follows.
+      fromRead: receivable !== null && receivable !== v.cpcNet,
+      interest,
+    },
+  };
+}
+
+/** The single figure to put in a "Demand / Refund" column: what the client ends
+ *  up with, which is the portal's figure until a read finds interest on top. */
+export function finalPosition(row) {
+  const ladder = positionLadder(row);
+  return ladder ? ladder.final : null;
+}
+
 /* ---------------- the AI read of the comparison table ---------------- */
 
 /* Only the lines where the two columns actually moved — what there is to argue

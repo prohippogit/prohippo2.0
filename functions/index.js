@@ -839,6 +839,8 @@ Then read the order's own closing position, as separate POSITIVE amounts:
 
 "headline": ONE short sentence naming what changed and by how much, e.g. "80C deduction of Rs 1,50,000 disallowed" or "TDS credit of Rs 32,000 not allowed". If several things changed, name the largest.
 
+"outstandingDemands": the demands of OTHER assessment years listed in this order's annexures — the tables headed "Details of Adjustment of Refund against Outstanding Demand" and "Details of balance Outstanding Demand and Interest payable u/s 220(2)". One entry per row, with "ay" as printed (e.g. "2017"), "demandReference" exactly as printed, "amount" the outstanding or adjusted amount in rupees, "adjusted" true only for rows in the ADJUSTMENT table (money taken from this refund) and false for rows in the BALANCE table (still owed). Empty array if the order has no such annexure. These belong to OTHER years — never mix them with this order's own demand or refund.
+
 "cause": the single best fit from this list, by id:
 - arithmetic — an arithmetical error in the return
 - incorrect-claim — an incorrect claim apparent from information in the return
@@ -877,6 +879,18 @@ const INTIMATION_SCHEMA = {
     refundDetermined: { type: "NUMBER", nullable: true },
     taxPayableAsReturned: { type: "NUMBER", nullable: true },
     refundClaimedAsReturned: { type: "NUMBER", nullable: true },
+    outstandingDemands: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          ay: { type: "STRING", nullable: true },
+          demandReference: { type: "STRING", nullable: true },
+          amount: { type: "NUMBER", nullable: true },
+          adjusted: { type: "BOOLEAN", nullable: true },
+        },
+      },
+    },
     headline: { type: "STRING", nullable: true },
     cause: { type: "STRING", nullable: true, enum: CAUSE_IDS },
   },
@@ -916,7 +930,9 @@ async function callGeminiIntimation(model, apiKey, files, meta = {}) {
       uid: meta.uid || null,
       vendor: "gemini",
       sku: model,
-      feature: "readIntimation",
+      // Automatic reads are metered apart from the ones somebody asked for, so
+      // the admin console answers "what is the automation costing me" on its own.
+      feature: meta.feature || "readIntimation",
       promptTokens: usage?.promptTokenCount || 0,
       outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
       ms: Date.now() - started,
@@ -980,7 +996,7 @@ exports.readIntimationOrder = onCall(
 
     // Rewrite just this order, leaving every other entry and its variance alone.
     const next = orders.slice();
-    next[index] = { ...order, reading };
+    next[index] = { ...order, reading, readingError: "" };
     await ref.set({ orders: next }, { merge: true });
 
     return { ok: true, reading };
@@ -1308,6 +1324,141 @@ exports.refreshReturnVariances = onCall(
       updated += 1;
     }
     return { ok: true, scanned, updated, remaining };
+  }
+);
+
+
+/* ---------- automatic reads for red-flagged orders -------------------------
+ *
+ * The manual button stays exactly as it was. This adds the same read, fired by
+ * a Firestore trigger, for the orders a practitioner would certainly have
+ * pressed it on anyway: the ones where CPC left the assessee materially worse
+ * off and nobody has looked yet.
+ *
+ * WHY A TRIGGER AND NOT THE SYNC. docs/PERF_AND_REGION.md records what happened
+ * when an ingest awaited a Gemini read: a 5-25 second call on the critical path,
+ * sharing a 5-instance cap, turning every sync slow. So this runs AFTER the
+ * write lands, off that path, and a sync is no slower for it being on.
+ *
+ * FIVE GUARDS, because this is the first thing in the feature that spends money
+ * without anyone pressing anything. Each one is a number a practice can reason
+ * about, not a heuristic.
+ * -------------------------------------------------------------------------- */
+
+// Below this the difference is not worth buying an explanation for — nobody
+// files a rectification over it.
+const AUTO_READ_MIN_RUPEES = 1000;
+
+// Orders older than this are left to the button. An intimation from four years
+// ago does not need an explanation to arrive unasked.
+const AUTO_READ_MAX_AGE_DAYS = 14 * 30;
+
+/* The ceiling that turns a bad day into a small bill.
+ *
+ * Deploying an engine change rewrites every return document at once, so the
+ * trigger can see a practice's whole history become eligible in one go. The age
+ * window keeps that to a handful in normal use; this is what holds if it is not
+ * a handful. Everything above the cap simply waits for the button. */
+const AUTO_READ_DAILY_CAP = 50;
+
+/* One counter per practice per day, in a collection only these functions touch
+   (firestore.rules denies everything outside users/{uid}). Returns false once
+   the day's allowance is gone. */
+async function claimAutoRead(uid) {
+  const day = new Date().toISOString().slice(0, 10);
+  const ref = db.doc(`autoReadLimits/${uid}_${day}`);
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const used = (snap.exists ? snap.data().count : 0) || 0;
+      if (used >= AUTO_READ_DAILY_CAP) return false;
+      tx.set(ref, { uid, day, count: used + 1, at: new Date().toISOString() }, { merge: true });
+      return true;
+    });
+  } catch (e) {
+    // A counter we cannot claim is a reason NOT to spend, never a reason to
+    // spend freely.
+    console.warn("auto-read: could not claim an allowance", (e && e.message) || e);
+    return false;
+  }
+}
+
+/** Would this order be read automatically? Pure, so the rule is one place. */
+function autoReadable(order, todayMs) {
+  if (!order || !order.storagePath || order.locked) return false;
+  if (order.reading || order.readingError) return false;      // once only
+  const v = order.variance;
+  if (!v || v.flag !== "red") return false;                   // red only
+  if (Math.abs(v.amount || 0) < AUTO_READ_MIN_RUPEES) return false; // material only
+  if (!order.orderDate) return false;
+  const age = (todayMs - Date.parse(`${order.orderDate}T00:00:00Z`)) / 86400000;
+  return Number.isFinite(age) && age <= AUTO_READ_MAX_AGE_DAYS; // recent only
+}
+
+/* Read the red orders on a return the moment one appears.
+ *
+ * OFF BY DEFAULT. `profile.autoReadIntimations` has to be switched on in
+ * Settings. A practitioner who has not yet judged the quality of a read should
+ * not be paying for reads they did not ask for — and turning it back off is a
+ * toggle, not a deploy.
+ *
+ * Re-entrancy: this writes back to the document that triggered it. The write
+ * gives every order it read a `reading` (or a `readingError`), so the second
+ * firing finds nothing autoReadable and stops. Same shape as
+ * onPortalOrderWritten.
+ */
+exports.onReturnWritten = onDocumentWritten(
+  {
+    document: "users/{uid}/returns/{returnId}",
+    region: TRIGGER_REGION,
+    secrets: [geminiApiKey],
+    timeoutSeconds: 540,
+    memory: "512MiB",
+    maxInstances: 3,
+  },
+  async (event) => {
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) return;
+    const uid = event.params.uid;
+    const data = after.data() || {};
+
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const now = Date.now();
+    const targets = orders.filter((o) => autoReadable(o, now));
+    if (!targets.length) return;
+
+    // The practice has to have asked for this.
+    const profile = await db.doc(`users/${uid}`).get().catch(() => null);
+    if (!profile || !profile.exists || !profile.data().autoReadIntimations) return;
+
+    let changed = false;
+    const next = orders.slice();
+    for (const target of targets) {
+      if (!(await claimAutoRead(uid))) {
+        console.log("auto-read: daily cap reached for", uid);
+        break;
+      }
+      const index = next.findIndex((o) => o && o.commRefNo === target.commRefNo);
+      if (index < 0) continue;
+      try {
+        const [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(target.storagePath).download();
+        if (!buf || buf.length > MAX_TOTAL_BYTES) throw new Error("the order PDF is too large to read");
+        const raw = await callGeminiIntimation(
+          PRIMARY_MODEL,
+          geminiApiKey.value(),
+          [{ mimeType: "application/pdf", data: buf.toString("base64") }],
+          { uid, feature: "readIntimationAuto" }
+        );
+        next[index] = { ...next[index], reading: { ...normaliseReading(raw, { variance: target.variance }), auto: true } };
+      } catch (err) {
+        /* Recorded on the order, which stops this retrying for ever the way the
+           order summariser does. The button ignores it, so a practitioner can
+           always try again by hand. */
+        next[index] = { ...next[index], readingError: String((err && err.message) || err).slice(0, 300) };
+      }
+      changed = true;
+    }
+    if (changed) await after.ref.set({ orders: next }, { merge: true });
   }
 );
 
@@ -2344,6 +2495,11 @@ Object.assign(exports, require("./voiceAgent").build({ REGIONS, PRIMARY_REGION, 
    headless Chromium so the house design renders exactly as designed. The
    mapping, the validation and the markup all happen client-side; this is a
    renderer and nothing more. Spec: docs/computation-spec.md §13 */
+/* Exported for tests: the auto-read decision is the rule that decides what gets
+   paid for, so it is asserted directly rather than inferred from behaviour. */
+exports._autoReadable = autoReadable;
+exports._AUTO_READ = { AUTO_READ_MIN_RUPEES, AUTO_READ_MAX_AGE_DAYS, AUTO_READ_DAILY_CAP };
+
 exports.renderComputationPdf = require("./computation").register({
   region: REGIONS,
   storageBucket: STORAGE_BUCKET,

@@ -1678,6 +1678,48 @@ function GoogleCalendarCard() {
   );
 }
 
+
+/* Reading red-flagged intimations without being asked.
+ *
+ * OFF UNTIL SOMEBODY TURNS IT ON, and the switch is here rather than buried on
+ * the Intimations page because it is the only thing in that feature that spends
+ * money on its own. What it costs is answerable — the admin console meters
+ * automatic reads apart from manual ones — and turning it back off is this
+ * toggle, not a deploy. */
+function AutoReadCard() {
+  const { profile, setProfile, notify } = useData();
+  const on = Boolean(profile?.autoReadIntimations);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">Read red-flagged intimations automatically</div>
+      </div>
+      <div className="muted" style={{fontSize: 12.5, lineHeight: 1.6}}>
+        When CPC leaves an assessee materially worse off, read the order's comparison table without waiting to be
+        asked — the same read the <b>Read the order</b> button makes. Everything else stays manual.
+      </div>
+      <div className="row" style={{gap: 6, flexWrap: "wrap", margin: "10px 0 4px"}}>
+        <span className="pill pill-muted">Only where more is payable</span>
+        <span className="pill pill-muted">Only over ₹1,000</span>
+        <span className="pill pill-muted">Only orders under 14 months old</span>
+        <span className="pill pill-muted">At most 50 a day</span>
+      </div>
+      <CalendarSwitch
+        name="Automatic reads"
+        sub={on
+          ? "On — orders meeting all four conditions are read once, shortly after a sync."
+          : "Off — nothing is read until you press the button on an order."}
+        checked={on}
+        onChange={() => { setProfile({ autoReadIntimations: !on }); notify(on ? "Automatic reads off" : "Automatic reads on"); }}
+      />
+      <div className="muted" style={{fontSize: 11.5, marginTop: 8, lineHeight: 1.5}}>
+        A read costs a fraction of a rupee. Automatic ones are metered separately from the ones you ask for, so the
+        Costs page answers what the automation is costing on its own.
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { data, profile, setProfile, loadSampleData, clearAllData, notify } = useData();
   const { user, signOutUser } = useAuth();
@@ -1765,6 +1807,7 @@ export function SettingsPage() {
       <div className="card-title mb-3" style={{fontSize: 15}}>Integrations</div>
       <div style={{marginBottom: 16}}><VoiceHelpLineCard/></div>
       <div style={{marginBottom: 16}}><GoogleCalendarCard/></div>
+      <div style={{marginBottom: 16}}><AutoReadCard/></div>
       <div className="grid-split" style={{gap: 16}}>
         {integrations.map(i => (
           <div key={i.t} className="card">

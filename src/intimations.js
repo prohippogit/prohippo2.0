@@ -554,3 +554,20 @@ export function pendingCauseSuggestion(row) {
   if (!s || row.cause) return "";           // already tagged by hand — leave it
   return CAUSE_LABEL[s] ? s : "";
 }
+
+/* ---------------- clearing the backlog ---------------- */
+
+/* Orders that can be settled without anybody reading them.
+ *
+ * On a practice's first visit every order says "needs a decision", including the
+ * many where CPC simply agreed with the return. Working through those one at a
+ * time is an afternoon nobody spends, and until they are gone the page cannot
+ * show what is genuinely outstanding.
+ *
+ * ONLY THE AGREEING ONES. A red order is money at stake and an unknown one is a
+ * gap in what we know; both need a human, and a bulk action that swept them up
+ * would be worse than no bulk action at all. `neutral` means the arithmetic
+ * found no material difference — that is the whole set this offers. */
+export function bulkClearable(rows) {
+  return rows.filter((r) => r.decision === "pending" && r.variance?.flag === "neutral");
+}

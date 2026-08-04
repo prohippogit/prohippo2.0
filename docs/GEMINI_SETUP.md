@@ -6,7 +6,8 @@ Two features read a PDF with Google's Gemini 3.1 Flash-Lite:
 |---|---|---|
 | `summarizePortalNotice` | an order the portal issued — a short summary, and **which** document it is (assessment order vs its computation sheet vs the notice of demand) | the Matters view; it also drives appeal detection |
 | `extractNoticeDocuments` | the list of documents a notice calls for | "Ask for documents" on a notice |
-| `readIntimationOrder` | the comparison table inside a s.143(1) / s.154 order — which line CPC changed | "Read the order" on the Intimations page |
+| `readIntimationOrder` | the comparison table inside a s.143(1) / s.154 order, and the earlier years' demand in its annexures | "Read the order" on the Intimations page |
+| `onReturnWritten` | the same read, fired automatically for red-flagged orders | off by default — Settings → "Read red-flagged intimations automatically" |
 
 Both run on documents the **portal** gave us, and both extract only what a PDF
 is the sole source of. Nothing else in the app is read by a model: a notice's

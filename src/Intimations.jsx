@@ -51,6 +51,7 @@ import { functions } from "./firebase";
 import {
   allIntimations, groupByAssessee, groupByCause, groupByStaff, practiceSummary, matchesFilter,
   clocksFor, refundPosition, describeVariance, staleRefunds, staffRoster,
+  positionLadder, finalPosition,
   DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS, SOURCE_LABEL,
   changedLines, readingTrust, pendingCauseSuggestion, bulkClearable,
 } from "./intimations";
@@ -565,26 +566,29 @@ function StaffList({ groups, onOpenRow }) {
 /* ---------------- level 2: one client's orders ---------------- */
 
 
-/* What CPC actually determined on this order — the Returns tab's figure.
+/* What the client ends up with — the figure a practitioner says out loud.
  *
  * DISTINCT FROM THE VARIANCE, and both are worth a column. The variance says how
- * far CPC moved from the return; this says where they landed. A practitioner
- * ringing a client says the second one out loud: "your refund is ₹15,005", not
- * "you are ₹0 away from what we claimed".
+ * far CPC moved from the return; this says where they landed. On the phone you
+ * say "your refund is ₹2,32,270", not "you are ₹1,002 away from what we
+ * claimed".
  *
- * Read off variance.cpcNet, which is already the status-driven figure — positive
- * is a refund, negative a demand — so this can never disagree with the flag
- * beside it.
+ * IT IS THE LAST RUNG OF THE LADDER, NOT THE PORTAL'S FIGURE. The portal reports
+ * the refund CPC computed, and a refund order then adds interest u/s 244A and
+ * restates the total — so the portal's number is one line short of the money.
+ * Until the order has been read that is all we have and it is what shows; after
+ * a read the caption says the interest is in there, because a headline figure
+ * that changed silently under an unchanged label would be worse than the gap.
  *
  * Set in Plus Jakarta Sans 800, the app's own extra-bold, at 15px. Poppins or
  * Montserrat would give the same weight but would be the only place in the app
  * using them, and would cost every page a second font download for one column.
  */
-function CpcAmount({ variance, size = 15 }) {
-  const net = variance?.cpcNet;
-  if (net === null || net === undefined) return <span className="muted" style={{fontSize: 12.5}}>—</span>;
-  if (net === 0) return <span className="muted" style={{fontSize: 12.5, fontWeight: 700}}>Nil</span>;
-  const refund = net > 0;
+function CpcAmount({ row, size = 15 }) {
+  const final = finalPosition(row);
+  if (!final) return <span className="muted" style={{fontSize: 12.5}}>—</span>;
+  if (final.net === 0) return <span className="muted" style={{fontSize: 12.5, fontWeight: 700}}>Nil</span>;
+  const refund = final.net > 0;
   return (
     <span style={{
       display: "block",
@@ -595,11 +599,66 @@ function CpcAmount({ variance, size = 15 }) {
       whiteSpace: "nowrap",
       lineHeight: 1.2,
     }}>
-      {fmtINR(Math.abs(net))}
+      {fmtINR(Math.abs(final.net))}
       <span style={{display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: ".03em", textTransform: "uppercase", opacity: 0.75}}>
-        {refund ? "refund" : "demand"}
+        {refund ? "refund" : "demand"}{final.fromRead ? " incl. 244A" : ""}
       </span>
     </span>
+  );
+}
+
+/* The three figures that confuse everybody, in order, with the last one being
+ * the money. See positionLadder() in src/intimations.js for why the flag stays
+ * on the middle rung instead of moving to the bottom one.
+ */
+function LadderPanel({ row }) {
+  const ladder = positionLadder(row);
+  if (!ladder) return null;
+  const { rungs, final } = ladder;
+  // Two rungs and no interest is just the flag restated — the header says it
+  // already, and a table saying it twice is noise.
+  if (final.interest === null && rungs.length < 2) return null;
+
+  return (
+    <div>
+      <Eyebrow>How this adds up</Eyebrow>
+      <table className="tbl" style={{fontSize: 12.5}}>
+        <tbody>
+          {rungs.map((r) => (
+            <tr key={r.id}>
+              <td style={{color: r.id === "cpc" ? "inherit" : "var(--p-text-2)"}}>{r.label}</td>
+              <td style={{textAlign: "right", whiteSpace: "nowrap", fontWeight: r.id === "cpc" ? 700 : 500}}>
+                {r.addend ? "+ " : ""}{fmtINR(Math.abs(r.net))}
+              </td>
+              <td style={{textAlign: "right", whiteSpace: "nowrap", width: 110}}>
+                {typeof r.delta === "number" && r.delta !== 0 && (
+                  <span style={{fontWeight: 800, color: r.delta < 0 ? "#B23B3B" : "#13795C"}}>
+                    {r.delta < 0 ? "−" : "+"}{fmtINR(Math.abs(r.delta))}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+          <tr style={{borderTop: "2px solid var(--p-line)"}}>
+            <td style={{fontWeight: 800}}>{final.label}</td>
+            <td style={{textAlign: "right", whiteSpace: "nowrap", fontWeight: 800, fontSize: 14, color: final.net >= 0 ? "#13795C" : "#B23B3B"}}>
+              {fmtINR(Math.abs(final.net))}
+            </td>
+            <td/>
+          </tr>
+        </tbody>
+      </table>
+      <div className="muted" style={{fontSize: 10.5, marginTop: 6, lineHeight: 1.5}}>
+        {final.interest
+          ? <>Interest u/s 244A is compensation for the delay in paying the refund, so it sits outside the comparison — the flag measures only the middle line, where the return and CPC computed the same thing.</>
+          : <>The portal reports the refund CPC computed. A refund order can add interest u/s 244A after that line and restate the total — <b>read the order</b> to pick that up.</>}
+      </div>
+      {row.reading?.ladderNote && (
+        <div style={{background: "#FDECEC", color: "#B23B3B", borderRadius: 9, padding: "8px 10px", fontSize: 11.5, marginTop: 8, fontWeight: 600}}>
+          <Icon name="alert" size={11}/> {row.reading.ladderNote}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -652,7 +711,7 @@ function OrderList({ client, readingKey, onOpen }) {
                   {readingKey === r.key && <span className="muted" style={{fontSize: 10.5}}>reading…</span>}
                 </span>
               </span>
-              <span><CpcAmount variance={r.variance}/></span>
+              <span><CpcAmount row={r}/></span>
               <span style={{minWidth: 0}}>
                 <StaffCell staff={r.assignedTo ? [r.assignedTo] : []} unallocated={0}/>
                 {r.assignedTo && (
@@ -762,10 +821,14 @@ function OrderModal({ row, busy, roster, readingNow, onClose, onTrack, onRead, o
           </div>
           <div className="center" style={{gap: 16}}>
             <div style={{textAlign: "right"}}>
+              {/* The heading names the LAST rung, not "CPC determined": on a
+                  refund order carrying s.244A interest those are two different
+                  figures, and the one the client asks about is this one. */}
               <div className="muted" style={{fontSize: 9.5, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase"}}>
-                CPC determined{row.variance?.source === "document" ? " · per the order" : ""}
+                {finalPosition(row)?.net >= 0 ? "Refundable" : "Payable"}
+                {row.variance?.source === "document" ? " · per the order" : ""}
               </div>
-              <CpcAmount variance={row.variance} size={19}/>
+              <CpcAmount row={row} size={19}/>
               {row.variance?.source === "document" && (
                 <div className="muted" style={{fontSize: 10, marginTop: 2, maxWidth: 210}}>
                   The portal sent no amount — this was read off the order itself.
@@ -777,6 +840,8 @@ function OrderModal({ row, busy, roster, readingNow, onClose, onTrack, onRead, o
             </span>
           </div>
         </div>
+
+        <LadderPanel row={row}/>
 
         <div className="row" style={{gap: 10, flexWrap: "wrap"}}>
           <select
@@ -861,6 +926,7 @@ function OrderModal({ row, busy, roster, readingNow, onClose, onTrack, onRead, o
               demand field {row.demand === "" || row.demand == null ? "—" : fmtINR(Number(row.demand))} ·
               refund field {row.refund === "" || row.refund == null ? "—" : fmtINR(Number(row.refund))}<br/>
               read as {row.variance?.cpcNet == null ? "not comparable" : `${row.variance.cpcNet < 0 ? "payable" : "refundable"} ${fmtINR(Math.abs(row.variance.cpcNet))}`} (engine {row.variance?.engine ?? "—"}{row.variance?.source ? `, ${SOURCE_LABEL[row.variance.source] || row.variance.source}` : ""})
+              {row.reading?.interestOnRefund ? <> · plus s.244A interest {fmtINR(row.reading.interestOnRefund)} = receivable {fmtINR(row.reading.receivable)}</> : null}
               {row.returnPosition?.netPayable != null && <> · return closed at {row.returnPosition.netPayable < 0 ? "payable" : "refundable"} {fmtINR(Math.abs(row.returnPosition.netPayable))}</>}
             </div>
           </details>

@@ -49,6 +49,49 @@ And the reconciliation refuses to check a read against a figure that came from a
 read: both numbers would be the same read of the same page, and "reconciles"
 would dress one unverified source up as two agreeing ones.
 
+### The portal's refund figure is one line short of the money
+
+A refund order does not stop at the refund. It nets the tax against the taxes
+paid, and **then** adds interest u/s 244A and restates the total — and it is the
+restated total that reaches the bank. The portal's `computedRefndAmt` is the
+first of those figures.
+
+A real A.Y. 2024-25 order, all three figures correct:
+
+| | |
+|---|---|
+| Refund claimed in the return | ₹2,29,840 |
+| Refund CPC computed — **what the portal sends** | ₹2,28,838 |
+| Interest u/s 244A | + ₹3,432 |
+| **Total refundable — what the client received** | **₹2,32,270** |
+
+The page showed the middle figure under the heading *"CPC determined"*, flagged
+the ₹1,002 shortfall in red, and left the practitioner to work out why the client
+had been paid more than either number on screen. Every figure was right and the
+screen was still failing at its job.
+
+**The flag does not move to the last line, and must not.** The return's own
+column against s.244A is printed *N/A* — a return never claims interest on its
+own refund — so measuring ₹2,32,270 against the ₹2,29,840 claimed would compare a
+refund *with* interest against one *without*, report ₹2,430 "in the assessee's
+favour", and bury a real ₹1,002 disallowance (the ₹1,000 fee u/s 234F plus ₹2 of
+s.288B rounding) underneath statutory interest. Interest is compensation for
+CPC's delay, not CPC agreeing with the return.
+
+So the ladder is stated **in full**, in order, by `positionLadder()` in
+`src/intimations.js`: the claim, CPC's figure carrying the flag, the interest,
+and the total. The last line is the one a practitioner says out loud, so it is
+what the **Demand / Refund** column and the card heading show. The interest is
+only known once the order has been read — the portal never sends it — so the
+ladder is two rungs before a read and four after, and `final.fromRead` says
+which. The column caption reads *"refund incl. 244A"* rather than letting the
+headline figure change silently under an unchanged label.
+
+The order prints all three, so the total is **checked** against the other two
+rather than computed from them (`refundLadder()` in
+`functions/intimationReading.js`). A model that misreads one of them says so
+instead of producing a total that adds up because we made it add up.
+
 Both are **net of taxes paid**, and both use one sign convention, set once and
 never varied:
 

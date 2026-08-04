@@ -849,6 +849,12 @@ Then read the order's own closing position, as separate POSITIVE amounts:
 
 The closing position is printed twice and both must agree: in the last row of the comparison table ("Net Amount Payable" / "Refundable"), and in the banner near the top of the order ("You have a Demand for A.Y. ..., Amount of Demand: Rs ..." or "A refund of Rs ... has been determined"). Read the banner where the table's last row is unclear. Report it even when it is the only figure you can read.
 
+A REFUND ORDER CARRIES INTEREST AFTER THAT LINE, and the taxpayer receives the later figure. Under "Refund amount [26=(25e-24)]" the order adds interest and restates the total. Read both, as POSITIVE amounts, from CPC's column only:
+- "interestOnRefund": interest u/s 244A allowed on the refund — the row "Interest on refund under section 244A". null if the order has no such row.
+- "totalRefundable": the final refundable figure the order closes on — "Total Income Tax Refund", and after it "Total amount refundable" where the order has one. This is what actually reaches the taxpayer's bank. null if the order determined a demand rather than a refund.
+
+Do NOT add "refundDetermined" and "interestOnRefund" together yourself. Report "totalRefundable" only as the order prints it.
+
 "headline": ONE short sentence naming what changed and by how much, e.g. "80C deduction of Rs 1,50,000 disallowed" or "TDS credit of Rs 32,000 not allowed". If several things changed, name the largest.
 
 "outstandingDemands": the demands of OTHER assessment years listed in this order's annexures — the tables headed "Details of Adjustment of Refund against Outstanding Demand" and "Details of balance Outstanding Demand and Interest payable u/s 220(2)". One entry per row, with "ay" as printed (e.g. "2017"), "demandReference" exactly as printed, "amount" the outstanding or adjusted amount in rupees, "adjusted" true only for rows in the ADJUSTMENT table (money taken from this refund) and false for rows in the BALANCE table (still owed). Empty array if the order has no such annexure. These belong to OTHER years — never mix them with this order's own demand or refund.
@@ -889,6 +895,8 @@ const INTIMATION_SCHEMA = {
     },
     demandRaised: { type: "NUMBER", nullable: true },
     refundDetermined: { type: "NUMBER", nullable: true },
+    interestOnRefund: { type: "NUMBER", nullable: true },
+    totalRefundable: { type: "NUMBER", nullable: true },
     taxPayableAsReturned: { type: "NUMBER", nullable: true },
     refundClaimedAsReturned: { type: "NUMBER", nullable: true },
     outstandingDemands: {

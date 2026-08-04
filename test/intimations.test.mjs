@@ -553,3 +553,103 @@ test("a client row says who is carrying it and how much nobody is", () => {
   assert.deepEqual(group.staff, ["Priya Mehta"]);
   assert.equal(group.unallocated, 1);
 });
+
+/* ============================================================================
+   The ladder — three correct figures that read as a contradiction.
+
+   From a real A.Y. 2024-25 order (Keshav Associates). The page showed the
+   middle figure under the heading "CPC determined", flagged the shortfall in
+   red, and left the practitioner to work out why the client had been paid more
+   than either number on screen.
+   ============================================================================ */
+import { positionLadder, finalPosition } from "../src/intimations.js";
+
+const keshavRow = (over = {}) => ({
+  variance: {
+    engine: VARIANCE_ENGINE, source: "portal", cpcNet: 228838, amount: -1002,
+    baseline: { kind: "return", ref: "", net: 229840 },
+    flag: "red", direction: "refund", adjusted: false, note: "",
+  },
+  reading: null,
+  ...over,
+});
+
+test("before a read the ladder stops at the portal's figure", () => {
+  const l = positionLadder(keshavRow());
+  assert.deepEqual(l.rungs.map((r) => [r.label, r.net]), [
+    ["Refund claimed in the return", 229840],
+    ["Refund CPC computed", 228838],
+  ]);
+  assert.equal(l.final.net, 228838);
+  assert.equal(l.final.fromRead, false, "so the screen can say the interest is not known yet");
+});
+
+test("after a read the last rung is the money the client received", () => {
+  const l = positionLadder(keshavRow({ reading: { interestOnRefund: 3432, receivable: 232270 } }));
+  assert.deepEqual(l.rungs.map((r) => r.net), [229840, 228838, 3432]);
+  assert.equal(l.rungs[2].addend, true, "interest is added, not compared");
+  assert.equal(l.final.net, 232270);
+  assert.equal(l.final.label, "Refundable to the client");
+  assert.equal(l.final.fromRead, true);
+});
+
+test("the shortfall stays on the middle rung, where the comparison is like for like", () => {
+  const l = positionLadder(keshavRow({ reading: { interestOnRefund: 3432, receivable: 232270 } }));
+  assert.equal(l.rungs[1].delta, -1002, "the ₹1,000 fee u/s 234F plus ₹2 of rounding");
+  assert.equal(l.rungs[0].delta, undefined);
+  assert.equal(l.rungs[2].delta, undefined, "s.244A interest is never a variance");
+  // Measuring the receivable against the claim would report +2,430 in the
+  // assessee's favour and bury a real disallowance under statutory interest.
+  assert.notEqual(l.final.net - l.rungs[0].net, l.rungs[1].delta);
+});
+
+test("a demand order's last rung is what the client pays", () => {
+  const l = positionLadder({
+    variance: { cpcNet: -6540, amount: -6540, baseline: { kind: "return", net: 0 }, flag: "red" },
+    reading: null,
+  });
+  assert.equal(l.final.label, "Payable by the client");
+  assert.equal(l.final.net, -6540);
+  assert.equal(l.rungs[1].label, "Demand CPC raised");
+});
+
+test("a nil position is called nil, not a refund of nothing", () => {
+  // A return closing at exactly zero is neither a refund claimed nor tax
+  // payable, and "Refund claimed in the return — ₹0" asserts something the
+  // figures do not say.
+  const l = positionLadder({
+    variance: { cpcNet: 0, amount: 0, baseline: { kind: "return", net: 0 }, flag: "neutral" },
+    reading: null,
+  });
+  assert.equal(l.rungs[0].label, "The return as filed — nothing either way");
+  assert.equal(l.rungs[1].label, "CPC computed nothing either way");
+  assert.equal(l.final.label, "Nothing due either way");
+});
+
+test("a s.154 order names the order it is measured against", () => {
+  const l = positionLadder({
+    variance: { cpcNet: 40000, amount: 240000, baseline: { kind: "order", ref: "INT1", net: -200000 }, flag: "green" },
+    reading: null,
+  });
+  assert.equal(l.rungs[0].label, "Payable per the previous order");
+  assert.equal(l.rungs[0].net, -200000);
+});
+
+test("an order that could not be compared has no ladder to show", () => {
+  assert.equal(positionLadder({ variance: { cpcNet: null, flag: "unknown" } }), null);
+  assert.equal(positionLadder({}), null);
+  assert.equal(finalPosition({ variance: { cpcNet: null, flag: "unknown" } }), null);
+});
+
+test("the money column shows the receivable once it is known", () => {
+  assert.equal(finalPosition(keshavRow()).net, 228838);
+  assert.equal(finalPosition(keshavRow({ reading: { interestOnRefund: 3432, receivable: 232270 } })).net, 232270);
+});
+
+test("a refund that earned no interest does not claim to have been read", () => {
+  // receivable === cpcNet means the read found nothing to add, so the caption
+  // must not say "incl. 244A" over a figure the portal gave us anyway.
+  const l = positionLadder(keshavRow({ reading: { interestOnRefund: null, receivable: 228838 } }));
+  assert.equal(l.final.fromRead, false);
+  assert.equal(l.rungs.length, 2);
+});

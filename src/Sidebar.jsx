@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { id: "appeals", label: "Appeals", icon: "gavel" },
   { id: "invoices", label: "Invoices", icon: "invoice" },
   { id: "communications", label: "Communications", icon: "chat" },
-  { id: "ai", label: "AI Parser", icon: "sparkle" },
+  { id: "notices", label: "Notices", icon: "doc" },
   { id: "reports", label: "Reports", icon: "chart" },
 ];
 

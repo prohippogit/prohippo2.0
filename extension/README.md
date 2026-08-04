@@ -15,8 +15,8 @@ app. (Phase 2 will add reading e-Proceedings and pulling notice PDFs.)
 ## What it needs
 
 - Google Chrome (desktop). Chrome-only for now.
-- The `parseNotice`/credential Cloud Functions deployed, and the assessee must
-  have a portal login saved in ProHippo (Assessee → **Add portal login**).
+- The credential and portal-ingest Cloud Functions deployed, and the assessee
+  must have a portal login saved in ProHippo (Assessee → **Add portal login**).
 
 ## Load it for testing (no developer account needed)
 

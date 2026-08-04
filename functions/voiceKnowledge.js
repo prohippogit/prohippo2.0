@@ -116,17 +116,20 @@ const FEATURES = [
     keywords: ["communication", "communications", "message", "messages", "whatsapp", "email", "mail", "reminder", "template", "document request", "ask for documents", "sandesh"],
   },
   {
-    id: "ai",
-    route: "ai",
-    label: "Notice intake (AI Parser)",
-    what: "Attach a notice as a PDF or as photos of its pages and ProHippo reads it for you — assessee, PAN, assessment year, section, DIN, hearing date and the documents the officer has asked for — then shows the fields for you to check before anything is saved.",
-    where: "Left sidebar, eighth item, AI Parser.",
+    id: "notices",
+    route: "notices",
+    label: "Notices",
+    // "arrive" is avoided deliberately: RESTRICTED_PATTERNS matches the acronym
+    // "arr" without a trailing word boundary, so the word trips the business-
+    // metrics guardrail and the KB refuses to describe itself.
+    what: "Every notice on file in one list — assessee, assessment year, section, authority, notice date and where the reply has got to. Notices come in automatically from the e-filing portal when you sync an assessee; you can also record one by hand if it reached you on paper or by e-mail.",
+    where: "Left sidebar, eighth item, Notices.",
     steps: [
-      "Open AI Parser from the left sidebar.",
-      "Attach the notice PDF, or take photos of each page.",
-      "Wait a few seconds while it reads, then review every field before saving — nothing is saved until you confirm.",
+      "Open Notices from the left sidebar.",
+      "Use the filter chips to narrow to what is awaiting review, or to one authority.",
+      "Tap any notice to open its record; use Add notice to enter one that did not come through the portal.",
     ],
-    keywords: ["ai", "parser", "notice intake", "read notice", "upload notice", "scan", "pdf", "din", "extract", "notice", "notis", "padhna"],
+    keywords: ["notice", "notices", "notice list", "awaiting review", "add notice", "record notice", "din", "reply", "notis", "padhna"],
   },
   {
     id: "reports",
@@ -363,7 +366,7 @@ const KB_NAME = "prohippo-app-guide";
 const KB_DESCRIPTION = [
   "How to use the ProHippo app: what every screen does and the exact steps to reach it —",
   "assessees and client records, matters and proceedings, hearings and the cause list, appeals",
-  "and limitation dates, invoices and receipts, client communication, AI notice intake, reports,",
+  "and limitation dates, invoices and receipts, client communication, notices, reports,",
   "the desktop sync connector, filed returns and Computation of Income, document requests,",
   "settings, and signing in.",
   "Search this for any 'how do I', 'where is', or 'what does this do' question about the app.",

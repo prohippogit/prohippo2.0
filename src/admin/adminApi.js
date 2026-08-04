@@ -50,7 +50,10 @@ export const VENDOR_LABEL = {
 };
 
 export const FEATURE_LABEL = {
-  parseNotice: "Notice parsing",
+  // Retired with the AI Parser screen. Kept because spend records are written
+  // once and never rewritten: drop the label and every historical row would
+  // render its raw key instead of a name.
+  parseNotice: "Notice parsing (retired)",
   summarizeNotice: "Order summaries",
   extractDocuments: "Document extraction",
   clientMessage: "Client messages",

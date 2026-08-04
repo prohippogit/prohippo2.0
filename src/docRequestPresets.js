@@ -1,11 +1,11 @@
 /* ProHippo — standard document checklists, keyed by the section a notice is
  * issued under.
  *
- * The AI parser reads whatever the notice itself lists (functions/index.js,
- * EXTRACTION_PROMPT). These presets cover what a practitioner asks for on top
- * of that — the papers you always end up needing but the notice never spells
- * out. They are suggestions only: every item lands in the checklist editable
- * and deletable.
+ * What the notice itself lists is read off the PDF (functions/index.js,
+ * extractNoticeDocuments). These presets cover what a practitioner asks for on
+ * top of that — the papers you always end up needing but the notice never
+ * spells out. They are suggestions only: every item lands in the checklist
+ * editable and deletable.
  */
 
 export const PRESETS = [

@@ -65,7 +65,11 @@ const MATERIALITY_RUPEES = 100;
    set-off is a separate matter, the recovery of a past year's demand. But a
    practitioner reading "refund ₹80,000" needs to know none of it is arriving,
    so the fact is carried alongside and the UI says it. */
-const ADJUSTMENT_ACTIVITY_CODES = new Set(["64", "65", "74", "75"]);
+// 613 is the later variant of 75 (see ORDER_ACTIVITIES in portalReturns.js) and
+// was missed when this set was first written — an order under it went unlabelled
+// and a practitioner would have been told a refund was coming when it had in
+// fact been set off.
+const ADJUSTMENT_ACTIVITY_CODES = new Set(["64", "65", "74", "75", "613"]);
 
 /* A rupee figure the portal sends as a string, which may be "", "null" or "0".
    Anything that is not a real number is "the portal did not say" — never zero.

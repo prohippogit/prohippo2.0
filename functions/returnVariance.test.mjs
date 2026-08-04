@@ -167,6 +167,13 @@ test("an adjusted refund is marked, and still judged on its own figures", () => 
   assert.equal(v.flag, "neutral", "the set-off does not change what CPC determined");
 });
 
+test("code 613 counts as an adjustment — it is the later variant of 75", () => {
+  // Listed in ORDER_ACTIVITIES but missed from the set when it was first
+  // written, so a 613 order announced a refund that had already been set off.
+  const v = only([order({ refund: "50000", activityCd: "613", section: "154" })], position(0));
+  assert.equal(v.adjusted, true);
+});
+
 test("adjustment is recorded even on an order that cannot be judged", () => {
   const v = only([order({ activityCd: "75", demand: "", refund: "" })], position(0));
   assert.equal(v.flag, "unknown");

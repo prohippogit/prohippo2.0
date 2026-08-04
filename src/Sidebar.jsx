@@ -13,7 +13,8 @@ const NAV_ITEMS = [
   { id: "invoices", label: "Invoices", icon: "invoice" },
   { id: "communications", label: "Communications", icon: "chat" },
   { id: "notices", label: "Notices", icon: "doc" },
-  { id: "reports", label: "Reports", icon: "chart" },
+  { id: "intimations", label: "Intimations", icon: "chart" },
+  { id: "reports", label: "Reports", icon: "list" },
 ];
 
 const NAV_BOTTOM = [

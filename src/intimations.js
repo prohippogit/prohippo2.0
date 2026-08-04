@@ -15,10 +15,17 @@
  * green.
  */
 
+/* The extension is explicit because this module is imported by a plain
+   `node --test` run as well as by Vite. Vite resolves "./appeals" happily;
+   Node does not, and the test dies on a module-not-found before a single
+   assertion runs. */
+import { regimeFor, endOfMonthPlus, daysUntil } from "./appeals.js";
+
 const DAY = 86400000;
 const parseISO = (s) => { const d = new Date(s + "T00:00:00"); d.setHours(0, 0, 0, 0); return d; };
 const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
 /* How far back the card looks.
  *
@@ -102,6 +109,7 @@ export function intimationVariances(data, opts = {}) {
   const rows = [];
   for (const r of data.returns || []) {
     const reviewed = r.varianceReviewed || {};
+    const tracked = r.intimationTracking || {};
     for (const o of r.orders || []) {
       if (!o || !o.commRefNo) continue;
       if (!INTIMATION_SECTIONS.includes(String(o.section || ""))) continue;
@@ -121,13 +129,23 @@ export function intimationVariances(data, opts = {}) {
         commRefNo: o.commRefNo,
         section: String(o.section || ""),
         statusDesc: o.statusDesc || "",
+        activityCd: String(o.activityCd || ""),
         orderDate: o.orderDate || "",
+        emailedOn: o.emailedOn || "",
+        demand: o.demand ?? "",
+        refund: o.refund ?? "",
         storagePath: o.storagePath || null,
         locked: Boolean(o.locked),
         lockReason: o.lockReason || "",
         returnPosition: r.returnPosition || null,
         variance,
         reviewed: isReviewed,
+        /* Everything the practitioner has decided about this order, kept in a
+           map on the RETURN keyed by CPC reference — never inside the orders
+           array, which the sync owns and rewrites wholesale. */
+        tracking: tracked[o.commRefNo] || null,
+        decision: (tracked[o.commRefNo] || {}).decision || "pending",
+        cause: (tracked[o.commRefNo] || {}).cause || "",
       });
     }
   }
@@ -170,3 +188,294 @@ export function needsVarianceBackfill(data) {
     (r) => (r.orders || []).some((o) => o && INTIMATION_SECTIONS.includes(String(o.section || "")) && !o.variance)
   );
 }
+
+/* ============================================================================
+   THE TWO CLOCKS
+   ============================================================================
+
+   An intimation u/s 143(1) starts two remedies whose windows differ by two
+   orders of magnitude, and that difference is where practices lose money:
+
+     appeal to CIT(A) u/s 246A   30 days from service    hard, easily missed
+     rectification u/s 154        4 years from the end
+                                  of the FY of the order  soft, feels infinite
+
+   What happens in practice is that the appeal window lapses in silence while
+   everyone assumes s.154 will fix it — and then CPC refuses the rectification
+   because the point is not a "mistake apparent from the record", and there is
+   no appeal left to file. So BOTH clocks are computed for every intimation and
+   both are shown. Letting the appeal window go has to be a decision somebody
+   took, not something that happened while nobody was looking.
+
+   As in src/appeals.js, the law lives here as DATA so it can be corrected in
+   one place. VERIFY AGAINST THE ACT BEFORE RELYING ON IT:
+
+     s.154(7)  no amendment after four years from the end of the financial year
+               in which the order sought to be amended was passed
+     s.154(8)  an application by the assessee must be disposed of within six
+               months from the end of the month in which it is received
+     s.249(2)  appeal to CIT(A) within 30 days of service (1961 Act); the 2025
+               Act counts one month from the end of the month of service, which
+               is the switch src/appeals.js already encodes
+
+   DELIBERATELY ABSENT: any projection of s.220(2) interest on an unpaid demand.
+   It would be our arithmetic presented next to figures the department actually
+   stated, and on this screen those must not be confusable.
+   ============================================================================ */
+
+/** 31 March that ends the financial year containing this date. */
+export function endOfFinancialYear(iso) {
+  if (!iso) return "";
+  const d = parseISO(iso);
+  // April (month index 3) starts a new FY; Jan-Mar still belong to the previous.
+  const endYear = d.getMonth() >= 3 ? d.getFullYear() + 1 : d.getFullYear();
+  return `${endYear}-03-31`;
+}
+
+/** s.154(7) — the last date a rectification of this order can be made. */
+export function rectificationDeadline(orderDate) {
+  const fyEnd = endOfFinancialYear(orderDate);
+  if (!fyEnd) return "";
+  return `${Number(fyEnd.slice(0, 4)) + 4}-03-31`;
+}
+
+/** s.154(8) — the date by which CPC must dispose of a rectification we filed. */
+export function rectificationDisposalDue(filedOn) {
+  return filedOn ? endOfMonthPlus(filedOn, 6) : "";
+}
+
+/* The appeal window against an intimation, on whichever Act governs it.
+ *
+ * Reuses the appeals engine's regime switch rather than restating it: an
+ * intimation served after the 2025 Act commenced runs on that Act's clock even
+ * though the assessment year may be much older. */
+export function appealWindow({ orderDate, servedOn, ay } = {}) {
+  const served = servedOn || orderDate || "";
+  if (!served) return { deadline: "", label: "", act: "", daysLeft: null, urgency: "none" };
+  const reg = regimeFor({ ay, communicatedOn: served });
+  const deadline = reg.newAct
+    ? endOfMonthPlus(served, 1)
+    : toISO(addDays(parseISO(served), 30));
+  const label = reg.newAct
+    ? "1 month from the end of the month of service"
+    : "30 days from the date of service";
+  const daysLeft = daysUntil(deadline);
+  return {
+    deadline,
+    label,
+    act: reg.act,
+    form: reg.citForm,
+    daysLeft,
+    urgency: daysLeft == null ? "none" : daysLeft < 0 ? "lapsed" : daysLeft <= 7 ? "urgent" : daysLeft <= 15 ? "soon" : "open",
+  };
+}
+
+/** Both clocks for one intimation, plus the disposal clock once we have filed. */
+export function clocksFor(row) {
+  const track = row.tracking || {};
+  const rect = rectificationDeadline(row.orderDate);
+  const rectDays = daysUntil(rect);
+  const disposal = rectificationDisposalDue(track.rectFiledOn);
+  return {
+    appeal: appealWindow({ orderDate: row.orderDate, servedOn: track.servedOn, ay: row.ay }),
+    rectification: {
+      deadline: rect,
+      label: "4 years from the end of the financial year of the order",
+      daysLeft: rectDays,
+      urgency: rectDays == null ? "none" : rectDays < 0 ? "lapsed" : rectDays <= 90 ? "soon" : "open",
+    },
+    disposal: disposal
+      ? { deadline: disposal, label: "6 months from the end of the month of the application", daysLeft: daysUntil(disposal), overdue: daysUntil(disposal) < 0 }
+      : null,
+  };
+}
+
+/* ---------------- what the practitioner decides ---------------- */
+
+/* The whole job, in six states. Kept small on purpose: a status list nobody can
+   hold in their head gets filled in at random and stops meaning anything. */
+export const DECISIONS = [
+  { id: "pending", label: "Needs a decision", tone: "amber", terminal: false },
+  { id: "rectify", label: "Rectification u/s 154", tone: "violet", terminal: false },
+  { id: "revise", label: "Revised return u/s 139(5)", tone: "violet", terminal: false },
+  { id: "appeal", label: "Appeal to CIT(A)", tone: "violet", terminal: false },
+  { id: "accept", label: "Accepted — client to pay", tone: "red", terminal: false },
+  { id: "resolved", label: "Resolved", tone: "green", terminal: true },
+  { id: "none", label: "No action needed", tone: "grey", terminal: true },
+];
+export const DECISION_LABEL = Object.fromEntries(DECISIONS.map((d) => [d.id, d.label]));
+export const DECISION_TONE = Object.fromEntries(DECISIONS.map((d) => [d.id, d.tone]));
+
+/* Why CPC's figure differs. The first six are the statutory grounds on which an
+ * adjustment may be made at all (s.143(1)(a)(i)-(vi)); the rest are the ones a
+ * practice actually meets week to week.
+ *
+ * THE POINT OF TAGGING. One cause across many clients is ONE legal position,
+ * ONE piece of research and ONE template — not fourteen separate jobs. Nothing
+ * else on this page pays for itself as quickly, and it needs no AI: the
+ * practitioner picks from this list in two seconds while reading the order. */
+export const CAUSES = [
+  { id: "arithmetic", label: "Arithmetical error", statute: "143(1)(a)(i)" },
+  { id: "incorrect-claim", label: "Incorrect claim apparent from the return", statute: "143(1)(a)(ii)" },
+  { id: "loss-late-return", label: "Loss disallowed — return filed late", statute: "143(1)(a)(iii) r/w 139(3)" },
+  { id: "audit-report", label: "Disallowance indicated in the audit report", statute: "143(1)(a)(iv)" },
+  { id: "80ac", label: "Chapter VI-A deduction disallowed — late return", statute: "143(1)(a)(v) r/w 80AC" },
+  { id: "form-26as", label: "Income in 26AS / AIS not returned", statute: "143(1)(a)(vi)" },
+  { id: "tds-credit", label: "TDS / TCS credit mismatch" },
+  { id: "challan", label: "Advance / self-assessment tax credit not given" },
+  { id: "deduction-viA", label: "Chapter VI-A deduction disallowed — other" },
+  { id: "rebate-87a", label: "Rebate u/s 87A denied" },
+  { id: "interest-234", label: "Interest u/s 234A / 234B / 234C" },
+  { id: "fee-234f", label: "Late filing fee u/s 234F" },
+  { id: "exemption", label: "Exemption / relief disallowed" },
+  { id: "other", label: "Other" },
+];
+export const CAUSE_LABEL = Object.fromEntries(CAUSES.map((c) => [c.id, c.label]));
+
+/* ---------------- refunds determined but never received ---------------- */
+
+/* CPC determining a refund and the client's bank actually receiving it are two
+   different events, and only the first is on the portal. A refund determined
+   months ago and still not credited almost always means a failed bank
+   validation needing a re-issue request — invisible unless somebody is looking
+   for it, which is what this exists to do. */
+export const REFUND_CHASE_DAYS = 30;
+
+// Fully adjusted u/s 245: the refund was set off against an earlier demand, so
+// no money is coming and nothing is owed to the client. Partly adjusted leaves
+// a balance that IS paid out, so those stay chaseable.
+const FULLY_ADJUSTED_CODES = new Set(["64", "74"]);
+
+export function refundPosition(row) {
+  const amount = Number(row.refund);
+  const determined = Number.isFinite(amount) && amount > 0;
+  if (!determined) return { state: "none", amount: null, days: null };
+
+  if (FULLY_ADJUSTED_CODES.has(String(row.activityCd || ""))) {
+    return { state: "adjusted", amount, days: null };
+  }
+  const receivedOn = row.tracking?.refundReceivedOn || "";
+  if (receivedOn) return { state: "received", amount, receivedOn, days: null };
+
+  const days = daysSince(row.orderDate);
+  return {
+    state: days != null && days > REFUND_CHASE_DAYS ? "overdue" : "awaited",
+    amount,
+    days,
+  };
+}
+
+/* ---------------- the page's own selectors ---------------- */
+
+/* Every intimation and rectification order on file, whatever its age.
+ *
+ * The dashboard card asks a different question — "what landed recently that I
+ * have not looked at" — so it keeps the six-month window and hides what has
+ * been ticked off. This page is the ledger: a s.154 order from three years ago
+ * is still rectifiable and still belongs here. */
+export function allIntimations(data, opts = {}) {
+  return intimationVariances(data, { months: null, includeReviewed: true, ...opts });
+}
+
+/* Grouped by client, which is how this work is actually done: you ring one
+   assessee about all their years, not one year about all your clients.
+   Clients needing a decision sort first, then by the largest sum at stake. */
+export function groupByAssessee(rows) {
+  const byId = new Map();
+  for (const row of rows) {
+    const key = row.assesseeId || row.pan || row.assessee || "—";
+    if (!byId.has(key)) {
+      byId.set(key, { key, assesseeId: row.assesseeId, assessee: row.assessee, pan: row.pan, rows: [] });
+    }
+    byId.get(key).rows.push(row);
+  }
+  const groups = [...byId.values()].map((g) => {
+    const pending = g.rows.filter((r) => r.decision === "pending").length;
+    const atStake = g.rows.reduce((sum, r) => sum + Math.abs(r.variance?.flag === "red" ? (r.variance.amount || 0) : 0), 0);
+    const years = [...new Set(g.rows.map((r) => r.ay).filter(Boolean))].sort().reverse();
+    return { ...g, pending, atStake, years, count: g.rows.length };
+  });
+  return groups.sort((a, b) =>
+    (b.pending - a.pending) || (b.atStake - a.atStake) || String(a.assessee).localeCompare(String(b.assessee))
+  );
+}
+
+/* The same rows grouped by why CPC differed.
+ *
+ * This is the view that turns fourteen jobs into one: every client hit by the
+ * same adjustment, in one place, to be answered once. Untagged rows are their
+ * own group rather than being hidden — an untagged intimation is work nobody
+ * has looked at yet, which is worth seeing. */
+export function groupByCause(rows) {
+  const byCause = new Map();
+  for (const row of rows) {
+    const key = row.cause || "";
+    if (!byCause.has(key)) byCause.set(key, { cause: key, label: CAUSE_LABEL[key] || "Not yet tagged", rows: [] });
+    byCause.get(key).rows.push(row);
+  }
+  return [...byCause.values()]
+    .map((g) => ({
+      ...g,
+      count: g.rows.length,
+      assessees: new Set(g.rows.map((r) => r.assesseeId || r.assessee)).size,
+      atStake: g.rows.reduce((s, r) => s + (r.variance?.flag === "red" ? Math.abs(r.variance.amount || 0) : 0), 0),
+    }))
+    // Biggest shared problem first; untagged always last, because it is a to-do
+    // list rather than a finding.
+    .sort((a, b) => (!a.cause) - (!b.cause) || b.assessees - a.assessees || b.count - a.count);
+}
+
+/** Practice-wide counts for the page header. */
+export function practiceSummary(rows) {
+  const out = {
+    total: rows.length, pending: 0, assessees: 0,
+    additionalDemand: 0, extraRefund: 0,
+    appealOpen: 0, appealLapsing: 0,
+    refundAwaited: 0, refundOverdue: 0, refundAwaitedAmount: 0,
+    disposalOverdue: 0, untagged: 0,
+  };
+  const names = new Set();
+  for (const row of rows) {
+    names.add(row.assesseeId || row.assessee);
+    if (row.decision === "pending") out.pending += 1;
+    if (!row.cause) out.untagged += 1;
+
+    const v = row.variance;
+    if (v?.flag === "red") out.additionalDemand += Math.abs(v.amount || 0);
+    if (v?.flag === "green") out.extraRefund += Math.abs(v.amount || 0);
+
+    const clocks = clocksFor(row);
+    // Only an undecided red intimation has an appeal worth counting: one already
+    // accepted or resolved is not waiting on anybody.
+    if (v?.flag === "red" && row.decision === "pending") {
+      if (clocks.appeal.urgency === "open" || clocks.appeal.urgency === "soon") out.appealOpen += 1;
+      if (clocks.appeal.urgency === "urgent") out.appealLapsing += 1;
+    }
+    if (clocks.disposal?.overdue) out.disposalOverdue += 1;
+
+    const refund = refundPosition(row);
+    if (refund.state === "awaited") { out.refundAwaited += 1; out.refundAwaitedAmount += refund.amount; }
+    if (refund.state === "overdue") { out.refundOverdue += 1; out.refundAwaitedAmount += refund.amount; }
+  }
+  out.assessees = names.size;
+  return out;
+}
+
+/** Filter predicate shared by the page's chips, kept here so it is testable. */
+export function matchesFilter(row, filter) {
+  switch (filter) {
+    case "All": return true;
+    case "Needs a decision": return row.decision === "pending";
+    case "More payable": return row.variance?.flag === "red";
+    case "In the assessee's favour": return row.variance?.flag === "green";
+    case "Refund awaited": { const s = refundPosition(row).state; return s === "awaited" || s === "overdue"; }
+    case "Rectification filed": return row.decision === "rectify" && Boolean(row.tracking?.rectFiledOn);
+    case "Not yet tagged": return !row.cause;
+    default: return true;
+  }
+}
+
+export const FILTERS = [
+  "All", "Needs a decision", "More payable", "In the assessee's favour",
+  "Refund awaited", "Rectification filed", "Not yet tagged",
+];

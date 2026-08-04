@@ -843,17 +843,28 @@ A CELL PRINTED AS 0, "0", "-", "Nil" or "NA" IS THE NUMBER ZERO. Report it as 0,
 
 Then read the order's own closing position, as separate POSITIVE amounts:
 - "demandRaised": the net amount payable determined by CPC. 0 if none.
-- "refundDetermined": the net refund determined by CPC. 0 if none.
+- "refundDetermined": the net refund determined by CPC, BEFORE any interest u/s 244A. 0 if none.
 - "taxPayableAsReturned": the balance tax payable per the return, from the taxpayer's column. 0 if none.
 - "refundClaimedAsReturned": the refund claimed per the return, from the taxpayer's column. 0 if none.
 
-The closing position is printed twice and both must agree: in the last row of the comparison table ("Net Amount Payable" / "Refundable"), and in the banner near the top of the order ("You have a Demand for A.Y. ..., Amount of Demand: Rs ..." or "A refund of Rs ... has been determined"). Read the banner where the table's last row is unclear. Report it even when it is the only figure you can read.
+A REFUND ORDER PRINTS ITS REFUND TWICE AND THE TWO FIGURES DIFFER. Getting this the wrong way round is the single most likely mistake here, so read the labels, not the position on the page:
 
-A REFUND ORDER CARRIES INTEREST AFTER THAT LINE, and the taxpayer receives the later figure. Under "Refund amount [26=(25e-24)]" the order adds interest and restates the total. Read both, as POSITIVE amounts, from CPC's column only:
-- "interestOnRefund": interest u/s 244A allowed on the refund — the row "Interest on refund under section 244A". null if the order has no such row.
-- "totalRefundable": the final refundable figure the order closes on — "Total Income Tax Refund", and after it "Total amount refundable" where the order has one. This is what actually reaches the taxpayer's bank. null if the order determined a demand rather than a refund.
+  BEFORE interest — this is "refundDetermined". The row in the detailed computation reading "Refund amount [40=(39e-38)]" (the numbers in the brackets vary by form), which is total taxes paid MINUS total income tax payable. Nothing else.
 
-Do NOT add "refundDetermined" and "interestOnRefund" together yourself. Report "totalRefundable" only as the order prints it.
+  AFTER interest — this is "totalRefundable", never "refundDetermined". Every one of these is the after-interest figure and they all agree with each other:
+    * the banner near the top: "A refund of Rs ... has been determined" / "Refund Amount: Rs ..."
+    * the summary row on the first page labelled "Refund amount (including interest under section 244A)"
+    * "Total Income Tax Refund" in the detailed computation
+    * "Total amount refundable", where the order has one — prefer this, it is the last word
+
+So on an order reading 6,85,336 at "Refund amount", 41,118 at "Interest on refund under section 244A" and 7,26,450 at "Total amount refundable": "refundDetermined" is 6,85,336 and "totalRefundable" is 7,26,450. Reporting 7,26,450 as the refund determined is WRONG.
+
+- "interestOnRefund": interest u/s 244A allowed on the refund — the row "Interest on refund under section 244A", CPC's column. null if the order has no such row.
+- "totalRefundable": as above. null if the order determined a demand rather than a refund.
+
+Do NOT add "refundDetermined" and "interestOnRefund" together yourself, and do not subtract one from the other. Report all three only as the order prints them; where they disagree that is a fact worth knowing.
+
+FOR A DEMAND ORDER there is no such split. Its figure is printed both in the last row of the comparison table ("Net Amount Payable") and in the banner ("You have a Demand for A.Y. ..., Amount of Demand: Rs ..."), and the two agree. Read the banner where the table's last row is unclear, and report it even when it is the only figure you can read. Leave "interestOnRefund" and "totalRefundable" null.
 
 "headline": ONE short sentence naming what changed and by how much, e.g. "80C deduction of Rs 1,50,000 disallowed" or "TDS credit of Rs 32,000 not allowed". If several things changed, name the largest.
 

@@ -206,7 +206,12 @@ function normaliseReading(raw, context = {}) {
     // then does it become the row's cause.
     causeAccepted: false,
     at: new Date().toISOString(),
-    ...reconcile({ netAsComputed, netAsReturned }, variance),
+    // The interest figures ride along so a failed check can name the one way
+    // this goes wrong — see interestSlip().
+    ...reconcile(
+      { netAsComputed, netAsReturned, interestOnRefund: num(r.interestOnRefund), totalRefundable: num(r.totalRefundable) },
+      variance
+    ),
   };
   return reading;
 }
@@ -225,7 +230,32 @@ function normaliseReading(raw, context = {}) {
  * intimation being rectified, so the two are not comparable and asserting
  * otherwise would fail every rectification.
  */
-function reconcile({ netAsComputed, netAsReturned }, variance) {
+/* The one way this check fails that is worth naming on screen.
+ *
+ * A refund order prints its refund TWICE — before interest u/s 244A in the
+ * computation, and after it in the banner, in the first-page summary and in the
+ * closing total. Only the first is comparable to the portal's figure, and a read
+ * that takes the wrong one produces exactly this failure: a total that is too
+ * high by precisely the interest.
+ *
+ * It happened on a real A.Y. 2023-24 order — 7,26,450 read where the portal said
+ * 6,85,332, the difference being ₹41,118 of s.244A interest — and the screen
+ * said only "does not match", which is true and tells a practitioner nothing.
+ * Naming the gap turns an error into a diagnosis.
+ */
+function interestSlip(netAsComputed, cpcNet, interest, total) {
+  if (!(netAsComputed > 0 && cpcNet > 0 && netAsComputed > cpcNet)) return "";
+  const gap = netAsComputed - cpcNet;
+  const named = interest !== null && Math.abs(gap - interest) <= RECONCILE_TOLERANCE;
+  const isTotal = total !== null && Math.abs(netAsComputed - total) <= RECONCILE_TOLERANCE;
+  if (!named && !isTotal) return "";
+  return (
+    `The difference is ${gap}, which is the interest u/s 244A on this refund — so the read has taken the ` +
+    "refund AFTER interest where the portal reports it before. "
+  );
+}
+
+function reconcile({ netAsComputed, netAsReturned, interestOnRefund = null, totalRefundable = null }, variance) {
   if (!variance || variance.cpcNet === null || variance.cpcNet === undefined) {
     return { reconciles: null, reconcileNote: "There is no portal figure to check this read against." };
   }
@@ -250,6 +280,7 @@ function reconcile({ netAsComputed, netAsReturned }, variance) {
       reconciles: false,
       reconcileNote:
         `The total read from the order (${netAsComputed}) does not match the figure the portal recorded against it (${variance.cpcNet}). ` +
+        interestSlip(netAsComputed, variance.cpcNet, interestOnRefund, totalRefundable) +
         "Treat the breakdown below as unverified and read the order itself.",
     };
   }

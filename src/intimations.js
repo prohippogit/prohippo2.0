@@ -668,9 +668,17 @@ export function positionLadder(row) {
       net: v.baseline.net,
     });
   }
+  /* "Refund CPC computed" on its own gets read as the refund, full stop — and
+     on an order carrying s.244A interest it is not, which is exactly the
+     confusion this ladder is here to end. Where a line of interest follows it,
+     the label says so. */
   rungs.push({
     id: "cpc",
-    label: v.cpcNet === 0 ? "CPC computed nothing either way" : v.cpcNet > 0 ? "Refund CPC computed" : "Demand CPC raised",
+    label: v.cpcNet === 0
+      ? "CPC computed nothing either way"
+      : v.cpcNet > 0
+        ? (interest ? "Refund CPC computed, before interest" : "Refund CPC computed")
+        : "Demand CPC raised",
     net: v.cpcNet,
     // The one comparison the flag rests on, so the row carries it.
     delta: typeof v.amount === "number" ? v.amount : null,

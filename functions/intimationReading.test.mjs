@@ -304,3 +304,69 @@ test("a refund order with no s.244A row earns no interest, which is not a gap", 
 test("the reading engine is 4 now that the receivable is read", () => {
   assert.equal(READING_ENGINE, 4);
 });
+
+/* ============================================================================
+   The one way a refund read goes wrong.
+
+   From a real A.Y. 2023-24 order (Himanshu Champakbhai Soni, AMDPS6177P). A
+   refund order prints its refund TWICE and the two differ:
+
+     line 40  Refund amount [40=(39e-38)]        6,85,336   <- portal reports it
+     line 42  Interest on refund u/s 244A       +   41,118
+     line 46  Total amount refundable            7,26,450   <- banner, summary
+
+   An earlier prompt told the model to fall back to the banner, and the banner
+   on a refund order is the AFTER-interest figure. It came back as the refund
+   determined, the check failed, and the screen said only "does not match" —
+   true, and no help at all to the practitioner reading it.
+   ============================================================================ */
+
+const soni = (over = {}) => ({
+  lines: [{ head: "TDS", asReturned: 1947727, asComputed: 1944998 }],
+  refundClaimedAsReturned: 688070,
+  taxPayableAsReturned: 0,
+  refundDetermined: 685332,
+  demandRaised: 0,
+  interestOnRefund: 41118,
+  totalRefundable: 726450,
+  cause: "tds-credit",
+  ...over,
+});
+
+test("the refund before interest reconciles and the after-interest total is carried", () => {
+  const out = normaliseReading(soni(), { variance: variance({ cpcNet: 685332, amount: -2738 }) });
+  assert.equal(out.reconciles, true);
+  assert.equal(out.netAsComputed, 685332);
+  assert.equal(out.interestOnRefund, 41118);
+  assert.equal(out.receivable, 726450);
+  assert.equal(out.ladderNote, "", "685332 + 41118 = 726450, so the order's own three figures agree");
+});
+
+test("taking the after-interest figure as the refund is named, not just reported", () => {
+  // What actually came back off this order before the prompt was fixed.
+  const out = normaliseReading(
+    soni({ refundDetermined: 726450, interestOnRefund: 41118 }),
+    { variance: variance({ cpcNet: 685332, amount: -2738 }) }
+  );
+  assert.equal(out.reconciles, false);
+  assert.match(out.reconcileNote, /41118/);
+  assert.match(out.reconcileNote, /interest u\/s 244A/);
+  assert.match(out.reconcileNote, /AFTER interest where the portal reports it before/);
+});
+
+test("a mismatch that is not the interest is not blamed on the interest", () => {
+  // A plain digit slip must keep the plain message — a wrong diagnosis is
+  // worse than none.
+  const out = normaliseReading(
+    soni({ refundDetermined: 985332, interestOnRefund: 41118, totalRefundable: 726450 }),
+    { variance: variance({ cpcNet: 685332 }) }
+  );
+  assert.equal(out.reconciles, false);
+  assert.doesNotMatch(out.reconcileNote, /interest u\/s 244A/);
+});
+
+test("a demand read too high is never blamed on refund interest", () => {
+  const out = normaliseReading(good({ demandRaised: 100000 }), { variance: variance() });
+  assert.equal(out.reconciles, false);
+  assert.doesNotMatch(out.reconcileNote, /244A/);
+});

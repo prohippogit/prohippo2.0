@@ -92,6 +92,30 @@ rather than computed from them (`refundLadder()` in
 `functions/intimationReading.js`). A model that misreads one of them says so
 instead of producing a total that adds up because we made it add up.
 
+#### The trap: a refund order prints its refund twice
+
+Only the **before-interest** figure is comparable to the portal's, and the
+after-interest one is printed in three prominent places while the before-interest
+one appears once, buried in the computation:
+
+| where | which |
+|---|---|
+| `Refund amount [40=(39e-38)]` in the detailed computation | **before** interest — this is the one |
+| the banner at the top: *"Refund Amount: Rs …"* | after |
+| the first-page summary row *"Refund amount (including interest under section 244A)"* | after |
+| `Total Income Tax Refund` / `Total amount refundable` | after |
+
+A prompt that said *"read the banner where the table's last row is unclear"* —
+correct for a demand order — produced ₹7,26,450 as the refund determined on an
+A.Y. 2023-24 order where the portal said ₹6,85,332. The reconciliation caught it,
+which is the system working, but the screen said only *"does not match"*.
+
+So the prompt now names the split explicitly with a worked example, restricts the
+banner fallback to demand orders, and `interestSlip()` recognises the one
+signature this failure has — a read exceeding the portal's figure by exactly the
+s.244A interest — and says so on the card. A wrong diagnosis being worse than
+none, it stays silent when the gap is not the interest.
+
 Both are **net of taxes paid**, and both use one sign convention, set once and
 never varied:
 

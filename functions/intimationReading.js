@@ -35,8 +35,10 @@
 /* Bump when the prompt, the schema or the reconciliation changes, so a stored
    reading written by an older engine can be spotted and re-read.
 
-   2 — also reads the order's outstanding-demand annexures. */
-const READING_ENGINE = 2;
+   2 — also reads the order's outstanding-demand annexures.
+   3 — a printed 0 is read as zero rather than as a blank, and a read is never
+       reconciled against a figure that came from a read. */
+const READING_ENGINE = 3;
 
 /* Rupees. The portal reports whole rupees and so does the order, so anything
    above this is a genuine disagreement rather than rounding. Deliberately
@@ -177,6 +179,17 @@ function normaliseReading(raw, context = {}) {
 function reconcile({ netAsComputed, netAsReturned }, variance) {
   if (!variance || variance.cpcNet === null || variance.cpcNet === undefined) {
     return { reconciles: null, reconcileNote: "There is no portal figure to check this read against." };
+  }
+  /* The figure on the variance came from a READ of this same document — the
+     portal sent a status and no amount, so returnVariance.js took the order's
+     own printed total. Checking a read against itself would return "reconciles"
+     every time and mean nothing; worse, it would dress up a single unverified
+     source as two agreeing ones. */
+  if (variance.source === "document") {
+    return {
+      reconciles: null,
+      reconcileNote: "The portal sent no figure for this order, so its position was taken from this read — there is nothing independent to check it against.",
+    };
   }
   if (netAsComputed === null) {
     return { reconciles: null, reconcileNote: "The order's own demand or refund total could not be read, so this breakdown is unchecked." };

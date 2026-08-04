@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { normaliseReading, changedLines, netOf, CAUSE_IDS } = require("./intimationReading.js");
+const { normaliseReading, changedLines, netOf, CAUSE_IDS, READING_ENGINE } = require("./intimationReading.js");
 
 // A red variance: the return claimed a ₹40,000 refund, CPC raised ₹10,000.
 const variance = (over = {}) => ({
@@ -102,7 +102,23 @@ test("nothing the model returns appears as a flag or an amount", () => {
   const out = normaliseReading(good({ flag: "green", amount: 999999, variance: "nonsense" }), { variance: variance() });
   assert.equal(out.flag, undefined, "a reading never carries a flag");
   assert.equal(out.amount, undefined, "nor an amount that could be mistaken for the variance");
-  assert.equal(out.engine, 2);
+  assert.equal(out.engine, READING_ENGINE);
+});
+
+/* A read may SUPPLY the figure where the portal sent none (returnVariance.js
+   documentNet), and the moment it does, this reconciliation has nothing left to
+   check: both numbers now come from the same read of the same page. Saying
+   "reconciles" there would dress one unverified source up as two agreeing ones,
+   which is the exact failure the whole check exists to prevent. */
+test("a read is never reconciled against a figure that came from a read", () => {
+  const out = normaliseReading(good(), { variance: variance({ source: "document", cpcNet: -10000 }) });
+  assert.equal(out.reconciles, null, "not true, however well the numbers match");
+  assert.match(out.reconcileNote, /nothing independent/);
+});
+
+test("a portal-sourced figure is still checked as before", () => {
+  const out = normaliseReading(good(), { variance: variance({ source: "portal" }) });
+  assert.equal(out.reconciles, true);
 });
 
 /* ---------------- the suggested cause ---------------- */
@@ -206,6 +222,10 @@ test("an absurd annexure is capped", () => {
   assert.equal(normaliseReading(good({ outstandingDemands: many }), { variance: variance() }).outstandingDemands.length, 30);
 });
 
-test("the reading engine is 2 now that arrears are read", () => {
-  assert.equal(normaliseReading(good(), { variance: variance() }).engine, 2);
+/* Pinned so that changing the prompt, the schema or the reconciliation without
+   bumping the engine fails here — a stored reading has to be findable by the
+   rules it was written under. */
+test("the reading engine is 3 now that a read can supply the figure", () => {
+  assert.equal(READING_ENGINE, 3);
+  assert.equal(normaliseReading(good(), { variance: variance() }).engine, 3);
 });

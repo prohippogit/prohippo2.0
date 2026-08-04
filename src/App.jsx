@@ -5,6 +5,7 @@ import { Assessees, AssesseeProfile } from './Assessees';
 import Hearings from './Hearings';
 import Appeals from './Appeals';
 import Notices, { NoticeReview } from './Notices';
+import Intimations from './Intimations';
 import { Matters, Invoices, Communications, Reports, SettingsPage } from './Other';
 import { Icon } from './shared';
 import { DataProvider, useData } from './store';
@@ -128,6 +129,7 @@ function Shell() {
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
       case "notices": content = <Notices onOpenNotice={openReview}/>; break;
+      case "intimations": content = <Intimations onOpenAssessee={(id) => { setProfileFocus({ tab: "Returns" }); setOpenAssesseeId(id); }}/>; break;
       case "reports": content = <Reports/>; break;
       case "connector": content = <ConnectorDownload/>; break;
       case "settings": content = <SettingsPage/>; break;

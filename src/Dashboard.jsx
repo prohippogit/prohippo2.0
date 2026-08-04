@@ -5,7 +5,7 @@ import { openFromStorage } from './downloadFile';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
 import { appealableOrders } from './appeals';
-import { intimationVariances, varianceSummary, describeVariance, needsVarianceBackfill, SECTION_LABEL, DEFAULT_WINDOW_MONTHS } from './intimations';
+import { intimationVariances, varianceSummary, needsVarianceBackfill, DEFAULT_WINDOW_MONTHS } from './intimations';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { AskDocsButton } from './askForDocuments';
@@ -25,7 +25,6 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
   };
   const [query, setQuery] = React.useState("");
   const [showNotices, setShowNotices] = React.useState(false);
-  const [showVariances, setShowVariances] = React.useState(false);
 
   const hearings = upcomingHearings(data);
   const awaiting = awaitingNotices(data);
@@ -115,7 +114,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
         <div className="col" style={{gap: 18}}>
           <AppealsReminderCard appeals={appeals} onNav={onNav} onAddTask={addTaskFromAppeal}/>
 
-          <IntimationVarianceCard rows={variances} onOpen={() => setShowVariances(true)}/>
+          <IntimationVarianceCard rows={variances} onOpen={() => onNav("intimations")}/>
 
           {awaiting.length > 0 && (
             <div
@@ -209,13 +208,6 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
         />
       )}
 
-      {showVariances && (
-        <IntimationVarianceModal
-          rows={variances}
-          onClose={() => setShowVariances(false)}
-          onOpenAssessee={(row) => { setShowVariances(false); onSearch(row.pan || row.assessee); }}
-        />
-      )}
     </div>
   );
 }
@@ -300,12 +292,6 @@ function useVarianceBackfill(returns) {
   }, [returns]);
 }
 
-const FLAG_STYLE = {
-  red: { bg: "#FDECEC", fg: "#B23B3B", label: "More payable" },
-  green: { bg: "#E7F7F0", fg: "#13795C", label: "In your favour" },
-  neutral: { bg: "var(--p-line-2)", fg: "var(--p-text-3)", label: "Agrees" },
-  unknown: { bg: "var(--p-amber, #FFF3D6)", fg: "#B07512", label: "Not compared" },
-};
 
 /* What CPC did to the assessee's position, across the practice, over the last
  * six months.
@@ -368,178 +354,6 @@ function IntimationVarianceCard({ rows, onOpen }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/* The orders behind the card, one row each.
- *
- * Every row states three things a practitioner cannot act without: the amount,
- * WHAT IT WAS MEASURED AGAINST, and the order itself. The middle one is not
- * decoration — a s.154 order is compared against the intimation it rectified
- * and a s.143(1) against the return as filed, and the same rupee figure means
- * different things under the two. The PDF is one click away because no figure
- * on this screen is a substitute for reading the order.
- */
-function IntimationVarianceModal({ rows, onClose, onOpenAssessee }) {
-  const { data, updateReturn, notify } = useData();
-  const [selected, setSelected] = React.useState(() => new Set());
-  const [busy, setBusy] = React.useState(false);
-
-  const toggle = (key) => setSelected((s) => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.key));
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.key)));
-
-  /* Ticking one off writes a map on the RETURN, keyed by CPC reference —
-     `varianceReviewed: { "CPC/2324/…": true }` — rather than a flag inside the
-     orders array. The sync owns that array and rewrites it wholesale on every
-     ingest; a flag stored inside it would be erased the next time CPC issued
-     anything for the year. The whole map is rewritten each time because a
-     reference can contain a dot, and a dotted key in updateDoc is a field PATH,
-     not a name. */
-  const markReviewed = async (keys) => {
-    if (!keys.length || busy) return;
-    setBusy(true);
-    const byReturn = new Map();
-    for (const row of rows.filter((r) => keys.includes(r.key))) {
-      const refs = byReturn.get(row.returnId) || [];
-      refs.push(row.commRefNo);
-      byReturn.set(row.returnId, refs);
-    }
-    for (const [returnId, refs] of byReturn) {
-      const existing = (data.returns.find((r) => r.id === returnId) || {}).varianceReviewed || {};
-      const next = { ...existing };
-      for (const ref of refs) next[ref] = true;
-      await updateReturn(returnId, { varianceReviewed: next });
-    }
-    setBusy(false);
-    setSelected(new Set());
-    notify(keys.length > 1 ? `${keys.length} orders marked reviewed` : "Marked reviewed");
-  };
-
-  const viewPdf = async (row) => {
-    try {
-      await openFromStorage(row.storagePath);
-    } catch {
-      notify("That order PDF could not be opened — open the assessee's Returns tab", "alert");
-    }
-  };
-
-  const s = varianceSummary(rows);
-
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{maxWidth: 780, padding: "22px 24px"}} onClick={(e) => e.stopPropagation()}>
-        <div className="between" style={{alignItems: "flex-start", gap: 12, marginBottom: 12}}>
-          <div>
-            <div style={{fontSize: 17, fontWeight: 800}}>Intimations · Tax variance</div>
-            <div className="card-sub" style={{marginTop: 2}}>
-              {rows.length} order{rows.length !== 1 ? "s" : ""} issued by CPC in the last {DEFAULT_WINDOW_MONTHS} months ·
-              {" "}each compared against the return as filed, or against the order it rectified
-            </div>
-          </div>
-          <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 10, flexShrink: 0}} title="Close" onClick={onClose}><Icon name="x" size={15}/></button>
-        </div>
-
-        {(s.red > 0 || s.green > 0) && (
-          <div className="row" style={{gap: 10, flexWrap: "wrap", padding: "0 2px 12px"}}>
-            {s.red > 0 && (
-              <div style={{flex: "1 1 200px", border: "1px solid var(--p-line-2)", borderRadius: 11, padding: "10px 12px"}}>
-                <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase"}}>More payable</div>
-                <div style={{fontSize: 18, fontWeight: 800, color: "#B23B3B", marginTop: 2}}>{fmtINR(s.additionalDemand)}</div>
-                <div className="muted" style={{fontSize: 11.5}}>across {s.red} order{s.red !== 1 ? "s" : ""}</div>
-              </div>
-            )}
-            {s.green > 0 && (
-              <div style={{flex: "1 1 200px", border: "1px solid var(--p-line-2)", borderRadius: 11, padding: "10px 12px"}}>
-                <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase"}}>In the assessee's favour</div>
-                <div style={{fontSize: 18, fontWeight: 800, color: "#13795C", marginTop: 2}}>{fmtINR(s.extraRefund)}</div>
-                <div className="muted" style={{fontSize: 11.5}}>across {s.green} order{s.green !== 1 ? "s" : ""}</div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="between" style={{padding: "2px 2px 12px", gap: 10}}>
-          <div className="center" style={{gap: 10, justifyContent: "flex-start"}}>
-            <Check checked={allSelected} onChange={toggleAll}/>
-            <span className="muted" style={{fontSize: 12}}>Select all</span>
-          </div>
-          {selected.size > 0 && (
-            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => markReviewed([...selected])}>
-              <Icon name="check" size={14}/>Mark {selected.size} reviewed
-            </button>
-          )}
-        </div>
-
-        <div className="col" style={{gap: 8, maxHeight: "56vh", overflowY: "auto"}}>
-          {rows.map((row) => {
-            const v = row.variance;
-            const flag = FLAG_STYLE[v?.flag] || FLAG_STYLE.unknown;
-            const isSel = selected.has(row.key);
-            return (
-              <div key={row.key} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderLeft: `3px solid ${flag.fg}`, borderRadius: 11, background: isSel ? "var(--p-lavender-2)" : "transparent", flexWrap: "wrap"}}>
-                <Check checked={isSel} onChange={() => toggle(row.key)}/>
-                <div style={{flex: 1, minWidth: 210, cursor: "pointer"}} onClick={() => onOpenAssessee(row)} title="Open this assessee">
-                  <div style={{fontSize: 14.5, fontWeight: 800, color: "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
-                    {row.assessee ? titleCase(row.assessee) : row.pan || "—"}
-                  </div>
-                  <div className="center" style={{gap: 6, marginTop: 4, justifyContent: "flex-start", flexWrap: "wrap"}}>
-                    <span className="pill pill-muted" title={SECTION_LABEL[row.section] || ""}>u/s {row.section}</span>
-                    <span className="muted" style={{fontSize: 11.5}}>
-                      AY {row.ay || "—"}{row.orderDate ? ` · ${fmtDate(row.orderDate)}` : " · date not stated"}
-                    </span>
-                    {v?.adjusted && (
-                      <span className="pill" style={{background: "var(--p-line-2)", color: "var(--p-text-3)"}} title="CPC set this refund off against an earlier demand u/s 245 — it is not being paid out">
-                        adjusted u/s 245
-                      </span>
-                    )}
-                  </div>
-                  <div style={{fontSize: 12.5, marginTop: 4, color: v?.flag === "unknown" ? "var(--p-text-3)" : "var(--p-text-2)"}}>
-                    {describeVariance(v)}{row.statusDesc ? ` · ${row.statusDesc}` : ""}
-                  </div>
-                </div>
-
-                <div style={{textAlign: "right", minWidth: 108}}>
-                  <div style={{display: "inline-block", background: flag.bg, color: flag.fg, borderRadius: 8, padding: "4px 9px", fontWeight: 800, fontSize: 13}}>
-                    {v && v.amount != null && v.flag !== "neutral"
-                      ? `${v.amount < 0 ? "−" : "+"}${fmtINR(Math.abs(v.amount))}`
-                      : flag.label}
-                  </div>
-                </div>
-
-                {row.storagePath && !row.locked ? (
-                  <button className="btn btn-ghost btn-xs" title="Open the order PDF in a new tab" onClick={() => viewPdf(row)}>
-                    <Icon name="doc" size={12}/>PDF
-                  </button>
-                ) : (
-                  <button className="btn btn-ghost btn-xs" title="No readable PDF on file — open the assessee's Returns tab" onClick={() => onOpenAssessee(row)}>
-                    <Icon name="arrow-right" size={12}/>Open
-                  </button>
-                )}
-                <button className="btn btn-ghost btn-xs" disabled={busy} title="Mark this order reviewed and clear it from the card" onClick={() => markReviewed([row.key])}>
-                  <Icon name="check" size={12}/>Reviewed
-                </button>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Said once, at the bottom, rather than on every row: the figures are
-            the portal's own, and the reason behind a difference is in the
-            document. A card that implied otherwise would be inviting somebody
-            to advise a client off a subtraction. */}
-        <div className="muted" style={{fontSize: 11.5, marginTop: 12, lineHeight: 1.5}}>
-          Differences are computed from the demand and refund CPC recorded against each order and the closing
-          position of the return as filed. They say <b>how much</b> changed, not <b>why</b> — the head-wise
-          comparison is in the order itself.
-        </div>
-      </div>
-    </div>,
-    document.body
   );
 }
 

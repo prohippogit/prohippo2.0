@@ -275,6 +275,11 @@ export function DataProvider({ children }) {
       addCommunication: addTo("communications"), updateCommunication: updateIn("communications"), removeCommunication: removeFrom("communications"),
       addDocRequest: addTo("docRequests"), updateDocRequest: updateIn("docRequests"), removeDocRequest: removeFrom("docRequests"),
       addTodo: addTo("todos"), updateTodo: updateIn("todos"), removeTodo: removeFrom("todos"),
+      /* Returns are written by the portal sync, never by hand — the one edit the
+         app makes to them is ticking an intimation's variance off the dashboard
+         card, which is a merge into `varianceReviewed` and touches nothing the
+         sync owns. There is deliberately no addReturn or removeReturn. */
+      updateReturn: updateIn("returns"),
       addInvoice: async (rec) => {
         try {
           const invRef = doc(colRef("invoices"));

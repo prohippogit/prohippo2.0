@@ -26,6 +26,13 @@ const db = admin.firestore();
    hand. Rates live in functions/pricing.js; see docs/COST_TRACKING.md. */
 const recordSpend = require("./spend").makeMeter({ db });
 
+/* The s.143(1) / s.154 variance. Both pure, both unit-tested, both free — the
+   flag is arithmetic on figures the portal already gave us, never an AI read of
+   the intimation PDF. See the header notes in returnVariance.js for why a
+   rectification is measured against the intimation it rectified. */
+const { readTaxPosition } = require("./itrTaxPosition");
+const { computeVariances, summariseVariances, VARIANCE_ENGINE } = require("./returnVariance");
+
 /* ---------- where these functions run ----------------------------------------
  * Firestore for this project lives in asia-south1 (Mumbai) — but these functions
  * were originally pinned to us-central1 (Iowa), Google's default. That split them
@@ -1209,6 +1216,25 @@ exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async
   }
   const orderList = [...merged.values()].sort((x, y) => String(y.orderDate || "").localeCompare(String(x.orderDate || "")));
 
+  /* What the intimation did to the assessee, against what the return claimed.
+   *
+   * The assessee's side is read from the ITR JSON in Storage rather than from
+   * the sync message: `itrJson` is only sent the FIRST time a year is seen
+   * (portalReturns.js only fetches it when the acknowledgement is new), so a
+   * re-sync that brings a newly issued s.154 order arrives with it null. The
+   * stored copy is the one source that is there on every run.
+   *
+   * Cached on the document and keyed by the path it was read from, so this
+   * costs one Storage read per assessment year for the life of that year — not
+   * one per sync. */
+  const positionPath = jsonPath || existing.jsonPath || null;
+  let position = existing.returnPosition || null;
+  if (orderList.length && positionPath && (!position || position.jsonPath !== positionPath)) {
+    const read = await taxPositionFromStorage(positionPath);
+    if (read) position = { ...read, jsonPath: positionPath, at: new Date().toISOString() };
+  }
+  const ordersWithVariance = computeVariances(orderList, position);
+
   const doc = {
     pan,
     assessee: assesseeName,
@@ -1236,7 +1262,11 @@ exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async
         activityDt: parsePortalDate(e.activityDt) || "",
       }))
       : existing.timeline || [],
-    orders: orderList,
+    orders: ordersWithVariance,
+    // The return's own closing position, kept so the Returns tab and the
+    // dashboard card can show what the comparison was made against, and so a
+    // later run does not re-read the JSON to find out.
+    returnPosition: position || null,
     // Never blank a file we already hold because this run skipped fetching it —
     // the ITR JSON and acknowledgement are only pulled the first time a return
     // is seen, so later syncs legitimately arrive with both fields null.
@@ -1255,8 +1285,100 @@ exports.ingestPortalReturn = onCall({ region: REGIONS, maxInstances: 10 }, async
   };
 
   await ref.set(doc, { merge: true });
-  return { ok: true, returnId: docId, orders: orderList.length };
+  // The variance summary rides back on the ingest result so the Returns tab can
+  // say what the sync just found, at the moment it finds it, rather than leaving
+  // the practitioner to notice a card that changed colour.
+  return { ok: true, returnId: docId, orders: orderList.length, variances: summariseVariances(ordersWithVariance) };
 });
+
+/* Read one return's ITR JSON out of Storage and pull the closing tax position
+ * out of it. Best-effort by design: a year whose JSON was never synced, or whose
+ * form puts the figures somewhere unrecognised, yields null — and null makes the
+ * variance report "could not be compared" rather than inventing a nil baseline.
+ *
+ * The size guard is a "something has gone wrong" ceiling, not a policy: ITR
+ * JSONs run from tens of KB to a few MB. */
+const MAX_ITR_JSON_BYTES = 12 * 1024 * 1024;
+async function taxPositionFromStorage(jsonPath) {
+  if (!jsonPath) return null;
+  let buf;
+  try {
+    [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(jsonPath).download();
+  } catch (e) {
+    console.warn("tax position: couldn't read", jsonPath, (e && e.message) || e);
+    return null;
+  }
+  if (!buf || !buf.length || buf.length > MAX_ITR_JSON_BYTES) return null;
+  try {
+    return readTaxPosition(JSON.parse(buf.toString("utf8")));
+  } catch {
+    return null;
+  }
+}
+
+/* Compute variances for returns already on file.
+ *
+ * Every intimation a practice has ever synced is already in Firestore with its
+ * demand/refund figures, and every filed return's JSON is already in Storage —
+ * so the whole history can be flagged without anyone re-syncing anything. That
+ * matters more than it sounds: the connector deliberately skips a year with no
+ * new order (portalReturns.js), so years that were quiet would otherwise never
+ * pass through ingestPortalReturn again and would stay blank for ever.
+ *
+ * Idempotent. A return whose orders already carry a variance from the current
+ * engine is skipped, so calling this repeatedly costs one Firestore read per
+ * return and nothing else. `force` re-reads everything, for when the engine
+ * version changes.
+ *
+ * Capped per call because the expensive part is one Storage download per year;
+ * `remaining` tells the caller to come back for the rest.
+ */
+const VARIANCE_REFRESH_LIMIT = 150;
+exports.refreshReturnVariances = onCall(
+  { region: REGIONS, maxInstances: 5, timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+    const { assesseeId, force } = request.data || {};
+
+    let query = db.collection(`users/${uid}/returns`);
+    if (assesseeId) query = query.where("assesseeId", "==", assesseeId);
+    const snap = await query.get();
+
+    const stale = (data) => {
+      const orders = data.orders || [];
+      if (!orders.length) return false; // nothing to compare — not work, just quiet
+      if (force) return true;
+      // A year read once and found unreadable must not be re-read on every call:
+      // the position is cached, so the absence of a variance is the only signal
+      // that this year has never been through the engine.
+      return orders.some((o) => !o || !o.variance || o.variance.engine !== VARIANCE_ENGINE);
+    };
+
+    let scanned = 0;
+    let updated = 0;
+    let remaining = 0;
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      if (!stale(data)) continue;
+      scanned += 1;
+      if (updated >= VARIANCE_REFRESH_LIMIT) { remaining += 1; continue; }
+
+      let position = force ? null : data.returnPosition || null;
+      const path = data.jsonPath || null;
+      if (path && (!position || position.jsonPath !== path)) {
+        const read = await taxPositionFromStorage(path);
+        if (read) position = { ...read, jsonPath: path, at: new Date().toISOString() };
+      }
+      await d.ref.set(
+        { orders: computeVariances(data.orders || [], position), returnPosition: position || null },
+        { merge: true }
+      );
+      updated += 1;
+    }
+    return { ok: true, scanned, updated, remaining };
+  }
+);
 
 // Attach a document to an already-recorded return. Used by the on-demand fetches
 // the Returns tab makes — the fully rendered ITR form PDF, and the generated

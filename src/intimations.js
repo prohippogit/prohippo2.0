@@ -185,11 +185,24 @@ export function varianceSummary(rows) {
   return out;
 }
 
-/** True when the practice holds orders that have never been through the
- *  variance engine — the one-shot backfill trigger reads this. */
+/* Must match VARIANCE_ENGINE in functions/returnVariance.js — the two are pinned
+   together by a test. Raising it there and here is what makes every stored
+   variance recompute on the next page load. */
+export const VARIANCE_ENGINE = 2;
+
+/** True when the practice holds orders that have never been through the variance
+ *  engine, OR were computed by an older one — the one-shot backfill reads this.
+ *
+ *  The engine check matters as much as the missing check: engine 1 netted the
+ *  demand and refund fields together and reported other years' arrears as this
+ *  order's demand, so every figure it wrote has to be recomputed rather than
+ *  left sitting on screen looking authoritative. */
 export function needsVarianceBackfill(data) {
   return (data.returns || []).some(
-    (r) => (r.orders || []).some((o) => o && INTIMATION_SECTIONS.includes(String(o.section || "")) && !o.variance)
+    (r) => (r.orders || []).some(
+      (o) => o && INTIMATION_SECTIONS.includes(String(o.section || "")) &&
+        (!o.variance || (o.variance.engine || 0) < VARIANCE_ENGINE)
+    )
   );
 }
 
@@ -345,6 +358,20 @@ export const CAUSE_LABEL = Object.fromEntries(CAUSES.map((c) => [c.id, c.label])
    for it, which is what this exists to do. */
 export const REFUND_CHASE_DAYS = 30;
 
+/* Past this, a refund is no longer chased — it is simply not tracked.
+ *
+ * The app learns that CPC DETERMINED a refund; whether the bank ever credited
+ * it is not on the portal. Defaulting every historical refund to "not received"
+ * meant a practice's first look at this page showed ₹180 from 2021 in red at
+ * 1,405 days, alongside every other refund it had ever had. That is the failure
+ * this feature was built to avoid: a screen that is always red is a screen
+ * nobody reads.
+ *
+ * A year is the line. Inside it, a missing refund is probably a failed bank
+ * validation and worth chasing. Outside it, silence means nothing either way,
+ * so the row says "not tracked" in grey and can be promoted by hand. */
+export const REFUND_STALE_DAYS = 365;
+
 // Fully adjusted u/s 245: the refund was set off against an earlier demand, so
 // no money is coming and nothing is owed to the client. Partly adjusted leaves
 // a balance that IS paid out, so those stay chaseable.
@@ -362,11 +389,18 @@ export function refundPosition(row) {
   if (receivedOn) return { state: "received", amount, receivedOn, days: null };
 
   const days = daysSince(row.orderDate);
+  if (days != null && days > REFUND_STALE_DAYS) return { state: "stale", amount, days };
   return {
     state: days != null && days > REFUND_CHASE_DAYS ? "overdue" : "awaited",
     amount,
     days,
   };
+}
+
+/* Refunds old enough that we cannot say either way, for the bulk "mark as
+   received" that clears a practice's history in one go. */
+export function staleRefunds(rows) {
+  return rows.filter((r) => refundPosition(r).state === "stale");
 }
 
 /* ---------------- the page's own selectors ---------------- */
@@ -435,7 +469,7 @@ export function practiceSummary(rows) {
     total: rows.length, pending: 0, assessees: 0,
     additionalDemand: 0, extraRefund: 0,
     appealOpen: 0, appealLapsing: 0,
-    refundAwaited: 0, refundOverdue: 0, refundAwaitedAmount: 0,
+    refundAwaited: 0, refundOverdue: 0, refundAwaitedAmount: 0, refundStale: 0,
     disposalOverdue: 0, untagged: 0,
   };
   const names = new Set();
@@ -460,6 +494,7 @@ export function practiceSummary(rows) {
     const refund = refundPosition(row);
     if (refund.state === "awaited") { out.refundAwaited += 1; out.refundAwaitedAmount += refund.amount; }
     if (refund.state === "overdue") { out.refundOverdue += 1; out.refundAwaitedAmount += refund.amount; }
+    if (refund.state === "stale") out.refundStale += 1;
   }
   out.assessees = names.size;
   return out;
@@ -473,6 +508,7 @@ export function matchesFilter(row, filter) {
     case "More payable": return row.variance?.flag === "red";
     case "In the assessee's favour": return row.variance?.flag === "green";
     case "Refund awaited": { const s = refundPosition(row).state; return s === "awaited" || s === "overdue"; }
+    case "Appeal window open": { const a = clocksFor(row).appeal; return a.urgency === "open" || a.urgency === "soon" || a.urgency === "urgent"; }
     case "Rectification filed": return row.decision === "rectify" && Boolean(row.tracking?.rectFiledOn);
     case "Not yet tagged": return !row.cause;
     default: return true;
@@ -481,7 +517,7 @@ export function matchesFilter(row, filter) {
 
 export const FILTERS = [
   "All", "Needs a decision", "More payable", "In the assessee's favour",
-  "Refund awaited", "Rectification filed", "Not yet tagged",
+  "Appeal window open", "Refund awaited", "Rectification filed", "Not yet tagged",
 ];
 
 /* ---------------- the AI read of the comparison table ---------------- */

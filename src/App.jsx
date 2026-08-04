@@ -129,7 +129,7 @@ function Shell() {
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
       case "notices": content = <Notices onOpenNotice={openReview}/>; break;
-      case "intimations": content = <Intimations onOpenAssessee={(id) => { setProfileFocus({ tab: "Returns" }); setOpenAssesseeId(id); }}/>; break;
+      case "intimations": content = <Intimations/>; break;
       case "reports": content = <Reports/>; break;
       case "connector": content = <ConnectorDownload/>; break;
       case "settings": content = <SettingsPage/>; break;

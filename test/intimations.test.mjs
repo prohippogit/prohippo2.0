@@ -653,3 +653,28 @@ test("a refund that earned no interest does not claim to have been read", () => 
   assert.equal(l.final.fromRead, false);
   assert.equal(l.rungs.length, 2);
 });
+
+test("the middle rung says 'before interest' when interest follows it", () => {
+  /* From the A.Y. 2023-24 order that prompted this: "Refund CPC computed
+     ₹6,85,332" read as "the refund", which on an order carrying ₹41,118 of
+     s.244A interest it is not. */
+  const row = {
+    variance: {
+      engine: VARIANCE_ENGINE, source: "portal", cpcNet: 685332, amount: -2738,
+      baseline: { kind: "return", net: 688070 }, flag: "red",
+    },
+    reading: { interestOnRefund: 41118, receivable: 726450 },
+  };
+  const l = positionLadder(row);
+  assert.deepEqual(l.rungs.map((r) => [r.label, r.net]), [
+    ["Refund claimed in the return", 688070],
+    ["Refund CPC computed, before interest", 685332],
+    ["Interest u/s 244A on the refund", 41118],
+  ]);
+  assert.equal(l.final.net, 726450);
+});
+
+test("with no interest the middle rung is not qualified", () => {
+  const l = positionLadder(keshavRow());
+  assert.equal(l.rungs[1].label, "Refund CPC computed", "no dangling 'before interest' when there is none");
+});

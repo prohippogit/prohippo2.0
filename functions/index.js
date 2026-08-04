@@ -106,6 +106,20 @@ const resendWebhookSecret = defineSecret("RESEND_WEBHOOK_SECRET");
 // To list the models your key can use, run:
 //   curl "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY"
 const PRIMARY_MODEL = "gemini-3.1-flash-lite";
+
+/* The most a PDF may be before we refuse to send it to Gemini. The callable
+   request limit is 10 MB and the base64 encoding of the file has to fit inside
+   it along with the prompt.
+
+   Every function that reads a PDF depends on this, and it was deleted by
+   accident when the AI Parser came out — it had been declared in the middle of
+   that feature's constants. Losing it took down `summarizePortalNotice`,
+   `extractNoticeDocuments` and `readIntimationOrder` at once, because each
+   throws a ReferenceError on the size check before it reaches the model. It is
+   declared here, next to the model id, precisely so it cannot go out with a
+   feature again. */
+const MAX_TOTAL_BYTES = 9 * 1024 * 1024;
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Short, type-aware summary of a portal notice/order for a tax practitioner,
@@ -646,7 +660,15 @@ const STORAGE_BUCKET = "prohippo2.firebasestorage.app";
 // Shared by the on-demand callable (a practitioner pressing re-parse in the
 // Matters view) and by the Firestore trigger that runs automatically for orders.
 // Returns the patch it applied.
-async function summariseNoticeDoc(ref, n, apiKey) {
+/* `uid` is threaded in rather than read from an outer scope, because there is no
+   outer scope to read it from: this ran as a bare `{ uid }` against an undeclared
+   name, which is a ReferenceError on every call. It took out the "Parse with AI"
+   button AND the automatic summary that runs after a sync, and — because the
+   trigger writes `aiSummaryError` and then refuses to retry a document that has
+   one — every order synced while it was broken stopped being summarised at all.
+   The spend record for the call is attributed to this uid, so passing it is also
+   what makes the cost land on the right practice. */
+async function summariseNoticeDoc(ref, n, apiKey, uid) {
   if (!n.storagePath) throw new HttpsError("failed-precondition", "This notice has no PDF to parse.");
 
   // Pull the PDF from Storage (admin bypasses rules) and hand it to Gemini.
@@ -701,7 +723,7 @@ exports.summarizePortalNotice = onCall(
     const ref = db.doc(`users/${uid}/notices/${noticeId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new HttpsError("not-found", "Notice not found.");
-    const patch = await summariseNoticeDoc(ref, snap.data(), geminiApiKey.value());
+    const patch = await summariseNoticeDoc(ref, snap.data(), geminiApiKey.value(), uid);
     return { ok: true, aiSummary: patch.aiSummary, docType: patch.docType, parsed: patch.parsed };
   }
 );
@@ -1053,7 +1075,7 @@ exports.onPortalOrderWritten = onDocumentWritten(
     if (n.aiSummary || n.aiSummaryError) return;
 
     try {
-      await summariseNoticeDoc(after.ref, n, geminiApiKey.value());
+      await summariseNoticeDoc(after.ref, n, geminiApiKey.value(), event.params.uid);
     } catch (err) {
       const message = String((err && err.message) || err).slice(0, 300);
       console.error("onPortalOrderWritten failed", event.params.noticeId, message);

@@ -44,8 +44,12 @@
 
 /* Bump when the arithmetic or the baseline rule changes. Stored on every
    variance so a recompute can find the ones written by an older engine instead
-   of trusting whatever is on the document. */
-const VARIANCE_ENGINE = 1;
+   of trusting whatever is on the document.
+
+   2 — the order's position is read from its CPC STATUS instead of by netting
+       the demand and refund fields against each other. Engine 1 reported a
+       ₹1,83,744 demand on an intimation that raised none. */
+const VARIANCE_ENGINE = 2;
 
 /* Differences at or below this are not reported.
  *
@@ -81,14 +85,59 @@ function amount(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/* The order's net position, on the same sign convention as the return's:
-   positive is money coming back. A refund of ₹50,000 is +50000, a demand of
-   ₹50,000 is −50000. An order stating neither told us nothing — null. */
+/* WHAT THIS ORDER DID, read from its CPC STATUS — not by netting.
+ *
+ * THE MISTAKE THIS REPLACES, because it produced confident, badly wrong figures
+ * on real client files. Engine 1 computed `refund − demand` from the two fields
+ * the portal sends. On an order where CPC determines a refund and sets it off
+ * u/s 245, the portal populates BOTH: the refund it determined, and the
+ * OUTSTANDING DEMAND OF EARLIER YEARS the refund went towards. Netting them
+ * reported the other years' arrears as a demand raised by this intimation.
+ *
+ * A real case: an A.Y. 2022-23 intimation agreeing with the return line for
+ * line, determining a ₹180 refund, fully adjusted against an A.Y. 2017 demand.
+ * The order itself says "There is no payment due." Engine 1 called it
+ * "₹1,83,744 worse vs the return as filed", in red, because ₹1,83,744 was the
+ * balance outstanding across 2017, 2018 and 2019.
+ *
+ * The status already says which figure belongs to this order, so ask it. The
+ * codes are ORDER_ACTIVITIES in connector/src/main/portalReturns.js.
+ */
+const OUTCOME_BY_ACTIVITY = {
+  61: "demand", // 143(1) processed, demand determined
+  62: "refund", // 143(1) processed, refund determined
+  63: "nil",    // 143(1) processed, no demand no refund
+  64: "refund", // refund determined and fully adjusted u/s 245
+  65: "refund", // refund determined and partly adjusted u/s 245
+  71: "demand", // rectification processed, demand due
+  72: "refund", // rectification processed, refund due
+  73: "nil",    // rectification processed, no refund due
+  74: "refund", // rectification refund fully adjusted
+  75: "refund", // rectification refund partly adjusted
+  613: "refund", // later variant of 75
+};
+
+/* The order's position, on the sign convention used everywhere here: positive
+   is money coming back. Null means the order did not tell us. */
 function cpcNet(order) {
   const demand = amount(order && order.demand);
   const refund = amount(order && order.refund);
+  const outcome = OUTCOME_BY_ACTIVITY[Number(order && order.activityCd)];
+
+  if (outcome === "nil") return 0;              // CPC stated it: neither side
+  if (outcome === "demand") return demand === null ? null : -demand;
+  if (outcome === "refund") return refund === null ? null : refund;
+
+  /* An activity code we do not recognise — a new CPC status, most likely.
+   *
+   * One figure alone is unambiguous and is used. BOTH figures with no status to
+   * disambiguate them is exactly the situation that produced the bug above, so
+   * it reports "could not be compared" instead of guessing. A gap a
+   * practitioner can see beats a number they cannot check. */
   if (demand === null && refund === null) return null;
-  return (refund || 0) - (demand || 0);
+  if (!demand && !refund) return 0;             // both stated, both nil
+  if (demand && refund) return null;            // ambiguous — do not guess
+  return refund ? refund : -demand;
 }
 
 function unknown(note, cpc) {
@@ -120,7 +169,12 @@ function varianceFor(entry, priors, position) {
 
   if (entry.net === null) {
     return {
-      ...unknown("The portal recorded this order without a demand or refund figure.", null),
+      ...unknown(
+        amount(order.demand) && amount(order.refund)
+          ? "The portal recorded both a demand and a refund against this order under a status we do not recognise, so which one belongs to this order cannot be told apart."
+          : "The portal recorded this order without a demand or refund figure.",
+        null
+      ),
       adjusted,
     };
   }
@@ -226,6 +280,7 @@ function summariseVariances(orders) {
 
 module.exports = {
   computeVariances,
+  OUTCOME_BY_ACTIVITY,
   summariseVariances,
   cpcNet,
   amount,

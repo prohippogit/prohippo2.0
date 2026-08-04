@@ -14,6 +14,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { computeVariances, summariseVariances, cpcNet } = require("./returnVariance.js");
 
+/* Default status is 61 — "processed, demand determined" — so a fixture carrying
+   a demand is self-consistent. Fixtures carrying a refund set activityCd: "62". */
 const order = (o) => ({ commRefNo: "REF1", section: "143(1)", activityCd: "61", orderDate: "2025-06-10", demand: "", refund: "", ...o });
 const position = (netPayable) => ({ netPayable, balTaxPayable: netPayable < 0 ? -netPayable : 0, refundDue: netPayable > 0 ? netPayable : 0 });
 const only = (orders, pos) => computeVariances(orders, pos)[0].variance;
@@ -21,14 +23,68 @@ const only = (orders, pos) => computeVariances(orders, pos)[0].variance;
 /* ---------------- the net position ---------------- */
 
 test("a demand is negative and a refund positive", () => {
-  assert.equal(cpcNet({ demand: "50000", refund: "" }), -50000);
-  assert.equal(cpcNet({ demand: "", refund: "50000" }), 50000);
-  assert.equal(cpcNet({ demand: "0", refund: "0" }), 0);
+  assert.equal(cpcNet({ activityCd: "61", demand: "50000", refund: "" }), -50000);
+  assert.equal(cpcNet({ activityCd: "62", demand: "", refund: "50000" }), 50000);
+  assert.equal(cpcNet({ activityCd: "63", demand: "0", refund: "0" }), 0);
 });
 
 test("an order stating neither figure is null, not zero", () => {
-  assert.equal(cpcNet({ demand: "", refund: "null" }), null);
+  assert.equal(cpcNet({ activityCd: "62", demand: "", refund: "null" }), null);
   assert.equal(cpcNet({}), null);
+});
+
+/* ---------------- the status decides, not the arithmetic ---------------- */
+
+test("a refund set off u/s 245 is a refund, not a demand", () => {
+  /* THE BUG THIS RULE EXISTS FOR, from a real A.Y. 2022-23 order.
+   *
+   * CPC agreed with the return line for line, determined a ₹180 refund, and
+   * adjusted it in full against an A.Y. 2017 demand. The portal's row carries
+   * BOTH the ₹180 and the ₹1,83,744 outstanding across 2017-2019. Netting them
+   * reported "₹1,83,744 worse vs the return as filed", in red, on an order whose
+   * own words are "There is no payment due." */
+  const order = { activityCd: "64", section: "143(1)", demand: "183744", refund: "180" };
+  assert.equal(cpcNet(order), 180, "the ₹1,83,744 belongs to other years, not to this order");
+
+  const v = only([order], position(180));
+  assert.equal(v.flag, "neutral", "the return claimed ₹180 and CPC allowed ₹180 — they agree");
+  assert.equal(v.amount, 0);
+  assert.equal(v.adjusted, true, "and the set-off is still labelled");
+});
+
+test("every CPC status maps to the figure that belongs to this order", () => {
+  const both = { demand: "90000", refund: "500" };
+  assert.equal(cpcNet({ ...both, activityCd: "61" }), -90000, "61 demand determined");
+  assert.equal(cpcNet({ ...both, activityCd: "62" }), 500, "62 refund determined");
+  assert.equal(cpcNet({ ...both, activityCd: "63" }), 0, "63 no demand no refund");
+  assert.equal(cpcNet({ ...both, activityCd: "64" }), 500, "64 refund fully adjusted");
+  assert.equal(cpcNet({ ...both, activityCd: "65" }), 500, "65 refund partly adjusted");
+  assert.equal(cpcNet({ ...both, activityCd: "71" }), -90000, "71 rectification demand due");
+  assert.equal(cpcNet({ ...both, activityCd: "72" }), 500, "72 rectification refund due");
+  assert.equal(cpcNet({ ...both, activityCd: "73" }), 0, "73 no refund due");
+  assert.equal(cpcNet({ ...both, activityCd: "74" }), 500, "74 refund fully adjusted");
+  assert.equal(cpcNet({ ...both, activityCd: "75" }), 500, "75 refund partly adjusted");
+  assert.equal(cpcNet({ ...both, activityCd: "613" }), 500, "613 later variant of 75");
+});
+
+test("'no demand no refund' is a stated nil, not a silence", () => {
+  // Engine 1 called these "not compared" — but CPC has said, in terms, that
+  // neither side arises. Against a return that also closed nil, they agree.
+  const v = only([order({ activityCd: "63", demand: "", refund: "", statusDesc: "ITR processed no demand no refund" })], position(0));
+  assert.equal(v.flag, "neutral");
+  assert.equal(v.cpcNet, 0);
+});
+
+test("an unknown status with both figures refuses to guess", () => {
+  const v = only([order({ activityCd: "999", demand: "183744", refund: "180" })], position(180));
+  assert.equal(v.flag, "unknown");
+  assert.match(v.note, /cannot be told apart/);
+});
+
+test("an unknown status with one figure is unambiguous and used", () => {
+  assert.equal(cpcNet({ activityCd: "999", demand: "70000", refund: "" }), -70000);
+  assert.equal(cpcNet({ activityCd: "999", demand: "", refund: "70000" }), 70000);
+  assert.equal(cpcNet({ activityCd: "999", demand: "0", refund: "0" }), 0);
 });
 
 /* ---------------- 143(1) against the return ---------------- */
@@ -188,7 +244,7 @@ test("input order and every original field survive", () => {
   assert.equal(out[0].storagePath, "p/a.pdf");
   assert.equal(out[0].locked, true);
   assert.equal(out[0].commRefNo, "A");
-  assert.equal(out[0].variance.engine, 1);
+  assert.equal(out[0].variance.engine, 2);
 });
 
 test("no orders is an empty array, not a throw", () => {

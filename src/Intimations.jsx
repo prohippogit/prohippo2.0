@@ -1,126 +1,189 @@
 /*
  * ProHippo — Intimations & rectification orders (CPC).
  *
- * Every s.143(1) intimation and s.154 order the portal sync has ever brought
- * in, as a place to WORK rather than a place to look.
+ * Every s.143(1) intimation and s.154 order the portal sync has brought in, as a
+ * place to WORK rather than a place to look.
  *
- * WHY THIS IS NOT THE RETURNS TAB AND NOT THE DASHBOARD CARD. The three answer
- * different questions and the difference is the whole design:
+ * THREE SCREENS, THREE QUESTIONS — the reason this is not the Returns tab and
+ * not the dashboard card:
  *
  *   dashboard card    "what landed recently that I have not seen?" — an alert,
- *                     six months, dismissible, deliberately small
+ *                     six months, deliberately small
  *   Returns tab       "what does THIS client's file look like?" — one assessee,
- *                     by assessment year, alongside the ITR and the ITR-V
+ *                     by year, beside the ITR and the ITR-V
  *   this page         "what does my practice owe its clients?" — every client,
- *                     every year, each intimation carrying a decision
+ *                     every year, each order carrying a decision
  *
- * GROUPED BY CLIENT by default, because that is how the work is actually done:
- * you ring one assessee about all their years, not one year about all your
- * clients. The by-cause grouping is the other half of it and earns its keep on
- * a different axis — fourteen clients hit by the same CPC adjustment is ONE
- * legal position to research and ONE template to write, not fourteen jobs.
+ * WHY IT DRILLS DOWN INSTEAD OF EXPANDING.
+ *
+ * The first build put every client's every order on one scrolling page with
+ * expandable rows. On a real practice that is hundreds of rows deep and reads as
+ * a wall — you cannot find one client, and nothing tells you where to start. So
+ * it now works the way the Matters tab does, which practitioners already know:
+ *
+ *   a searchable list of CLIENTS, one row each, saying how much is at stake
+ *     → one client's ORDERS, one row per assessment year
+ *       → one order's full card, in a pop-up
+ *
+ * The visual language is deliberately the Matters tab's — the lavender stage,
+ * white rows with a coloured left bar, the "View →" chip that fills on hover —
+ * because this is the same kind of work and should not feel like a new app.
  *
  * WHAT IS DELIBERATELY NOT HERE
  *
  *   No client messaging. A sync can pull a dozen new PANs at once, and a screen
- *   that could fire messages off the back of that is a screen that will one day
- *   message a dozen clients nobody meant to contact. Communications stay where
- *   a human starts them one at a time.
+ *   that could fire messages off the back of that will one day message a dozen
+ *   people nobody meant to contact.
  *
- *   No s.220(2) interest projection. It would be our arithmetic sitting next to
- *   figures the department actually stated, and on this screen those two must
- *   never be confusable.
+ *   No s.220(2) interest projection. It would be our arithmetic sitting beside
+ *   figures the department stated, and here the two must not be confusable.
  */
 import React from "react";
-import { Icon, EmptyState, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
+import { Icon, EmptyState, Modal, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
 import { useData } from "./store";
 import { openFromStorage } from "./downloadFile";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "./firebase";
 import {
   allIntimations, groupByAssessee, groupByCause, practiceSummary, matchesFilter,
-  clocksFor, refundPosition, describeVariance, SECTION_LABEL,
-  DECISIONS, CAUSES, CAUSE_LABEL, FILTERS, REFUND_CHASE_DAYS,
+  clocksFor, refundPosition, describeVariance, staleRefunds,
+  DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS,
   changedLines, readingTrust, pendingCauseSuggestion,
 } from "./intimations";
 
+/* Section accents, in the Matters tab's idiom: an intimation is the violet the
+   app uses for proceedings; a rectification gets the teal so the two read apart
+   at a glance in a year list that mixes them. */
+const SECTION_ACCENT = {
+  "143(1)": { bar: "#6C5CE7", tint: "#F0EBFB", fg: "#46389C", label: "Intimation" },
+  "154": { bar: "#1AA6A0", tint: "#E3F6F5", fg: "#0F6E6A", label: "Rectification" },
+};
+const accentFor = (section) => SECTION_ACCENT[section] || { bar: "var(--p-primary-3)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)", label: "Order" };
+
 const FLAG_TONE = {
-  red: { bg: "#FDECEC", fg: "#B23B3B" },
-  green: { bg: "#E7F7F0", fg: "#13795C" },
-  neutral: { bg: "var(--p-line-2)", fg: "var(--p-text-3)" },
-  unknown: { bg: "#FFF3D6", fg: "#B07512" },
+  red: { bg: "#FDECEC", fg: "#B23B3B", word: "More payable" },
+  green: { bg: "#E7F7F0", fg: "#13795C", word: "In your favour" },
+  neutral: { bg: "var(--p-line-2)", fg: "var(--p-text-3)", word: "Agrees" },
+  unknown: { bg: "#FFF3D6", fg: "#B07512", word: "Not compared" },
+};
+const toneOf = (v) => FLAG_TONE[v?.flag] || FLAG_TONE.unknown;
+
+/* Only a live clock gets colour. An appeal window that shut three years ago is
+   archaeology, not a warning, and painting it red taught the eye to skip red. */
+const APPEAL_STALE_DAYS = 90;
+const appealTone = (appeal) => {
+  if (!appeal.deadline || appeal.daysLeft == null) return null;
+  if (appeal.daysLeft < -APPEAL_STALE_DAYS) return { colour: "var(--p-text-3)", loud: false };
+  if (appeal.daysLeft < 0) return { colour: "#B23B3B", loud: true };
+  if (appeal.daysLeft <= 15) return { colour: "#B23B3B", loud: true };
+  if (appeal.daysLeft <= 45) return { colour: "#B07512", loud: true };
+  return { colour: "var(--p-text-3)", loud: false };
 };
 
-const URGENCY_TONE = { lapsed: "#B23B3B", urgent: "#B23B3B", soon: "#B07512", open: "var(--p-text-3)", none: "var(--p-text-3)" };
+const signed = (v) =>
+  v && v.amount != null && v.flag !== "neutral" && v.flag !== "unknown"
+    ? `${v.amount < 0 ? "−" : "+"}${fmtINR(Math.abs(v.amount))}`
+    : null;
 
-export default function Intimations({ onOpenAssessee }) {
+export default function Intimations() {
   const { data, updateReturn, notify } = useData();
   const [filter, setFilter] = React.useState("All");
-  const [grouping, setGrouping] = React.useState("client");
-  const [open, setOpen] = React.useState(() => new Set());
+  const [view, setView] = React.useState("clients"); // clients | cause
+  const [search, setSearch] = React.useState("");
+  const [openClient, setOpenClient] = React.useState(null); // group key
+  const [openRow, setOpenRow] = React.useState(null); // row key → pop-up
   const [busy, setBusy] = React.useState(false);
+  const [readingKey, setReadingKey] = React.useState("");
 
   const rows = React.useMemo(() => allIntimations({ returns: data.returns }), [data.returns]);
-  const visible = React.useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
+  const filtered = React.useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
   const summary = React.useMemo(() => practiceSummary(rows), [rows]);
+  const clients = React.useMemo(() => groupByAssessee(filtered), [filtered]);
 
-  const toggle = (key) => setOpen((s) => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
+  /* Name or PAN, case- and space-insensitive. A practitioner searching for a
+     client types either without thinking about which. */
+  const needle = search.trim().toLowerCase().replace(/\s+/g, "");
+  const shown = needle
+    ? clients.filter((c) =>
+      `${c.assessee || ""}${c.pan || ""}`.toLowerCase().replace(/\s+/g, "").includes(needle))
+    : clients;
 
-  /* One write per change, merged into the map on the return document.
-   *
-   * Recording a decision also ticks the order off the dashboard card: an
-   * intimation somebody has decided about is not "awaiting review" any more,
-   * and leaving it on the card would teach people to ignore the card. */
-  const setTracking = async (row, patch) => {
+  const client = openClient ? clients.find((c) => c.key === openClient) : null;
+  const row = openRow ? rows.find((r) => r.key === openRow) : null;
+
+  const setTracking = async (target, patch) => {
     if (busy) return;
     setBusy(true);
     try {
-      const ret = data.returns.find((r) => r.id === row.returnId) || {};
+      const ret = data.returns.find((r) => r.id === target.returnId) || {};
       const tracking = ret.intimationTracking || {};
       const write = {
         intimationTracking: {
           ...tracking,
-          [row.commRefNo]: { ...(tracking[row.commRefNo] || {}), ...patch, updatedAt: new Date().toISOString() },
+          [target.commRefNo]: { ...(tracking[target.commRefNo] || {}), ...patch, updatedAt: new Date().toISOString() },
         },
       };
+      // A decision means somebody has looked; it should stop nagging from the
+      // dashboard card too.
       if (patch.decision && patch.decision !== "pending") {
-        write.varianceReviewed = { ...(ret.varianceReviewed || {}), [row.commRefNo]: true };
+        write.varianceReviewed = { ...(ret.varianceReviewed || {}), [target.commRefNo]: true };
       }
-      await updateReturn(row.returnId, write);
+      await updateReturn(target.returnId, write);
     } finally {
       setBusy(false);
     }
   };
 
-  /* Read one order's comparison table. ON DEMAND ONLY — one button, one order,
-     one paid call. There is deliberately no "read them all": a practice with
-     200 clients would be a thousand reads nobody asked for, and the value of
-     this is in the handful that are actually in dispute. */
-  const [reading, setReading] = React.useState("");
-  const readOrder = async (row) => {
-    if (reading) return;
-    setReading(row.key);
+  /* One paid read, on one order, only when asked. */
+  const readOrder = async (target) => {
+    if (readingKey) return;
+    setReadingKey(target.key);
     try {
       await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
-        returnId: row.returnId, commRefNo: row.commRefNo,
+        returnId: target.returnId, commRefNo: target.commRefNo,
       });
       notify("Order read — check the breakdown against the PDF");
     } catch (e) {
       notify(e?.message?.slice(0, 140) || "Couldn't read that order", "alert");
     } finally {
-      setReading("");
+      setReadingKey("");
     }
   };
 
-  const viewPdf = async (row) => {
+  const viewPdf = async (target) => {
     try {
-      await openFromStorage(row.storagePath);
+      await openFromStorage(target.storagePath);
     } catch {
       notify("That order PDF could not be opened", "alert");
+    }
+  };
+
+  /* Clear a practice's refund history in one go.
+     On first use every refund CPC ever determined looks outstanding, because the
+     portal never says whether the bank paid it. Marking the old ones settled is
+     a single decision, not one per row. */
+  const settleStale = async () => {
+    const stale = staleRefunds(rows);
+    if (!stale.length || busy) return;
+    setBusy(true);
+    try {
+      const byReturn = new Map();
+      for (const r of stale) {
+        if (!byReturn.has(r.returnId)) byReturn.set(r.returnId, []);
+        byReturn.get(r.returnId).push(r);
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      for (const [returnId, items] of byReturn) {
+        const ret = data.returns.find((x) => x.id === returnId) || {};
+        const tracking = { ...(ret.intimationTracking || {}) };
+        for (const item of items) {
+          tracking[item.commRefNo] = { ...(tracking[item.commRefNo] || {}), refundReceivedOn: today, updatedAt: new Date().toISOString() };
+        }
+        await updateReturn(returnId, { intimationTracking: tracking });
+      }
+      notify(`${stale.length} older refund${stale.length > 1 ? "s" : ""} marked received`);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -139,114 +202,191 @@ export default function Intimations({ onOpenAssessee }) {
     );
   }
 
-  const groups = grouping === "client" ? groupByAssessee(visible) : groupByCause(visible);
-
   return (
     <div className="animate-in">
-      <Topbar summary={summary}/>
+      <Topbar summary={summary} client={client} onBack={() => setOpenClient(null)}/>
 
-      <div className="grid-stats" style={{gap: 14, marginBottom: 18}}>
-        <Stat label="Needs a decision" value={summary.pending} sub={`${summary.assessees} assessee${summary.assessees !== 1 ? "s" : ""} in all`} color="#B07512"/>
-        <Stat label="More payable" value={fmtINR(summary.additionalDemand)} sub="than the returns claimed" color="#B23B3B"/>
-        <Stat label="In the assessee's favour" value={fmtINR(summary.extraRefund)} sub="over the returns claimed" color="#13795C"/>
-        <Stat
-          label="Refund awaited"
-          value={summary.refundAwaited + summary.refundOverdue}
-          sub={summary.refundOverdue ? `${summary.refundOverdue} over ${REFUND_CHASE_DAYS} days` : "determined, not yet received"}
-          color={summary.refundOverdue ? "#B23B3B" : "var(--p-text-2)"}
-        />
-      </div>
+      {!client && (
+        <>
+          <div className="grid-stats" style={{gap: 14, marginBottom: 16}}>
+            <Stat label="Needs a decision" value={summary.pending} sub={`across ${summary.assessees} assessee${summary.assessees !== 1 ? "s" : ""}`} colour="#B07512"/>
+            <Stat label="More payable" value={fmtINR(summary.additionalDemand)} sub="than the returns claimed" colour="#B23B3B"/>
+            <Stat label="In the assessee's favour" value={fmtINR(summary.extraRefund)} sub="over the returns claimed" colour="#13795C"/>
+            <Stat label="Refund awaited" value={summary.refundAwaited + summary.refundOverdue} sub={summary.refundOverdue ? `${summary.refundOverdue} over 30 days` : "determined, not yet received"} colour={summary.refundOverdue ? "#B23B3B" : "var(--p-text-2)"}/>
+          </div>
 
-      {(summary.appealLapsing > 0 || summary.disposalOverdue > 0) && (
-        <div className="card" style={{marginBottom: 18, borderLeft: "3px solid #B23B3B", padding: "14px 18px"}}>
-          <div className="center" style={{gap: 8, justifyContent: "flex-start", flexWrap: "wrap"}}>
-            <Icon name="alert" size={15}/>
-            <span style={{fontWeight: 700, fontSize: 13.5}}>
-              {summary.appealLapsing > 0 && `${summary.appealLapsing} appeal window${summary.appealLapsing > 1 ? "s" : ""} closing within 7 days`}
-              {summary.appealLapsing > 0 && summary.disposalOverdue > 0 && " · "}
-              {summary.disposalOverdue > 0 && `${summary.disposalOverdue} rectification${summary.disposalOverdue > 1 ? "s" : ""} past the s.154(8) six-month limit`}
-            </span>
-          </div>
-          {/* Said plainly, because this is the trap: the 154 window stays open
-              for four years and the appeal window does not, so it is the appeal
-              that gets lost while everyone assumes rectification will do. */}
-          <div className="muted" style={{fontSize: 12, marginTop: 6}}>
-            Rectification u/s 154 stays open for four years; the appeal to CIT(A) does not. Letting it lapse should be a decision, not an oversight.
-          </div>
-        </div>
+          {(summary.appealLapsing > 0 || summary.disposalOverdue > 0) && (
+            <div className="card" style={{marginBottom: 16, borderLeft: "3px solid #B23B3B", padding: "13px 18px"}}>
+              <div className="center" style={{gap: 8, justifyContent: "flex-start", flexWrap: "wrap"}}>
+                <Icon name="alert" size={15}/>
+                <span style={{fontWeight: 700, fontSize: 13.5}}>
+                  {summary.appealLapsing > 0 && `${summary.appealLapsing} appeal window${summary.appealLapsing > 1 ? "s" : ""} closing within 7 days`}
+                  {summary.appealLapsing > 0 && summary.disposalOverdue > 0 && " · "}
+                  {summary.disposalOverdue > 0 && `${summary.disposalOverdue} rectification${summary.disposalOverdue > 1 ? "s" : ""} past the s.154(8) six-month limit`}
+                </span>
+              </div>
+              <div className="muted" style={{fontSize: 12, marginTop: 5}}>
+                Rectification u/s 154 stays open for four years; the appeal to CIT(A) does not.
+              </div>
+            </div>
+          )}
+
+          {summary.refundStale > 0 && (
+            <div className="card" style={{marginBottom: 16, padding: "12px 18px"}}>
+              <div className="between" style={{gap: 12, flexWrap: "wrap", alignItems: "center"}}>
+                <div style={{fontSize: 12.5}}>
+                  <b>{summary.refundStale} refund{summary.refundStale > 1 ? "s" : ""}</b> determined more than {Math.round(REFUND_STALE_DAYS / 30)} months ago.
+                  <span className="muted"> The portal never says whether the bank paid out, so these are not chased — clear them once and only recent ones will be tracked.</span>
+                </div>
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={settleStale}>
+                  <Icon name="check" size={13}/>Mark as received
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      <div className="between" style={{marginBottom: 12, gap: 10, flexWrap: "wrap"}}>
+      {/* Search + filters. Search is only meaningful on the client list; inside
+          one client the list is already short. */}
+      <div className="between" style={{marginBottom: 14, gap: 12, flexWrap: "wrap"}}>
         <div className="row" style={{gap: 6, flexWrap: "wrap"}}>
           {FILTERS.map((f) => (
             <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f}</span>
           ))}
         </div>
-        <div className="row" style={{gap: 6}}>
-          <span className={`fchip ${grouping === "client" ? "active" : ""}`} onClick={() => setGrouping("client")}>By client</span>
-          <span className={`fchip ${grouping === "cause" ? "active" : ""}`} onClick={() => setGrouping("cause")}
-            title="Every client hit by the same CPC adjustment — one position to research, not one per client">
-            By cause
-          </span>
-        </div>
+        {!client && (
+          <div className="center" style={{gap: 8}}>
+            <div className="search" style={{minWidth: 230}}>
+              <Icon name="search" size={15}/>
+              <input placeholder="Search assessee or PAN…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+            </div>
+            <span className={`fchip ${view === "clients" ? "active" : ""}`} onClick={() => setView("clients")}>By client</span>
+            <span className={`fchip ${view === "cause" ? "active" : ""}`} onClick={() => setView("cause")}
+              title="Every client hit by the same CPC adjustment — one position to research, not one per client">
+              By cause
+            </span>
+          </div>
+        )}
       </div>
 
-      {visible.length === 0 && (
-        <div className="card"><EmptyState icon="check" title={`Nothing under “${filter}”`} sub="Try another filter, or All."/></div>
+      {client
+        ? <OrderList
+          client={client}
+          readingKey={readingKey}
+          onOpen={(r) => setOpenRow(r.key)}
+        />
+        : view === "clients"
+          ? <ClientList clients={shown} search={search} onOpen={(c) => setOpenClient(c.key)}/>
+          : <CauseList groups={groupByCause(filtered)} onOpenRow={(r) => setOpenRow(r.key)}/>}
+
+      {row && (
+        <OrderModal
+          row={row}
+          busy={busy}
+          readingNow={readingKey === row.key}
+          onClose={() => setOpenRow(null)}
+          onTrack={(patch) => setTracking(row, patch)}
+          onRead={() => readOrder(row)}
+          onViewPdf={() => viewPdf(row)}
+        />
       )}
+    </div>
+  );
+}
 
-      <div className="col" style={{gap: 12}}>
-        {groups.map((g) => {
-          const key = grouping === "client" ? g.key : `cause:${g.cause}`;
-          const isOpen = open.has(key) || groups.length === 1;
+function Topbar({ summary, client, onBack }) {
+  return (
+    <div className="topbar">
+      <div>
+        {client ? (
+          <>
+            <button className="btn btn-ghost btn-sm" style={{marginBottom: 6, paddingLeft: 0}} onClick={onBack}>
+              <Icon name="arrow-left" size={14}/>All assessees
+            </button>
+            <div className="page-title">{titleCase(client.assessee) || client.pan}</div>
+            <div className="page-sub">
+              {client.pan || "PAN not on file"} · {client.count} order{client.count !== 1 ? "s" : ""} from CPC
+              {client.pending ? <> · <b style={{color: "#B07512"}}>{client.pending} awaiting a decision</b></> : " · all decided"}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="page-title">Intimations &amp; rectifications</div>
+            <div className="page-sub">
+              {summary.total} order{summary.total !== 1 ? "s" : ""} from CPC across {summary.assessees} assessee{summary.assessees !== 1 ? "s" : ""}
+              {summary.pending ? <> · <b style={{color: "#B07512"}}>{summary.pending} awaiting a decision</b></> : " · all decided"}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, colour }) {
+  return (
+    <div className="card" style={{padding: "14px 16px"}}>
+      <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase"}}>{label}</div>
+      <div style={{fontSize: 21, fontWeight: 800, marginTop: 3, color: colour || "inherit", letterSpacing: "-0.02em"}}>{value}</div>
+      <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{sub}</div>
+    </div>
+  );
+}
+
+/* ---------------- level 1: the clients ---------------- */
+
+const CLIENT_GRID = "minmax(180px, 1fr) 126px 92px 150px 104px 104px";
+
+function ClientList({ clients, search, onOpen }) {
+  if (clients.length === 0) {
+    return (
+      <div className="card">
+        <EmptyState icon="search" title={search ? `No assessee matches “${search}”` : "Nothing under this filter"} sub={search ? "Try part of the name, or the PAN." : "Try another filter, or All."}/>
+      </div>
+    );
+  }
+  return (
+    <div className="matters-surface" style={{overflowX: "auto"}}>
+      <div className="col" style={{gap: 10, minWidth: 720}}>
+        <div style={{display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
+          <span>Assessee</span><span>PAN</span><span>Orders</span><span>Position</span><span>To decide</span><span/>
+        </div>
+        {clients.map((c) => {
+          // A client's own colour comes from what they need, not from a type:
+          // undecided work leads, then money at stake, then settled.
+          const bar = c.pending ? "#E0A93B" : c.atStake ? "#B23B3B" : "#8E7CFF";
           return (
-            <div key={key} className="card" style={{padding: 0, overflow: "hidden"}}>
-              <div
-                className="between"
-                style={{padding: "14px 18px", cursor: "pointer", gap: 12, alignItems: "center", flexWrap: "wrap"}}
-                role="button"
-                tabIndex={0}
-                onClick={() => toggle(key)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(key); } }}
-              >
-                <div style={{minWidth: 200}}>
-                  <div style={{fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em"}}>
-                    {grouping === "client" ? (titleCase(g.assessee) || g.pan || "—") : g.label}
-                  </div>
-                  <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>
-                    {grouping === "client"
-                      ? <>{g.pan || "PAN not on file"} · {g.count} order{g.count !== 1 ? "s" : ""} · A.Y. {g.years.join(", ") || "—"}</>
-                      : <>{g.assessees} assessee{g.assessees !== 1 ? "s" : ""} · {g.count} order{g.count !== 1 ? "s" : ""}</>}
-                  </div>
-                </div>
-                <div className="center" style={{gap: 8, flexWrap: "wrap"}}>
-                  {g.pending > 0 && <span className="pill" style={{background: "#FFF3D6", color: "#B07512"}}>{g.pending} to decide</span>}
-                  {g.atStake > 0 && <span className="pill" style={{background: "#FDECEC", color: "#B23B3B"}}>{fmtINR(g.atStake)} more payable</span>}
-                  {grouping === "client" && g.assesseeId && (
-                    <button className="btn btn-ghost btn-xs" title="Open this assessee" onClick={(e) => { e.stopPropagation(); onOpenAssessee(g.assesseeId); }}>
-                      <Icon name="arrow-right" size={12}/>Open
-                    </button>
-                  )}
-                  <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={14}/>
-                </div>
-              </div>
-
-              {isOpen && (
-                <div style={{borderTop: "1px solid var(--p-line-2)"}}>
-                  {g.rows.map((row) => (
-                    <IntimationRow
-                      key={row.key}
-                      row={row}
-                      showAssessee={grouping === "cause"}
-                      busy={busy}
-                      readingNow={reading === row.key}
-                      onTrack={(patch) => setTracking(row, patch)}
-                      onViewPdf={() => viewPdf(row)}
-                      onRead={() => readOrder(row)}
-                    />
-                  ))}
-                </div>
-              )}
+            <div
+              key={c.key}
+              className="card matter-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpen(c)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(c); } }}
+              style={{display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 14, alignItems: "center", padding: "14px 18px", cursor: "pointer", borderLeft: `4px solid ${bar}`}}
+            >
+              <span style={{minWidth: 0}}>
+                <span className="strong" style={{fontSize: 13.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                  {titleCase(c.assessee) || "—"}
+                </span>
+                <span className="muted" style={{fontSize: 11}}>A.Y. {c.years.slice(0, 4).join(", ")}{c.years.length > 4 ? ` +${c.years.length - 4}` : ""}</span>
+              </span>
+              <span className="muted" style={{fontSize: 12, fontFamily: "ui-monospace, monospace"}}>{c.pan || "—"}</span>
+              <span style={{fontSize: 13, fontWeight: 700}}>{c.count}</span>
+              <span>
+                {c.atStake > 0
+                  ? <span className="pill" style={{background: "#FDECEC", color: "#B23B3B", fontWeight: 700}}>{fmtINR(c.atStake)} more payable</span>
+                  : <span className="muted" style={{fontSize: 12}}>Nothing adverse</span>}
+              </span>
+              <span>
+                {c.pending
+                  ? <span className="pill" style={{background: "#FFF3D6", color: "#B07512", fontWeight: 700}}>{c.pending}</span>
+                  : <span className="pill pill-muted">All done</span>}
+              </span>
+              <span className="matter-view center" style={{gap: 5, justifySelf: "end", padding: "6px 11px", borderRadius: 999, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap"}}>
+                View <Icon name="arrow-right" size={13}/>
+              </span>
             </div>
           );
         })}
@@ -255,250 +395,253 @@ export default function Intimations({ onOpenAssessee }) {
   );
 }
 
-function Topbar({ summary }) {
+/* ---------------- level 2: one client's orders ---------------- */
+
+const ORDER_GRID = "116px 78px 96px minmax(180px, 1fr) 128px 104px";
+
+function OrderList({ client, readingKey, onOpen }) {
+  const ordered = [...client.rows].sort((a, b) =>
+    (b.ay || "").localeCompare(a.ay || "") || (b.orderDate || "").localeCompare(a.orderDate || ""));
+
   return (
-    <div className="topbar">
-      <div>
-        <div className="page-title">Intimations &amp; rectifications</div>
-        <div className="page-sub">
-          {summary.total
-            ? <>{summary.total} order{summary.total !== 1 ? "s" : ""} from CPC across {summary.assessees} assessee{summary.assessees !== 1 ? "s" : ""}{summary.pending ? <> · <b style={{color: "#B07512"}}>{summary.pending} awaiting a decision</b></> : " · all decided"}</>
-            : "Everything CPC has issued u/s 143(1) and u/s 154, compared against the return as filed"}
+    <div className="matters-surface" style={{overflowX: "auto"}}>
+      <div className="col" style={{gap: 10, minWidth: 760}}>
+        <div style={{display: "grid", gridTemplateColumns: ORDER_GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
+          <span>Order</span><span>A.Y.</span><span>Dated</span><span>What it did</span><span>Decision</span><span/>
         </div>
+        {ordered.map((r) => {
+          const accent = accentFor(r.section);
+          const tone = toneOf(r.variance);
+          const amt = signed(r.variance);
+          const clocks = clocksFor(r);
+          const at = appealTone(clocks.appeal);
+          const refund = refundPosition(r);
+          const live = r.variance?.flag === "red" && r.decision === "pending" && at?.loud;
+          return (
+            <div
+              key={r.key}
+              className="card matter-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpen(r)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(r); } }}
+              style={{display: "grid", gridTemplateColumns: ORDER_GRID, gap: 14, alignItems: "center", padding: "14px 18px", cursor: "pointer", borderLeft: `4px solid ${accent.bar}`}}
+            >
+              <span>
+                <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>u/s {r.section}</span>
+              </span>
+              <span style={{fontSize: 13, fontWeight: 700}}>{r.ay || "—"}</span>
+              <span className="muted" style={{fontSize: 12}}>{r.orderDate ? fmtDate(r.orderDate) : "—"}</span>
+              <span style={{minWidth: 0}}>
+                <span style={{fontSize: 12.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                  {describeVariance(r.variance)}
+                </span>
+                <span className="center" style={{gap: 6, justifyContent: "flex-start", flexWrap: "wrap", marginTop: 2}}>
+                  {r.variance?.adjusted && <span className="pill pill-muted" style={{fontSize: 10}}>adjusted u/s 245</span>}
+                  {live && <span style={{fontSize: 10.5, fontWeight: 700, color: at.colour}}>appeal {clocks.appeal.daysLeft < 0 ? "just closed" : `${clocks.appeal.daysLeft}d left`}</span>}
+                  {refund.state === "overdue" && <span style={{fontSize: 10.5, fontWeight: 700, color: "#B23B3B"}}>refund not received</span>}
+                  {r.reading && readingTrust(r.reading) === "ok" && r.reading.headline && (
+                    <span className="muted" style={{fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 240}}>{r.reading.headline}</span>
+                  )}
+                  {readingKey === r.key && <span className="muted" style={{fontSize: 10.5}}>reading…</span>}
+                </span>
+              </span>
+              <span>
+                <span style={{display: "inline-block", background: tone.bg, color: tone.fg, borderRadius: 8, padding: "3px 8px", fontWeight: 800, fontSize: 12.5}}>
+                  {amt || tone.word}
+                </span>
+                <span className="muted" style={{fontSize: 10.5, display: "block", marginTop: 3}}>{DECISION_LABEL[r.decision]}</span>
+              </span>
+              <span className="matter-view center" style={{gap: 5, justifySelf: "end", padding: "6px 11px", borderRadius: 999, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap"}}>
+                View <Icon name="arrow-right" size={13}/>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function Stat({ label, value, sub, color }) {
+/* ---------------- the by-cause view ---------------- */
+
+function CauseList({ groups, onOpenRow }) {
+  if (!groups.length) return <div className="card"><EmptyState icon="chart" title="Nothing under this filter"/></div>;
   return (
-    <div className="card" style={{padding: "14px 16px"}}>
-      <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase"}}>{label}</div>
-      <div style={{fontSize: 21, fontWeight: 800, marginTop: 3, color: color || "inherit", letterSpacing: "-0.02em"}}>{value}</div>
-      <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{sub}</div>
+    <div className="col" style={{gap: 12}}>
+      {groups.map((g) => (
+        <div key={g.cause || "untagged"} className="card" style={{padding: 0, overflow: "hidden"}}>
+          <div className="between" style={{padding: "13px 18px", background: g.cause ? "var(--p-card-tint)" : "transparent", gap: 12, flexWrap: "wrap"}}>
+            <div>
+              <div style={{fontSize: 14.5, fontWeight: 800}}>{g.label}</div>
+              <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>
+                {g.assessees} assessee{g.assessees !== 1 ? "s" : ""} · {g.count} order{g.count !== 1 ? "s" : ""}
+                {g.atStake > 0 ? ` · ${fmtINR(g.atStake)} more payable` : ""}
+              </div>
+            </div>
+            {g.cause && g.assessees > 1 && (
+              <span className="pill" style={{background: "var(--p-lavender-2)", color: "var(--p-primary-2)", fontWeight: 700}}>
+                One position, {g.assessees} clients
+              </span>
+            )}
+          </div>
+          <div>
+            {g.rows.map((r) => {
+              const tone = toneOf(r.variance);
+              return (
+                <div
+                  key={r.key}
+                  className="between row-link"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onOpenRow(r)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenRow(r); } }}
+                  style={{padding: "10px 18px", borderTop: "1px solid var(--p-line-2)", cursor: "pointer", gap: 12, flexWrap: "wrap"}}
+                >
+                  <span style={{fontSize: 12.5}}>
+                    <b>{titleCase(r.assessee) || r.pan}</b>
+                    <span className="muted"> · A.Y. {r.ay} · u/s {r.section}</span>
+                  </span>
+                  <span style={{background: tone.bg, color: tone.fg, borderRadius: 7, padding: "2px 7px", fontWeight: 800, fontSize: 12}}>
+                    {signed(r.variance) || tone.word}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-/* One order: what it did, what is still open, and what we have decided.
- *
- * The variance and its baseline sit on the collapsed line because they are the
- * whole point; the clocks and the tracking fields open on demand, because a
- * list where every row is six lines tall is a list nobody scrolls. */
-function IntimationRow({ row, showAssessee, busy, readingNow, onTrack, onViewPdf, onRead }) {
-  const [open, setOpen] = React.useState(false);
-  const v = row.variance;
-  const tone = FLAG_TONE[v?.flag] || FLAG_TONE.unknown;
+/* ---------------- one order, in full ---------------- */
+
+function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf }) {
+  const accent = accentFor(row.section);
+  const tone = toneOf(row.variance);
   const clocks = clocksFor(row);
   const refund = refundPosition(row);
-  const signed = v && v.amount != null && v.flag !== "neutral" && v.flag !== "unknown"
-    ? `${v.amount < 0 ? "−" : "+"}${fmtINR(Math.abs(v.amount))}`
-    : null;
-
-  // The appeal clock is only worth shouting about while the appeal is still a
-  // live option: a red variance nobody has decided on yet.
-  const appealLive = v?.flag === "red" && row.decision === "pending" && clocks.appeal.deadline;
+  const amt = signed(row.variance);
 
   return (
-    <div style={{padding: "12px 18px", borderTop: "1px solid var(--p-line-2)"}}>
-      <div className="center" style={{gap: 12, flexWrap: "wrap"}}>
-        <div style={{flex: 1, minWidth: 210}}>
-          <div className="center" style={{gap: 7, justifyContent: "flex-start", flexWrap: "wrap"}}>
-            {showAssessee && <span style={{fontWeight: 800, fontSize: 13.5, color: "var(--p-primary-2)"}}>{titleCase(row.assessee) || row.pan}</span>}
-            <span className="pill pill-muted" title={SECTION_LABEL[row.section] || ""}>u/s {row.section}</span>
-            <span style={{fontWeight: 700, fontSize: 13}}>A.Y. {row.ay || "—"}</span>
-            <span className="muted" style={{fontSize: 11.5}}>
-              {row.orderDate ? fmtDate(row.orderDate) : "date not stated"}
-            </span>
-            {v?.adjusted && (
-              <span className="pill pill-muted" title="CPC set this refund off against an earlier demand u/s 245">adjusted u/s 245</span>
+    <Modal
+      title={`${accent.label} u/s ${row.section} — A.Y. ${row.ay || "—"}`}
+      titleStyle={{fontSize: 21}}
+      sub={[titleCase(row.assessee) || row.pan, row.orderDate ? fmtDateLong(row.orderDate) : "date not stated", row.statusDesc].filter(Boolean).join("  ·  ")}
+      onClose={onClose}
+      width={820}
+      footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
+    >
+      <div className="col" style={{gap: 16}}>
+        {/* What it did, and what we are doing about it — the two things a
+            practitioner opens this card for. */}
+        <div className="between" style={{alignItems: "center", flexWrap: "wrap", gap: 12, padding: "13px 15px", background: accent.tint, borderRadius: 12, borderLeft: `4px solid ${accent.bar}`}}>
+          <div>
+            <div style={{fontSize: 13, fontWeight: 700}}>{describeVariance(row.variance)}</div>
+            {row.variance?.adjusted && (
+              <div className="muted" style={{fontSize: 11.5, marginTop: 3}}>
+                The refund was set off against an earlier year's demand u/s 245 — CPC allowed it, but none of it reaches the client.
+              </div>
             )}
           </div>
-          <div style={{fontSize: 12.5, marginTop: 4, color: v?.flag === "unknown" ? "var(--p-text-3)" : "var(--p-text-2)"}}>
-            {describeVariance(v)}{row.statusDesc ? ` · ${row.statusDesc}` : ""}
-          </div>
-          {/* What the order itself says moved. Only shown once the read has been
-              checked against the portal's own figure — an unreconciled headline
-              is exactly the kind of confident sentence nobody should skim. */}
-          {row.reading?.headline && readingTrust(row.reading) === "ok" && (
-            <div className="center" style={{gap: 6, marginTop: 4, justifyContent: "flex-start"}}>
-              <Icon name="sparkle" size={11}/>
-              <span style={{fontSize: 12.5, fontWeight: 600, color: "var(--p-primary-2)"}}>{row.reading.headline}</span>
-            </div>
-          )}
-          {(appealLive || refund.state === "overdue" || clocks.disposal?.overdue) && (
-            <div className="center" style={{gap: 10, marginTop: 5, justifyContent: "flex-start", flexWrap: "wrap"}}>
-              {appealLive && (
-                <span style={{fontSize: 11.5, fontWeight: 700, color: URGENCY_TONE[clocks.appeal.urgency]}}>
-                  {clocks.appeal.daysLeft < 0
-                    ? `Appeal window closed ${Math.abs(clocks.appeal.daysLeft)} days ago`
-                    : `Appeal to CIT(A) — ${clocks.appeal.daysLeft} day${clocks.appeal.daysLeft !== 1 ? "s" : ""} left`}
-                </span>
-              )}
-              {refund.state === "overdue" && (
-                <span style={{fontSize: 11.5, fontWeight: 700, color: "#B23B3B"}}>
-                  Refund {fmtINR(refund.amount)} not received — {refund.days} days
-                </span>
-              )}
-              {clocks.disposal?.overdue && (
-                <span style={{fontSize: 11.5, fontWeight: 700, color: "#B23B3B"}}>
-                  CPC past the s.154(8) limit ({fmtDate(clocks.disposal.deadline)})
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div style={{textAlign: "right", minWidth: 104}}>
-          <span style={{display: "inline-block", background: tone.bg, color: tone.fg, borderRadius: 8, padding: "4px 9px", fontWeight: 800, fontSize: 13}}>
-            {signed || (v?.flag === "neutral" ? "Agrees" : v?.flag === "unknown" || !v ? "Not compared" : "—")}
+          <span style={{background: tone.bg, color: tone.fg, borderRadius: 9, padding: "6px 12px", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap"}}>
+            {amt || tone.word}
           </span>
         </div>
 
-        <select
-          value={row.decision}
-          disabled={busy}
-          title="What are we doing about this one?"
-          onChange={(e) => onTrack({ decision: e.target.value })}
-          style={{padding: "6px 8px", borderRadius: 9, border: "1px solid var(--p-line)", fontSize: 12.5, minWidth: 168}}
-        >
-          {DECISIONS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-        </select>
+        <div className="row" style={{gap: 10, flexWrap: "wrap"}}>
+          <select
+            value={row.decision}
+            disabled={busy}
+            onChange={(e) => onTrack({ decision: e.target.value })}
+            style={{flex: "1 1 220px", padding: "8px 10px", borderRadius: 10, border: "1px solid var(--p-line)", fontSize: 13, fontWeight: 600}}
+          >
+            {DECISIONS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+          </select>
+          {row.storagePath && !row.locked ? (
+            <>
+              <button className="btn btn-secondary btn-sm" onClick={onViewPdf}><Icon name="doc" size={13}/>Open the PDF</button>
+              <button className="btn btn-primary btn-sm" disabled={readingNow} onClick={onRead}>
+                <Icon name="sparkle" size={13}/>{readingNow ? "Reading…" : row.reading ? "Re-read" : "Read the order"}
+              </button>
+            </>
+          ) : (
+            <span className="muted" style={{fontSize: 12, alignSelf: "center"}}>{row.lockReason === "request-only" ? "CPC only sends this year's order by e-mail" : "No readable PDF on file"}</span>
+          )}
+        </div>
 
-        {row.storagePath && !row.locked ? (
-          <>
-            <button className="btn btn-ghost btn-xs" title="Open the order PDF" onClick={onViewPdf}><Icon name="doc" size={12}/>PDF</button>
-            {/* One order, one paid read, only when asked. A read already on file
-                is re-runnable — CPC formats change and a bad read should not be
-                permanent — but it never happens on its own. */}
-            <button
-              className="btn btn-ghost btn-xs"
-              disabled={readingNow}
-              title={row.reading
-                ? "Read this order again — replaces the breakdown below"
-                : "Read the order's comparison table and show which line moved"}
-              onClick={onRead}
-            >
-              <Icon name="sparkle" size={12}/>{readingNow ? "Reading…" : row.reading ? "Re-read" : "Read order"}
-            </button>
-          </>
-        ) : (
-          <span className="muted" style={{fontSize: 11}} title={row.lockReason || "No readable PDF on file"}>No PDF</span>
-        )}
-
-        <button className="icon-btn" style={{width: 26, height: 26}} title={open ? "Hide detail" : "Deadlines, cause and tracking"} onClick={() => setOpen(!open)}>
-          <Icon name={open ? "chevron-up" : "chevron-down"} size={13}/>
-        </button>
-      </div>
-
-      {open && (
-        <div className="row" style={{gap: 20, marginTop: 12, paddingLeft: 2, flexWrap: "wrap", alignItems: "flex-start"}}>
-          <div style={{flex: "1 1 280px", minWidth: 250}}>
+        <div className="row" style={{gap: 18, alignItems: "flex-start", flexWrap: "wrap"}}>
+          <div style={{flex: "1 1 300px", minWidth: 270}}>
             <Eyebrow>Remedies &amp; limitation</Eyebrow>
-            <Clock
-              label={`Appeal to CIT(A) — ${clocks.appeal.form || "Form 35"}`}
-              deadline={clocks.appeal.deadline}
-              note={clocks.appeal.label}
-              daysLeft={clocks.appeal.daysLeft}
-              urgency={clocks.appeal.urgency}
-            />
-            <Clock
-              label="Rectification u/s 154"
-              deadline={clocks.rectification.deadline}
-              note={clocks.rectification.label}
-              daysLeft={clocks.rectification.daysLeft}
-              urgency={clocks.rectification.urgency}
-            />
-            {clocks.disposal && (
-              <Clock
-                label="CPC to dispose of our application"
-                deadline={clocks.disposal.deadline}
-                note={clocks.disposal.label}
-                daysLeft={clocks.disposal.daysLeft}
-                urgency={clocks.disposal.overdue ? "lapsed" : "open"}
-              />
-            )}
+            <Clock label={`Appeal to CIT(A) — ${clocks.appeal.form || "Form 35"}`} clock={clocks.appeal}/>
+            <Clock label="Rectification u/s 154" clock={clocks.rectification}/>
+            {clocks.disposal && <Clock label="CPC to dispose of our application" clock={{...clocks.disposal, urgency: clocks.disposal.overdue ? "lapsed" : "open"}}/>}
             <div className="muted" style={{fontSize: 10.5, marginTop: 8, lineHeight: 1.5}}>
-              Dates computed from the order date on the portal. Verify against the order and the Act before relying on them.
+              Computed from the order date on the portal. Verify against the order and the Act before relying on them.
             </div>
           </div>
 
-          <div style={{flex: "1 1 300px", minWidth: 260}}>
+          <div style={{flex: "1 1 320px", minWidth: 280}}>
             <Eyebrow>Why CPC differed</Eyebrow>
             <ReadingPanel row={row} busy={busy} readingNow={readingNow} onRead={onRead} onTrack={onTrack}/>
-            <select
-              value={row.cause}
-              disabled={busy}
-              onChange={(e) => onTrack({ cause: e.target.value })}
-              style={{width: "100%", padding: "7px 9px", borderRadius: 9, border: "1px solid var(--p-line)", fontSize: 12.5}}
-            >
-              <option value="">Not yet tagged</option>
-              {CAUSES.map((c) => <option key={c.id} value={c.id}>{c.label}{c.statute ? ` — s.${c.statute}` : ""}</option>)}
-            </select>
-            <div className="muted" style={{fontSize: 11, marginTop: 6, lineHeight: 1.5}}>
-              Tagging pays off across the practice: switch to <b>By cause</b> and every client hit by the same adjustment is one list, to be answered once.
-            </div>
           </div>
+        </div>
 
-          <div style={{flex: "1 1 240px", minWidth: 220}}>
-            <Eyebrow>Tracking</Eyebrow>
+        <div>
+          <Eyebrow>Tracking</Eyebrow>
+          <div className="row" style={{gap: 12, flexWrap: "wrap"}}>
             {(row.decision === "rectify" || row.tracking?.rectFiledOn) && (
               <>
-                <FieldRow label="Rectification filed on">
-                  <input type="date" value={row.tracking?.rectFiledOn || ""} disabled={busy}
-                    onChange={(e) => onTrack({ rectFiledOn: e.target.value })}/>
-                </FieldRow>
-                <FieldRow label="Request no.">
-                  <input type="text" value={row.tracking?.rectRequestNo || ""} disabled={busy} placeholder="from the portal"
-                    onChange={(e) => onTrack({ rectRequestNo: e.target.value })}/>
-                </FieldRow>
+                <Field label="Rectification filed on" style={{flex: "1 1 170px"}}>
+                  <input type="date" value={row.tracking?.rectFiledOn || ""} disabled={busy} onChange={(e) => onTrack({ rectFiledOn: e.target.value })}/>
+                </Field>
+                <Field label="Request no." style={{flex: "1 1 170px"}}>
+                  <input type="text" value={row.tracking?.rectRequestNo || ""} disabled={busy} placeholder="from the portal" onChange={(e) => onTrack({ rectRequestNo: e.target.value })}/>
+                </Field>
               </>
             )}
             {refund.state !== "none" && refund.state !== "adjusted" && (
-              <FieldRow label="Refund received on">
-                <input type="date" value={row.tracking?.refundReceivedOn || ""} disabled={busy}
-                  onChange={(e) => onTrack({ refundReceivedOn: e.target.value })}/>
-              </FieldRow>
+              <Field label={refund.state === "stale" ? "Refund received on (not chased — older than a year)" : "Refund received on"} style={{flex: "1 1 200px"}}>
+                <input type="date" value={row.tracking?.refundReceivedOn || ""} disabled={busy} onChange={(e) => onTrack({ refundReceivedOn: e.target.value })}/>
+              </Field>
             )}
-            {refund.state === "adjusted" && (
-              <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5}}>
-                Refund of {fmtINR(refund.amount)} set off in full against an earlier demand u/s 245 — nothing is due to the client.
-              </div>
-            )}
-            <FieldRow label="Note">
-              <input type="text" value={row.tracking?.note || ""} disabled={busy} placeholder="for your own record"
-                onChange={(e) => onTrack({ note: e.target.value })}/>
-            </FieldRow>
-            <div className="muted" style={{fontSize: 10.5, marginTop: 6}}>
-              CPC ref. <span style={{fontFamily: "ui-monospace, monospace"}}>{row.commRefNo}</span>
-              {row.emailedOn ? ` · e-mailed ${fmtDateLong(row.emailedOn)}` : ""}
+            <Field label="Note" style={{flex: "2 1 260px"}}>
+              <input type="text" value={row.tracking?.note || ""} disabled={busy} placeholder="for your own record" onChange={(e) => onTrack({ note: e.target.value })}/>
+            </Field>
+          </div>
+          {refund.state === "adjusted" && (
+            <div className="muted" style={{fontSize: 11.5, marginTop: 4}}>
+              Refund of {fmtINR(refund.amount)} set off in full u/s 245 — nothing is due to the client, so it is not chased.
             </div>
+          )}
+          <div className="muted" style={{fontSize: 10.5, marginTop: 8}}>
+            CPC ref. <span style={{fontFamily: "ui-monospace, monospace"}}>{row.commRefNo}</span>
+            {row.emailedOn ? ` · e-mailed ${fmtDateLong(row.emailedOn)}` : ""}
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </Modal>
   );
 }
 
 const Eyebrow = ({ children }) => (
-  <div className="pm-eyebrow" style={{fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 8, color: "var(--p-text-3)"}}>
-    {children}
-  </div>
+  <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>{children}</div>
 );
 
-function FieldRow({ label, children }) {
+function Field({ label, children, style }) {
   return (
-    <label style={{display: "block", marginBottom: 8}}>
+    <label style={{display: "block", ...style}}>
       <div className="muted" style={{fontSize: 11, marginBottom: 3}}>{label}</div>
       {React.cloneElement(children, {
-        style: {width: "100%", padding: "6px 8px", borderRadius: 8, border: "1px solid var(--p-line)", fontSize: 12.5},
+        style: {width: "100%", padding: "7px 9px", borderRadius: 9, border: "1px solid var(--p-line)", fontSize: 12.5},
       })}
     </label>
   );
 }
 
-function Clock({ label, deadline, note, daysLeft, urgency }) {
-  if (!deadline) {
+function Clock({ label, clock }) {
+  if (!clock?.deadline) {
     return (
       <div style={{marginBottom: 10}}>
         <div style={{fontSize: 12.5, fontWeight: 700}}>{label}</div>
@@ -506,20 +649,22 @@ function Clock({ label, deadline, note, daysLeft, urgency }) {
       </div>
     );
   }
-  const colour = URGENCY_TONE[urgency] || "var(--p-text-3)";
+  const tone = clock.urgency === "lapsed" || clock.urgency === "urgent" ? "#B23B3B"
+    : clock.urgency === "soon" ? "#B07512" : "var(--p-text-3)";
+  // A window long closed is stated in grey: it is history, not a warning.
+  const stale = clock.daysLeft != null && clock.daysLeft < -APPEAL_STALE_DAYS;
+  const colour = stale ? "var(--p-text-3)" : tone;
   return (
     <div style={{marginBottom: 10}}>
       <div className="between" style={{gap: 8, alignItems: "baseline"}}>
         <span style={{fontSize: 12.5, fontWeight: 700}}>{label}</span>
-        <span style={{fontSize: 12.5, fontWeight: 800, color: colour, whiteSpace: "nowrap"}}>
-          {fmtDate(deadline)}
-        </span>
+        <span style={{fontSize: 12.5, fontWeight: 800, color: colour, whiteSpace: "nowrap"}}>{fmtDate(clock.deadline)}</span>
       </div>
       <div className="muted" style={{fontSize: 11}}>
-        {note}
-        {daysLeft != null && (
-          <span style={{color: colour, fontWeight: 700}}>
-            {" · "}{daysLeft < 0 ? `${Math.abs(daysLeft)} days past` : `${daysLeft} days left`}
+        {clock.label}
+        {clock.daysLeft != null && (
+          <span style={{color: colour, fontWeight: stale ? 400 : 700}}>
+            {" · "}{clock.daysLeft < 0 ? `closed ${Math.abs(clock.daysLeft)} days ago` : `${clock.daysLeft} days left`}
           </span>
         )}
       </div>
@@ -529,26 +674,25 @@ function Clock({ label, deadline, note, daysLeft, urgency }) {
 
 /* What the order's own comparison table says, once somebody has asked for it.
  *
- * THE TRUST BANNER IS NOT DECORATION. The figures here were read by a model out
- * of a PDF, and the one thing that makes them safe to look at is that the
- * order's own bottom line was checked against the figure the portal separately
- * recorded. Where those agree the table is shown plainly; where they do not it
- * is shown under a warning, because a practitioner will otherwise advise a
- * client off a number nobody verified. There is no middle setting on purpose —
- * "probably right" would be read as "right". */
+ * THE TRUST BANNER IS NOT DECORATION. These figures were read by a model out of
+ * a PDF, and what makes them safe to look at is that the order's own bottom line
+ * was checked against the figure the portal separately recorded. Where they
+ * agree the table is shown plainly; where they do not it is shown under a
+ * warning. There is no middle setting — "probably right" would be read as
+ * "right". */
 function ReadingPanel({ row, busy, readingNow, onRead, onTrack }) {
   const reading = row.reading;
 
   if (!reading) {
     return (
-      <div style={{marginBottom: 10}}>
-        <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5, marginBottom: 7}}>
-          The order prints the return's figures against CPC's, side by side. Reading it shows which line moved
-          {row.storagePath && !row.locked ? "" : " — but there is no readable PDF for this one"}.
+      <div>
+        <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5, marginBottom: 8}}>
+          The order prints the return's figures against CPC's, side by side. Reading it shows which line moved.
         </div>
         <button className="btn btn-secondary btn-xs" disabled={readingNow || !row.storagePath || row.locked} onClick={onRead}>
           <Icon name="sparkle" size={12}/>{readingNow ? "Reading…" : "Read the order"}
         </button>
+        <CausePicker row={row} busy={busy} onTrack={onTrack}/>
       </div>
     );
   }
@@ -558,7 +702,7 @@ function ReadingPanel({ row, busy, readingNow, onRead, onTrack }) {
   const suggestion = pendingCauseSuggestion(row);
 
   return (
-    <div style={{marginBottom: 10}}>
+    <div>
       {trust !== "ok" && (
         <div style={{
           background: trust === "broken" ? "#FDECEC" : "#FFF3D6",
@@ -574,56 +718,56 @@ function ReadingPanel({ row, busy, readingNow, onRead, onTrack }) {
       {moved.length > 0 ? (
         <div style={{overflowX: "auto"}}>
           <table className="tbl" style={{fontSize: 12}}>
-            <thead>
-              <tr>
-                <th>Head</th>
-                <th style={{textAlign: "right"}}>As returned</th>
-                <th style={{textAlign: "right"}}>As computed</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Head</th><th style={{textAlign: "right"}}>As returned</th><th style={{textAlign: "right"}}>As computed</th></tr></thead>
             <tbody>
-              {moved.map((l, i) => {
-                const diff = l.asComputed - l.asReturned;
-                return (
-                  <tr key={`${l.head}-${i}`}>
-                    <td>
-                      {l.head}
-                      {l.remark && <div className="muted" style={{fontSize: 10.5}}>{l.remark}</div>}
-                    </td>
-                    <td style={{textAlign: "right", whiteSpace: "nowrap"}}>{fmtINR(l.asReturned)}</td>
-                    <td style={{textAlign: "right", whiteSpace: "nowrap", color: diff < 0 ? "#B23B3B" : "#13795C", fontWeight: 700}}>
-                      {fmtINR(l.asComputed)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {moved.map((l, i) => (
+                <tr key={`${l.head}-${i}`}>
+                  <td>{l.head}{l.remark && <div className="muted" style={{fontSize: 10.5}}>{l.remark}</div>}</td>
+                  <td style={{textAlign: "right", whiteSpace: "nowrap"}}>{fmtINR(l.asReturned)}</td>
+                  <td style={{textAlign: "right", whiteSpace: "nowrap", color: l.asComputed < l.asReturned ? "#B23B3B" : "#13795C", fontWeight: 700}}>{fmtINR(l.asComputed)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="muted" style={{fontSize: 11.5}}>
-          The read found no line where the two columns differ. If the order plainly shows one, re-read it or open the PDF.
+          The read found no line where the two columns differ — which is the right answer for an order CPC processed as filed.
         </div>
       )}
 
-      {/* A suggested tag is a suggestion until somebody says otherwise. It has
-          to be accepted before it counts, because the by-cause grouping is what
-          decides which clients get treated as sharing one legal position. */}
       {suggestion && (
         <div className="center" style={{gap: 8, marginTop: 10, padding: "8px 10px", background: "var(--p-card-tint)", borderRadius: 9, flexWrap: "wrap"}}>
-          <span style={{fontSize: 11.5}}>
-            Suggested cause: <b>{CAUSE_LABEL[suggestion]}</b>
-          </span>
+          <span style={{fontSize: 11.5}}>Suggested cause: <b>{CAUSE_LABEL[suggestion]}</b></span>
           <button className="btn btn-primary btn-xs" style={{marginLeft: "auto"}} disabled={busy} onClick={() => onTrack({ cause: suggestion })}>
             <Icon name="check" size={11}/>Accept
           </button>
         </div>
       )}
 
-      <div className="muted" style={{fontSize: 10.5, marginTop: 8, lineHeight: 1.5}}>
-        Read from the order PDF on {fmtDateLong(String(reading.at || "").slice(0, 10))}. Verify against the order before acting on it.
-        {" "}
-        <button className="btn btn-ghost btn-xs" disabled={readingNow} onClick={onRead} style={{padding: "2px 6px"}}>Re-read</button>
+      <CausePicker row={row} busy={busy} onTrack={onTrack}/>
+
+      <div className="muted" style={{fontSize: 10.5, marginTop: 6, lineHeight: 1.5}}>
+        Read on {fmtDateLong(String(reading.at || "").slice(0, 10))}. Verify against the order before acting on it.
+      </div>
+    </div>
+  );
+}
+
+function CausePicker({ row, busy, onTrack }) {
+  return (
+    <div style={{marginTop: 10}}>
+      <select
+        value={row.cause}
+        disabled={busy}
+        onChange={(e) => onTrack({ cause: e.target.value })}
+        style={{width: "100%", padding: "7px 9px", borderRadius: 9, border: "1px solid var(--p-line)", fontSize: 12.5}}
+      >
+        <option value="">Not yet tagged</option>
+        {CAUSES.map((c) => <option key={c.id} value={c.id}>{c.label}{c.statute ? ` — s.${c.statute}` : ""}</option>)}
+      </select>
+      <div className="muted" style={{fontSize: 10.5, marginTop: 5, lineHeight: 1.5}}>
+        Tagging pays off across the practice: <b>By cause</b> puts every client hit by the same adjustment in one list.
       </div>
     </div>
   );

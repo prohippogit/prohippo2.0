@@ -24,7 +24,7 @@ import {
 const TODAY = "2026-08-03";
 
 const variance = (flag, amount, kind = "return") => ({
-  engine: 1,
+  engine: 2,
   cpcNet: -1000,
   baseline: kind ? { kind, ref: kind === "order" ? "PREV" : "", net: 0 } : null,
   amount,
@@ -103,7 +103,7 @@ test("an order under any other section is not an intimation", () => {
 test("an order that could not be compared is still listed", () => {
   /* "We could not check this one" is information a practitioner needs. Dropping
      it would make the card silently understate the work. */
-  const data = { returns: [ret({ orders: [ord({ variance: { engine: 1, flag: "unknown", amount: null, note: "no figure" } })] })] };
+  const data = { returns: [ret({ orders: [ord({ variance: { engine: 2, flag: "unknown", amount: null, note: "no figure" } })] })] };
   const rows = intimationVariances(data, { today: TODAY });
   assert.equal(rows.length, 1);
   assert.equal(rows[0].variance.flag, "unknown");
@@ -195,12 +195,25 @@ test("rupees are grouped the Indian way", () => {
 
 /* ---------------- the backfill trigger ---------------- */
 
-test("backfill is needed only for intimations that never went through the engine", () => {
+test("backfill is needed for intimations never computed, or computed by an older engine", () => {
   assert.equal(needsVarianceBackfill({ returns: [ret({ orders: [ord()] })] }), false);
   assert.equal(needsVarianceBackfill({ returns: [ret({ orders: [ord({ variance: undefined })] })] }), true);
+
+  /* The engine check is what repairs a practice automatically. Engine 1 netted
+     the demand and refund fields together and reported other years' arrears as
+     this order's demand; every figure it wrote has to be recomputed rather than
+     left on screen looking authoritative. */
+  const stale = { ...variance("red", -183744), engine: 1 };
+  assert.equal(needsVarianceBackfill({ returns: [ret({ orders: [ord({ variance: stale })] })] }), true);
+
   // A non-intimation order without a variance is not work.
   assert.equal(needsVarianceBackfill({ returns: [ret({ orders: [ord({ section: "143(3)", variance: undefined })] })] }), false);
   assert.equal(needsVarianceBackfill({ returns: [] }), false);
+});
+
+test("the client and the backend agree on which engine is current", () => {
+  const { VARIANCE_ENGINE: backend } = requireCjs("../functions/returnVariance.js");
+  assert.equal(VARIANCE_ENGINE, backend, "src/intimations.js and functions/returnVariance.js have drifted");
 });
 
 /* ---------------- robustness ---------------- */
@@ -225,6 +238,7 @@ import {
   endOfFinancialYear, rectificationDeadline, rectificationDisposalDue,
   appealWindow, clocksFor, refundPosition, groupByAssessee, groupByCause,
   practiceSummary, matchesFilter, allIntimations, CAUSES, DECISIONS,
+  staleRefunds, VARIANCE_ENGINE,
 } from "../src/intimations.js";
 
 test("the financial year ends on the 31st of March after the order", () => {
@@ -287,25 +301,52 @@ test("both clocks are returned for every intimation, and the disposal clock only
 
 /* ---------------- refunds determined but not received ---------------- */
 
+// "60 days ago" has to mean that whenever the suite runs, so refund tests use
+// offsets from today rather than fixed dates.
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+
 test("a refund still not received after a month is worth chasing", () => {
-  const base = { refund: "40000", activityCd: "62", orderDate: "2020-01-01", tracking: null };
+  const base = { refund: "40000", activityCd: "62", orderDate: daysAgo(60), tracking: null };
   assert.equal(refundPosition(base).state, "overdue");
   assert.equal(refundPosition(base).amount, 40000);
 });
 
+test("a refund only days old is awaited, not yet overdue", () => {
+  assert.equal(refundPosition({ refund: "40000", activityCd: "62", orderDate: daysAgo(5) }).state, "awaited");
+});
+
+test("a refund older than a year is not chased at all", () => {
+  /* The failure this exists to stop: on a practice's first visit, every refund
+     CPC had ever determined showed as "not received" in red — ₹180 from 2021 at
+     1,405 days. The portal never says whether the bank paid out, so past a year
+     silence means nothing and the row must stop shouting. */
+  const old = refundPosition({ refund: "180", activityCd: "62", orderDate: daysAgo(1405) });
+  assert.equal(old.state, "stale");
+  assert.equal(old.amount, 180, "it is still listed, just not chased");
+});
+
 test("a refund marked received stops being chased", () => {
-  const row = { refund: "40000", activityCd: "62", orderDate: "2020-01-01", tracking: { refundReceivedOn: "2020-02-01" } };
+  const row = { refund: "40000", activityCd: "62", orderDate: daysAgo(60), tracking: { refundReceivedOn: daysAgo(30) } };
   assert.equal(refundPosition(row).state, "received");
 });
 
 test("a fully adjusted refund is never chased — no money was ever coming", () => {
   // Codes 64 / 74: set off in full against an earlier demand u/s 245.
-  assert.equal(refundPosition({ refund: "80000", activityCd: "64", orderDate: "2020-01-01" }).state, "adjusted");
-  assert.equal(refundPosition({ refund: "80000", activityCd: "74", orderDate: "2020-01-01" }).state, "adjusted");
+  assert.equal(refundPosition({ refund: "80000", activityCd: "64", orderDate: daysAgo(60) }).state, "adjusted");
+  assert.equal(refundPosition({ refund: "80000", activityCd: "74", orderDate: daysAgo(60) }).state, "adjusted");
 });
 
 test("a partly adjusted refund IS chased — the balance is still paid out", () => {
-  assert.equal(refundPosition({ refund: "80000", activityCd: "65", orderDate: "2020-01-01" }).state, "overdue");
+  assert.equal(refundPosition({ refund: "80000", activityCd: "65", orderDate: daysAgo(60) }).state, "overdue");
+});
+
+test("the bulk settle picks up exactly the stale ones", () => {
+  const rows = [
+    { key: "a", refund: "180", activityCd: "62", orderDate: daysAgo(1405) },
+    { key: "b", refund: "500", activityCd: "62", orderDate: daysAgo(45) },
+    { key: "c", refund: "", activityCd: "61", orderDate: daysAgo(1405) },
+  ];
+  assert.deepEqual(staleRefunds(rows).map((r) => r.key), ["a"]);
 });
 
 test("an order with no refund has no refund position", () => {

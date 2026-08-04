@@ -13,6 +13,16 @@ that were made deliberately.
 | **CPC's position** | the activity row's own detail blob — `computedDemndAmt` / `computedRefndAmt`, stored on the order as `demand` / `refund` (`connector/src/main/portalReturns.js` → `ingestPortalReturn`) |
 | **The assessee's position** | the filed ITR JSON already in Storage, read by `functions/itrTaxPosition.js` |
 
+**CPC's figure is read from the order's STATUS, never by netting the two fields
+against each other.** When CPC determines a refund and sets it off u/s 245, the
+portal populates both — the refund determined, *and* the outstanding demand of
+**earlier years** the refund went towards. Engine 1 netted them and reported a
+₹1,83,744 demand on an A.Y. 2022-23 intimation that agreed with the return line
+for line and whose own words are *"There is no payment due."* The status says
+which figure belongs to the order (`OUTCOME_BY_ACTIVITY`), so it is asked. An
+unrecognised status carrying both figures reports "could not be compared" rather
+than guessing.
+
 Both are **net of taxes paid**, and both use one sign convention, set once and
 never varied:
 
@@ -98,8 +108,8 @@ presented as a fact.
 
 ## Refunds adjusted u/s 245
 
-Activity codes 64/65/74/75 mean CPC determined a refund and set it off against an
-earlier demand. That does **not** change the flag — the refund determined is
+Activity codes 64/65/74/75/613 mean CPC determined a refund and set it off against
+an earlier demand. That does **not** change the flag — the refund determined is
 still the refund determined, and comparing it to the refund claimed is still
 valid. The set-off is a separate matter (recovery of a past year's demand), so it
 is carried as `variance.adjusted` and labelled in the UI, because a practitioner

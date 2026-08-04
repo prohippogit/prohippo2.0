@@ -155,10 +155,10 @@ const AUTHORITY_OPTIONS = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
 const STATUS_OPTIONS = ["Awaiting review", "Reply drafted", "Submitted"];
 const MODE_OPTIONS = ["Physical", "Video Conference", "e-Proceeding"];
 
-function Field({ label, value, onChange, mono, full, type = "text", options, ai }) {
+function Field({ label, value, onChange, mono, full, type = "text", options }) {
   return (
-    <div className={`field${ai ? " ai-extracted" : ""}`} style={{gridColumn: full ? "1 / -1" : "auto"}}>
-      <label>{label}{ai ? <span title="Pre-filled by AI — verify against the notice" style={{marginLeft: 6, color: "var(--p-primary)", fontSize: 10, fontWeight: 800}}>AI</span> : null}</label>
+    <div className="field" style={{gridColumn: full ? "1 / -1" : "auto"}}>
+      <label>{label}</label>
       {options
         ? <select value={value} onChange={e => onChange(e.target.value)}>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>
         : <input type={type} value={value} onChange={e => onChange(e.target.value)} style={{fontFamily: mono ? "ui-monospace, monospace" : "inherit"}}/>}
@@ -216,15 +216,6 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
 
   // Block the save only until the user acknowledges this specific DIN.
   const dupBlocking = Boolean(dupNotice) && ackDupDin !== normDin(edited.din);
-
-  // Fields pre-filled by the AI parser — highlighted so each gets verified.
-  const aiFilled = React.useMemo(() => {
-    if (!notice?.aiParsed) return new Set();
-    const skip = new Set(["aiParsed", "aiWarnings", "fileName", "status"]);
-    return new Set(Object.keys(notice).filter(
-      (k) => !skip.has(k) && (Array.isArray(notice[k]) ? notice[k].length > 0 : Boolean(notice[k]))
-    ));
-  }, [notice]);
 
   const update = (k, v) => setEdited(e => ({ ...e, [k]: v }));
   const pickAssessee = (name) => {
@@ -305,8 +296,6 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
       return;
     }
     const rec = { ...edited, assessee: linked.name, pan: linked.pan };
-    delete rec.aiParsed;
-    delete rec.aiWarnings;
     // A new notice is awaited so a document request created below can carry its
     // id — that link is what stops the same list being prepared twice.
     let noticeId = notice?.id || "";
@@ -410,19 +399,8 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
             <div>
               <div style={{fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em"}}>{isNew ? "Record a notice" : `Notice — ${titleCase(edited.assessee)}`}</div>
               <div className="card-sub" style={{marginTop: 4}}>
-                {notice?.aiParsed
-                  ? <>Fields marked <b style={{color: "var(--p-primary)"}}>AI</b> were read from the PDF — verify each against the original notice before saving.</>
-                  : "Verify every field against the original notice before saving."}
+                Verify every field against the original notice before saving.
               </div>
-              {notice?.aiParsed && (notice.aiWarnings || []).length > 0 && (
-                <div style={{marginTop: 10, padding: "10px 12px", background: "var(--p-amber)", borderRadius: 10, fontSize: 12.5}}>
-                  {(notice.aiWarnings || []).map((w, i) => (
-                    <div key={i} className="center" style={{gap: 6, justifyContent: "flex-start"}}>
-                      <Icon name="alert" size={12}/><span>{w}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
           <div className="center" style={{gap: 8}}>
@@ -461,16 +439,16 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
                 {data.assessees.map(a => <option key={a.id} value={a.name}>{titleCase(a.name)}</option>)}
               </select>
             </div>
-            <Field label="PAN" value={edited.pan} onChange={setPan} mono ai={aiFilled.has("pan")}/>
-            <Field label="Assessment Year *" value={edited.ay} onChange={v => update("ay", v)} ai={aiFilled.has("ay")}/>
-            <Field label="Authority" value={edited.authority} onChange={v => update("authority", v)} options={AUTHORITY_OPTIONS} ai={aiFilled.has("authority")}/>
-            <Field label="Section" value={edited.section} onChange={v => update("section", v)} ai={aiFilled.has("section")}/>
-            <Field label="ITA / Appeal No." value={edited.ita} onChange={v => update("ita", v)} ai={aiFilled.has("ita")}/>
-            <Field label="DIN" value={edited.din} onChange={v => update("din", v)} mono full ai={aiFilled.has("din")}/>
-            <Field label="Notice date *" value={edited.date} onChange={v => update("date", v)} type="date" ai={aiFilled.has("date")}/>
-            <Field label="Bench / Officer" value={edited.bench} onChange={v => update("bench", v)} ai={aiFilled.has("bench")}/>
-            <Field label="Hearing date" value={edited.hearingDate} onChange={v => update("hearingDate", v)} type="date" ai={aiFilled.has("hearingDate")}/>
-            <Field label="Hearing time" value={edited.hearingTime} onChange={v => update("hearingTime", v)} type="time" ai={aiFilled.has("hearingTime")}/>
+            <Field label="PAN" value={edited.pan} onChange={setPan} mono/>
+            <Field label="Assessment Year *" value={edited.ay} onChange={v => update("ay", v)}/>
+            <Field label="Authority" value={edited.authority} onChange={v => update("authority", v)} options={AUTHORITY_OPTIONS}/>
+            <Field label="Section" value={edited.section} onChange={v => update("section", v)}/>
+            <Field label="ITA / Appeal No." value={edited.ita} onChange={v => update("ita", v)}/>
+            <Field label="DIN" value={edited.din} onChange={v => update("din", v)} mono full/>
+            <Field label="Notice date *" value={edited.date} onChange={v => update("date", v)} type="date"/>
+            <Field label="Bench / Officer" value={edited.bench} onChange={v => update("bench", v)}/>
+            <Field label="Hearing date" value={edited.hearingDate} onChange={v => update("hearingDate", v)} type="date"/>
+            <Field label="Hearing time" value={edited.hearingTime} onChange={v => update("hearingTime", v)} type="time"/>
             <Field label="Mode" value={edited.mode} onChange={v => update("mode", v)} options={MODE_OPTIONS}/>
             <Field label="Status" value={edited.status} onChange={v => update("status", v)} options={STATUS_OPTIONS}/>
           </div>

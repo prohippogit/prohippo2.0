@@ -216,7 +216,7 @@ for flat discounts and converts on submit.
 
 1. `plans/{planId}` catalogue with limits and prices (the rules already allow
    any signed-in user to read it).
-2. `assertEntitlement(uid, "aiParse")` at the top of `parseNotice`,
+2. `assertEntitlement(uid, "aiParse")` at the top of `summarizePortalNotice`,
    `sendClientMessage` and `ingestPortal*` — those callables are where cost is
    actually incurred, so they are the only place a limit can be enforced.
 3. Razorpay subscriptions (UPI Autopay/e-mandate, INR, GST invoices), webhook →

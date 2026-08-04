@@ -12,7 +12,7 @@ Every paid outbound call in the codebase, all writing the same shape through
 
 | Vendor | Where | Billing unit | Attributed to |
 |---|---|---|---|
-| Gemini | `callGemini` (notice parsing, ×2 on escalation), `callGeminiSummary`, `callGeminiDocuments` | tokens in + out, per model | the signed-in practice |
+| Gemini | `callGeminiSummary`, `callGeminiDocuments` | tokens in + out, per model | the signed-in practice |
 | 2Factor | `sendSmsOtp` — **AUTOGEN only** | 1 SMS credit | nobody (login) |
 | Resend | `sendEmailOtp` | 1 email | nobody (login) |
 | Resend | `sendViaResend` (client messages) | 1 email | the signed-in practice |
@@ -67,20 +67,17 @@ those separately as `thoughtsTokenCount`. The meter adds them to
 `candidatesTokenCount` — counting only the visible answer would under-report
 every call.
 
-### One gap: the escalation model
+### A model with no rate is flagged, not guessed
 
-`ESCALATION_MODEL = "gemini-3.1-flash"` (`functions/index.js:83`) has **no rate
-in the table**, deliberately — its price was not on the pricing page that was
-checked, and inventing one would be worse than leaving it out. Calls to it are
-recorded with `priced: false` and surface on the Costs page as *"N calls had no
-rate in the price table"*. A visible gap beats a confident wrong total.
+Only `gemini-3.1-flash-lite` has a rate in the table. Any other model id — a
+rename, or a deliberate switch of `PRIMARY_MODEL` — is recorded with
+`priced: false` and surfaces on the Costs page as *"N calls had no rate in the
+price table"* rather than being priced at zero. A visible gap beats a confident
+wrong total, and that counter leaving zero is the signal to go and add the rate.
 
-**That counter is also worth watching for a second reason.** If it shows calls,
-escalation is happening and you need the rate. If it stays at zero while notices
-are being parsed, escalation is either never triggering or failing — the code
-catches an escalation error and falls back to the first-pass result
-(`functions/index.js:393`), so a model id that no longer exists would degrade
-parse quality silently.
+> Until the AI Parser was removed, `parseNotice` could retry a failed read on a
+> costlier `ESCALATION_MODEL`, and that model was the standing example of an
+> unpriced SKU. The mechanism above is unchanged; only the caller is gone.
 
 ## 3. Where the data goes
 
@@ -124,11 +121,6 @@ prompt, a response, a phone number or an email address. `spend` is
 admin-readable, so anything in it is something support can read, and these calls
 carry the practitioner's clients' tax records.
 
-**Escalation is visible.** `parseNotice` calls Gemini twice when the first pass
-misses a critical field, and the second call uses a costlier model. Both are
-recorded with `attempt: 1 | 2`, so the by-SKU panel shows what escalation is
-really costing you — a number nothing in the system reported before.
-
 **Email totals are gross of Resend's free tier.** Below the monthly free
 allowance the real invoice is lower than the figure shown. Noted on the page.
 
@@ -163,6 +155,6 @@ node functions/pricing.test.mjs
 ```
 
 Covers the discount-free arithmetic that everything else rests on: per-token
-pricing, the escalation model being the expensive one, unknown models being
-flagged rather than priced at zero, frozen FX, zero-unit failed sends, and that
-model ids full of dots survive being used as Firestore map keys.
+pricing, unknown models being flagged rather than priced at zero, frozen FX,
+zero-unit failed sends, and that model ids full of dots survive being used as
+Firestore map keys.

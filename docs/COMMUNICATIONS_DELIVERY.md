@@ -203,7 +203,6 @@ Do not confuse these — they answer different questions about the same PDF:
 
 | Callable | Prompt | Returns | Used by |
 |---|---|---|---|
-| `parseNotice` | `EXTRACTION_PROMPT` | every field, incl. `documents[]` | the upload page, for a notice not yet on file |
 | `summarizePortalNotice` | `summaryPrompt` | additions/disallowances, order metadata | "Parse with AI" on a proceeding tile |
 | `extractNoticeDocuments` | `DOCUMENTS_PROMPT` | `documents[]` + due dates only | "Ask for documents" |
 

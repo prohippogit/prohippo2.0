@@ -303,7 +303,7 @@ test("every feature points at a route the sidebar actually has", () => {
   // NAV_ITEMS + NAV_BOTTOM in src/Sidebar.jsx, plus the route App.jsx defaults to.
   const REAL_ROUTES = new Set([
     "dashboard", "assessees", "matters", "hearings", "appeals",
-    "invoices", "communications", "ai", "reports", "connector", "settings",
+    "invoices", "communications", "notices", "reports", "connector", "settings",
   ]);
   for (const route of ROUTES) {
     assert.ok(REAL_ROUTES.has(route), `voiceKnowledge names a route the app doesn't have: ${route}`);
@@ -323,7 +323,9 @@ test("the words a caller actually uses find the right screen", () => {
   expect("how do I raise a bill", "invoices");
   expect("where do I add a new client", "assessees");
   expect("when is my next sunwai", "hearings");
-  expect("upload a notice pdf", "ai");
+  // The AI Parser screen is gone, so there is no "upload a notice" flow to send
+  // anyone to — a caller asking about a notice belongs on the Notices list.
+  expect("where are my notices", "notices");
   expect("sync from the income tax portal", "connector");
   expect("I can't log in, no OTP", "login");
   expect("download a csv report", "reports");

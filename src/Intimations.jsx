@@ -454,7 +454,46 @@ function ClientList({ clients, search, onOpen }) {
 
 /* ---------------- level 2: one client's orders ---------------- */
 
-const ORDER_GRID = "116px 78px 96px minmax(180px, 1fr) 128px 104px";
+
+/* What CPC actually determined on this order — the Returns tab's figure.
+ *
+ * DISTINCT FROM THE VARIANCE, and both are worth a column. The variance says how
+ * far CPC moved from the return; this says where they landed. A practitioner
+ * ringing a client says the second one out loud: "your refund is ₹15,005", not
+ * "you are ₹0 away from what we claimed".
+ *
+ * Read off variance.cpcNet, which is already the status-driven figure — positive
+ * is a refund, negative a demand — so this can never disagree with the flag
+ * beside it.
+ *
+ * Set in Plus Jakarta Sans 800, the app's own extra-bold, at 15px. Poppins or
+ * Montserrat would give the same weight but would be the only place in the app
+ * using them, and would cost every page a second font download for one column.
+ */
+function CpcAmount({ variance, size = 15 }) {
+  const net = variance?.cpcNet;
+  if (net === null || net === undefined) return <span className="muted" style={{fontSize: 12.5}}>—</span>;
+  if (net === 0) return <span className="muted" style={{fontSize: 12.5, fontWeight: 700}}>Nil</span>;
+  const refund = net > 0;
+  return (
+    <span style={{
+      display: "block",
+      fontSize: size,
+      fontWeight: 800,
+      letterSpacing: "-0.02em",
+      color: refund ? "#13795C" : "#B23B3B",
+      whiteSpace: "nowrap",
+      lineHeight: 1.2,
+    }}>
+      {fmtINR(Math.abs(net))}
+      <span style={{display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: ".03em", textTransform: "uppercase", opacity: 0.75}}>
+        {refund ? "refund" : "demand"}
+      </span>
+    </span>
+  );
+}
+
+const ORDER_GRID = "112px 72px 84px minmax(190px, 1fr) 118px 128px 96px";
 
 function OrderList({ client, readingKey, onOpen }) {
   const ordered = [...client.rows].sort((a, b) =>
@@ -462,9 +501,9 @@ function OrderList({ client, readingKey, onOpen }) {
 
   return (
     <div className="matters-surface" style={{overflowX: "auto"}}>
-      <div className="col" style={{gap: 10, minWidth: 760}}>
+      <div className="col" style={{gap: 10, minWidth: 880}}>
         <div style={{display: "grid", gridTemplateColumns: ORDER_GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
-          <span>Order</span><span>A.Y.</span><span>Dated</span><span>What it did</span><span>Decision</span><span/>
+          <span>Order</span><span>A.Y.</span><span>Dated</span><span>What it did</span><span>Demand / Refund</span><span>Decision</span><span/>
         </div>
         {ordered.map((r) => {
           const accent = accentFor(r.section);
@@ -503,8 +542,9 @@ function OrderList({ client, readingKey, onOpen }) {
                   {readingKey === r.key && <span className="muted" style={{fontSize: 10.5}}>reading…</span>}
                 </span>
               </span>
+              <span><CpcAmount variance={r.variance}/></span>
               <span>
-                <span style={{display: "inline-block", background: tone.bg, color: tone.fg, borderRadius: 8, padding: "3px 8px", fontWeight: 800, fontSize: 12.5}}>
+                <span style={{display: "inline-block", background: tone.bg, color: tone.fg, borderRadius: 8, padding: "3px 8px", fontWeight: 800, fontSize: 12}}>
                   {amt || tone.word}
                 </span>
                 <span className="muted" style={{fontSize: 10.5, display: "block", marginTop: 3}}>{DECISION_LABEL[r.decision]}</span>
@@ -602,9 +642,15 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
               </div>
             )}
           </div>
-          <span style={{background: tone.bg, color: tone.fg, borderRadius: 9, padding: "6px 12px", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap"}}>
-            {amt || tone.word}
-          </span>
+          <div className="center" style={{gap: 16}}>
+            <div style={{textAlign: "right"}}>
+              <div className="muted" style={{fontSize: 9.5, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase"}}>CPC determined</div>
+              <CpcAmount variance={row.variance} size={19}/>
+            </div>
+            <span style={{background: tone.bg, color: tone.fg, borderRadius: 9, padding: "6px 12px", fontWeight: 800, fontSize: 14, whiteSpace: "nowrap"}}>
+              {amt || tone.word}
+            </span>
+          </div>
         </div>
 
         <div className="row" style={{gap: 10, flexWrap: "wrap"}}>
@@ -684,7 +730,7 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
               status {row.activityCd || "—"} · {row.statusDesc || "no description"}<br/>
               demand field {row.demand === "" || row.demand == null ? "—" : fmtINR(Number(row.demand))} ·
               refund field {row.refund === "" || row.refund == null ? "—" : fmtINR(Number(row.refund))}<br/>
-              read as {row.variance?.cpcNet == null ? "not comparable" : `${row.variance.cpcNet < 0 ? "payable" : "refundable"} ${fmtINR(Math.abs(row.variance.cpcNet))}`}
+              read as {row.variance?.cpcNet == null ? "not comparable" : `${row.variance.cpcNet < 0 ? "payable" : "refundable"} ${fmtINR(Math.abs(row.variance.cpcNet))}`} (engine {row.variance?.engine ?? "—"})
               {row.returnPosition?.netPayable != null && <> · return closed at {row.returnPosition.netPayable < 0 ? "payable" : "refundable"} {fmtINR(Math.abs(row.returnPosition.netPayable))}</>}
             </div>
           </details>

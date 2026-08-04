@@ -102,7 +102,7 @@ test("nothing the model returns appears as a flag or an amount", () => {
   const out = normaliseReading(good({ flag: "green", amount: 999999, variance: "nonsense" }), { variance: variance() });
   assert.equal(out.flag, undefined, "a reading never carries a flag");
   assert.equal(out.amount, undefined, "nor an amount that could be mistaken for the variance");
-  assert.equal(out.engine, 1);
+  assert.equal(out.engine, 2);
 });
 
 /* ---------------- the suggested cause ---------------- */
@@ -158,4 +158,54 @@ test("every statutory ground has a cause id", () => {
     assert.ok(CAUSE_IDS.includes(id), `${id} is missing from the model's vocabulary`);
   }
   assert.ok(CAUSE_IDS.includes("other"));
+});
+
+
+/* ---------------- earlier years' arrears ---------------- */
+
+test("the adjustment annexure is read, and kept apart from this order", () => {
+  /* From the real A.Y. 2022-23 order: a ₹180 refund set off against A.Y. 2017,
+     with ₹1,43,720 still outstanding across 2017-2019. None of it may reach the
+     order's own position — mixing the two is exactly what put a ₹1,83,744
+     demand on an order that raised none. */
+  const out = normaliseReading(good({
+    outstandingDemands: [
+      { ay: "2017", demandReference: "2019201737068445885T", amount: 180, adjusted: true },
+      { ay: "2017", demandReference: "2019201737068445885T", amount: 76240, adjusted: false },
+      { ay: "2019", demandReference: "2019201937111008795T", amount: 67470, adjusted: false },
+      { ay: "2018", demandReference: "2019201837104829600T", amount: 10, adjusted: false },
+    ],
+  }), { variance: variance() });
+
+  assert.equal(out.arrearsAdjusted, 180, "money taken from this refund");
+  assert.equal(out.arrearsOutstanding, 143720, "money still owed for other years");
+  assert.equal(out.outstandingDemands.length, 4);
+  assert.equal(out.netAsComputed, -10000, "this order's own position is untouched by any of it");
+});
+
+test("no annexure is an empty list, not a missing field", () => {
+  const out = normaliseReading(good(), { variance: variance() });
+  assert.deepEqual(out.outstandingDemands, []);
+  assert.equal(out.arrearsAdjusted, 0);
+  assert.equal(out.arrearsOutstanding, 0);
+});
+
+test("a demand row with no amount is dropped rather than shown as nil", () => {
+  const out = normaliseReading(good({
+    outstandingDemands: [
+      { ay: "2017", demandReference: "X", amount: null },
+      { ay: "2018", demandReference: "Y", amount: 0 },
+      { ay: "2019", demandReference: "Z", amount: 500 },
+    ],
+  }), { variance: variance() });
+  assert.deepEqual(out.outstandingDemands.map((d) => d.ay), ["2019"]);
+});
+
+test("an absurd annexure is capped", () => {
+  const many = Array.from({ length: 100 }, (_, i) => ({ ay: String(2000 + i), demandReference: `R${i}`, amount: 100 }));
+  assert.equal(normaliseReading(good({ outstandingDemands: many }), { variance: variance() }).outstandingDemands.length, 30);
+});
+
+test("the reading engine is 2 now that arrears are read", () => {
+  assert.equal(normaliseReading(good(), { variance: variance() }).engine, 2);
 });

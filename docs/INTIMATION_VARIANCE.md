@@ -62,9 +62,34 @@ screen says so instead of showing a confident table nobody checked. A read that
 cannot be checked at all is a third state, and none of the three is called
 "probably right" — that would be read as "right".
 
-It runs **on demand only**: one button, one order, one paid call. There is no
-sync hook, because a practice with 200 clients and five years apiece would be a
-thousand reads nobody asked for.
+It also reads the order's **outstanding-demand annexures** — the arrears of other
+assessment years the refund was set off against, and what is still owed. Those
+are kept strictly apart from the order's own position and can never reach the
+variance; mixing the two is what produced the ₹1,83,744 bug. They earn their
+place because an order can agree with the return to the rupee and still leave
+the client with nothing.
+
+### When it runs by itself (`onReturnWritten`)
+
+Manual by default: one button, one order, one paid call. A practice can switch
+on automatic reads in Settings, which applies the same read — through a
+Firestore trigger, never inside the sync, because `docs/PERF_AND_REGION.md`
+records what awaiting a Gemini call on that path did to sync times.
+
+Five guards, each a number rather than a heuristic:
+
+| guard | value | why |
+|---|---|---|
+| red only | — | most orders agree; there is nothing to explain |
+| material only | ₹1,000 | below that nobody files a rectification |
+| recent only | 14 months | an old intimation does not need an unasked explanation |
+| once only | — | a stored `reading` or `readingError` blocks it; the button always overrides |
+| daily cap | 50 per practice | a deploy that rewrites every return can make a whole history eligible at once |
+
+The age window is the first line of defence and the cap is the backstop —
+`functions/autoRead.test.mjs` asserts a 200-order history leaves well under a
+tenth eligible. Automatic reads meter under `readIntimationAuto`, apart from
+manual ones, so the Costs page answers what the automation costs on its own.
 
 The suggested cause is stored as `suggestedCause` with `causeAccepted: false`
 and does nothing until a practitioner accepts it on screen — the by-cause

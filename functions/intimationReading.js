@@ -33,8 +33,10 @@
 "use strict";
 
 /* Bump when the prompt, the schema or the reconciliation changes, so a stored
-   reading written by an older engine can be spotted and re-read. */
-const READING_ENGINE = 1;
+   reading written by an older engine can be spotted and re-read.
+
+   2 — also reads the order's outstanding-demand annexures. */
+const READING_ENGINE = 2;
 
 /* Rupees. The portal reports whole rupees and so does the order, so anything
    above this is a genuine disagreement rather than rounding. Deliberately
@@ -115,12 +117,39 @@ function normaliseReading(raw, context = {}) {
 
   const cause = CAUSE_IDS.includes(r.cause) ? r.cause : "";
 
+  /* The arrears of OTHER assessment years, printed in the order's own annexures.
+   *
+   * Worth reading because a s.245 set-off is only half a story without them. An
+   * order can agree with the return to the rupee, determine a refund, and leave
+   * the client with nothing — because the refund went against a demand from
+   * years nobody is looking at. "Agrees" is true and incomplete; this is the
+   * other half.
+   *
+   * It costs nothing extra: the annexure is in the PDF the read already sends.
+   * And it is EXPLICITLY separated from this order's own position, because
+   * confusing the two is precisely the mistake that put a ₹1,83,744 demand on an
+   * order that raised none. Nothing here can reach the variance. */
+  const outstanding = (Array.isArray(r.outstandingDemands) ? r.outstandingDemands : [])
+    .map((d) => ({
+      ay: text(d && d.ay, 12),
+      demandReference: text(d && d.demandReference, 40),
+      amount: num(d && d.amount),
+      adjusted: Boolean(d && d.adjusted),
+    }))
+    .filter((d) => d.amount !== null && d.amount > 0)
+    .slice(0, 30);
+
   const reading = {
     engine: READING_ENGINE,
     lines,
     netAsReturned,
     netAsComputed,
     headline: text(r.headline, 200),
+    outstandingDemands: outstanding,
+    // Split, not summed together: money already taken from this refund is a
+    // settled fact, money still owed is a live problem.
+    arrearsAdjusted: outstanding.filter((d) => d.adjusted).reduce((t, d) => t + d.amount, 0),
+    arrearsOutstanding: outstanding.filter((d) => !d.adjusted).reduce((t, d) => t + d.amount, 0),
     suggestedCause: cause,
     // Never applied on its own. The practitioner accepts it on screen, and only
     // then does it become the row's cause.

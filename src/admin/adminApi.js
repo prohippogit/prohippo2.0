@@ -56,6 +56,7 @@ export const FEATURE_LABEL = {
   parseNotice: "Notice parsing (retired)",
   summarizeNotice: "Order summaries",
   readIntimation: "Intimation breakdowns",
+  readIntimationAuto: "Intimation breakdowns (automatic)",
   extractDocuments: "Document extraction",
   clientMessage: "Client messages",
   login: "Login & signup",

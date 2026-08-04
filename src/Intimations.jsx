@@ -48,7 +48,7 @@ import {
   allIntimations, groupByAssessee, groupByCause, practiceSummary, matchesFilter,
   clocksFor, refundPosition, describeVariance, staleRefunds,
   DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS,
-  changedLines, readingTrust, pendingCauseSuggestion,
+  changedLines, readingTrust, pendingCauseSuggestion, bulkClearable,
 } from "./intimations";
 
 /* Section accents, in the Matters tab's idiom: an intimation is the violet the
@@ -187,6 +187,36 @@ export default function Intimations() {
     }
   };
 
+  /* Settle every order where CPC agreed, in one write per return.
+     Scoped to whatever is on screen: on the client list that is the practice,
+     inside a client it is that client. */
+  const clearAgreeing = async (scope) => {
+    const clearable = bulkClearable(scope);
+    if (!clearable.length || busy) return;
+    setBusy(true);
+    try {
+      const byReturn = new Map();
+      for (const r of clearable) {
+        if (!byReturn.has(r.returnId)) byReturn.set(r.returnId, []);
+        byReturn.get(r.returnId).push(r);
+      }
+      const at = new Date().toISOString();
+      for (const [returnId, items] of byReturn) {
+        const ret = data.returns.find((x) => x.id === returnId) || {};
+        const tracking = { ...(ret.intimationTracking || {}) };
+        const reviewed = { ...(ret.varianceReviewed || {}) };
+        for (const item of items) {
+          tracking[item.commRefNo] = { ...(tracking[item.commRefNo] || {}), decision: "none", updatedAt: at };
+          reviewed[item.commRefNo] = true;
+        }
+        await updateReturn(returnId, { intimationTracking: tracking, varianceReviewed: reviewed });
+      }
+      notify(`${clearable.length} agreeing order${clearable.length > 1 ? "s" : ""} cleared`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (rows.length === 0) {
     return (
       <div className="animate-in">
@@ -231,6 +261,20 @@ export default function Intimations() {
             </div>
           )}
 
+          {bulkClearable(rows).length > 0 && (
+            <div className="card" style={{marginBottom: 16, padding: "12px 18px"}}>
+              <div className="between" style={{gap: 12, flexWrap: "wrap", alignItems: "center"}}>
+                <div style={{fontSize: 12.5}}>
+                  <b>{bulkClearable(rows).length} order{bulkClearable(rows).length > 1 ? "s" : ""}</b> where CPC agreed with the return.
+                  <span className="muted"> Nothing to decide on those — clear them and only the orders that need you are left.</span>
+                </div>
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => clearAgreeing(rows)}>
+                  <Icon name="check" size={13}/>Mark as no action needed
+                </button>
+              </div>
+            </div>
+          )}
+
           {summary.refundStale > 0 && (
             <div className="card" style={{marginBottom: 16, padding: "12px 18px"}}>
               <div className="between" style={{gap: 12, flexWrap: "wrap", alignItems: "center"}}>
@@ -269,6 +313,19 @@ export default function Intimations() {
           </div>
         )}
       </div>
+
+      {client && bulkClearable(client.rows).length > 0 && (
+        <div className="card" style={{marginBottom: 14, padding: "11px 18px"}}>
+          <div className="between" style={{gap: 12, flexWrap: "wrap", alignItems: "center"}}>
+            <span style={{fontSize: 12.5}}>
+              {bulkClearable(client.rows).length} of this assessee's orders agree with the return.
+            </span>
+            <button className="btn btn-secondary btn-xs" disabled={busy} onClick={() => clearAgreeing(client.rows)}>
+              <Icon name="check" size={12}/>Clear them
+            </button>
+          </div>
+        </div>
+      )}
 
       {client
         ? <OrderList
@@ -588,6 +645,8 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
           </div>
         </div>
 
+        {row.reading?.outstandingDemands?.length > 0 && <ArrearsPanel reading={row.reading}/>}
+
         <div>
           <Eyebrow>Tracking</Eyebrow>
           <div className="row" style={{gap: 12, flexWrap: "wrap"}}>
@@ -615,6 +674,21 @@ function OrderModal({ row, busy, readingNow, onClose, onTrack, onRead, onViewPdf
               Refund of {fmtINR(refund.amount)} set off in full u/s 245 — nothing is due to the client, so it is not chased.
             </div>
           )}
+          {/* The portal's own figures, exactly as sent, beside what we made of
+              them. Here because this feature once reported a ₹1,83,744 demand on
+              an order that raised none, and a practitioner should be able to
+              check our arithmetic in five seconds rather than by opening a PDF. */}
+          <details style={{marginTop: 10}}>
+            <summary className="muted" style={{fontSize: 11, cursor: "pointer"}}>What the portal actually sent</summary>
+            <div className="muted" style={{fontSize: 11, marginTop: 6, lineHeight: 1.7, fontFamily: "ui-monospace, monospace"}}>
+              status {row.activityCd || "—"} · {row.statusDesc || "no description"}<br/>
+              demand field {row.demand === "" || row.demand == null ? "—" : fmtINR(Number(row.demand))} ·
+              refund field {row.refund === "" || row.refund == null ? "—" : fmtINR(Number(row.refund))}<br/>
+              read as {row.variance?.cpcNet == null ? "not comparable" : `${row.variance.cpcNet < 0 ? "payable" : "refundable"} ${fmtINR(Math.abs(row.variance.cpcNet))}`}
+              {row.returnPosition?.netPayable != null && <> · return closed at {row.returnPosition.netPayable < 0 ? "payable" : "refundable"} {fmtINR(Math.abs(row.returnPosition.netPayable))}</>}
+            </div>
+          </details>
+
           <div className="muted" style={{fontSize: 10.5, marginTop: 8}}>
             CPC ref. <span style={{fontFamily: "ui-monospace, monospace"}}>{row.commRefNo}</span>
             {row.emailedOn ? ` · e-mailed ${fmtDateLong(row.emailedOn)}` : ""}
@@ -768,6 +842,61 @@ function CausePicker({ row, busy, onTrack }) {
       </select>
       <div className="muted" style={{fontSize: 10.5, marginTop: 5, lineHeight: 1.5}}>
         Tagging pays off across the practice: <b>By cause</b> puts every client hit by the same adjustment in one list.
+      </div>
+    </div>
+  );
+}
+
+/* The arrears of OTHER assessment years, from this order's own annexures.
+ *
+ * WHY THIS EARNS ITS SPACE. An order can agree with the return to the rupee,
+ * determine a refund, and leave the client with nothing — because the refund
+ * went against a demand from years nobody is looking at. "Agrees" is true and
+ * incomplete. This is the other half, and it comes free: the annexure is in the
+ * PDF the read already sends.
+ *
+ * Adjusted and still-owed are kept apart. Money already taken is a settled fact;
+ * money still outstanding is a live problem, and often a wrong or long-paid CPC
+ * demand that nobody has challenged. */
+function ArrearsPanel({ reading }) {
+  const rows = reading.outstandingDemands || [];
+  const taken = rows.filter((d) => d.adjusted);
+  const owed = rows.filter((d) => !d.adjusted);
+  return (
+    <div>
+      <Eyebrow>Earlier years' demand, per this order</Eyebrow>
+      <div className="row" style={{gap: 10, flexWrap: "wrap", marginBottom: 8}}>
+        {reading.arrearsAdjusted > 0 && (
+          <span className="pill" style={{background: "var(--p-line-2)", color: "var(--p-text-2)", fontWeight: 700}}>
+            {fmtINR(reading.arrearsAdjusted)} taken from this refund
+          </span>
+        )}
+        {reading.arrearsOutstanding > 0 && (
+          <span className="pill" style={{background: "#FDECEC", color: "#B23B3B", fontWeight: 700}}>
+            {fmtINR(reading.arrearsOutstanding)} still outstanding
+          </span>
+        )}
+      </div>
+      <div style={{overflowX: "auto"}}>
+        <table className="tbl" style={{fontSize: 12}}>
+          <thead><tr><th>A.Y.</th><th>Demand reference</th><th style={{textAlign: "right"}}>Amount</th><th></th></tr></thead>
+          <tbody>
+            {[...taken, ...owed].map((d, i) => (
+              <tr key={`${d.demandReference}-${i}`}>
+                <td>{d.ay || "—"}</td>
+                <td style={{fontFamily: "ui-monospace, monospace", fontSize: 11}}>{d.demandReference || "—"}</td>
+                <td style={{textAlign: "right", whiteSpace: "nowrap"}}>{fmtINR(d.amount)}</td>
+                <td>
+                  <span className="pill pill-muted" style={{fontSize: 10}}>{d.adjusted ? "adjusted" : "outstanding"}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="muted" style={{fontSize: 10.5, marginTop: 6, lineHeight: 1.5}}>
+        Read from this order's annexures. These belong to <b>other</b> assessment years and never enter this order's
+        own position — verify against the order before acting on them.
       </div>
     </div>
   );

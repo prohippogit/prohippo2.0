@@ -45,6 +45,7 @@ const { computeVariances, summariseVariances, VARIANCE_ENGINE } = require("./ret
 /* Reading the intimation's own comparison table — on demand, never on a sync,
    and never able to change the flag the arithmetic above settled. */
 const { normaliseReading, CAUSE_IDS } = require("./intimationReading");
+const { normaliseTranslation, languageFor } = require("./messageTranslation");
 
 /* ---------- where these functions run ----------------------------------------
  * Firestore for this project lives in asia-south1 (Mumbai) — but these functions
@@ -2289,6 +2290,148 @@ async function sendViaResend({ to, replyTo, subject, html, text, uid }) {
     });
   }
 }
+
+/* ---------- translating a client message ----------------------------------
+ *
+ * A practice in Ahmedabad writes to Gujarati-speaking and English-speaking
+ * clients off the same list. The letter is already good; it is in the wrong
+ * language for half the people receiving it.
+ *
+ * THE MODEL NEVER SEES THE LETTER. It receives about a dozen short sentences
+ * WITH SLOTS IN THEM, plus the practitioner's own document names and note.
+ * Everything a translator must not touch — the client's name, the proceeding,
+ * the DIN, the dates, the firm — travels in a slot and is never sent at all.
+ * The letter is then assembled by the same renderer, in the same order, with
+ * the same escaping, so no language can produce different markup from another.
+ * See functions/messageTranslation.js for the checks on the way back.
+ * ------------------------------------------------------------------------- */
+
+const TRANSLATE_PROMPT = `You are translating a letter that an Indian chartered accountant sends to their own client, asking for the documents needed to answer an income-tax notice.
+
+Translate into: {LANGUAGE}. Use the natural, everyday register a professional would use writing to a client in that language — courteous, plain, not literary.
+
+You are given:
+- "phrases": fixed sentences of the letter. Some contain PLACEHOLDERS in curly braces such as {name}, {proceeding}, {din}, {date}, {count}, {firm}.
+- "items": the names of the documents being asked for.
+- "note": the accountant's own note to the client, if any.
+
+RULES, in order of importance.
+
+1. EVERY PLACEHOLDER MUST SURVIVE, spelled exactly as given, braces included, once each. Never translate, never transliterate, never reorder the letters inside braces. {name} stays {name}. Put each one where that language's grammar needs it — word order differs between languages, and choosing the position is your job. A phrase that comes back missing a placeholder is discarded.
+
+2. NEVER CHANGE A NUMBER. Digits stay as Western Arabic numerals (0-9), never Devanagari or any other script. Dates, section numbers and figures inside document names are reproduced character for character: "08.07.2026" stays "08.07.2026", "142(1)" stays "142(1)".
+
+3. LEAVE THESE IN ENGLISH wherever they appear, because the client has to find them on their own phone or quote them to the department: PDF, MB, Scan, Files, Notes, Google Drive, and any income-tax term of art — section numbers, "u/s", form names such as Form 26AS, ITR-1, AIS, DIN, PAN, TDS.
+
+4. TRANSLATE THE DOCUMENT NAMES. That is the part the client has to understand in order to go and find the thing. "Bank statement" becomes the everyday term for a bank statement in that language. Keep any statutory reference inside the name in English per rule 3.
+
+5. Return exactly as many items as you were given, in the same order. Translate "note" only if one was given; otherwise return an empty string.
+
+Return nothing but the JSON.`;
+
+const TRANSLATE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    phrases: { type: "OBJECT", properties: {}, nullable: true },
+    items: { type: "ARRAY", items: { type: "STRING" } },
+    note: { type: "STRING", nullable: true },
+  },
+  required: ["items"],
+};
+
+async function callGeminiTranslate(model, apiKey, payload, language, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    /* The phrase KEYS are declared to the schema from the payload itself, so the
+       model must return the same set it was given rather than inventing a shape.
+       A key it drops is caught by normaliseTranslation either way. */
+    const schema = {
+      ...TRANSLATE_SCHEMA,
+      properties: {
+        ...TRANSLATE_SCHEMA.properties,
+        phrases: {
+          type: "OBJECT",
+          properties: Object.fromEntries(Object.keys(payload.phrases || {}).map((k) => [k, { type: "STRING" }])),
+          required: Object.keys(payload.phrases || {}),
+        },
+      },
+      required: ["phrases", "items"],
+    };
+    const body = {
+      contents: [{ role: "user", parts: [{ text: `${TRANSLATE_PROMPT.replace("{LANGUAGE}", language)}\n\n${JSON.stringify(payload)}` }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0 },
+    };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    usage = json?.usageMetadata;
+    const out = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+    try {
+      ok = true;
+      return JSON.parse(out);
+    } catch {
+      throw new HttpsError("internal", "Gemini returned malformed JSON.");
+    }
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      // Metered on its own so the Costs page answers what translation costs
+      // rather than hiding it inside the order-reading bill.
+      feature: "translateMessage",
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
+  }
+}
+
+/* Translate one message's phrases. Returns the bundle; the CLIENT decides what
+ * to do with it, because the practitioner has to read the result before it is
+ * sent to anybody. Nothing here writes to a document request. */
+exports.translateClientMessage = onCall(
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 120, memory: "256MiB", maxInstances: 5 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+
+    const { language, phrases, items, note } = request.data || {};
+    const lang = languageFor(language);
+    if (!lang || lang.english) throw new HttpsError("invalid-argument", "Pick a language to translate into.");
+    if (!phrases || typeof phrases !== "object" || !Object.keys(phrases).length) {
+      throw new HttpsError("invalid-argument", "There is nothing to translate.");
+    }
+
+    const payload = {
+      phrases: Object.fromEntries(
+        Object.entries(phrases).slice(0, 40).map(([k, v]) => [String(k).slice(0, 40), String(v || "").slice(0, 1200)])
+      ),
+      items: (Array.isArray(items) ? items : []).slice(0, 40).map((i) => String(i || "").slice(0, 300)),
+      note: String(note || "").slice(0, 2000),
+    };
+
+    const raw = await callGeminiTranslate(PRIMARY_MODEL, geminiApiKey.value(), payload, lang.label, { uid });
+    const result = normaliseTranslation(raw, { language: lang.code, ...payload });
+    if (!result.ok) throw new HttpsError("internal", result.reason);
+
+    // The strings it was made from ride along, so the composer can tell when an
+    // edit has left the translation describing a message that no longer exists.
+    return { ok: true, translation: { ...result.translation, source: { items: payload.items, note: payload.note } } };
+  }
+);
 
 exports.sendClientMessage = onCall(
   { region: REGIONS, secrets: [resendApiKey], maxInstances: 10 },

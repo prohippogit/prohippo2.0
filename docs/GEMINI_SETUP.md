@@ -8,13 +8,18 @@ Two features read a PDF with Google's Gemini 3.1 Flash-Lite:
 | `extractNoticeDocuments` | the list of documents a notice calls for | "Ask for documents" on a notice |
 | `readIntimationOrder` | the comparison table inside a s.143(1) / s.154 order, and the earlier years' demand in its annexures | "Read the order" on the Intimations page |
 | `onReturnWritten` | the same read, fired automatically for red-flagged orders | off by default — Settings → "Read red-flagged intimations automatically" |
+| `translateClientMessage` | *reads no document* — translates the sentences of a client's document request into an Indian language | the language dropdown on the document-request preview |
 
-Both run on documents the **portal** gave us, and both extract only what a PDF
-is the sole source of. Nothing else in the app is read by a model: a notice's
-PAN, assessment year, section, DIN and dates come from the portal's own
+The first four run on documents the **portal** gave us, and each extracts only
+what a PDF is the sole source of. Nothing else in the app is read by a model: a
+notice's PAN, assessment year, section, DIN and dates come from the portal's own
 structured data, and the s.143(1)/s.154 variance is arithmetic on figures the
 department stated. That boundary is deliberate — see the header of
 `functions/index.js`.
+
+`translateClientMessage` is the one that reads nothing. It is sent our own
+sentences with the client's details held back in placeholders, never the letter
+itself and never a document — see `docs/COMMUNICATIONS_DELIVERY.md`.
 
 > An earlier **AI Parser** screen let you upload a notice PDF and had Gemini
 > pre-fill the intake form from it. It was removed once notices began arriving

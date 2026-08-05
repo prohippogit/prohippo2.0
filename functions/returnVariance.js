@@ -53,8 +53,10 @@
        the demand and refund fields against each other. Engine 1 reported a
        ₹1,83,744 demand on an intimation that raised none.
    3 — where the portal sent NO figure at all, the order's own printed total is
-       used instead, from the AI read. `variance.source` records which it was. */
-const VARIANCE_ENGINE = 3;
+       used instead, from the AI read. `variance.source` records which it was.
+   4 — the CPC status sets `direction` even when no amount came with it: an
+       order can be uncomparable and still be known to have raised a demand. */
+const VARIANCE_ENGINE = 4;
 
 /* Differences at or below this are not reported.
  *
@@ -189,6 +191,27 @@ function cpcNet(order) {
   return cpcPosition(order).net;
 }
 
+/* WHAT THE STATUS SAYS HAPPENED, whether or not an amount came with it.
+ *
+ * These are two different questions and the code used to answer only the
+ * second. Status 61 is "ITR processed, demand determined": that a demand exists
+ * is stated by the department, in structured data, with no arithmetic and no
+ * document involved. How much it is may still be missing.
+ *
+ * A real order arrived exactly like that, and the card said "Not compared" over
+ * a dash — throwing away a fact the portal had handed us — while a line of
+ * diagnostics three inches below read "ITR processed demand determined". So the
+ * direction is now recorded whatever the amount does, and the screen can say
+ * "a demand, amount not stated", which is the whole truth and is actionable:
+ * it tells a practitioner to open the order.
+ */
+function directionFor(order) {
+  const outcome = OUTCOME_BY_ACTIVITY[Number(order && order.activityCd)];
+  if (outcome === "nil") return "nil";
+  if (outcome === "demand" || outcome === "refund") return outcome;
+  return "unknown";
+}
+
 function unknown(note, cpc, source) {
   return {
     engine: VARIANCE_ENGINE,
@@ -220,13 +243,21 @@ function varianceFor(entry, priors, position) {
   const adjusted = ADJUSTMENT_ACTIVITY_CODES.has(String(order.activityCd || ""));
 
   if (entry.net === null) {
+    /* Uncomparable, but not necessarily unknown. The status may still state
+       WHICH WAY this order went, and saying so beats a dash. */
+    const stated = directionFor(order);
     return {
       ...unknown(
         amount(order.demand) && amount(order.refund)
           ? "The portal recorded both a demand and a refund against this order under a status we do not recognise, so which one belongs to this order cannot be told apart."
-          : "The portal recorded this order without a demand or refund figure. Reading the order itself will take the figure off the document.",
+          : stated === "demand"
+            ? "CPC's status says this order determined a demand, but the portal did not send the amount. Reading the order will take it off the document."
+            : stated === "refund"
+              ? "CPC's status says this order determined a refund, but the portal did not send the amount. Reading the order will take it off the document."
+              : "The portal recorded this order without a demand or refund figure. Reading the order itself will take the figure off the document.",
         null
       ),
+      direction: stated,
       adjusted,
     };
   }
@@ -340,6 +371,7 @@ module.exports = {
   cpcPosition,
   portalNet,
   documentNet,
+  directionFor,
   amount,
   VARIANCE_ENGINE,
   MATERIALITY_RUPEES,

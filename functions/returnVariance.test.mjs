@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { computeVariances, summariseVariances, cpcNet, cpcPosition, VARIANCE_ENGINE } = require("./returnVariance.js");
+const { computeVariances, summariseVariances, cpcNet, cpcPosition, directionFor, VARIANCE_ENGINE } = require("./returnVariance.js");
 
 /* Default status is 61 — "processed, demand determined" — so a fixture carrying
    a demand is self-consistent. Fixtures carrying a refund set activityCd: "62". */
@@ -195,7 +195,9 @@ test("an order with no figure is unknown, never neutral", () => {
   const v = only([order({ demand: "", refund: "" })], position(40000));
   assert.equal(v.flag, "unknown");
   assert.equal(v.amount, null);
-  assert.match(v.note, /without a demand or refund/);
+  // The fixture's status is 61, so the note names the demand it says was
+  // determined; what matters here is that no COMPARISON was invented from it.
+  assert.match(v.note, /did not send the amount/);
 });
 
 test("no readable return position means unknown, not a zero baseline", () => {
@@ -334,4 +336,46 @@ test("the summary totals red and green separately and counts what it could not j
   );
   assert.equal(s.additionalDemand, 50000);
   assert.equal(s.extraRefund, 50000);
+});
+
+/* ---------------- uncomparable is not the same as unknown ----------------
+ *
+ * A real A.Y. 2024-25 order arrived under status 61 — "ITR processed, demand
+ * determined" — with both amount fields empty. That a demand EXISTS is stated
+ * by the department in structured data; only the amount is missing. The card
+ * showed "Not compared" over a dash and threw the fact away.
+ */
+
+test("the status sets the direction even when no amount came with it", () => {
+  const v = only([order({ activityCd: "61", demand: "", refund: "" })], position(0));
+  assert.equal(v.flag, "unknown", "still not comparable — there is no figure");
+  assert.equal(v.cpcNet, null);
+  assert.equal(v.direction, "demand", "but which way it went is known");
+  assert.match(v.note, /determined a demand/);
+});
+
+test("an amountless refund status says refund, not demand", () => {
+  const v = only([order({ activityCd: "62", demand: "", refund: "" })], position(0));
+  assert.equal(v.direction, "refund");
+  assert.match(v.note, /determined a refund/);
+});
+
+test("a status we do not recognise claims no direction", () => {
+  const v = only([order({ activityCd: "999", demand: "", refund: "" })], position(0));
+  assert.equal(v.direction, "unknown");
+  assert.match(v.note, /without a demand or refund figure/);
+});
+
+test("both figures under an unknown status still refuses to guess a direction", () => {
+  const v = only([order({ activityCd: "999", demand: "5000", refund: "9000" })], position(0));
+  assert.equal(v.direction, "unknown");
+  assert.match(v.note, /cannot be told apart/);
+});
+
+test("directionFor reads the status alone, never the amounts", () => {
+  assert.equal(directionFor({ activityCd: "61" }), "demand");
+  assert.equal(directionFor({ activityCd: "72" }), "refund");
+  assert.equal(directionFor({ activityCd: "63" }), "nil");
+  assert.equal(directionFor({ activityCd: "" }), "unknown");
+  assert.equal(directionFor(null), "unknown");
 });

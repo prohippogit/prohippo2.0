@@ -51,7 +51,7 @@ import { functions } from "./firebase";
 import {
   allIntimations, groupByAssessee, groupByCause, groupByStaff, practiceSummary, matchesFilter,
   clocksFor, refundPosition, describeVariance, staleRefunds, staffRoster,
-  positionLadder, finalPosition,
+  positionLadder, finalPosition, statedDirection,
   DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS, SOURCE_LABEL,
   changedLines, readingTrust, pendingCauseSuggestion, bulkClearable,
 } from "./intimations";
@@ -71,7 +71,17 @@ const FLAG_TONE = {
   neutral: { bg: "var(--p-line-2)", fg: "var(--p-text-3)", word: "Agrees" },
   unknown: { bg: "#FFF3D6", fg: "#B07512", word: "Not compared" },
 };
-const toneOf = (v) => FLAG_TONE[v?.flag] || FLAG_TONE.unknown;
+/* "Not compared" answers a question nobody asked when the status already says a
+   demand was raised. Where the direction is known and the amount is not, the
+   pill says the direction — the comparison is still missing either way, and the
+   note below spells that out. */
+const toneOf = (v) => {
+  const tone = FLAG_TONE[v?.flag] || FLAG_TONE.unknown;
+  if (v?.flag !== "unknown") return tone;
+  if (v.direction === "demand") return { ...tone, word: "Demand raised" };
+  if (v.direction === "refund") return { ...tone, word: "Refund due" };
+  return tone;
+};
 
 /* Only a live clock gets colour. An appeal window that shut three years ago is
    archaeology, not a warning, and painting it red taught the eye to skip red. */
@@ -89,6 +99,19 @@ const signed = (v) =>
   v && v.amount != null && v.flag !== "neutral" && v.flag !== "unknown"
     ? `${v.amount < 0 ? "−" : "+"}${fmtINR(Math.abs(v.amount))}`
     : null;
+
+/* What to call the figure in the card's corner.
+ *
+ * Taken from the STATUS where there is no figure, never from the absence of
+ * one. `finalPosition(row)?.net >= 0` reads `undefined >= 0` when nothing is
+ * known, which is false, which silently printed "PAYABLE" over a dash — on
+ * refund orders too. A label nobody chose is worse than no label. */
+function moneyHeading(row) {
+  const final = finalPosition(row);
+  if (final) return final.net >= 0 ? "Refundable" : "Payable";
+  const stated = statedDirection(row.variance);
+  return stated === "refund" ? "Refundable" : stated === "demand" ? "Payable" : "CPC determined";
+}
 
 export default function Intimations() {
   const { data, updateReturn, notify } = useData();
@@ -586,7 +609,21 @@ function StaffList({ groups, onOpenRow }) {
  */
 function CpcAmount({ row, size = 15 }) {
   const final = finalPosition(row);
-  if (!final) return <span className="muted" style={{fontSize: 12.5}}>—</span>;
+  if (!final) {
+    /* No amount — but the STATUS may still say which way the order went, and a
+       dash throws that away. "Not stated · demand" is the whole truth and is
+       the thing that tells a practitioner to open the order. */
+    const stated = statedDirection(row.variance);
+    if (!stated) return <span className="muted" style={{fontSize: 12.5}}>—</span>;
+    return (
+      <span style={{display: "block", fontSize: 12.5, fontWeight: 700, color: "#B07512", lineHeight: 1.2, whiteSpace: "nowrap"}}>
+        Not stated
+        <span style={{display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: ".03em", textTransform: "uppercase", opacity: 0.85}}>
+          {stated}
+        </span>
+      </span>
+    );
+  }
   if (final.net === 0) return <span className="muted" style={{fontSize: 12.5, fontWeight: 700}}>Nil</span>;
   const refund = final.net > 0;
   return (
@@ -825,7 +862,7 @@ function OrderModal({ row, busy, roster, readingNow, onClose, onTrack, onRead, o
                   refund order carrying s.244A interest those are two different
                   figures, and the one the client asks about is this one. */}
               <div className="muted" style={{fontSize: 9.5, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase"}}>
-                {finalPosition(row)?.net >= 0 ? "Refundable" : "Payable"}
+                {moneyHeading(row)}
                 {row.variance?.source === "document" ? " · per the order" : ""}
               </div>
               <CpcAmount row={row} size={19}/>

@@ -192,7 +192,16 @@ export function varianceSummary(rows) {
 /* Must match VARIANCE_ENGINE in functions/returnVariance.js — the two are pinned
    together by a test. Raising it there and here is what makes every stored
    variance recompute on the next page load. */
-export const VARIANCE_ENGINE = 3;
+export const VARIANCE_ENGINE = 4;
+
+/* What the CPC status says the order did, even where no amount came with it.
+   "Not compared" is about the COMPARISON; this is about the order, and the two
+   are different questions. An order can be uncomparable and still be known to
+   have raised a demand — which is what tells a practitioner to open it. */
+export function statedDirection(v) {
+  const d = v && v.direction;
+  return d === "demand" || d === "refund" ? d : "";
+}
 
 /* Where CPC's figure came from. A practitioner acting on a number is entitled to
    know whether the department stated it or a model read it off a page.

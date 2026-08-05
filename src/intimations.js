@@ -601,6 +601,26 @@ export function matchesFilter(row, filter) {
   switch (filter) {
     case "All": return true;
     case "Needs a decision": return row.decision === "pending";
+
+    /* WHAT THE CLIENT OWES — a different question from the flag beside it, and
+     * the one a practitioner works through first.
+     *
+     * "More payable" is the VARIANCE: CPC went against the return. "Demand
+     * raised" is the POSITION: there is money to pay. An order can agree with
+     * the return to the rupee and still raise a demand, because the return
+     * itself showed tax payable — and that client still has to be rung.
+     *
+     * Includes the demands whose amount never arrived. CPC's status states that
+     * a demand exists whether or not the portal sent the figure, and an unknown
+     * demand is more urgent than a known one, not less. */
+    case "Demand raised": return row.variance?.direction === "demand";
+
+    /* The ones nobody can act on until somebody opens the order. Both
+     * directions: the work is identical either way, and the money column already
+     * says which it is. */
+    case "Amount not stated":
+      return row.variance?.flag === "unknown" && Boolean(statedDirection(row.variance));
+
     case "More payable": return row.variance?.flag === "red";
     case "In the assessee's favour": return row.variance?.flag === "green";
     case "Refund awaited": { const s = refundPosition(row).state; return s === "awaited" || s === "overdue"; }
@@ -616,11 +636,25 @@ export function matchesFilter(row, filter) {
   }
 }
 
+/* Ten chips in one row is a wall, and a wall gets read as decoration. So the
+ * ones a practitioner reaches for daily are always on screen and the rest are
+ * one click away — nothing is taken away, it just stops competing.
+ *
+ * The primary six are the questions this page exists to answer: what does the
+ * client owe, what can nobody act on yet, where did CPC go against us, what is
+ * owed to the client and hasn't come, and what still needs me. */
 export const FILTERS = [
-  "All", "Needs a decision", "More payable", "In the assessee's favour",
-  "Appeal window open", "Refund awaited", "Rectification filed", "Not yet tagged",
-  "Not allocated", "With staff",
+  "All", "Demand raised", "Amount not stated", "More payable", "Refund awaited", "Needs a decision",
 ];
+
+/* Real, and narrower: each answers a question asked once a week rather than
+   once an hour. */
+export const MORE_FILTERS = [
+  "In the assessee's favour", "Appeal window open", "Rectification filed",
+  "Not yet tagged", "Not allocated", "With staff",
+];
+
+export const ALL_FILTERS = [...FILTERS, ...MORE_FILTERS];
 
 /* ---------------- the three figures, in one ladder ---------------- */
 

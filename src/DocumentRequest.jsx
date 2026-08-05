@@ -13,8 +13,9 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { Icon, Modal, FormField, TextInput, EmptyState, titleCase, fmtDateLong } from './shared';
 import { useData, newDocItem, docRequestProgress, derivedRequestStatus, todayISO } from './store';
-import { renderDocRequest, defaultTitle, whatsappLink } from './messageTemplates';
+import { renderDocRequest, defaultTitle, whatsappLink, PHRASES } from './messageTemplates';
 import { presetsFor } from './docRequestPresets';
+import { LANGUAGES, languageName, isEnglish, defaultLanguage, translationStale, askableLabels } from './messageLanguages';
 
 const REQUEST_STATUS_LABEL = {
   draft: "Draft", sent: "Sent", partial: "Partly received",
@@ -73,8 +74,27 @@ function ItemRow({ item, index, count, sent, onChange, onMove, onRemove }) {
   );
 }
 
+/* The phrases this particular message actually uses.
+ *
+ * Only what is on screen is sent to be translated — a request with no due date
+ * does not pay for a sentence about one, and a shorter payload is a smaller,
+ * more accurate translation. */
+function phrasesForRequest(req) {
+  const items = askableLabels(req);
+  const proc = Boolean(req.authority || req.section || req.ay);
+  const keys = ["greeting", proc ? "intro" : "introPlain",
+    items.length === 1 ? "needOne" : "needMany",
+    "howToTitle", "howToBody", "replyEmail", "replyWhatsApp", "sentVia", "onBehalfOf"];
+  // The subject follows the same rule as the body: a practitioner who typed
+  // their own keeps it, so only the generated one is worth translating.
+  if (!(req.title || "").trim()) keys.push(proc ? "subject" : "subjectPlain");
+  if (req.dueDate) keys.push("dueBy");
+  if ((req.items || []).some((i) => i.required === false)) keys.push("ifAvailable");
+  return Object.fromEntries(keys.map((k) => [k, PHRASES[k]]));
+}
+
 export default function DocumentRequestComposer({ request, seed, onClose }) {
-  const { data, profile, addDocRequest, updateDocRequest, removeDocRequest, addCommunication, notify } = useData();
+  const { data, profile, addDocRequest, updateDocRequest, removeDocRequest, addCommunication, setProfile, updateAssessee, notify } = useData();
   const isNew = !request?.id;
 
   const [form, setForm] = React.useState(() => ({
@@ -86,17 +106,44 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
   const [tab, setTab] = React.useState("Email");
   const [showPresets, setShowPresets] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [translating, setTranslating] = React.useState(false);
+  // Reading the English of a letter you are about to send in Gujarati is the
+  // point of the toggle; it never changes what gets sent.
+  const [showEnglish, setShowEnglish] = React.useState(false);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const assessee = data.assessees.find((a) => a.id === form.assesseeId) || null;
   const sent = Boolean(form.sentAt);
   const progress = docRequestProgress(form);
 
+  /* The language this request opens in: its own if it has one, else the
+     client's, else the practice's. Resolved once the assessee is known — a
+     composer opened before an assessee is picked has nothing to go on. */
+  const [language, setLanguage] = React.useState(() => defaultLanguage({ request: form, assessee: null, profile }));
+  const resolvedOnce = React.useRef(false);
+  React.useEffect(() => {
+    if (resolvedOnce.current || !assessee) return;
+    resolvedOnce.current = true;
+    setLanguage(defaultLanguage({ request: form, assessee, profile }));
+    // form is read once on the first resolve; re-running on every keystroke
+    // would fight the dropdown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assessee, profile]);
+
+  const translation = isEnglish(language) ? null : (form.translation || null);
+  const translationMatches = Boolean(translation) && translation.language === language;
+  const stale = translationMatches && translationStale(form);
+  const needsTranslating = !isEnglish(language) && (!translationMatches || stale);
+
+  // What actually renders: the translation unless it is for another language, or
+  // the practitioner has asked to see the English behind it.
+  const shownTranslation = showEnglish || !translationMatches ? null : translation;
+
   // Everything the message needs, with the title defaulted the same way the
   // stored copy will be, so preview and sent copy can't disagree.
   const preview = React.useMemo(
-    () => renderDocRequest({ request: form, assessee, profile }),
-    [form, assessee, profile]
+    () => renderDocRequest({ request: form, assessee, profile, translation: shownTranslation }),
+    [form, assessee, profile, shownTranslation]
   );
 
   const askable = (form.items || []).filter((i) => i.status !== "received" && i.status !== "waived");
@@ -132,10 +179,58 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
     setForm((f) => ({ ...f, items: [...(f.items || []), ...fresh.map((l) => newDocItem(l))] }));
   };
 
+  /* One paid call, on the sentences this message actually uses.
+   *
+   * The result is NOT sent anywhere — it lands in the preview, and the
+   * practitioner reads it before pressing send. That is the whole safeguard for
+   * a letter going out under their firm's name in a script they may not read. */
+  const translate = async () => {
+    if (translating || isEnglish(language)) return;
+    setTranslating(true);
+    try {
+      const res = await httpsCallable(functions, "translateClientMessage", { timeout: 120000 })({
+        language,
+        phrases: phrasesForRequest(form),
+        items: askableLabels(form),
+        note: (form.note || "").trim(),
+      });
+      set("translation", res.data?.translation || null);
+      setShowEnglish(false);
+      notify(`Translated to ${languageName(language)} — read it before sending`);
+    } catch (e) {
+      // The server refuses a translation that lost a figure or a placeholder,
+      // and says which. That reason is the useful part, so it is shown whole.
+      notify(e?.message?.slice(0, 200) || "Couldn't translate that — try again in a moment", "alert");
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  /* Remember the choice where it belongs: on the CLIENT, because the language
+     belongs to the person being written to and not to the firm writing. The
+     practice default is only touched when the client has none, so setting one
+     client to Tamil never changes what everybody else sees. */
+  const rememberLanguage = async (code) => {
+    setLanguage(code);
+    if (isEnglish(code)) return;
+    try {
+      if (assessee && assessee.messageLanguage !== code) await updateAssessee(assessee.id, { messageLanguage: code });
+      if (!profile?.messageLanguage) await setProfile({ messageLanguage: code });
+    } catch {
+      // A preference that failed to save is not a reason to stop composing —
+      // the dropdown still holds for this message.
+    }
+  };
+
   /* Persist and return the saved record (with its id). The rendered message is
      stored alongside the checklist — the sender delivers this copy verbatim. */
   const persist = async (patch = {}) => {
-    const rendered = renderDocRequest({ request: { ...form, ...patch }, assessee, profile });
+    const next = { ...form, ...patch };
+    /* THE COPY THAT GOES IS THE COPY ON SCREEN. Rendered with the translation
+       actually in force — not with `shownTranslation`, which follows the English
+       toggle and is about reading, never about sending. */
+    const inForce = isEnglish(language) || !translationMatches ? null : next.translation;
+    const rendered = renderDocRequest({ request: next, assessee, profile, translation: inForce });
     // `id` must never be written into the document body: the store builds rows
     // as { id: doc.id, ...doc.data() }, so a stored `id` field would shadow the
     // real Firestore id.
@@ -143,9 +238,16 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
     delete fields.id;
     const rec = {
       ...fields, ...patch,
-      title: (form.title || "").trim() || defaultTitle(form),
+      // rendered.subject already applies the "a typed title wins" rule, and in
+      // the language in force — reading it back keeps the stored title and the
+      // sent subject from being able to disagree.
+      title: rendered.subject,
       assessee: assessee?.name || form.assessee || "",
       pan: assessee?.pan || form.pan || "",
+      // Stored so reopening a draft comes back in the language it was written
+      // in, whatever the client's default has since become.
+      language: isEnglish(language) ? "en" : language,
+      translation: inForce || null,
       message: { subject: rendered.subject, emailHtml: rendered.emailHtml, emailText: rendered.emailText, whatsappText: rendered.whatsappText },
       updatedAt: new Date().toISOString(),
     };
@@ -351,14 +453,68 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
 
         {/* ---- right: exactly what the client will get ---- */}
         <div className="col" style={{gap: 10}}>
-          <div className="between">
+          <div className="between" style={{gap: 10, flexWrap: "wrap"}}>
             <div className="card-title" style={{fontSize: 14}}>Preview</div>
-            <div className="row" style={{gap: 6}}>
+            <div className="row" style={{gap: 6, flexWrap: "wrap", alignItems: "center"}}>
+              {/* The language sits beside the thing it changes. A practitioner
+                  deciding whether the message is right is already looking here;
+                  a settings screen would be somewhere else entirely. */}
+              <select
+                value={language}
+                disabled={translating}
+                onChange={(e) => rememberLanguage(e.target.value)}
+                title="The language this client is written to in. Remembered against them."
+                style={{padding: "6px 8px", borderRadius: 9, border: "1px solid var(--p-line)", fontSize: 12.5, fontWeight: 600, maxWidth: 168}}
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>{l.english ? l.label : `${l.native} · ${l.label}`}</option>
+                ))}
+              </select>
+              {!isEnglish(language) && (
+                <button
+                  className={`btn btn-${needsTranslating ? "primary" : "secondary"} btn-xs`}
+                  disabled={translating}
+                  onClick={translate}
+                >
+                  <Icon name="sparkle" size={12}/>
+                  {translating ? "Translating…" : needsTranslating ? "Translate" : "Translate again"}
+                </button>
+              )}
               {["Email", "WhatsApp"].map((t) => (
                 <span key={t} className={`fchip ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</span>
               ))}
             </div>
           </div>
+
+          {/* Where the message stands, in one line. Only ever one of these. */}
+          {!isEnglish(language) && (
+            stale ? (
+              <div className="center" style={{gap: 8, padding: "9px 11px", background: "var(--p-amber)", borderRadius: 10, fontSize: 12}}>
+                <Icon name="alert" size={13}/>
+                <span style={{flex: 1}}>
+                  You changed the list after translating — <b>translate again</b> before sending, or the client
+                  gets a {languageName(language)} letter that no longer matches it.
+                </span>
+              </div>
+            ) : !translationMatches ? (
+              <div className="center" style={{gap: 8, padding: "9px 11px", background: "var(--p-card-tint)", borderRadius: 10, fontSize: 12}}>
+                <Icon name="info" size={13}/>
+                <span style={{flex: 1}}>Not translated yet — this will go in English until you press Translate.</span>
+              </div>
+            ) : (
+              <div className="center" style={{gap: 8, padding: "9px 11px", background: "var(--p-mint)", borderRadius: 10, fontSize: 12}}>
+                <Icon name="check" size={13}/>
+                <span style={{flex: 1}}>
+                  {showEnglish
+                    ? <>Showing the English behind it. The client receives the {languageName(language)}.</>
+                    : <>In {languageName(language)}. This is exactly what the client receives.</>}
+                </span>
+                <button className="btn btn-ghost btn-xs" onClick={() => setShowEnglish((s) => !s)}>
+                  {showEnglish ? `Show ${languageName(language)}` : "Show English"}
+                </button>
+              </div>
+            )
+          )}
 
           {tab === "Email" ? (
             <div className="col" style={{gap: 8}}>

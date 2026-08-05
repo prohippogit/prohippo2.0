@@ -63,32 +63,16 @@ export const Icon = ({ name, size = 18, stroke = 1.6, className = "" }) => {
   }
 };
 
-// Portal data often arrives ALL-CAPS (e.g. "MONIKA NAVAL WADHAWA"); show names
-// with only the first letter of each word capitalised. CSS `capitalize` can't do
-// this (it never lowercases the rest), so normalise here. Handles the usual name
-// separators — space, hyphen, apostrophe, dot, slash.
-export const titleCase = (s) =>
-  (s || "").toLowerCase().replace(/(^|[\s\-'./])([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
+/* The formatters now live in src/formatters.js — plain .js, so a module with no
+   React in it (src/messageTemplates.js renders a client's letter) can import
+   them without dragging JSX behind it, which `node --test` cannot parse. They
+   are re-exported here because hundreds of call sites import them from `shared`,
+   and none of them needed to change.
 
-export const fmtINR = (n) => "₹" + new Intl.NumberFormat("en-IN").format(n);
-export const fmtLakhs = (n) => {
-  if (n >= 10000000) return "₹" + (n / 10000000).toFixed(2).replace(/\.?0+$/, "") + "Cr";
-  if (n >= 100000) return "₹" + (n / 100000).toFixed(2).replace(/\.?0+$/, "") + "L";
-  return fmtINR(n);
-};
-export const fmtDate = (iso) => {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-};
-export const fmtDateLong = (iso) => {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-};
-// Date + time, e.g. "23 Jul 2026, 2:18 PM" — for "last synced at" displays.
-export const fmtDateTime = (iso) => {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
-};
+   titleCase in particular: portal data arrives ALL-CAPS ("MONIKA NAVAL
+   WADHAWA") and CSS `capitalize` cannot fix it, since it never lowercases the
+   rest. */
+export { titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, fmtDateTime } from './formatters.js';
 export const daysFromNow = (iso) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);

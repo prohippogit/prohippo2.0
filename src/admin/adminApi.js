@@ -59,6 +59,7 @@ export const FEATURE_LABEL = {
   readIntimationAuto: "Intimation breakdowns (automatic)",
   extractDocuments: "Document extraction",
   clientMessage: "Client messages",
+  translateMessage: "Message translation",
   login: "Login & signup",
 };
 

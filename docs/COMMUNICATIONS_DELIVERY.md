@@ -87,6 +87,71 @@ This is deliberate. The alternative — rendering server-side at send time — m
 two copies of the template that can drift, and a preview that is only *probably*
 what the client receives. Here the preview is byte-for-byte the sent message.
 
+It is also why translation needed no change at all to the send path: store the
+translated copy and `sendClientMessage` delivers it, exactly as it delivers the
+English one.
+
+### In the client's own language
+
+A practice in Ahmedabad writes to Gujarati-speaking and English-speaking clients
+off the same list. The letter is already good; it is in the wrong language for
+half the people receiving it.
+
+**The model never sees the letter.** The email is a hand-built HTML table, and
+handing that to a model to translate would one day come back with a broken tag
+and a letter rendering as source code in somebody's inbox. So every fixed
+sentence lives in `PHRASES` in `src/messageTemplates.js` **with slots in it** —
+`"Namaste {name},"` — and `translateClientMessage` sends about a dozen of those
+plus the practitioner's own document names and note. The letter is then
+assembled by the same renderer, in the same order, with the same escaping, so no
+language can produce different markup from another.
+
+The slots are the second reason. Word order moves: English puts the proceeding
+before the noun (*"in your **Scrutiny u/s 142(1)** matter"*), Gujarati after it.
+Only the model can decide where the slot goes; only the app may decide what goes
+in it.
+
+**What never reaches the model at all**, because it travels in a slot:
+
+| slot | why |
+|---|---|
+| `{name}` | a name is spelt the way its owner spells it |
+| `{proceeding}` | `Scrutiny u/s 142(1) · AY 2020-21` — terms of art; a client taking one to the department needs the department's words |
+| `{din}` | Devanagari numerals in a DIN make it unusable |
+| `{date}`, `{count}`, `{firm}` | reproduced exactly; the date matches the notice it came from |
+
+Document names and the practitioner's note **are** translated — that is the part
+a client has to understand to go and find the thing. They are free text and can
+carry a date or a section reference inside them, so those are checked coming
+back rather than protected going out: **every number in the source must survive
+verbatim**, or the whole translation is refused with a reason naming the figure
+that went missing (`functions/messageTranslation.js`). A phrase that loses a slot
+is refused the same way — it would render a hole where the client's name should
+be.
+
+Three more rules the screen enforces:
+
+- **Nothing is sent untranslated by accident.** Pick a language and the strip
+  says *"Not translated yet — this will go in English until you press Translate."*
+- **The practitioner reads it first.** The result lands in the preview, never in
+  an outbox. **Show English** flips between the two as often as they like and
+  changes nothing about what gets sent.
+- **Editing after translating warns.** Add a document and the translation now
+  describes a message that no longer exists; without the warning the client gets
+  a Gujarati letter missing the item just added, in a script the sender may not
+  read. It warns rather than blocks — sometimes the edit was a comma — and the
+  renderer falls back to the practitioner's own labels if a mismatched
+  translation ever reaches it, because wrong document names beat English ones.
+
+The language is remembered **on the assessee** (`messageLanguage`), because it
+belongs to the person being written to and not to the firm writing. The
+practice-wide default (`profile.messageLanguage`) covers a client nobody has set
+one on, and the dropdown overrides both for the message in hand. A draft reopens
+in the language it was drafted in whatever the client's default has since become.
+
+Metered separately as `translateMessage` — one Flash-Lite call of a few hundred
+tokens, well under ₹0.05 a request.
+
 ---
 
 ## Why `assesseeId` had to happen first

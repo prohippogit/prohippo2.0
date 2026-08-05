@@ -697,3 +697,85 @@ test("the note is what the row shows when there is no figure to show", () => {
   const note = "CPC's status says this order determined a demand, but the portal did not send the amount. Reading the order will take it off the document.";
   assert.equal(describeVariance({ flag: "unknown", direction: "demand", note }), note);
 });
+
+/* ============================================================================
+   Filtering by what the client owes.
+
+   "More payable" is the VARIANCE — CPC went against the return. "Demand raised"
+   is the POSITION — there is money to pay. They are different questions and an
+   order can be one without the other.
+   ============================================================================ */
+import { FILTERS, MORE_FILTERS, ALL_FILTERS } from "../src/intimations.js";
+
+const v4 = (over) => ({ engine: VARIANCE_ENGINE, source: "portal", adjusted: false, note: "", ...over });
+
+const owedRows = () => allIntimations({ returns: [
+  trackedReturn({ id: "r1", orders: [
+    // CPC agreed with the return, and the return itself showed tax payable.
+    ord({ commRefNo: "AGREED-DEMAND", variance: v4({ cpcNet: -50000, amount: 0, flag: "neutral", direction: "demand", baseline: { kind: "return", net: -50000 } }) }),
+    // CPC went against the return but the client is still getting money back.
+    ord({ commRefNo: "RED-REFUND", variance: v4({ cpcNet: 20000, amount: -30000, flag: "red", direction: "refund", baseline: { kind: "return", net: 50000 } }) }),
+    // Status says a demand; the portal never sent the figure.
+    ord({ commRefNo: "UNSTATED-DEMAND", variance: v4({ cpcNet: null, amount: null, flag: "unknown", direction: "demand", baseline: null, note: "no amount" }) }),
+    ord({ commRefNo: "UNSTATED-REFUND", variance: v4({ cpcNet: null, amount: null, flag: "unknown", direction: "refund", baseline: null, note: "no amount" }) }),
+    // Nothing either way, and nothing knowable.
+    ord({ commRefNo: "NIL", variance: v4({ cpcNet: 0, amount: 0, flag: "neutral", direction: "nil", baseline: { kind: "return", net: 0 } }) }),
+    ord({ commRefNo: "OPAQUE", variance: v4({ cpcNet: null, amount: null, flag: "unknown", direction: "unknown", baseline: null, note: "?" }) }),
+  ] }),
+] });
+
+const under = (filter) => owedRows().filter((r) => matchesFilter(r, filter)).map((r) => r.commRefNo).sort();
+
+test("'Demand raised' is what the client owes, not where CPC went against us", () => {
+  assert.deepEqual(under("Demand raised"), ["AGREED-DEMAND", "UNSTATED-DEMAND"]);
+});
+
+test("'More payable' stays the variance and does not become the position", () => {
+  // The red order here leaves the client with a refund; the neutral one leaves
+  // them owing ₹50,000. Neither filter may quietly become the other.
+  assert.deepEqual(under("More payable"), ["RED-REFUND"]);
+});
+
+test("a demand whose amount never arrived is still a demand", () => {
+  assert.ok(under("Demand raised").includes("UNSTATED-DEMAND"),
+    "an unknown demand is more urgent than a known one, not less");
+});
+
+test("'Amount not stated' is every order nobody can act on until it is opened", () => {
+  assert.deepEqual(under("Amount not stated"), ["UNSTATED-DEMAND", "UNSTATED-REFUND"]);
+});
+
+test("an order with no direction at all is in neither", () => {
+  assert.ok(!under("Demand raised").includes("OPAQUE"));
+  assert.ok(!under("Amount not stated").includes("OPAQUE"), "there is nothing to say about it");
+  assert.ok(!under("Demand raised").includes("NIL"));
+});
+
+test("every chip on screen has a predicate behind it", () => {
+  /* A chip whose name does not match a case falls through to `true` and
+     silently filters nothing — which on screen looks like "the filter is
+     broken", with no clue that the name and the predicate have drifted apart.
+
+     The fixture has to be able to EXCLUDE something under every chip, so one
+     order is decided and another is tagged; otherwise "Needs a decision" and
+     "Not yet tagged" match everything honestly and the guard cries wolf. */
+  const all = allIntimations({ returns: [
+    trackedReturn({ id: "r1",
+      intimationTracking: { DONE: { decision: "resolved", cause: "tds-credit", assignedTo: "Priya Mehta" } },
+      orders: [...owedRows().map((r) => ord({ commRefNo: r.commRefNo, variance: r.variance })), ord({ commRefNo: "DONE" })] }),
+  ] });
+  for (const f of ALL_FILTERS) {
+    if (f === "All") continue;
+    assert.notEqual(
+      all.filter((r) => matchesFilter(r, f)).length, all.length,
+      `"${f}" matched every row, so it is probably falling through to the default`
+    );
+  }
+});
+
+test("the chips are split, not duplicated or dropped", () => {
+  assert.equal(new Set(ALL_FILTERS).size, ALL_FILTERS.length, "no chip appears twice");
+  assert.equal(FILTERS.length + MORE_FILTERS.length, ALL_FILTERS.length);
+  assert.equal(FILTERS[0], "All", "the way back is always the first chip");
+  assert.ok(FILTERS.length <= 6, "the always-visible row has to stay readable");
+});

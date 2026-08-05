@@ -52,7 +52,7 @@ import {
   allIntimations, groupByAssessee, groupByCause, groupByStaff, practiceSummary, matchesFilter,
   clocksFor, refundPosition, describeVariance, staleRefunds, staffRoster,
   positionLadder, finalPosition, statedDirection,
-  DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, REFUND_STALE_DAYS, SOURCE_LABEL,
+  DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, MORE_FILTERS, REFUND_STALE_DAYS, SOURCE_LABEL,
   changedLines, readingTrust, pendingCauseSuggestion, bulkClearable,
 } from "./intimations";
 
@@ -122,6 +122,10 @@ export default function Intimations() {
   const [openRow, setOpenRow] = React.useState(null); // row key → pop-up
   const [busy, setBusy] = React.useState(false);
   const [readingKey, setReadingKey] = React.useState("");
+  const [moreFilters, setMoreFilters] = React.useState(false);
+  // A filter from the hidden set keeps the set open, whatever the toggle says —
+  // an applied filter must always be visible as the reason the list is short.
+  const showMoreFilters = moreFilters || MORE_FILTERS.includes(filter);
 
   const rows = React.useMemo(() => allIntimations({ returns: data.returns }), [data.returns]);
   const filtered = React.useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
@@ -336,8 +340,30 @@ export default function Intimations() {
       <div className="between" style={{marginBottom: 14, gap: 12, flexWrap: "wrap"}}>
         <div className="row" style={{gap: 6, flexWrap: "wrap"}}>
           {FILTERS.map((f) => (
+            <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+              {f}
+              {/* A count on the two that drive the work: "Demand raised" with
+                  nothing behind it is worth knowing before the click. */}
+              {(f === "Demand raised" || f === "Amount not stated") && (
+                <b style={{marginLeft: 5, opacity: 0.7}}>{rows.filter((r) => matchesFilter(r, f)).length}</b>
+              )}
+            </span>
+          ))}
+          {showMoreFilters && MORE_FILTERS.map((f) => (
             <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f}</span>
           ))}
+          <span
+            className="fchip"
+            style={{fontWeight: 600, opacity: 0.75}}
+            onClick={() => {
+              // Collapsing while a hidden filter is applied would leave the list
+              // narrowed with nothing on screen saying why.
+              if (showMoreFilters && MORE_FILTERS.includes(filter)) setFilter("All");
+              setMoreFilters(!showMoreFilters);
+            }}
+          >
+            {showMoreFilters ? "Fewer filters" : `More filters +${MORE_FILTERS.length}`}
+          </span>
         </div>
         {!client && (
           <div className="center" style={{gap: 8}}>

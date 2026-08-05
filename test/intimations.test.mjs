@@ -678,3 +678,22 @@ test("with no interest the middle rung is not qualified", () => {
   const l = positionLadder(keshavRow());
   assert.equal(l.rungs[1].label, "Refund CPC computed", "no dangling 'before interest' when there is none");
 });
+
+/* ---------------- uncomparable is not the same as unknown ---------------- */
+
+import { statedDirection } from "../src/intimations.js";
+
+test("an order with no amount still says which way it went", () => {
+  /* Status 61 is "ITR processed, demand determined": that a demand exists is
+     stated by the department. Only the amount is missing, and the card used to
+     reduce both facts to a dash. */
+  assert.equal(statedDirection({ flag: "unknown", direction: "demand" }), "demand");
+  assert.equal(statedDirection({ flag: "unknown", direction: "refund" }), "refund");
+  assert.equal(statedDirection({ flag: "unknown", direction: "unknown" }), "");
+  assert.equal(statedDirection(null), "");
+});
+
+test("the note is what the row shows when there is no figure to show", () => {
+  const note = "CPC's status says this order determined a demand, but the portal did not send the amount. Reading the order will take it off the document.";
+  assert.equal(describeVariance({ flag: "unknown", direction: "demand", note }), note);
+});

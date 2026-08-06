@@ -98,6 +98,14 @@ export async function ingestPortalSyncMessage(payload) {
     return { kind: "proceedings", data: res.data };
   }
 
+  /* What the portal now says about notices already on file — chiefly the date
+     the officer opened the reply, which appears long after the notice itself
+     first synced. No documents; a patch by DIN. */
+  if (payload.kind === "notice-meta") {
+    const res = await httpsCallable(functions, "refreshNoticeMeta")({ notices: payload.notices || [] });
+    return { kind: "notice-meta", data: res.data };
+  }
+
   // A response filed against a notice: upload its attachment PDFs, then record
   // the remarks + attachment paths on the matching notice.
   if (payload.kind === "response") {

@@ -1,59 +1,20 @@
-/* The dates on a notice, and what became of the reply.
+/* "Response viewed by AO on" — reading it out of whatever the portal calls it.
  *
  *   node --test test/noticeDates.test.mjs
  *
- * Two things are being pinned. First, that a due date is said as loudly as it
- * deserves and no louder — a card where every date is red is a card whose
- * colours mean nothing. Second, that a date claimed to be "viewed by AO" really
- * looks like a date: a practitioner may ring a client off the back of it, so a
- * wrong one is worse than none at all.
+ * What is pinned here is that a date the card claims the officer opened a reply
+ * on really is a date. A practitioner may ring a client off the back of it, so
+ * a wrong one is worse than none at all.
+ *
+ * There is deliberately NO countdown to test. The card used to print "overdue
+ * by 695 days" beside a 2024 hearing notice in an appeal the client had since
+ * answered twice — arithmetically right, and the reason nobody would read the
+ * card again.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  daysUntilDate, dueTone, dueLabel,
-  viewedByOfficer, unnamedFields, looksLikeDate, fmtPortalDate,
-} from "../src/noticeDates.js";
-
-const TODAY = new Date("2026-06-10T09:30:00");
-
-/* ---------------- how far away it is ---------------- */
-
-test("days are counted whole, from midnight, whatever the time of day", () => {
-  assert.equal(daysUntilDate("2026-06-10", TODAY), 0, "later the same day is still today");
-  assert.equal(daysUntilDate("2026-06-11", TODAY), 1);
-  assert.equal(daysUntilDate("2026-06-01", TODAY), -9);
-  assert.equal(daysUntilDate("", TODAY), null);
-  assert.equal(daysUntilDate("not a date", TODAY), null);
-});
-
-test("only a date worth shouting about is loud", () => {
-  assert.equal(dueTone("2026-06-01", TODAY).state, "overdue");
-  assert.equal(dueTone("2026-06-10", TODAY).state, "today");
-  assert.equal(dueTone("2026-06-12", TODAY).state, "urgent");
-  assert.equal(dueTone("2026-06-18", TODAY).state, "soon");
-  assert.equal(dueTone("2026-08-01", TODAY).state, "open");
-
-  // The whole point of the scale: a date seven weeks out is stated in grey.
-  assert.equal(dueTone("2026-08-01", TODAY).loud, false);
-  assert.equal(dueTone("2026-06-01", TODAY).loud, true);
-});
-
-test("overdue is red, closing is amber, and nothing else is coloured", () => {
-  assert.equal(dueTone("2026-06-01", TODAY).colour, "#B23B3B");
-  assert.equal(dueTone("2026-06-18", TODAY).colour, "#B07512");
-  assert.equal(dueTone("2026-08-01", TODAY).colour, "var(--p-text-3)");
-});
-
-test("the label says the thing a practitioner would say out loud", () => {
-  assert.equal(dueLabel("2026-06-06", TODAY), "overdue by 4 days");
-  assert.equal(dueLabel("2026-06-09", TODAY), "overdue by 1 day");
-  assert.equal(dueLabel("2026-06-10", TODAY), "due today");
-  assert.equal(dueLabel("2026-06-11", TODAY), "1 day left");
-  assert.equal(dueLabel("2026-06-20", TODAY), "10 days left");
-  assert.equal(dueLabel("", TODAY), "");
-});
+import { viewedByOfficer, unnamedFields, looksLikeDate, fmtPortalDate } from "../src/noticeDates.js";
 
 /* ---------------- did the officer open it ---------------- */
 
@@ -62,7 +23,7 @@ const reply = (extra) => ({ responseId: "R1", submittedOn: "1749513600000", extr
 test("the viewed date is found whatever the portal calls the field", () => {
   /* ITBA is not consistent across its own services, so the name is matched
      rather than assumed: case and separators are ignored. */
-  for (const key of ["viewedOn", "viewed_on", "VIEWED_DATE", "viewedDt", "aoViewedOn", "responseViewedOn", "seenOn"]) {
+  for (const key of ["responseViewedByAoOn", "viewedByAO", "aoViewedOn", "viewedOn", "viewed_on", "VIEWED_DATE", "viewedDt", "responseViewedOn", "seenOn"]) {
     const out = viewedByOfficer(reply({ [key]: "12/06/2026" }));
     assert.ok(out, `${key} should have been recognised`);
     assert.equal(out.key, key, "and it reports which field it came from");
@@ -124,4 +85,38 @@ test("both date shapes the portal uses come out readable", () => {
   assert.equal(fmtPortalDate("12/06/2026"), "12/06/2026", "printed text is left as printed");
   assert.equal(fmtPortalDate(""), "");
   assert.equal(fmtPortalDate(null), "");
+});
+
+/* ---------------- the notice is where the portal prints it ---------------- */
+
+test("the notice is asked before the reply, because that is where the label is", () => {
+  /* "View Notices for e-Proceedings" prints "Response viewed by AO on" on the
+     NOTICE block, under the response due date — not on the reply. */
+  const notice = { din: "100116461153", extra: { responseViewedByAoOn: "21-Jul-2026" } };
+  const rsp = { responseId: "R1", extra: { viewedOn: "01-Jan-2026" } };
+  assert.equal(viewedByOfficer(notice, rsp).value, "21-Jul-2026");
+});
+
+test("the reply still answers when the notice has nothing", () => {
+  const notice = { din: "1", extra: { respStatus: "Submitted" } };
+  const rsp = { responseId: "R1", extra: { viewedOn: "21-Jul-2026" } };
+  assert.equal(viewedByOfficer(notice, rsp).value, "21-Jul-2026");
+});
+
+test("a record with no extra at all is skipped, not thrown on", () => {
+  assert.equal(viewedByOfficer(null, undefined, {}), null);
+  assert.equal(viewedByOfficer({ extra: { viewedOn: "21-Jul-2026" } }, null).value, "21-Jul-2026");
+});
+
+test("the format the portal actually prints is recognised", () => {
+  /* "Response viewed by AO on : 21-Jul-2026" — a month NAME, not digits. The
+     first version of this check was digits-only and rejected the one format it
+     was written for. */
+  assert.equal(looksLikeDate("21-Jul-2026"), true);
+  assert.equal(looksLikeDate("21-JUL-2026"), true);
+  assert.equal(looksLikeDate("1 Jul 26"), true);
+  assert.equal(looksLikeDate("Jul"), false, "a month on its own is not a date");
+  // And it survives verbatim: re-formatting would make the app and the portal
+  // disagree over the same fact.
+  assert.equal(fmtPortalDate("21-Jul-2026"), "21-Jul-2026");
 });

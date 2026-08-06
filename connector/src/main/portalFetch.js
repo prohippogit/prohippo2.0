@@ -63,18 +63,27 @@ const RESPONSE_MAPPED = new Set([
   "responseId", "remarks", "remarksHash", "submittedOn", "respType", "attachmentLst",
 ]);
 
+/* Same, for a notice row out of eProceedingDetailsService. */
+const NOTICE_MAPPED = new Set([
+  "documentIdentificationNumber", "headerSeqNo", "noticeSection", "description",
+  "issuedOn", "servedOn", "responseDueDate", "documentReferenceId",
+  "ay", "pan", "proceedingStatus", "proceedingName",
+]);
+
 /* WHAT THE PORTAL SENDS THAT WE HAVE NO NAME FOR YET.
  *
- * `itbaResponseService` returns more against a filed reply than the five fields
- * we read, and one of them is the date the assessing officer OPENED it — the
- * single most useful thing a practitioner can know after filing, because it is
- * the difference between "he hasn't looked" and "he's looked and said nothing".
+ * "View Notices for e-Proceedings" prints, on each notice, a line reading
+ * "Response viewed by AO on : 21-Jul-2026" — directly under the response due
+ * date. It is the single most useful thing a practitioner can know after
+ * filing, because it is the difference between "he hasn't looked" and "he's
+ * looked and said nothing".
  *
- * We cannot name that field from here without a live response row in front of
- * us, and ITBA's own naming is inconsistent across services. So rather than
- * guess once and be wrong silently, every remaining SCALAR is carried through
- * under `extra`: bounded hard, no documents, no nested objects. One sync then
- * shows the real key on screen, and it can be given a proper label.
+ * What ITBA calls that field in the JSON behind the label is another matter,
+ * and its naming is not consistent across its own services. So rather than
+ * guess once and be silently wrong, every remaining SCALAR on both the notice
+ * row and the reply row is carried through under `extra`: bounded hard, no
+ * documents, no nested objects. One sync then shows the real key on screen and
+ * it can be given a proper label.
  *
  * Deliberately narrow: strings, numbers and booleans only, 12 of them, 120
  * characters each. This is a discovery hatch, not a second data model. */
@@ -180,10 +189,25 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
       payload: { serviceName: "eProceedingDetailsService", proceedingReqId: r.proceedingReqId, pan, header: FORM },
     }));
     const items = Array.isArray(det.json) ? det.json : [];
+    /* Fields on notices we already hold that may have MOVED since we saw them.
+     *
+     * "Response viewed by AO on" is the reason: the officer opens a reply days
+     * after it is filed, which is long after the notice itself first synced. A
+     * known notice used to be skipped outright, so that date could never
+     * arrive. One small call per proceeding carries them, no PDFs. */
+    const meta = [];
     for (const it of items) {
       const din0 = it.documentIdentificationNumber || "";
       const headerSeqNo = it.headerSeqNo;
       const isKnown = din0 && known.has(String(din0));
+      if (isKnown && din0) {
+        meta.push({
+          din: String(din0),
+          responseDueDate: it.responseDueDate || "",
+          servedOn: it.servedOn || "",
+          extra: extraFields(it, NOTICE_MAPPED),
+        });
+      }
       if (!isKnown) {
         let pdf = null;
         if (headerSeqNo) {
@@ -212,6 +236,7 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
             ay: it.ay || r.ay || "",
             pan: it.pan || pan,
             proceedingStatus: it.proceedingStatus || "",
+            extra: extraFields(it, NOTICE_MAPPED),
             filename: (pdf && pdf.filename) || "",
             contentType: (pdf && pdf.contentType) || "application/pdf",
             contentBase64: (pdf && pdf.base64) || null,
@@ -230,6 +255,13 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
         try { summary.responses += await syncResponses(page, job, pan, din0, String(headerSeqNo)); }
         catch { /* per-notice; keep going */ }
       }
+    }
+    // Not counted as a synced notice — nothing new arrived, we only refreshed
+    // what the portal now says about notices already on file.
+    if (meta.length) {
+      await t.time("ingest", () => ingestSyncMessage({
+        assesseeId: job.assesseeId, kind: "notice-meta", notices: meta,
+      }));
     }
   }
 

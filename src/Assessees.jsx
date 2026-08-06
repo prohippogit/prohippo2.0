@@ -3,7 +3,7 @@ import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, titl
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
   groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS,
   commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus, noticeDeadline } from './store';
-import { dueTone, dueLabel, viewedByOfficer, unnamedFields, fmtPortalDate } from './noticeDates';
+import { viewedByOfficer, unnamedFields, fmtPortalDate } from './noticeDates';
 import { downloadLedgerPDF } from './ledgerPdf';
 import { MatterModal } from './Other';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
@@ -136,29 +136,28 @@ async function downloadDoc(storagePath, filename) {
 
 export { AssesseeModal };
 
-/* When the reply is due, said as loudly as it deserves.
+/* When the reply was due. Stated, and nothing inferred from it.
  *
- * A hearing date, where there is one, outranks the response due date — that is
- * the rule `noticeDeadline` already applies everywhere else, and this must not
- * be the one place that disagrees.
+ * NO COUNTDOWN, DELIBERATELY. This used to read "overdue by 695 days" beside a
+ * hearing notice from 2024 — arithmetically right and completely wrong. An
+ * appeal runs on a series of hearing notices, the assessee answers the current
+ * one, and every superseded notice in the list then reads as a two-year-old
+ * emergency. A row that shouts on a matter nobody is worried about is how a
+ * screen teaches people to stop reading it. Live deadlines belong on the
+ * dashboard and in the calendar; this card is the file.
  *
- * A reply already filed silences the countdown entirely: "overdue by 12 days"
- * over a notice that was answered a fortnight ago is the kind of false alarm
- * that teaches people to ignore the real ones. */
+ * A hearing date, where there is one, outranks the response due date — the rule
+ * `noticeDeadline` already applies everywhere else, and this must not be the one
+ * place that disagrees. */
 function ReplyDue({ notice: n }) {
   const due = noticeDeadline(n);
   if (!due) return null;
   const answered = (n.responses || []).length > 0;
-  const tone = dueTone(due);
-  const isHearing = Boolean(n.hearingDate);
-  const colour = answered ? "var(--p-text-3)" : tone?.colour || "var(--p-text-3)";
   return (
-    <div style={{fontSize: 11.5, marginTop: 3, fontWeight: tone?.loud && !answered ? 700 : 600, color: colour}}>
+    <div className="muted" style={{fontSize: 11.5, marginTop: 3}}>
       <Icon name="clock" size={11}/>{" "}
-      {isHearing ? "Hearing" : "Reply due"} {fmtDateLong(due)}
-      {answered
-        ? <span style={{fontWeight: 500}}> · replied</span>
-        : <span style={{fontWeight: tone?.loud ? 800 : 500}}> · {dueLabel(due)}</span>}
+      {n.hearingDate ? "Hearing" : "Reply due"} {fmtDateLong(due)}
+      {answered && " · replied"}
     </div>
   );
 }
@@ -171,29 +170,30 @@ function fmtSubmitted(v) {
   catch { return String(v); }
 }
 
-/* Whether the officer has opened the reply, and when.
+/* "Response viewed by AO on : 21-Jul-2026" — the portal's own words, and the
+ * most useful thing a practitioner can know after filing. "He hasn't looked"
+ * and "he's looked and said nothing" are two completely different conversations
+ * to have with a client, and the app could not tell them apart.
  *
- * The most useful thing a practitioner can know after filing: "he hasn't
- * looked" and "he's looked and said nothing" are two completely different
- * conversations to have with a client, and until now the app could not tell
- * them apart.
- *
- * The portal does say so, on the reply row, under a name that is not consistent
- * across ITBA's own services and could not be read off a live row while this was
- * being built. So the connector forwards every unmapped scalar and
- * src/noticeDates.js checks the likely names against it — the date appears the
- * moment the real name is one of them. Where it is not, the raw fields sit
- * behind "what else the portal said", which is how the real name gets
- * identified from one live reply rather than from more guessing. */
-function ViewedByOfficer({ response }) {
-  const seen = viewedByOfficer(response);
-  const rest = unnamedFields(response);
+ * WHERE IT COMES FROM. The portal prints it on the NOTICE block, under the
+ * response due date, so that is where it is read from — the reply is only
+ * checked as a fallback. What ITBA calls the field in the JSON behind that
+ * label is not something that could be read off a live row while this was
+ * built, so the connector forwards every unmapped scalar and
+ * src/noticeDates.js matches the likely names. Where none matches, the raw
+ * fields sit behind a disclosure, which is how the real name gets identified
+ * from one live notice rather than from more guessing. */
+function ViewedByOfficer({ notice, response }) {
+  const seen = viewedByOfficer(notice, response);
+  // Only the notice's own unnamed fields are offered: that is where the label
+  // lives on the portal, so that is where the answer will be.
+  const rest = unnamedFields(notice);
   if (!seen && !rest.length) return null;
   return (
     <>
       {seen && (
         <span style={{fontWeight: 700, color: "#1A8A53"}} title={`Portal field: ${seen.key}`}>
-          · viewed by AO {fmtPortalDate(seen.value)}
+          · viewed by AO on {fmtPortalDate(seen.value)}
         </span>
       )}
       {rest.length > 0 && (
@@ -213,7 +213,7 @@ function ViewedByOfficer({ response }) {
 // Responses the assessee filed against a notice — remarks text + downloadable
 // attachment PDFs. Shared by the Matters view and the per-assessee Notices tab
 // so the two never drift apart.
-function ResponsesBlock({ responses, plain }) {
+function ResponsesBlock({ notice, responses, plain }) {
   const list = responses || [];
   if (list.length === 0) return null;
   return (
@@ -228,7 +228,7 @@ function ResponsesBlock({ responses, plain }) {
               <span style={{width: 18, height: 18, borderRadius: "50%", background: "#20B978", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0}}><Icon name="check" size={11} stroke={3}/></span>
               <span style={{fontWeight: 800, color: "#1A8A53"}}>{rsp.respType || "Response"}</span>
               {rsp.submittedOn && <span style={{fontWeight: 700, color: "#1A8A53"}}>· filed {fmtSubmitted(rsp.submittedOn)}</span>}
-              <ViewedByOfficer response={rsp}/>
+              <ViewedByOfficer notice={notice} response={rsp}/>
             </div>
             {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
             {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
@@ -1214,7 +1214,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                   {(n.responses || []).length > 0 && (
                     <tr>
                       <td></td>
-                      <td colSpan="6" style={{paddingTop: 0}}><ResponsesBlock responses={n.responses} plain/></td>
+                      <td colSpan="6" style={{paddingTop: 0}}><ResponsesBlock notice={n} responses={n.responses} plain/></td>
                     </tr>
                   )}
                 </React.Fragment>
@@ -2199,7 +2199,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                           )}
                         </div>
                       )}
-                      <ResponsesBlock responses={n.responses}/>
+                      <ResponsesBlock notice={n} responses={n.responses}/>
                     </div>
                   );
                 })}

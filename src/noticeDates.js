@@ -19,63 +19,44 @@
  * client.
  */
 
-const DAY = 86400000;
-
-const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
-const parseISO = (s) => startOfDay(new Date(`${s}T00:00:00`));
-
-/** Whole days from today to an ISO date. Negative is in the past. */
-export function daysUntilDate(iso, today = new Date()) {
-  if (!iso) return null;
-  const d = parseISO(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return Math.round((d - startOfDay(today)) / DAY);
-}
-
-/* How loudly to say a due date.
+/* NO COUNTDOWN, DELIBERATELY.
  *
- * An OVERDUE reply is the loud one — the window has gone and somebody needs to
- * know today. A date comfortably ahead is stated in grey: a card where every
- * date is red is a card whose colours mean nothing. */
-export function dueTone(iso, today = new Date()) {
-  const days = daysUntilDate(iso, today);
-  if (days === null) return null;
-  if (days < 0) return { state: "overdue", days, colour: "#B23B3B", loud: true };
-  if (days === 0) return { state: "today", days, colour: "#B23B3B", loud: true };
-  if (days <= 3) return { state: "urgent", days, colour: "#B23B3B", loud: true };
-  if (days <= 10) return { state: "soon", days, colour: "#B07512", loud: true };
-  return { state: "open", days, colour: "var(--p-text-3)", loud: false };
-}
-
-/** "Overdue by 4 days" / "Due today" / "6 days left". */
-export function dueLabel(iso, today = new Date()) {
-  const days = daysUntilDate(iso, today);
-  if (days === null) return "";
-  if (days < 0) return `overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"}`;
-  if (days === 0) return "due today";
-  if (days === 1) return "1 day left";
-  return `${days} days left`;
-}
+ * This screen used to print "overdue by 695 days" beside a hearing notice from
+ * 2024. It was arithmetically right and completely wrong: an appeal runs on a
+ * series of hearing notices, the assessee answers the current one, and every
+ * superseded notice in the list then reads as a two-year-old emergency. A row
+ * that shouts on a matter nobody is worried about is how a screen teaches
+ * people to stop reading it.
+ *
+ * So the due date is stated and nothing is inferred from it. The dashboard and
+ * the calendar are where a live deadline belongs; this card is the file.
+ */
 
 /* ---------------- what became of the reply ---------------- */
 
-/* Field names the portal might use for "the officer opened this".
+/* Field names the portal might use for "Response viewed by AO on".
  *
- * ITBA is not consistent across its own services, and this one cannot be read
- * off a live row from here. So the connector forwards every unmapped scalar
- * (portalFetch.js `extraFields`) and this list is checked against it — the
- * moment the real name is among these, the date appears on screen with no
- * further deploy. Where it is NOT among them, the raw fields are shown on the
- * card so the name can be read off a real reply and added here.
+ * The portal prints that label on the NOTICE block of "View Notices for
+ * e-Proceedings", directly under "Response Due Date" — not on the reply. What
+ * it calls the field in the JSON behind that label is another matter, and ITBA
+ * is not consistent across its own services.
+ *
+ * So the connector forwards every unmapped scalar from both rows
+ * (portalFetch.js `extraFields`) and this list is checked against them. The
+ * moment the real name is among these, the date appears with no further deploy;
+ * where it is not, the raw fields are shown on the card so the name can be read
+ * off a live notice and added here.
  *
  * Matching is case-insensitive and ignores separators, so `viewedOn`,
  * `viewed_on`, `VIEWED_DATE` and `viewedDt` are all the same key. */
 const VIEWED_KEYS = [
-  "viewedon", "viewedby", "viewedbyao", "vieweddate", "vieweddt", "viewdate", "viewdt", "viewedts",
-  "seenon", "seendate", "seendt",
-  "readon", "readdate", "readdt",
-  "aoviewedon", "aovieweddate", "officerviewedon",
-  "responseviewedon", "responseviewdate", "respviewdt", "respviewedon",
+  // Closest to the portal's own words, so tried first.
+  "responseviewedbyaoon", "responseviewedbyao", "respviewedbyaoon", "respviewedbyao",
+  "viewedbyaoon", "viewedbyao", "aoviewedon", "aovieweddate", "aoviewdate", "aoviewdt",
+  "responseviewedon", "responseviewdate", "responseviewdt", "respviewedon", "respviewdt",
+  "officerviewedon", "viewedbyofficeron",
+  "viewedon", "vieweddate", "vieweddt", "viewdate", "viewdt", "viewedts",
+  "seenon", "seendate", "seendt", "readon", "readdate", "readdt",
 ];
 
 const norm = (k) => String(k || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -92,36 +73,49 @@ export function looksLikeDate(v) {
   // Epoch millis, roughly 2001 to 2100. Seconds are excluded deliberately: a
   // 10-digit number is as likely to be an id as a timestamp.
   if (Number.isFinite(n) && String(v).replace(/\D/g, "").length >= 12 && n > 978307200000 && n < 4102444800000) return true;
-  return /\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/.test(String(v));
+  const s = String(v);
+  // All digits: 21/07/2026, 2026-07-21, 21.07.2026.
+  if (/\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/.test(s)) return true;
+  // With a month NAME — which is what the portal actually prints on this very
+  // field: "Response viewed by AO on : 21-Jul-2026". A digits-only rule missed
+  // the one format this was written for.
+  return /\d{1,2}[-\s/](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[-\s/]\d{2,4}/i.test(s);
 }
 
 /**
- * When the officer opened this reply, if the portal said so.
+ * When the officer opened the reply, if the portal said so.
+ *
+ * Takes anything carrying an `extra` map — a NOTICE first, since that is where
+ * the portal prints it, and a response as a fallback in case the JSON puts it
+ * there too. Several may be passed; the first that answers wins.
  *
  * @returns { key, value } — the field it came from and its raw value, so the
- *          screen can show where a date it is asserting actually came from.
- *          null when nothing in the row looks like one.
+ *          screen can say where a date it is asserting actually came from.
+ *          null when nothing in the rows looks like one.
  */
-export function viewedByOfficer(response) {
-  const extra = response?.extra;
-  if (!extra || typeof extra !== "object") return null;
-  const byNorm = new Map(Object.keys(extra).map((k) => [norm(k), k]));
-  for (const want of VIEWED_KEYS) {
-    const key = byNorm.get(want);
-    if (key && looksLikeDate(extra[key])) return { key, value: extra[key] };
+export function viewedByOfficer(...records) {
+  for (const rec of records) {
+    const extra = rec?.extra;
+    if (!extra || typeof extra !== "object") continue;
+    const byNorm = new Map(Object.keys(extra).map((k) => [norm(k), k]));
+    for (const want of VIEWED_KEYS) {
+      const key = byNorm.get(want);
+      if (key && looksLikeDate(extra[key])) return { key, value: extra[key] };
+    }
   }
   return null;
 }
 
-/* Everything the portal sent about a reply that we have no name for.
+/* Everything the portal sent that we have no name for.
  *
  * Shown on screen, quietly, behind a disclosure. It is how the real name of the
- * "viewed" field gets identified from one live reply instead of from guessing —
- * and it costs nothing, because the connector is already carrying these. */
-export function unnamedFields(response) {
-  const extra = response?.extra;
+ * "Response viewed by AO on" field gets identified from one live notice instead
+ * of from more guessing — and it costs nothing, because the connector is
+ * already carrying these. */
+export function unnamedFields(record) {
+  const extra = record?.extra;
   if (!extra || typeof extra !== "object") return [];
-  const known = viewedByOfficer(response);
+  const known = viewedByOfficer(record);
   return Object.entries(extra)
     .filter(([k]) => k !== known?.key)
     .map(([key, value]) => ({ key, value }));

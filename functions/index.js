@@ -620,6 +620,9 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
     if (storagePath) { patch.storagePath = storagePath; if (!cur.fileName) patch.fileName = fileName; }
     const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate, servedOn };
     for (const k of Object.keys(fill)) if (!cur[k] && fill[k]) patch[k] = fill[k];
+    // Portal-owned, so it tracks the portal rather than filling a gap once.
+    const extraNow = cleanExtra(notice.extra);
+    if (Object.keys(extraNow).length) patch.extra = extraNow;
     await existing.ref.set(patch, { merge: true });
     noticeId = existing.id;
     added = false;
@@ -630,7 +633,7 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
       din, docKey, isOrder, docType: isOrder ? classifyDocType(notice.description || fileName, notice.section, authority) : "",
       date, subject: notice.description || "", status: "Awaiting review",
       mode: "e-Proceeding", bench: "", ita: "", hearingDate: "", hearingTime: "",
-      documents: [], responseDueDate: dueDate, servedOn,
+      documents: [], responseDueDate: dueDate, servedOn, extra: cleanExtra(notice.extra),
       source: "portal", proceedingReqId: notice.proceedingReqId || "",
       storagePath: storagePath || "", fileName,
       createdAt: new Date().toISOString(), portalSyncedAt: new Date().toISOString(),
@@ -1600,6 +1603,48 @@ exports.ingestPortalResponse = onCall({ region: REGIONS, maxInstances: 10 }, asy
   });
   await ref.set({ responses, hasResponse: true }, { merge: true });
   return { ok: true, count: responses.length };
+});
+
+/* What the portal now says about notices ALREADY ON FILE.
+ *
+ * The portal prints "Response viewed by AO on : 21-Jul-2026" on the notice
+ * block, and that date appears days after the reply is filed — which is long
+ * after the notice itself first synced. A notice already held was skipped
+ * outright by the connector and never written again, so the date could never
+ * arrive. This is the small patch-by-DIN that lets it.
+ *
+ * Only portal-derived metadata moves. The practitioner's own edits — status,
+ * authority, their hearing date — are never touched, which is the same rule
+ * ingestPortalNotice follows on a re-sync. */
+exports.refreshNoticeMeta = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const list = Array.isArray(request.data?.notices) ? request.data.notices.slice(0, 200) : [];
+  if (!list.length) return { ok: true, updated: 0 };
+
+  let updated = 0;
+  for (const row of list) {
+    const din = String(row?.din || "").trim();
+    if (!din) continue;
+    const q = await db.collection(`users/${uid}/notices`).where("din", "==", din).limit(1).get();
+    if (q.empty) continue;
+
+    const cur = q.docs[0].data() || {};
+    const patch = {};
+    const extra = cleanExtra(row.extra);
+    if (Object.keys(extra).length && JSON.stringify(cur.extra || {}) !== JSON.stringify(extra)) patch.extra = extra;
+    // These two the portal owns outright, but only fill a gap — a date the
+    // practitioner corrected by hand is theirs.
+    const due = parsePortalDate(row.responseDueDate);
+    if (due && !cur.responseDueDate) patch.responseDueDate = due;
+    const served = parsePortalDate(row.servedOn);
+    if (served && !cur.servedOn) patch.servedOn = served;
+
+    if (!Object.keys(patch).length) continue;
+    await q.docs[0].ref.set(patch, { merge: true });
+    updated += 1;
+  }
+  return { ok: true, updated };
 });
 
 /* Portal fields we have no mapping for, kept honest: scalars only, bounded in

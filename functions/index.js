@@ -623,6 +623,7 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
     // Portal-owned, so it tracks the portal rather than filling a gap once.
     const extraNow = cleanExtra(notice.extra);
     if (Object.keys(extraNow).length) patch.extra = extraNow;
+    patch.metaSyncedAt = new Date().toISOString();
     await existing.ref.set(patch, { merge: true });
     noticeId = existing.id;
     added = false;
@@ -633,7 +634,7 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
       din, docKey, isOrder, docType: isOrder ? classifyDocType(notice.description || fileName, notice.section, authority) : "",
       date, subject: notice.description || "", status: "Awaiting review",
       mode: "e-Proceeding", bench: "", ita: "", hearingDate: "", hearingTime: "",
-      documents: [], responseDueDate: dueDate, servedOn, extra: cleanExtra(notice.extra),
+      documents: [], responseDueDate: dueDate, servedOn, extra: cleanExtra(notice.extra), metaSyncedAt: new Date().toISOString(),
       source: "portal", proceedingReqId: notice.proceedingReqId || "",
       storagePath: storagePath || "", fileName,
       createdAt: new Date().toISOString(), portalSyncedAt: new Date().toISOString(),
@@ -1633,6 +1634,11 @@ exports.refreshNoticeMeta = onCall({ region: REGIONS, maxInstances: 10 }, async 
     const patch = {};
     const extra = cleanExtra(row.extra);
     if (Object.keys(extra).length && JSON.stringify(cur.extra || {}) !== JSON.stringify(extra)) patch.extra = extra;
+    /* Written even when the portal sent nothing, because "we looked and it said
+       nothing" and "we never looked" are different answers and the screen could
+       not tell them apart. It is also what stops the app asking again: the
+       connector only spends a call on a proceeding whose notices lack this. */
+    if (!cur.metaSyncedAt) patch.metaSyncedAt = new Date().toISOString();
     // These two the portal owns outright, but only fill a gap — a date the
     // practitioner corrected by hand is theirs.
     const due = parsePortalDate(row.responseDueDate);

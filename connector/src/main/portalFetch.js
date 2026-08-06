@@ -172,6 +172,18 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
   const t = clock(job);
   const known = new Set((job.knowns.knownDins || []).map((d) => String(d)));
   const knownByProc = job.knowns.knownByProc || {};
+  /* Proceedings holding a reply whose portal metadata we have never read.
+   *
+   * THIS IS WHY "Response viewed by AO on" DID NOT ARRIVE. A disposed appeal is
+   * closed and its notice count never changes again, so the skip below took it
+   * out before the detail call that carries the metadata was ever made — and a
+   * disposed appeal is precisely where a practitioner wants to know whether the
+   * officer read the submission before dismissing it.
+   *
+   * Self-limiting: the app only lists a proceeding here while one of its
+   * replied-to notices has no metadata on file, so this costs one call each
+   * until the answer lands and then nothing. */
+  const needsMeta = new Set((job.knowns.procNeedsMeta || []).map((p) => String(p)));
   const scope = job.scope;
   const isClosed = (r) => /information/i.test(r.tab || "") || r.proceedingStatus === "C";
   const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
@@ -181,8 +193,9 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
     const kp = knownByProc[r.proceedingReqId] || {};
     const countMatches = (r.viewNoticeCount || 0) <= (kp.n || 0);
     // Unchanged closed proceeding (or unchanged active one in eproc mode): skip
-    // its detail call and every per-notice reply call entirely.
-    if (countMatches && (isClosed(r) || scope === "eproc")) continue;
+    // its detail call and every per-notice reply call entirely — unless its
+    // notices are still missing the metadata that only that call carries.
+    if (countMatches && (isClosed(r) || scope === "eproc") && !needsMeta.has(String(r.proceedingReqId))) continue;
     emit("fetch", `Notices ${i + 1}/${targets.length} — ${(r.name || "proceeding").slice(0, 28)}…`, "info", 30 + Math.round(((i + 1) / targets.length) * 50));
     const det = await t.time("notice-list", () => apiCall(page, {
       path: PATHS.GET_ENTITY, serviceName: "eProceedingDetailsService",

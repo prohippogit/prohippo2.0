@@ -53,6 +53,7 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
   const knownResponseIds = new Set();
   const procNotices = {};        // proceedingReqId -> Set<DIN>
   const procHasOrder = new Set();
+  const procNeedsMeta = new Set();
   (notices || []).forEach((n) => {
     if (n.pan !== pan) return;
     if (n.din) knownDins.add(n.din);
@@ -61,6 +62,13 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
     if (pid) {
       if (n.isOrder) procHasOrder.add(pid);
       if (n.din) (procNotices[pid] || (procNotices[pid] = new Set())).add(String(n.din));
+      /* A notice with a reply on it but nothing yet from the portal's own
+         metadata — "Response viewed by AO on" is the one that matters.
+         Marking the PROCEEDING means the connector makes its one detail call
+         even where the count is unchanged and the proceeding is closed, which
+         is otherwise skipped outright. It is self-limiting: once the metadata
+         is on file the notice drops out of this set and the skip returns. */
+      if ((n.responses || []).length && !n.metaSyncedAt) procNeedsMeta.add(pid);
     }
     (n.responses || []).forEach((r) => { if (r && r.responseId != null) knownResponseIds.add(String(r.responseId)); });
   });
@@ -91,6 +99,7 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
   });
   return {
     knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds],
+    procNeedsMeta: [...procNeedsMeta],
     knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, knownFormAcks,
     canUnlockOrders: Boolean(dob),
   };
@@ -188,7 +197,13 @@ function ViewedByOfficer({ notice, response }) {
   // Only the notice's own unnamed fields are offered: that is where the label
   // lives on the portal, so that is where the answer will be.
   const rest = unnamedFields(notice);
-  if (!seen && !rest.length) return null;
+  /* "We looked and the portal said nothing" is a different answer from "we
+     have never looked", and with no marker the screen showed the same blank
+     for both — which is exactly how the first attempt at this went unnoticed.
+     `metaSyncedAt` is stamped whenever the metadata pass touches the notice,
+     empty result included, so the two can be told apart. */
+  const looked = Boolean(notice?.metaSyncedAt);
+  if (!seen && !rest.length && !looked) return null;
   return (
     <>
       {seen && (
@@ -196,13 +211,15 @@ function ViewedByOfficer({ notice, response }) {
           · viewed by AO on {fmtPortalDate(seen.value)}
         </span>
       )}
-      {rest.length > 0 && (
+      {(rest.length > 0 || (looked && !seen)) && (
         <details style={{width: "100%", marginTop: 4}}>
           <summary style={{fontSize: 10.5, cursor: "pointer", opacity: 0.7}}>
-            {seen ? "What else the portal said" : "The portal sent fields we have no name for"}
+            {seen ? "What else the portal said" : "No viewed-by-AO date came through — what the portal did send"}
           </summary>
           <div style={{fontSize: 10.5, marginTop: 4, lineHeight: 1.7, fontFamily: "ui-monospace, monospace", opacity: 0.85}}>
-            {rest.map((f) => <div key={f.key}>{f.key}: {String(f.value)}</div>)}
+            {rest.length
+              ? rest.map((f) => <div key={f.key}>{f.key}: {String(f.value)}</div>)
+              : <div>Nothing beyond the fields already shown. The portal prints the date on its own page, so its API is not returning it on this notice.</div>}
           </div>
         </details>
       )}

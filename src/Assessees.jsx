@@ -2,7 +2,8 @@ import React from 'react';
 import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
   groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS,
-  commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus } from './store';
+  commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus, noticeDeadline } from './store';
+import { dueTone, dueLabel, viewedByOfficer, unnamedFields, fmtPortalDate } from './noticeDates';
 import { downloadLedgerPDF } from './ledgerPdf';
 import { MatterModal } from './Other';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
@@ -135,12 +136,78 @@ async function downloadDoc(storagePath, filename) {
 
 export { AssesseeModal };
 
+/* When the reply is due, said as loudly as it deserves.
+ *
+ * A hearing date, where there is one, outranks the response due date — that is
+ * the rule `noticeDeadline` already applies everywhere else, and this must not
+ * be the one place that disagrees.
+ *
+ * A reply already filed silences the countdown entirely: "overdue by 12 days"
+ * over a notice that was answered a fortnight ago is the kind of false alarm
+ * that teaches people to ignore the real ones. */
+function ReplyDue({ notice: n }) {
+  const due = noticeDeadline(n);
+  if (!due) return null;
+  const answered = (n.responses || []).length > 0;
+  const tone = dueTone(due);
+  const isHearing = Boolean(n.hearingDate);
+  const colour = answered ? "var(--p-text-3)" : tone?.colour || "var(--p-text-3)";
+  return (
+    <div style={{fontSize: 11.5, marginTop: 3, fontWeight: tone?.loud && !answered ? 700 : 600, color: colour}}>
+      <Icon name="clock" size={11}/>{" "}
+      {isHearing ? "Hearing" : "Reply due"} {fmtDateLong(due)}
+      {answered
+        ? <span style={{fontWeight: 500}}> · replied</span>
+        : <span style={{fontWeight: tone?.loud ? 800 : 500}}> · {dueLabel(due)}</span>}
+    </div>
+  );
+}
+
 // The portal sends submittedOn as epoch millis; render it as a readable date.
 function fmtSubmitted(v) {
   const n = Number(v);
   if (!v || Number.isNaN(n)) return String(v || "");
   try { return new Date(n).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
   catch { return String(v); }
+}
+
+/* Whether the officer has opened the reply, and when.
+ *
+ * The most useful thing a practitioner can know after filing: "he hasn't
+ * looked" and "he's looked and said nothing" are two completely different
+ * conversations to have with a client, and until now the app could not tell
+ * them apart.
+ *
+ * The portal does say so, on the reply row, under a name that is not consistent
+ * across ITBA's own services and could not be read off a live row while this was
+ * being built. So the connector forwards every unmapped scalar and
+ * src/noticeDates.js checks the likely names against it — the date appears the
+ * moment the real name is one of them. Where it is not, the raw fields sit
+ * behind "what else the portal said", which is how the real name gets
+ * identified from one live reply rather than from more guessing. */
+function ViewedByOfficer({ response }) {
+  const seen = viewedByOfficer(response);
+  const rest = unnamedFields(response);
+  if (!seen && !rest.length) return null;
+  return (
+    <>
+      {seen && (
+        <span style={{fontWeight: 700, color: "#1A8A53"}} title={`Portal field: ${seen.key}`}>
+          · viewed by AO {fmtPortalDate(seen.value)}
+        </span>
+      )}
+      {rest.length > 0 && (
+        <details style={{width: "100%", marginTop: 4}}>
+          <summary style={{fontSize: 10.5, cursor: "pointer", opacity: 0.7}}>
+            {seen ? "What else the portal said" : "The portal sent fields we have no name for"}
+          </summary>
+          <div style={{fontSize: 10.5, marginTop: 4, lineHeight: 1.7, fontFamily: "ui-monospace, monospace", opacity: 0.85}}>
+            {rest.map((f) => <div key={f.key}>{f.key}: {String(f.value)}</div>)}
+          </div>
+        </details>
+      )}
+    </>
+  );
 }
 
 // Responses the assessee filed against a notice — remarks text + downloadable
@@ -157,10 +224,11 @@ function ResponsesBlock({ responses, plain }) {
       <div className="col" style={{gap: 8}}>
         {list.map((rsp, ri) => (
           <div key={ri} style={{padding: "9px 11px", background: "var(--p-mint)", border: "1px solid #CDEED9", borderRadius: 10, fontSize: 12, color: "#3A5A46"}}>
-            <div className="center" style={{gap: 7, justifyContent: "flex-start", marginBottom: rsp.remarks ? 5 : 0}}>
+            <div className="center" style={{gap: 7, justifyContent: "flex-start", marginBottom: rsp.remarks ? 5 : 0, flexWrap: "wrap"}}>
               <span style={{width: 18, height: 18, borderRadius: "50%", background: "#20B978", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0}}><Icon name="check" size={11} stroke={3}/></span>
               <span style={{fontWeight: 800, color: "#1A8A53"}}>{rsp.respType || "Response"}</span>
-              {rsp.submittedOn && <span style={{fontWeight: 700, color: "#1A8A53"}}>· {fmtSubmitted(rsp.submittedOn)}</span>}
+              {rsp.submittedOn && <span style={{fontWeight: 700, color: "#1A8A53"}}>· filed {fmtSubmitted(rsp.submittedOn)}</span>}
+              <ViewedByOfficer response={rsp}/>
             </div>
             {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
             {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
@@ -2064,8 +2132,20 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                           <div className="muted" style={{fontSize: 11, marginTop: 2}}>
                             {appeal
                               ? [ap.dateFiling ? `Filed ${fmtDateLong(ap.dateFiling)}` : "", ap.ackNum ? `Ack ${ap.ackNum}` : "", ap.dateOrder ? `vs order ${fmtDateLong(ap.dateOrder)}` : "", ap.orderSection ? `u/s ${ap.orderSection}` : "", ap.appealSection ? `appeal u/s ${ap.appealSection}` : ""].filter(Boolean).join(" · ")
-                              : [n.date ? fmtDateLong(n.date) : "", n.section ? `u/s ${n.section}` : "", n.din ? `DIN ${n.din}` : ""].filter(Boolean).join(" · ")}
+                              : [
+                                n.date ? `Issued ${fmtDateLong(n.date)}` : "",
+                                // Only when it differs — on most notices the two
+                                // are the same day and printing both is noise.
+                                n.servedOn && n.servedOn !== n.date ? `served ${fmtDateLong(n.servedOn)}` : "",
+                                n.section ? `u/s ${n.section}` : "",
+                                n.din ? `DIN ${n.din}` : "",
+                              ].filter(Boolean).join(" · ")}
                           </div>
+                          {/* THE DATE THE PRACTICE WORKS TO. The portal has always
+                              sent it and the dashboard has always used it; this
+                              card simply never printed it. An order has no reply
+                              date, so it only shows on notices. */}
+                          {!appeal && !n.isOrder && <ReplyDue notice={n}/>}
                           {!appeal && (n.assessedIncome != null || (n.parsed && n.parsed.disputedDemand)) ? (
                             <div style={{fontSize: 12, marginTop: 3, fontWeight: 700, color: "#8A6A12"}}>
                               {[n.assessedIncome != null ? `Assessed ${fmtINR(n.assessedIncome)}` : "", n.parsed && n.parsed.disputedDemand ? `Demand ${fmtINR(n.parsed.disputedDemand)}` : ""].filter(Boolean).join(" · ")}

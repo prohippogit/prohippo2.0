@@ -562,6 +562,12 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
   const isOrder = Boolean(notice.isOrder);
   const date = parsePortalDate(notice.issuedOn) || parsePortalDate(notice.servedOn);
   const dueDate = parsePortalDate(notice.responseDueDate);
+  /* Kept as its own field, not only as a fallback for `date`.
+     Issue and SERVICE are different dates and the difference is load-bearing:
+     s.249(2) runs the appeal window from service, and a notice issued on the
+     30th and served on the 3rd has three days of somebody's window already
+     gone. The connector has always sent it; nothing stored it. */
+  const servedOn = parsePortalDate(notice.servedOn);
   const ay = formatAy(notice.ay);
   const authority = deriveAuthority(notice.proceedingName, notice.section);
   const fileName = filename || notice.filename || "";
@@ -612,7 +618,7 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
     const patch = { source: cur.source || "portal", din, docKey, isOrder, proceedingReqId: notice.proceedingReqId || "", portalSyncedAt: new Date().toISOString() };
     if (isOrder && !cur.docType) patch.docType = classifyDocType(notice.description || fileName, notice.section, authority);
     if (storagePath) { patch.storagePath = storagePath; if (!cur.fileName) patch.fileName = fileName; }
-    const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate };
+    const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate, servedOn };
     for (const k of Object.keys(fill)) if (!cur[k] && fill[k]) patch[k] = fill[k];
     await existing.ref.set(patch, { merge: true });
     noticeId = existing.id;
@@ -624,7 +630,7 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
       din, docKey, isOrder, docType: isOrder ? classifyDocType(notice.description || fileName, notice.section, authority) : "",
       date, subject: notice.description || "", status: "Awaiting review",
       mode: "e-Proceeding", bench: "", ita: "", hearingDate: "", hearingTime: "",
-      documents: [], responseDueDate: dueDate,
+      documents: [], responseDueDate: dueDate, servedOn,
       source: "portal", proceedingReqId: notice.proceedingReqId || "",
       storagePath: storagePath || "", fileName,
       createdAt: new Date().toISOString(), portalSyncedAt: new Date().toISOString(),
@@ -1552,6 +1558,31 @@ exports.ingestPortalResponse = onCall({ region: REGIONS, maxInstances: 10 }, asy
   const ref = q.docs[0].ref;
   const cur = q.docs[0].data();
   const responses = Array.isArray(cur.responses) ? cur.responses.slice() : [];
+
+  /* A REFRESH: what the portal now says about replies already on file.
+   *
+   * This exists because the interesting fields appear LATE. A reply is filed on
+   * Monday and the officer opens it on Thursday, so the date that says so is
+   * only ever on a row we have already stored. The old code returned early on a
+   * duplicate responseId and never wrote again, which is why nothing after the
+   * moment of filing could ever be learnt.
+   *
+   * Only `extra` moves. Remarks, attachments and the filing date are settled
+   * facts and a refresh must not be able to rewrite them. */
+  if (Array.isArray(response.refresh)) {
+    let changed = false;
+    for (const row of response.refresh.slice(0, 50)) {
+      const i = responses.findIndex((r) => String(r.responseId) === String(row?.responseId || ""));
+      if (i < 0) continue;
+      const extra = cleanExtra(row.extra);
+      if (JSON.stringify(responses[i].extra || {}) === JSON.stringify(extra)) continue;
+      responses[i] = { ...responses[i], extra };
+      changed = true;
+    }
+    if (changed) await ref.set({ responses }, { merge: true });
+    return { ok: true, refreshed: changed };
+  }
+
   const rid = String(response.responseId || "");
   if (rid && responses.some((r) => String(r.responseId) === rid)) return { ok: true, dup: true };
 
@@ -1560,6 +1591,9 @@ exports.ingestPortalResponse = onCall({ region: REGIONS, maxInstances: 10 }, asy
     remarks: (response.remarks || "").toString(),
     submittedOn: (response.submittedOn || "").toString(),
     respType: (response.respType || "").toString(),
+    // Whatever else the portal said about this reply. Named fields are read off
+    // this on screen; the rest is shown raw so an unknown one can be identified.
+    extra: cleanExtra(response.extra),
     attachments: Array.isArray(response.attachments)
       ? response.attachments.map((a) => ({ storagePath: a.storagePath || "", filename: a.filename || "attachment.pdf", label: (a.label || "").toString() }))
       : [],
@@ -1567,6 +1601,24 @@ exports.ingestPortalResponse = onCall({ region: REGIONS, maxInstances: 10 }, asy
   await ref.set({ responses, hasResponse: true }, { merge: true });
   return { ok: true, count: responses.length };
 });
+
+/* Portal fields we have no mapping for, kept honest: scalars only, bounded in
+   count and length. A discovery hatch, not a second data model — the connector
+   applies the same limits before this ever sees them (portalFetch.js
+   extraFields), and this is the server-side half of the same rule. */
+function cleanExtra(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out = {};
+  let n = 0;
+  for (const [k, val] of Object.entries(v)) {
+    if (n >= 12) break;
+    const t = typeof val;
+    if (t !== "string" && t !== "number" && t !== "boolean") continue;
+    out[String(k).slice(0, 40)] = t === "string" ? val.slice(0, 120) : val;
+    n++;
+  }
+  return out;
+}
 
 // A CIT(A) appeal filed as Form 35 (from the portal's "View Filed Forms").
 // Match it to the assessee's First Appeal proceeding by AY (+ corroborate with

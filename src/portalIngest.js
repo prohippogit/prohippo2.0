@@ -102,6 +102,16 @@ export async function ingestPortalSyncMessage(payload) {
   // the remarks + attachment paths on the matching notice.
   if (payload.kind === "response") {
     const r = payload.response || {};
+    /* A refresh carries no documents. It is the portal's latest word on replies
+       already on file — chiefly the date the officer opened them, which only
+       appears against a reply we have already seen once. Straight through, no
+       Storage work. */
+    if (Array.isArray(r.refresh)) {
+      const res = await httpsCallable(functions, "ingestPortalResponse")({
+        assesseeId: payload.assesseeId, noticeKey: r.noticeKey, response: { refresh: r.refresh },
+      });
+      return { kind: "response", data: res.data };
+    }
     const uid = auth.currentUser?.uid;
     const attachments = [];
     let ai = 0;
@@ -119,7 +129,7 @@ export async function ingestPortalSyncMessage(payload) {
     }
     const res = await httpsCallable(functions, "ingestPortalResponse")({
       assesseeId: payload.assesseeId, noticeKey: r.noticeKey,
-      response: { responseId: r.responseId, remarks: r.remarks, submittedOn: r.submittedOn, respType: r.respType, attachments },
+      response: { responseId: r.responseId, remarks: r.remarks, submittedOn: r.submittedOn, respType: r.respType, extra: r.extra || {}, attachments },
     });
     return { kind: "response", data: res.data };
   }

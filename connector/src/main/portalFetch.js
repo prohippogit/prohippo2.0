@@ -57,6 +57,41 @@ function mapRow(o, tab) {
   };
 }
 
+/* Fields on a portal response row that we map by name. Everything else scalar
+   is swept up by extraFields() below. */
+const RESPONSE_MAPPED = new Set([
+  "responseId", "remarks", "remarksHash", "submittedOn", "respType", "attachmentLst",
+]);
+
+/* WHAT THE PORTAL SENDS THAT WE HAVE NO NAME FOR YET.
+ *
+ * `itbaResponseService` returns more against a filed reply than the five fields
+ * we read, and one of them is the date the assessing officer OPENED it — the
+ * single most useful thing a practitioner can know after filing, because it is
+ * the difference between "he hasn't looked" and "he's looked and said nothing".
+ *
+ * We cannot name that field from here without a live response row in front of
+ * us, and ITBA's own naming is inconsistent across services. So rather than
+ * guess once and be wrong silently, every remaining SCALAR is carried through
+ * under `extra`: bounded hard, no documents, no nested objects. One sync then
+ * shows the real key on screen, and it can be given a proper label.
+ *
+ * Deliberately narrow: strings, numbers and booleans only, 12 of them, 120
+ * characters each. This is a discovery hatch, not a second data model. */
+function extraFields(row, mapped) {
+  const out = {};
+  let n = 0;
+  for (const [k, v] of Object.entries(row || {})) {
+    if (mapped.has(k) || v === null || v === undefined || v === "") continue;
+    const t = typeof v;
+    if (t !== "string" && t !== "number" && t !== "boolean") continue;
+    if (n >= 12) break;
+    out[String(k).slice(0, 40)] = t === "string" ? v.slice(0, 120) : v;
+    n++;
+  }
+  return out;
+}
+
 // Responses filed against one notice (remarks + attachment PDFs).
 async function syncResponses(page, job, pan, din, headerSeqNo) {
   const t = clock(job);
@@ -67,11 +102,25 @@ async function syncResponses(page, job, pan, din, headerSeqNo) {
   }));
   const list = resp.json && Array.isArray(resp.json.respRemrkAttLst) ? resp.json.respRemrkAttLst : [];
   let count = 0;
+  /* KNOWN responses, gathered and sent in ONE message at the end.
+   *
+   * They cannot be skipped outright any more: an AO opens a reply days after it
+   * is filed, so the fields that say so only ever appear on a row we have
+   * already seen once. Skipping is exactly why nothing downstream could learn
+   * that a reply had been looked at.
+   *
+   * But one callable per response per sync would be a round trip per reply for
+   * ever, so they ride together — one small call per notice, no PDFs, and the
+   * ingest merges rather than duplicating. */
+  const refresh = [];
   for (const rr of list) {
     const atts = Array.isArray(rr.attachmentLst) ? rr.attachmentLst : [];
     if (!rr || (!rr.remarks && atts.length === 0)) continue;
     const responseId = String(rr.responseId || rr.remarksHash || rr.submittedOn || (rr.remarks || "").slice(0, 24));
-    if (knownResp.has(responseId)) continue;
+    if (knownResp.has(responseId)) {
+      refresh.push({ responseId, extra: extraFields(rr, RESPONSE_MAPPED) });
+      continue;
+    }
     const attachments = [];
     for (const at of atts) {
       const adocId = at.docId || at.satDocId || at.documentId || at.attachmentId || at.refId;
@@ -88,10 +137,23 @@ async function syncResponses(page, job, pan, din, headerSeqNo) {
     }
     await t.time("ingest", () => ingestSyncMessage({
       assesseeId: job.assesseeId, kind: "response",
-      response: { noticeKey: din, responseId, remarks: rr.remarks || "", submittedOn: rr.submittedOn || "", respType: rr.respType || "", attachments },
+      response: {
+        noticeKey: din, responseId,
+        remarks: rr.remarks || "", submittedOn: rr.submittedOn || "", respType: rr.respType || "",
+        extra: extraFields(rr, RESPONSE_MAPPED),
+        attachments,
+      },
     }));
     count++;
     await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+  }
+  // Not counted as a synced response — nothing new arrived, we only refreshed
+  // what the portal now says about replies already on file.
+  if (refresh.length) {
+    await t.time("ingest", () => ingestSyncMessage({
+      assesseeId: job.assesseeId, kind: "response",
+      response: { noticeKey: din, refresh },
+    }));
   }
   return count;
 }

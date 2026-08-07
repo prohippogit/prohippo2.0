@@ -820,3 +820,184 @@ input, select, textarea { font-family: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .fab-menu { animation: none; }
 }
+
+/* ============================================================================
+   TOUCH
+   ============================================================================
+
+   Everything below applies only on a phone. The desktop app is unchanged.
+
+   The app was built for a desk and then carried into a hearing room, and the
+   two are not the same problem: a mouse hits a 24px target every time, a thumb
+   on a moving train does not. What follows is that difference, and nothing
+   else. See src/haptics.js for the other half — and for why an iPhone cannot
+   buzz, which is exactly why these press states are visible rather than only
+   felt.
+   ============================================================================ */
+
+@media (hover: none) and (pointer: coarse) {
+  /* A tap has no hover to tell you it landed, so every control answers by
+     shrinking. 60ms, cubic — quick enough to feel like a response rather than
+     an animation. */
+  .btn:active,
+  .icon-btn:active,
+  .fchip:active,
+  .utab:active,
+  .pill:active,
+  .matter-row:active,
+  .row-link:active { transform: scale(0.97); }
+
+  .btn, .icon-btn, .fchip, .utab, .matter-row, .row-link {
+    transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1), background 0.12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Hover states are a lie on a touch screen: they latch after a tap and stay
+     lit until you touch something else, which reads as "still selected". */
+  .btn-primary:hover { transform: none; }
+  .tbl tbody tr:hover { background: transparent; }
+
+  /* 44px is Apple's floor and Google's is 48; the small variants were drawn at
+     22 and 26. Padding rather than height, so the label stays where it was and
+     only the hit area grows. */
+  .btn-xs { padding: 10px 12px; font-size: 12px; }
+  .btn-sm { padding: 11px 14px; font-size: 13px; }
+  .icon-btn { min-width: 40px; min-height: 40px; }
+  .utab { padding: 14px 15px; font-size: 13.5px; }
+}
+
+@media (max-width: 720px) {
+  /* ------------------------------------------------------------------------
+     TABLES BECOME CARDS.
+
+     `.tbl { min-width: 720px }` made every table on the assessee's tabs a
+     sideways scroll inside a 390px screen — you could see two of six columns
+     and had to swipe to learn which client the row belonged to. Reading a
+     table sideways on a phone is not reading.
+
+     So each ROW becomes a card and each CELL becomes a labelled line. The
+     labels come from the table's own <thead>, copied onto the cells at render
+     by tableLabels() in src/shared.jsx, so no table's markup had to change and
+     none can drift from its own headings.
+
+     Tables that opt out — anything genuinely matrix-shaped, where the columns
+     are the point — keep `.tbl-wide` and scroll as before.
+     ------------------------------------------------------------------------ */
+  .card:has(.tbl:not(.tbl-wide)) { overflow-x: visible !important; }
+  .tbl:not(.tbl-wide) { min-width: 0; display: block; }
+  .tbl:not(.tbl-wide) thead { display: none; }
+  .tbl:not(.tbl-wide) tbody { display: block; }
+
+  .tbl:not(.tbl-wide) tbody tr {
+    display: block;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--p-line-2);
+  }
+  .tbl:not(.tbl-wide) tbody tr:last-child { border-bottom: none; }
+
+  .tbl:not(.tbl-wide) tbody td {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
+    align-items: baseline;
+    padding: 4px 0;
+    border-bottom: none;
+  }
+  .tbl:not(.tbl-wide) tbody td::before {
+    content: attr(data-label);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--p-text-3);
+    /* A cell whose column had no heading — an actions column, usually — gets
+       the full width rather than an empty label gutter beside it. */
+  }
+  .tbl:not(.tbl-wide) tbody td[data-label=""]::before { display: none; }
+  .tbl:not(.tbl-wide) tbody td[data-label=""] { grid-template-columns: minmax(0, 1fr); }
+
+  /* The first cell is the row's identity — the name, the date, the DIN — so it
+     reads as the card's title instead of as one field among six. */
+  .tbl:not(.tbl-wide) tbody td:first-child {
+    grid-template-columns: minmax(0, 1fr);
+    font-size: 14px;
+    padding-bottom: 8px;
+  }
+  .tbl:not(.tbl-wide) tbody td:first-child::before { display: none; }
+
+  /* A cell holding nothing would print a lone label over a blank. */
+  .tbl:not(.tbl-wide) tbody td:empty { display: none; }
+
+  /* A colSpan cell is a message ("No hearings yet"), never a field. */
+  .tbl:not(.tbl-wide) tbody td[colspan] {
+    display: block;
+    grid-template-columns: none;
+  }
+  .tbl:not(.tbl-wide) tbody td[colspan]::before { display: none; }
+}
+
+@media (max-width: 720px) {
+  /* Tab strips scroll under the thumb and snap, rather than cramming eight
+     tabs into 390px at 4px each. */
+  .utabs, .tabs, .fchips {
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* Bleed to the screen edges so the strip reads as scrollable — a tab cut
+       off at the margin is the only affordance a scroll region gets. */
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .utabs::-webkit-scrollbar, .tabs::-webkit-scrollbar, .fchips::-webkit-scrollbar { display: none; }
+  .utab, .tab, .fchip { scroll-snap-align: start; }
+
+  /* A page header that wraps to four lines pushes the content off screen. */
+  .page-title { font-size: 19px; }
+  .page-sub { font-size: 12px; }
+  .topbar { row-gap: 10px; }
+
+  /* Every card loses a little padding: 20px of chrome each side of a 390px
+     screen is a fifth of it. */
+  .card { padding: 14px; border-radius: 14px; }
+  .main { padding: 14px 14px calc(84px + env(safe-area-inset-bottom)); }
+
+  /* Room for the floating menu button, which otherwise sits on top of the last
+     row of whatever list you were reading. */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal {
+    max-height: 92vh;
+    width: 100%;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* An input under 16px makes iOS zoom the whole page on focus, and it never
+   zooms back out. Every form in the app is affected, so this is not per-field. */
+@media (max-width: 720px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* The assessee header.
+ *
+ * On a desk it is a name on the left and five buttons on the right. On a phone
+ * those two halves fight for 390px and both lose: the name truncates to
+ * "Bhagwatipra…" and the buttons stack into a 30px-wide column of icons.
+ * Stacking them is not a compromise here — the name is what the screen is
+ * about, and the actions read better as a full-width row under it. */
+@media (max-width: 720px) {
+  .assessee-hero { flex-direction: column; gap: 16px; }
+  .assessee-id { align-items: flex-start; }
+  .assessee-hero .assessee-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .assessee-hero .assessee-actions .btn { flex: 1 1 auto; justify-content: center; }
+  /* Contact details wrap to their own lines rather than being squeezed onto
+     one — an email address is the longest string on the card. */
+  .assessee-contact { flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
+  .assessee-contact span { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+}

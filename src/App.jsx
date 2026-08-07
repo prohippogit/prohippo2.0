@@ -16,6 +16,7 @@ import Onboarding from './Onboarding';
 import ConnectorDownload from './ConnectorDownload';
 import { useCalendarReturn } from './googleCalendar';
 import { CalendarDeadlineMirror } from './CalendarDeadlineMirror';
+import { tap, success, error as hapticError, setHapticsEnabled } from './haptics';
 
 function Splash({ label = "Loading your practice…" }) {
   return (
@@ -39,6 +40,37 @@ function Shell() {
   const [reviewNotice, setReviewNotice] = React.useState(null); // notice record, or {} for a new one
   const [assesseeQuery, setAssesseeQuery] = React.useState("");
   const [menuOpen, setMenuOpen] = React.useState(false); // mobile drawer
+
+  /* TOUCH FEEDBACK, WIRED ONCE.
+   *
+   * One delegated listener rather than an onTouchStart on several hundred
+   * buttons. Every control in the app is covered by construction, including
+   * ones not written yet, and no component has to know that haptics exist.
+   *
+   * `pointerdown`, not click: the buzz has to land when the finger lands, not
+   * after whatever the button does. Touch only — a mouse is not asking for
+   * this, and the API is a no-op on a desktop anyway. */
+  React.useEffect(() => {
+    const onDown = (e) => {
+      if (e.pointerType !== "touch") return;
+      const el = e.target?.closest?.("button, a[href], .fchip, .utab, .tab, .matter-row, .row-link, [role='button'], input[type='checkbox'], select");
+      if (!el || el.disabled || el.getAttribute("aria-disabled") === "true") return;
+      tap();
+    };
+    document.addEventListener("pointerdown", onDown, { passive: true });
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
+
+  // The practice can switch it off; anyone who has asked the OS for reduced
+  // motion has it off already (see src/haptics.js).
+  React.useEffect(() => { setHapticsEnabled(data.profile?.haptics); }, [data.profile?.haptics]);
+
+  /* A toast is the app answering back, so it answers in the same channel:
+     two light ticks for a success, one firmer one for a failure. */
+  React.useEffect(() => {
+    if (!toast) return;
+    if (toast.icon === "alert") hapticError(); else success();
+  }, [toast]);
 
   const handleNav = (id) => {
     setRoute(id);

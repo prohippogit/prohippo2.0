@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Table, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
   groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS,
   commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus, noticeDeadline } from './store';
@@ -548,7 +548,7 @@ function GroupDetail({ groupName, onBack, onOpenAssessee, onRename, profile }) {
         {g.members.length === 0 ? (
           <EmptyState icon="users" title="No members yet" sub="Add assessees to this group." action={<button className="btn btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Add member</button>}/>
         ) : (
-          <table className="tbl">
+          <Table>
             <thead><tr><th>Assessee</th><th>PAN</th><th>Entity</th><th>Outstanding</th><th></th></tr></thead>
             <tbody>
               {g.members.map((a) => {
@@ -572,7 +572,7 @@ function GroupDetail({ groupName, onBack, onOpenAssessee, onRename, profile }) {
                 );
               })}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
 
@@ -1048,8 +1048,8 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
 
       <div className="card" style={{position: "relative", overflow: "hidden", border: "none", background: "linear-gradient(120deg, #2B2270 0%, #5146C6 55%, #8E7CFF 100%)", color: "white", boxShadow: "0 18px 42px -20px rgba(43, 34, 112, 0.6)"}}>
         <div style={{position: "absolute", right: -50, top: -50, width: 240, height: 240, borderRadius: "50%", background: "rgba(255,180,220,0.22)", filter: "blur(24px)", pointerEvents: "none"}}/>
-        <div className="between" style={{alignItems: "flex-start", position: "relative"}}>
-          <div className="center" style={{gap: 16}}>
+        <div className="between assessee-hero" style={{alignItems: "flex-start", position: "relative"}}>
+          <div className="center assessee-id" style={{gap: 16}}>
             <Avatar name={a.name} color={a.color} size="lg" round soft/>
             <div>
               <div className="center" style={{gap: 8}}>
@@ -1057,14 +1057,14 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                 <span className="pill" style={{background: "rgba(255,255,255,0.18)", color: "white", fontWeight: 700}}>{a.status}</span>
                 {a.group && <span className="pill" style={{background: "rgba(255,255,255,0.18)", color: "white", fontWeight: 700}}>{a.group}</span>}
               </div>
-              <div className="row" style={{gap: 18, marginTop: 8, fontSize: 13, color: "rgba(255,255,255,0.82)"}}>
+              <div className="row assessee-contact" style={{gap: 18, marginTop: 8, fontSize: 13, color: "rgba(255,255,255,0.82)"}}>
                 <span><b style={{fontFamily: "ui-monospace, monospace"}}>{a.pan}</b></span>
                 {a.mobile && <span><Icon name="phone" size={12}/> {a.mobile}</span>}
                 {a.email && <span><Icon name="mail" size={12}/> {a.email}</span>}
               </div>
             </div>
           </div>
-          <div className="center" style={{gap: 8}}>
+          <div className="center assessee-actions" style={{gap: 8}}>
             {waLink && <a className="btn btn-sm" style={{background: "rgba(255,255,255,0.16)", color: "white", border: "1px solid rgba(255,255,255,0.28)"}} href={waLink} target="_blank" rel="noreferrer"><Icon name="whatsapp" size={14}/>WhatsApp</a>}
             {a.email && <a className="btn btn-sm" style={{background: "rgba(255,255,255,0.16)", color: "white", border: "1px solid rgba(255,255,255,0.28)"}} href={`mailto:${a.email}`}><Icon name="mail" size={14}/>Email</a>}
             <button className="btn btn-sm" style={{background: "white", color: "var(--p-primary-2)", fontWeight: 700}} onClick={() => setShowMatter(true)}><Icon name="plus" size={14}/>New matter</button>
@@ -1184,7 +1184,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
 
       {tab === "Hearings" && (
         <div className="card" style={{padding: 0}}>
-          <table className="tbl">
+          <Table>
             <thead><tr><th>Date / Time</th><th>Authority</th><th>Bench</th><th>AY</th><th>Mode</th><th>Status</th></tr></thead>
             <tbody>
               {allHearings.map(h => (
@@ -1199,13 +1199,13 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
               ))}
               {allHearings.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings for {titleCase(a.name)} yet.</td></tr>}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 
       {tab === "Notices" && (
         <div className="card" style={{padding: 0}}>
-          <table className="tbl">
+          <Table>
             <thead><tr><th>DIN</th><th>AY</th><th>Section</th><th>Authority</th><th>Date</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {notices.map(n => (
@@ -1238,13 +1238,13 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
               ))}
               {notices.length === 0 && <tr><td colSpan="7" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No notices for {titleCase(a.name)} yet.</td></tr>}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 
       {tab === "Invoices" && (
         <div className="card" style={{padding: 0}}>
-          <table className="tbl">
+          <Table>
             <thead><tr><th>Invoice #</th><th>Date</th><th>Service</th><th>AY</th><th>Amount</th><th>Balance</th><th>Status</th></tr></thead>
             <tbody>
               {invoices.map(inv => (
@@ -1260,7 +1260,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
               ))}
               {invoices.length === 0 && <tr><td colSpan="7" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No invoices yet.</td></tr>}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 
@@ -1781,7 +1781,7 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
       </div>
 
       <div className="card" style={{padding: 0}}>
-        <table className="tbl">
+        <Table>
           <thead><tr><th>A.Y.</th><th>Form</th><th>Filed</th><th>Status</th><th>Demand / Refund</th><th>Documents</th><th></th></tr></thead>
           <tbody>
             {rows.map((r) => {
@@ -1936,7 +1936,7 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
               );
             })}
           </tbody>
-        </table>
+        </Table>
       </div>
 
       {rows.some((r) => (r.orders || []).some((o) => o.locked && o.lockReason === "no-password")) && !assessee.dob && (

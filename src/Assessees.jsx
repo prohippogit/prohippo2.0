@@ -1999,7 +1999,7 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
       // The summary lands on the notice doc → appears via the store's live data.
     } catch (e) {
       console.error("summarize failed", e);
-      notify && notify("AI parse failed — " + (e?.message?.slice(0, 100) || "error"), "alert");
+      notify && notify("Couldn't summarise that PDF — " + (e?.message?.slice(0, 100) || "try again in a moment"), "alert");
     } finally {
       setParsingId("");
     }
@@ -2174,9 +2174,15 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                             </div>
                           ) : null}
                         </div>
+                        {/* "Get summary", not "Parse with AI": a button is named
+                            for what it gives you, not for what runs inside it.
+                            The sparkle and the note under the result already say
+                            a model read the PDF, which is where that belongs —
+                            on the output a practitioner has to check, not on the
+                            control. */}
                         {!appeal && n.storagePath && (
-                          <button className="btn btn-ghost btn-xs" title="Summarise this PDF with AI" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); onParse(n); }}>
-                            <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Parsing…" : (n.aiSummary ? "Re-parse" : "Parse with AI")}
+                          <button className="btn btn-ghost btn-xs" title="Read this PDF and summarise what it says" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); onParse(n); }}>
+                            <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Summarising…" : (n.aiSummary ? "Refresh summary" : "Get summary")}
                           </button>
                         )}
                         {!appeal && n.storagePath && (

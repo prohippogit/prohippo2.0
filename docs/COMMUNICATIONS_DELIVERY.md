@@ -268,7 +268,7 @@ Do not confuse these — they answer different questions about the same PDF:
 
 | Callable | Prompt | Returns | Used by |
 |---|---|---|---|
-| `summarizePortalNotice` | `summaryPrompt` | additions/disallowances, order metadata | "Parse with AI" on a proceeding tile |
+| `summarizePortalNotice` | `summaryPrompt` | additions/disallowances, order metadata | "Get summary" on a proceeding tile |
 | `extractNoticeDocuments` | `DOCUMENTS_PROMPT` | `documents[]` + due dates only | "Ask for documents" |
 
 `extractNoticeDocuments` is deliberately narrow. A portal notice already has its

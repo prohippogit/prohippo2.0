@@ -122,7 +122,7 @@ logs:
 firebase functions:log --only summarizePortalNotice
 ```
 
-"Parse with AI" on the proceeding tile re-runs it by hand.
+"Get summary" on the proceeding tile re-runs it by hand.
 
 **Costs**
 Each document costs a fraction of a rupee (Flash-Lite ≈ ₹0.15). Both functions

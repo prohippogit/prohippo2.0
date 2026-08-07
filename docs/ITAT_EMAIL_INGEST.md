@@ -57,7 +57,7 @@ ITAT (no-reply@itat.nic.in)
         ├─► consultant's mailbox ─┐
         └─► client's mailbox ─────┤ forwarding rule (or a manual forward)
                                   ▼
-              itat-<token>@in.prohippo.in        ← unique per practice
+              <token>@in.prohippo.in     ← one per practice, one per assessee
                                   │
                  inbound provider (MX → webhook)
                                   ▼
@@ -70,8 +70,13 @@ ITAT (no-reply@itat.nic.in)
                                           └─► existing Google Calendar sync
 ```
 
-Every practice gets one unguessable address. Four ways mail reaches it, and a
-practice will use several at once:
+Addresses are unguessable random tokens, and come in two kinds. Each practice
+has **one of its own**, for the consultant's mailbox and for ad-hoc forwards.
+Each assessee can additionally be issued **their own**, which is what gets handed
+to a client — see *Handing the setup to the client* below for why that separation
+earns its keep.
+
+Four ways mail reaches them, and a practice will use several at once:
 
 1. **Register the alias with the Tribunal.** Where the portal accepts a
    representative's address alongside the appellant's, put the alias there at
@@ -80,12 +85,9 @@ practice will use several at once:
 2. **A forwarding rule in the consultant's mailbox**, scoped to
    `from:no-reply@itat.nic.in`. Two minutes, one time, covers every appeal filed
    under the firm's address, past and future.
-3. **A forwarding rule in the client's mailbox.** Same rule, set by the client.
-   ProHippo generates the instructions and can send them over the existing
-   WhatsApp/email channel (`sendClientMessage`); the Gmail confirmation code
-   Google sends to verify a new forwarding address lands *in our inbox*, so the
-   handshake can be completed automatically instead of asking the client to
-   read a code back.
+3. **A forwarding rule in the client's mailbox**, set by the client from a link
+   the consultant sends them. This is the one that decides whether the feature
+   covers a whole practice or half of it, and it has a section to itself below.
 4. **A manual forward**, from anyone, any time. The always-there fallback and
    the thing that makes the feature usable on day one. Treated as lower trust —
    see below.
@@ -107,6 +109,126 @@ itself, and everything already sending as that domain, is untouched.
 Whichever is chosen, the Cloud Function is a public `onRequest` and must not
 trust the caller: verify the provider's signature or a long secret path segment,
 and reject anything that fails.
+
+---
+
+## Handing the setup to the client
+
+The consultant cannot configure someone else's mailbox. What ProHippo can do is
+make the client's part of it short enough that it actually gets done — and the
+honest measure of that is not how elegant the flow is, but how many clients
+finish it without a phone call.
+
+### The shape of it
+
+**Issue the client their own address.** From the assessee's profile:
+*Set up ITAT email forwarding* mints `<token>@in.prohippo.in` bound to that one
+assessee, and produces a **setup link** — an unguessable, no-login page the
+consultant sends over WhatsApp or email using the delivery that already exists
+(`sendClientMessage`, which will already translate the covering message into the
+client's own language).
+
+Per-assessee rather than one practice-wide address, for four reasons that all
+show up in practice:
+
+- Mail is attributable to a client *before* it is parsed, so a message whose PAN
+  is mangled still lands in the right file.
+- The provider's verification code (below) can be matched to the client whose
+  setup is in flight, instead of guessing between three simultaneous ones.
+- Ending a client relationship revokes one address; every other client's
+  forwarding keeps working.
+- A client who over-scopes their rule floods one alias, which is contained,
+  traceable and revocable on its own.
+
+**The setup page does the hard part.** The client opens it on their phone; it
+shows the address with a copy button and step-by-step instructions for their
+provider. Then it *waits with them*: the page stays open, live, and the moment
+the provider's verification email arrives at the alias — which it does, because
+the alias is the destination being verified — the page **displays the
+confirmation code on screen**. The client types it back into Gmail without ever
+leaving their own account, asking their consultant, or reading a code out over
+the phone. That single trick is the difference between a two-minute job and a
+support call, and it works for every provider that verifies by emailing the
+destination, which is all of the common ones.
+
+The page then waits for the real thing: when the first ITAT message actually
+arrives it turns green, and the consultant sees the assessee's forwarding status
+go **Connected** in ProHippo. Nobody is left wondering whether it worked.
+
+### The instructions have to be exactly right
+
+Two details decide whether this is safe and whether it works at all:
+
+**Use a filter, not blanket forwarding.** Gmail's *Forwarding and POP/IMAP* tab
+offers "Forward a copy of incoming mail to…", and a client who ticks that sends
+ProHippo their entire personal inbox. The correct sequence is: add the address
+and verify it, **leave forwarding itself disabled**, then create a filter —
+`From: no-reply@itat.nic.in` → *Forward it to* the verified address. A verified
+address can be used by a filter while blanket forwarding stays off; that is the
+configuration the instructions must produce, and the page should say why in one
+line, because a client who understands the reason will not "simplify" it.
+
+**Gmail forwarding cannot be set up from the mobile app.** Neither Android nor
+iOS Gmail exposes it — it is desktop web only. This is the single biggest reason
+a client will fail, so the page must open by saying so, and offer to send the
+link to a desktop rather than letting someone discover it three screens in.
+Outlook.com, Yahoo and Zoho all allow it in their mobile web settings, so the
+instructions branch on the address's domain and show only the relevant provider.
+
+### Consent, and the client's ability to stop
+
+The client is pointing part of their personal mailbox at their consultant's
+software. That deserves to be handled properly, not buried:
+
+- The setup page states plainly, before anything is copied, that **only mail
+  from the Tribunal is kept, and everything else is discarded without being
+  read or stored**. The sender allowlist at the webhook is what makes that true
+  rather than a promise — an off-target message is dropped before any write, and
+  all that survives is a counter.
+- The same page carries a **Stop forwarding** control that revokes the alias
+  from the client's side, without going through the consultant. A control the
+  data subject can reach themselves is the right posture generally, and under
+  the DPDP Act it is worth having on the record.
+- Consent is recorded on the assessee: address, timestamp, and the text the
+  client was shown.
+
+### Guarding against a stranger pointing mail at us
+
+The setup link is unguessable, but a link can be forwarded. So the alias pins
+itself: the mailbox that sends the first accepted ITAT message is remembered,
+and later mail arriving from a *different* forwarder goes to the review queue
+instead of applying automatically. Combined with the ITAT-only sender allowlist,
+the exposure of a leaked setup link is that someone can put ITAT mail in front
+of the consultant for confirmation — not that they can move a hearing date.
+
+### When forwarding quietly stops
+
+A forwarding rule that has been deleted, or a mailbox that has hit its quota,
+looks exactly like a client with no ITAT activity. Silence is the failure mode,
+and silence is invisible.
+
+Three things catch it, cheapest first: the alias records `lastReceivedAt`; a
+matter that is Active while its assessee's alias has been silent for months is
+worth a nudge; and — decisively — the **cause list** cross-check. If the
+Tribunal lists a hearing for an appeal number on file and no email ever arrived
+for it, the forwarding is broken, and ProHippo knows that without the client
+noticing anything.
+
+### If the client will not do it
+
+The ladder, in order of how much the client has to do:
+
+| | Client does | Result |
+| --- | --- | --- |
+| 1 | Nothing — the consultant enters the alias as the representative's address on the ITAT portal at filing | Fully automatic, no forwarding anywhere |
+| 2 | One-time setup from the link | Fully automatic thereafter |
+| 3 | Forwards each ITAT email by hand | Works; lands in the review queue for one click |
+| 4 | Nothing at all | Cause-list scraping still recovers hearing dates for appeals on file |
+
+Row 1 is the quiet winner for appeals filed from here on, and it needs no client
+cooperation whatsoever. Row 4 is why the cause-list companion in the phasing
+table below is worth more than it first looks: it is the floor under every case
+where the email route fails.
 
 ---
 
@@ -211,8 +333,12 @@ is written.
 
 In order, stopping at the first hit:
 
+0. **The alias it arrived at**, when that alias belongs to one assessee. Settled
+   before a single field is parsed, and still right when the PAN is mangled.
 1. **PAN** against `users/{uid}/assessees` — both emails carry it, and it is
-   exact. This is the normal path.
+   exact. This is the normal path for the practice-wide alias, and the
+   confirmation for a per-assessee one. A PAN that contradicts the alias is not
+   overridden by either: it goes to review.
 2. **Appeal number** against an existing matter's `ref`, canonicalised. Catches
    the case where the matter was entered by hand before any email arrived.
 3. **Appellant name**, normalised (case, punctuation, `&`/`AND`, honorifics),
@@ -285,11 +411,15 @@ denies to clients, same as `googleTokens` and `portalCreds`.
 
 ## What the practitioner sees
 
-**Settings → Integrations → ITAT email.** The alias with a copy button, a live
-"last received" line, **Reset address**, and step-by-step forwarding instructions
-for Gmail and Outlook. Beside it, a **Send setup instructions to client** action
-that reuses the existing WhatsApp/email delivery so the consultant does not have
-to explain forwarding rules over the phone.
+**Settings → Integrations → ITAT email.** The practice's own alias with a copy
+button, a live "last received" line, **Reset address**, and the forwarding
+instructions for the consultant's own mailbox.
+
+**On each assessee's profile**, a forwarding status — *Not set up* / *Waiting for
+the client* / *Connected, last received 3 days ago* — with **Send setup link**
+beside it. That is where the consultant spends ten seconds per client and then
+stops thinking about it. A practice-level view of the same column answers "which
+of my clients are not covered", which is the question that actually gets asked.
 
 **A review queue**, as a tab on Hearings or a badge in the existing shell, holding
 everything awaiting one click. Empty most days; that is the point.
@@ -301,7 +431,7 @@ everything awaiting one click. Empty most days; that is the point.
 | Phase | Ships | Depends on |
 | --- | --- | --- |
 | **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue. Manual forwarding only. | An MX subdomain and an inbound provider account. Nothing else. |
-| **2** | Guided forwarding-rule setup, automatic completion of the Gmail verification handshake, auto-apply for authenticated messages. | Phase 1 in the field. |
+| **2** | Per-assessee aliases, the client setup link and its live code-catching page, forwarding status on the assessee, auto-apply for authenticated messages. | Phase 1 in the field. |
 | **3** | Extend the allowlist and parsers to CIT(A)/NFAC and departmental mail — much higher volume, same pipeline. | Sample emails. |
 | **4** | Optional `gmail.readonly` connect for practices filing under their own address, if the CASA cost is ever worth it. Optional IMAP polling in the desktop connector for non-Google mailboxes, where credentials are already vaulted. | A commercial decision, not a technical one. |
 
@@ -324,3 +454,6 @@ all. Two independent sources agreeing is a much stronger promise than one.
 - **Does the ITAT portal accept a representative's email** alongside the
   appellant's at registration? If it does, route 1 above is the one to push in
   the product, because it removes forwarding from the picture entirely.
+- **How many of the practice's clients are on Gmail?** It decides how much the
+  desktop-only limitation actually costs. If most are, the setup page should
+  lead with "open this on a computer" rather than treating it as a caveat.

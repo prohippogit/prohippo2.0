@@ -64,6 +64,11 @@ export async function detectExtension() {
  *   - knownDins:         PDFs already held (DINs + docKeys) — don't re-download
  *   - knownByProc:       per-proceeding {n,o} counts — skip unchanged proceedings
  *   - knownResponseIds:  replies already recorded — don't re-download
+ *   - noticeDocsPending: notices held with only ONE of their documents, from
+ *                        before a notice was understood to be a SET of files —
+ *                        [{din, fileName}] so the sweep skips what we hold
+ *   - procNeedsDocs:     the proceedings those notices sit in, so an unchanged
+ *                        one is not skipped before the sweep can reach them
  *   - knownActiveProcs:  proceedingReqIds we hold as Active — used in "eproc" to
  *                        spot ones that left FYA (just closed) and grab the order
  *   - knownAckNums:      returns already on file — a filed return never changes
@@ -73,8 +78,8 @@ export async function detectExtension() {
  *   - knownFormAcks:     returns whose rendered ITR form PDF is already stored —
  *                        that one is ~11 MB, so it is rationed per sync run
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, canUnlockOrders, knownFormAcks, formRequest, background, clientRef }, 8000);
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeDocsPending = [], procNeedsDocs = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, noticeDocsPending, procNeedsDocs, knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, canUnlockOrders, knownFormAcks, formRequest, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

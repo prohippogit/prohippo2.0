@@ -14,6 +14,7 @@ import { ref as storageRef, uploadString } from "firebase/storage";
 import { doc as fsDoc, getDoc as fsGetDoc } from "firebase/firestore";
 import { functions, storage, auth, db } from "./firebase";
 import { derivePassword, unlockBase64 } from "./pdfUnlock";
+import { documentExt } from "./downloadNames";
 
 /* Metadata for every object we upload.
  *
@@ -65,21 +66,63 @@ function dobFromItrJson(json) {
   return found;
 }
 
+const safeId = (s) => String(s || "").replace(/[^A-Za-z0-9_-]/g, "");
+
+/* Upload the OTHER documents behind one notice.
+ *
+ * A notice on e-Proceedings is a set of files: the s.148 notice that exposed
+ * this came with an approval to the JAO, a set note and a search print, and the
+ * app stored one of the four. These are the rest.
+ *
+ * The path carries the portal's own satDocId, so a re-sync overwrites the same
+ * object rather than leaving a second copy of the same approval behind — and
+ * its EXTENSION follows the file, because a download is named from the path
+ * (downloadFile.js) and a ZIP saved as `.pdf` is a file nobody can open.
+ */
+async function uploadNoticeDocs(list, uid, assesseeId, noticeKey) {
+  const out = [];
+  let i = 0;
+  for (const at of (list || [])) {
+    if (!at) continue;
+    const ext = documentExt(at.filename, at.contentType) || "pdf";
+    let storagePath = null;
+    if (at.contentBase64) {
+      const id = safeId(at.satDocId || `${noticeKey}-${i}`);
+      storagePath = `users/${uid}/assessees/${assesseeId}/notices/${safeId(noticeKey)}-${id}.${ext}`;
+      await uploadString(storageRef(storage, storagePath), at.contentBase64, "base64", attachment(at.contentType));
+    }
+    out.push({
+      storagePath,
+      filename: at.filename || `document.${ext}`,
+      satDocId: String(at.satDocId || ""),
+      contentType: at.contentType || "application/pdf",
+      bytes: at.bytes || 0,
+    });
+    i++;
+  }
+  return out;
+}
+
 export async function ingestPortalSyncMessage(payload) {
   if (!payload || !payload.assesseeId) return { kind: payload?.kind };
 
   if (payload.kind === "notice") {
     const n = payload.notice || {};
+    const uid = auth.currentUser?.uid;
+    const key = n.din || n.docKey || `${n.proceedingReqId}-${Date.now()}`;
     let storagePath = null;
     if (n.contentBase64) {
-      const uid = auth.currentUser?.uid;
-      const safeId = (n.din || `${n.proceedingReqId}-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, "");
-      storagePath = `users/${uid}/assessees/${payload.assesseeId}/notices/${safeId}.pdf`;
+      storagePath = `users/${uid}/assessees/${payload.assesseeId}/notices/${safeId(key)}.${documentExt(n.filename, n.contentType) || "pdf"}`;
       await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64", attachment(n.contentType));
     }
+    const attachments = await uploadNoticeDocs(n.attachments, uid, payload.assesseeId, key);
     const meta = { ...n };
     delete meta.contentBase64;
-    const res = await httpsCallable(functions, "ingestPortalNotice")({ assesseeId: payload.assesseeId, notice: meta, storagePath, filename: n.filename });
+    delete meta.attachments;
+    const res = await httpsCallable(functions, "ingestPortalNotice")({
+      assesseeId: payload.assesseeId, notice: meta, storagePath, filename: n.filename,
+      attachments, docsTotal: n.docsTotal || 0,
+    });
     // Parse order PDFs on fetch, so the real document type (order vs demand
     // notice vs computation sheet) and the order's own metadata are known right
     // away — this drives the appeal detection and the Form 35 match. Best-effort.
@@ -96,6 +139,23 @@ export async function ingestPortalSyncMessage(payload) {
   if (payload.kind === "proceedings") {
     const res = await httpsCallable(functions, "ingestPortalProceedings")({ assesseeId: payload.assesseeId, proceedings: payload.proceedings || [] });
     return { kind: "proceedings", data: res.data };
+  }
+
+  /* The rest of the set for a notice already on file. A known DIN is skipped by
+     the incremental diff — that is the point of it — so notices synced before
+     the app understood that one notice is several files can only be repaired by
+     going back for the missing documents on their own. Documents only; nothing
+     the practitioner may have edited is touched. */
+  if (payload.kind === "notice-docs") {
+    const d = payload.noticeDocs || {};
+    const uid = auth.currentUser?.uid;
+    const key = d.din || d.docKey || "notice";
+    const primary = d.primary ? (await uploadNoticeDocs([d.primary], uid, payload.assesseeId, key))[0] : null;
+    const attachments = await uploadNoticeDocs(d.attachments, uid, payload.assesseeId, key);
+    const res = await httpsCallable(functions, "attachNoticeDocuments")({
+      din: d.din || "", docKey: d.docKey || "", primary, attachments, docsTotal: d.docsTotal || 0,
+    });
+    return { kind: "notice-docs", data: res.data };
   }
 
   /* What the portal now says about notices already on file — chiefly the date

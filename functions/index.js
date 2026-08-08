@@ -545,13 +545,47 @@ function deriveAuthority(proceedingName, section) {
   return "Other";
 }
 
+/* The OTHER documents behind one notice.
+ *
+ * A notice on e-Proceedings is a set of files, not a file: the s.148 notice
+ * that exposed this arrived with an approval to the JAO, a set note and a
+ * search print, and only one of the four was ever stored. These are the rest.
+ *
+ * Bounded and typed the same way `extra` is — a Firestore document has a 1 MB
+ * ceiling and this list is written by a client, so it is capped rather than
+ * trusted. `kind` is what the card badges and what tells a practitioner that
+ * the thing they are about to download is a ZIP they will have to unpack. */
+const COMPRESSED_EXT = /\.(zip|rar|7z|tar|tgz)$/i;
+const COMPRESSED_CT = /(zip|x-7z|rar|x-tar|compressed)/i;
+function documentKind(filename, contentType) {
+  const name = String(filename || "").replace(/\.gz$/i, "");
+  const ct = String(contentType || "");
+  if (COMPRESSED_EXT.test(name) || COMPRESSED_CT.test(ct)) return "zip";
+  if (/\.pdf$/i.test(name) || /pdf/i.test(ct)) return "pdf";
+  return "other";
+}
+function cleanNoticeDocs(v) {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((d) => d && typeof d === "object" && d.storagePath)
+    .slice(0, 20)
+    .map((d) => ({
+      storagePath: String(d.storagePath).slice(0, 500),
+      filename: String(d.filename || "document.pdf").slice(0, 200),
+      satDocId: String(d.satDocId || "").slice(0, 40),
+      contentType: String(d.contentType || "application/pdf").slice(0, 120),
+      kind: documentKind(d.filename, d.contentType),
+      bytes: Number(d.bytes) || 0,
+    }));
+}
+
 // Record one portal notice/order as a real app notice (deduped by DIN), attach
 // its Storage PDF, and — when its response is due in the future — create a
 // hearing/calendar entry. The PDF bytes never pass through this function.
 exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInstances: KEEP_WARM }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
-  const { assesseeId, notice, storagePath, filename } = request.data || {};
+  const { assesseeId, notice, storagePath, filename, attachments, docsTotal } = request.data || {};
   if (!assesseeId || !notice || typeof notice !== "object") {
     throw new HttpsError("invalid-argument", "assesseeId and notice are required.");
   }
@@ -571,6 +605,11 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
   const ay = formatAy(notice.ay);
   const authority = deriveAuthority(notice.proceedingName, notice.section);
   const fileName = filename || notice.filename || "";
+  const docs = cleanNoticeDocs(attachments);
+  // How many the portal LISTED, which is not always how many arrived — a set
+  // can be truncated by the per-notice ceiling. Stored so the card can say so
+  // rather than showing what it has and implying that is all there was.
+  const docsListed = Number(docsTotal) || (docs.length + (storagePath ? 1 : 0));
   const today = new Date().toISOString().slice(0, 10);
 
   const noticesCol = db.collection(`users/${uid}/notices`);
@@ -618,6 +657,13 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
     const patch = { source: cur.source || "portal", din, docKey, isOrder, proceedingReqId: notice.proceedingReqId || "", portalSyncedAt: new Date().toISOString() };
     if (isOrder && !cur.docType) patch.docType = classifyDocType(notice.description || fileName, notice.section, authority);
     if (storagePath) { patch.storagePath = storagePath; if (!cur.fileName) patch.fileName = fileName; }
+    /* Portal-owned, so it tracks the portal — a document the department
+       withdrew should leave the card. Written even when empty, because "this
+       notice really is one file" is an answer, and it is the answer that stops
+       the sync asking again. */
+    patch.attachments = docs;
+    patch.docsTotal = docsListed;
+    patch.docsSyncedAt = new Date().toISOString();
     const fill = { assessee: assesseeName, pan, ay, section: notice.section || "", authority, date, subject: notice.description || "", responseDueDate: dueDate, servedOn };
     for (const k of Object.keys(fill)) if (!cur[k] && fill[k]) patch[k] = fill[k];
     // Portal-owned, so it tracks the portal rather than filling a gap once.
@@ -637,6 +683,7 @@ exports.ingestPortalNotice = onCall({ region: REGIONS, maxInstances: 10, minInst
       documents: [], responseDueDate: dueDate, servedOn, extra: cleanExtra(notice.extra), metaSyncedAt: new Date().toISOString(),
       source: "portal", proceedingReqId: notice.proceedingReqId || "",
       storagePath: storagePath || "", fileName,
+      attachments: docs, docsTotal: docsListed, docsSyncedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(), portalSyncedAt: new Date().toISOString(),
     }, { merge: true });
     added = true;
@@ -1651,6 +1698,50 @@ exports.refreshNoticeMeta = onCall({ region: REGIONS, maxInstances: 10 }, async 
     updated += 1;
   }
   return { ok: true, updated };
+});
+
+/* The rest of the documents behind a notice ALREADY on file.
+ *
+ * Every notice synced before the fetch understood that one notice is a set of
+ * files holds exactly one of them. Re-syncing cannot fix that on its own — a
+ * known DIN is skipped, which is the whole point of the incremental diff — so
+ * the fetch goes back for the missing documents once and hands them here.
+ *
+ * Deliberately narrow. It attaches documents and stamps `docsSyncedAt`, which
+ * is what takes the notice off the sync's repair list; it does not touch a
+ * single field a practitioner may have edited. The one exception is a notice
+ * that has no PDF at all — there is nothing of theirs to protect there, and a
+ * first fetch that failed should be allowed to heal. */
+exports.attachNoticeDocuments = onCall({ region: REGIONS, maxInstances: 10 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const { din, docKey, primary, attachments, docsTotal } = request.data || {};
+  const key = String(din || "").trim();
+  const dk = String(docKey || "").trim();
+  if (!key && !dk) throw new HttpsError("invalid-argument", "A DIN or docKey is required.");
+
+  const col = db.collection(`users/${uid}/notices`);
+  const q = key
+    ? await col.where("din", "==", key).limit(1).get()
+    : await col.where("docKey", "==", dk).limit(1).get();
+  if (q.empty) return { ok: true, updated: 0 };
+
+  const ref = q.docs[0].ref;
+  const cur = q.docs[0].data() || {};
+  const docs = cleanNoticeDocs(attachments);
+  const patch = {
+    attachments: docs,
+    docsTotal: Number(docsTotal) || (docs.length + (cur.storagePath ? 1 : 0)),
+    docsSyncedAt: new Date().toISOString(),
+  };
+  // Only where the notice has no document of its own — see above.
+  const first = cleanNoticeDocs([primary])[0];
+  if (first && !cur.storagePath) {
+    patch.storagePath = first.storagePath;
+    if (!cur.fileName) patch.fileName = first.filename;
+  }
+  await ref.set(patch, { merge: true });
+  return { ok: true, updated: 1, noticeId: q.docs[0].id, documents: docs.length };
 });
 
 /* Portal fields we have no mapping for, kept honest: scalars only, bounded in

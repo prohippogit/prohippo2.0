@@ -87,6 +87,59 @@ Two extra one-time deploy steps for this phase:
 
    `storage.rules` restricts every user to their own `users/{uid}/…` files.
 
+### One notice is a SET of files, not a file
+
+The portal's "Notice/Letter pdf" screen routinely lists several Download
+buttons against a single notice. A s.148 reassessment arrives as four: the
+notice, the approval to the JAO, the set note, and the print of the approval
+search.
+
+`noticeletterpdf` reports this in a way that is easy to get wrong. It names ONE
+document at the top level and lists the whole set separately:
+
+```jsonc
+{
+  "noticeSection": "148",
+  "satDocId": 442426058,                                  // ← ONE of them
+  "docNam":  "…_AST_APPROVAL TO JAO.pdf.gz",
+  "docMap": {                                             // ← ALL of them
+    "442426058": "…_AST_APPROVAL TO JAO.pdf.gz",
+    "442426042": "…_AST_SET NOTE APPROVAL.pdf.gz",
+    "442426059": "…_AST_AXIPP8954H_Notice us 148_….pdf.gz",
+    "442426040": "…_AST_AXIPP8954H_Print Approval Search_….pdf.gz"
+  }
+}
+```
+
+The sync read `satDocId` and stopped, so three of the four never left the
+portal — and on this notice the one it did take was the internal approval, not
+the notice the assessee has to answer.
+
+What happens now:
+
+- **Every** entry in `docMap` is fetched, in ascending `satDocId` order (the
+  order the portal's own screen lists them in). Bounded at 12 files / 60 MB per
+  notice; `docsTotal` records how many the portal listed, so the card can say
+  "4 of 6" rather than implying four was all there was.
+- The **primary** — what the "PDF" button saves and what the AI summary reads —
+  is chosen from the filenames (the notice's own section first, then the word
+  "notice"), with the portal's `satDocId` as the tie-break.
+- The rest land on the notice as `attachments: [{ storagePath, filename,
+  satDocId, contentType, kind, bytes }]`. `kind` is `pdf` | `zip` | `other`, and
+  the Storage object carries the real extension, because the department
+  sometimes hands over a **compressed folder** instead of listing files — a ZIP
+  saved as `.pdf` is a file nobody can open.
+- Notices already on file are **repaired once**. A known DIN is skipped by the
+  incremental diff, which is the point of it, so `noticeDocsPending` /
+  `procNeedsDocs` (built from notices with no `docsSyncedAt`) let the sync go
+  back for what is missing. It never re-downloads the file already held, and it
+  never touches a field a practitioner may have edited — that is all
+  `attachNoticeDocuments` is allowed to do. The list empties itself: every
+  ingest stamps `docsSyncedAt`, whatever the portal said.
+
+`ingestPortalNotice` gained an `attachments` argument and there is one new
+callable, so this phase needs `firebase deploy --only functions`.
+
 ## Phase 3 — filed returns, intimations and s.154 orders (implemented)
 
 A full sync now also pulls every assessment year's filed return. One call to

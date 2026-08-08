@@ -10,8 +10,8 @@ import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
 import { AskDocsButton } from './askForDocuments';
 import { AssesseeModal } from './AssesseeModal';
 import { httpsCallable } from 'firebase/functions';
-import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-import { functions, storage, auth } from './firebase';
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { functions, storage } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
 import { ingestPortalSyncMessage } from './portalIngest';
 import { downloadFromStorage } from './downloadFile';
@@ -20,6 +20,8 @@ import { noticeFilename, returnOrderFilename, returnDocFilename } from './downlo
 // not ride in the main bundle.
 import { computationAvailability } from './computation/supported';
 import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
+import NoticeDocuments from './NoticeDocuments';
+import { noticeDocumentCount, hasDocumentList } from './noticeDocs';
 import { describeVariance, BASELINE_LABEL } from './intimations';
 
 // Build the incremental-sync hints from what's already on file for one PAN, so
@@ -29,6 +31,10 @@ import { describeVariance, BASELINE_LABEL } from './intimations';
 //                       the extension skips whole proceedings whose counts are
 //                       unchanged (a closed proceeding never changes)
 //   - knownResponseIds: replies already recorded → skip re-downloading them
+//   - noticeDocsPending / procNeedsDocs: the opposite of a "known" — notices we
+//                       hold with only ONE of their documents, because that is
+//                       all the old fetch asked for. A known DIN is skipped, so
+//                       these would never be repaired by a re-sync on their own
 //   - knownActiveProcs: proceedingReqIds we hold as Active → the extension spots
 //                       which ones left FYA (just closed) to grab their order
 //   - knownAckNums:     returns already on file → a filed return never changes,
@@ -54,10 +60,23 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
   const procNotices = {};        // proceedingReqId -> Set<DIN>
   const procHasOrder = new Set();
   const procNeedsMeta = new Set();
+  /* Notices stored back when ONE notice meant ONE file. The portal serves a
+     s.148 notice as a set — the notice, the approval to the JAO, the set note,
+     the search print — and only one of them was ever taken. Listed here (with
+     the name of the file we DO hold, so nothing is fetched twice) for a single
+     sweep. Self-limiting the way procNeedsMeta is: the ingest stamps
+     `docsSyncedAt` however the sweep goes, and the notice drops out for good.
+     Orders are excluded — downloadClosureOrder always returned its whole list. */
+  const noticeDocsPending = [];
+  const procNeedsDocs = new Set();
   (notices || []).forEach((n) => {
     if (n.pan !== pan) return;
     if (n.din) knownDins.add(n.din);
     if (n.docKey) knownDins.add(n.docKey);
+    if (n.din && !n.isOrder && !n.docsSyncedAt) {
+      noticeDocsPending.push({ din: String(n.din), fileName: String(n.fileName || "") });
+      if (n.proceedingReqId) procNeedsDocs.add(n.proceedingReqId);
+    }
     const pid = n.proceedingReqId;
     if (pid) {
       if (n.isOrder) procHasOrder.add(pid);
@@ -100,6 +119,7 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
   return {
     knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds],
     procNeedsMeta: [...procNeedsMeta],
+    noticeDocsPending, procNeedsDocs: [...procNeedsDocs],
     knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, knownFormAcks,
     canUnlockOrders: Boolean(dob),
   };
@@ -1214,11 +1234,14 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                     <td className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>
                       <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
                         <span>{n.din || "—"}</span>
-                        {n.storagePath && (
+                        {/* One button where the notice is one PDF; every file
+                            listed where the portal served a set or a ZIP. */}
+                        {n.storagePath && !hasDocumentList(n) && (
                           <button className="btn btn-ghost btn-xs" title="Download notice / order PDF" onClick={() => downloadDoc(n.storagePath, noticeFilename(n, a.name))}>
                             <Icon name="doc" size={11}/>PDF
                           </button>
                         )}
+                        <NoticeDocuments notice={n} assesseeName={a.name} compact/>
                       </div>
                     </td>
                     <td>{n.ay}</td>
@@ -1500,19 +1523,12 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       if (payload.kind === "notice") {
         const n = payload.notice || {};
         try {
-          let storagePath = null;
-          if (n.contentBase64) {
-            const uid = auth.currentUser?.uid;
-            const safeId = (n.din || `${n.proceedingReqId}-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, "");
-            storagePath = `users/${uid}/assessees/${a.id}/notices/${safeId}.pdf`;
-            await uploadString(storageRef(storage, storagePath), n.contentBase64, "base64",
-              // attachment => a browser handed this URL saves it instead of
-              // rendering it. See downloadFile.js.
-              { contentType: n.contentType || "application/pdf", contentDisposition: "attachment" });
-          }
-          const meta = { ...n };
-          delete meta.contentBase64;
-          await httpsCallable(functions, "ingestPortalNotice")({ assesseeId: a.id, notice: meta, storagePath, filename: n.filename });
+          // Uploads the notice AND the rest of its set — a s.148 notice arrives
+          // with its approval, set note and search print. Shared with the
+          // connector's path (portalIngest.js) rather than repeated here, which
+          // is how the two used to drift: this branch quietly stored one file
+          // per notice long after the fetch started sending four.
+          await ingestPortalSyncMessage(payload);
           noticeStats.current.ok++;
         } catch (e) {
           console.error("Notice ingest failed", e);
@@ -1543,6 +1559,17 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
           currentFileName: n.filename || '',
           noticeCounts: { ...noticeCountsRef.current },
         }));
+        return;
+      }
+
+      // The rest of the documents behind a notice already on file (the repair
+      // pass for notices synced back when one notice meant one file).
+      if (payload.kind === "notice-docs") {
+        try { await ingestPortalSyncMessage(payload); }
+        catch (e) { console.error("notice documents ingest failed", e); }
+        downloadedRef.current += (payload.noticeDocs?.attachments || []).length;
+        armWatchdog();
+        setFetchState((f) => f && ({ ...f, downloadedCount: downloadedRef.current }));
         return;
       }
 
@@ -2082,6 +2109,10 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
   const accent = accentFor(m.type);
   const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
   const docCount = ns.length;
+  /* Notices and FILES are different numbers, and the difference is the whole
+     point of this change: four notices on this proceeding can be a dozen
+     documents. Only printed when they actually differ. */
+  const fileCount = ns.reduce((s, n) => s + noticeDocumentCount(n), 0);
   return (
     <Modal
       title={m.ref || m.proceedingName || "Proceeding"}
@@ -2100,7 +2131,9 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             {m.bench && <span className="muted" style={{fontSize: 12}}>{m.bench}</span>}
           </div>
           <div style={{fontSize: 12.5, fontWeight: 700, color: accent.fg}}>
-            {docCount} notice{docCount === 1 ? "" : "s"}/orders{hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}
+            {docCount} notice{docCount === 1 ? "" : "s"}/orders
+            {fileCount > docCount ? ` · ${fileCount} files` : ""}
+            {hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}
           </div>
         </div>
 
@@ -2185,12 +2218,17 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                             <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Summarising…" : (n.aiSummary ? "Refresh summary" : "Get summary")}
                           </button>
                         )}
+                        {/* The notice's own document. Where the portal served a
+                            SET — a s.148 notice comes with its approval, set
+                            note and search print — the whole set is listed
+                            below rather than hidden behind this one button. */}
                         {!appeal && n.storagePath && (
                           <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={(e) => { e.stopPropagation(); downloadDoc(n.storagePath, noticeFilename(n, n.assessee)); }}>
                             <Icon name="doc" size={12}/>PDF
                           </button>
                         )}
                       </div>
+                      {!appeal && <NoticeDocuments notice={n} assesseeName={n.assessee}/>}
                       {/* Orders are decided — there is nothing left to ask the
                           client for. Notices are what call for documents. */}
                       {!appeal && !n.isOrder && (

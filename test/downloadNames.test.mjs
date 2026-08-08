@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 
 import {
   safeFilename, withExtension, noticeFilename, returnOrderFilename, returnDocFilename,
+  portalDocLabel, documentKind, documentExt, noticeDocFilename,
 } from "../src/downloadNames.js";
 
 test("statutory slashes survive as hyphens rather than vanishing", () => {
@@ -97,5 +98,58 @@ test("a return whose form we don't know still gets a usable name", () => {
   assert.equal(
     returnDocFilename("json", { ay: "2019-20" }, "Sample Foods"),
     "Sample Foods - AY 2019-20 - ITR JSON.json"
+  );
+});
+
+/* ---------------- a notice's OTHER documents ----------------
+ *
+ * The names below are real, off the s.148 set that exposed the bug: the portal
+ * served four files behind one notice and the app only ever saw one of them. */
+
+test("a portal filename reduces to the one segment that says what it is", () => {
+  assert.equal(
+    portalDocLabel("70000000145843545_186446841_2025_AST_AXIPP8954H_Notice us 148_1087936850(1)_26032026.pdf"),
+    "Notice us 148"
+  );
+  assert.equal(
+    portalDocLabel("70000000145843512_186446264_2025_AST_AXIPP8954H_Print Approval Search_1087855481(1)_24032026.pdf"),
+    "Print Approval Search"
+  );
+  assert.equal(portalDocLabel("70000000145843513_186446265_2025_AST_SET NOTE APPROVAL.pdf"), "SET NOTE APPROVAL");
+  assert.equal(portalDocLabel("70000000145843515_186446267_2025_AST_APPROVAL TO JAO.pdf.gz"), "APPROVAL TO JAO");
+});
+
+test("a filename that isn't shaped like ITBA's keeps its own name", () => {
+  // Falling through to the base name is worse than a label and better than "".
+  assert.equal(portalDocLabel("Reply annexures.zip"), "Reply annexures");
+  assert.equal(portalDocLabel("123456_7890.pdf"), "123456_7890");
+});
+
+test("a compressed bundle is told apart from a PDF", () => {
+  assert.equal(documentKind("annexures.zip"), "zip");
+  assert.equal(documentKind("annexures", "application/x-zip-compressed"), "zip");
+  assert.equal(documentKind("notice.pdf"), "pdf");
+  // The portal names its objects "*.pdf.gz" and serves them decompressed — that
+  // trailing .gz is transport, not a bundle the practitioner has to unpack.
+  assert.equal(documentKind("notice.pdf.gz", "application/pdf"), "pdf");
+  assert.equal(documentKind("scan.tif", "image/tiff"), "other");
+});
+
+test("a download keeps the extension its content implies", () => {
+  assert.equal(documentExt("annexures.zip"), "zip");
+  assert.equal(documentExt("notice.pdf.gz"), "pdf");
+  assert.equal(documentExt("unnamed", "application/zip"), "zip");
+  assert.equal(documentExt("unnamed", "application/pdf"), "pdf");
+});
+
+test("an enclosure is named for itself, not for the notice it came with", () => {
+  const notice = { ay: "2022-23", section: "148" };
+  assert.equal(
+    noticeDocFilename({ filename: "70000000145843513_186446265_2025_AST_SET NOTE APPROVAL.pdf" }, notice, "Virajkumar Patel"),
+    "Virajkumar Patel - AY 2022-23 - SET NOTE APPROVAL.pdf"
+  );
+  assert.equal(
+    noticeDocFilename({ filename: "annexures.zip", contentType: "application/zip" }, notice, "Virajkumar Patel"),
+    "Virajkumar Patel - AY 2022-23 - annexures.zip"
   );
 });

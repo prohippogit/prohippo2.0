@@ -7,6 +7,8 @@ import { useData, awaitingNotices, todayISO, itemsFromNoticeDocuments, docReques
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
 import DocumentRequestComposer from './DocumentRequest';
 import { AskDocsButton } from './askForDocuments';
+import NoticeDocuments from './NoticeDocuments';
+import { hasDocumentList } from './noticeDocs';
 import { renderDocRequest, defaultTitle } from './messageTemplates';
 
 // Save a notice's PDF to the user's computer, named after the notice rather
@@ -130,11 +132,16 @@ export default function Notices({ onOpenNotice }) {
                   <td onClick={e => e.stopPropagation()}>
                     <div className="center" style={{gap: 4, justifyContent: "flex-end"}}>
                       {!n.isOrder && <AskDocsButton notice={n}/>}
-                      {n.storagePath && (
+                      {/* One button where the notice is one PDF. Where the
+                          portal served a SET — a s.148 notice arrives with its
+                          approval, set note and search print — every file gets
+                          its own, so none of them can be missed from here. */}
+                      {n.storagePath && !hasDocumentList(n) && (
                         <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={() => downloadNotice(n)}>
                           <Icon name="doc" size={12}/>PDF
                         </button>
                       )}
+                      <NoticeDocuments notice={n} assesseeName={n.assessee} compact/>
                       <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this notice?")) { removeNotice(n.id); notify("Notice deleted"); } }}>
                         <Icon name="trash" size={12}/>
                       </button>
@@ -456,6 +463,11 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
             <label>Subject</label>
             <input value={edited.subject} onChange={e => update("subject", e.target.value)} placeholder="e.g. Appeal hearing — addition u/s 68"/>
           </div>
+          {/* Every file the portal served with this notice. Distinct from the
+              checklist opposite: that is what we ask the CLIENT for, this is
+              what the DEPARTMENT sent — and the s.148 set that exposed the bug
+              was four files, of which the app held one. */}
+          <NoticeDocuments notice={edited} assesseeName={edited.assessee}/>
         </div>
 
         <div className="col" style={{gap: 18}}>

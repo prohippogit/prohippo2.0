@@ -278,6 +278,15 @@ async function getSyncKnowns(pan) {
   const knownResponseIds = new Set();
   const procNotices = {}; // proceedingReqId -> Set<DIN>
   const procHasOrder = new Set();
+  /* Notices stored before the sync understood that ONE notice is a SET of
+     files. Each carries the single document the old code asked for, while the
+     approval, the set note and the search print that came with it are still
+     only on the portal. Listed here so the fetch can go back for them once —
+     `docsSyncedAt` is stamped on every ingest, so a notice leaves this list the
+     moment it has been swept and never returns to it. Orders are excluded:
+     downloadClosureOrder has always returned its whole list. */
+  const noticeDocsPending = [];
+  const procNeedsDocs = new Set();
 
   noticeSnap.forEach((d) => {
     const n = d.data() || {};
@@ -287,6 +296,10 @@ async function getSyncKnowns(pan) {
     if (pid) {
       if (n.isOrder) procHasOrder.add(String(pid));
       if (n.din) (procNotices[pid] || (procNotices[pid] = new Set())).add(String(n.din));
+    }
+    if (n.din && !n.isOrder && !n.docsSyncedAt) {
+      noticeDocsPending.push({ din: String(n.din), fileName: String(n.fileName || "") });
+      if (pid) procNeedsDocs.add(String(pid));
     }
     for (const r of n.responses || []) {
       if (r && r.responseId != null) knownResponseIds.add(String(r.responseId));
@@ -339,6 +352,8 @@ async function getSyncKnowns(pan) {
     knownDins: [...knownDins],
     knownByProc,
     knownResponseIds: [...knownResponseIds],
+    noticeDocsPending,
+    procNeedsDocs: [...procNeedsDocs],
     knownActiveProcs,
     knownAckNums,
     knownOrderRefs,

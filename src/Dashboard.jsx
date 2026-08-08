@@ -9,6 +9,7 @@ import { intimationVariances, varianceSummary, needsVarianceBackfill, DEFAULT_WI
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { AskDocsButton } from './askForDocuments';
+import { noticeDocumentCount } from './noticeDocs';
 import { KeepBoard } from './Tasks';
 
 export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
@@ -449,6 +450,11 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
             const due = n.responseDueDate || n.hearingDate || "";
             const hasFutureHearing = due && due >= today;
             const isSel = selected.has(n.id);
+            /* A notice is often a SET of files — a s.148 arrives with its
+               approval, set note and search print. This queue is for reading
+               the notice, so it opens the notice; the count is here so nobody
+               reads one file and assumes that was all of it. */
+            const docCount = noticeDocumentCount(n);
             return (
               /* Wraps rather than squeezes: on a narrow window the buttons drop
                  to a second line instead of eating into the name. */
@@ -477,8 +483,8 @@ function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
                     for reading; where it isn't, the record is still one click
                     away — an absent button would read as a broken one. */}
                 {n.storagePath ? (
-                  <button className="btn btn-ghost btn-xs" title="Open the notice PDF in a new tab" onClick={() => viewPdf(n)}>
-                    <Icon name="doc" size={12}/>PDF
+                  <button className="btn btn-ghost btn-xs" title={docCount > 1 ? `Open the notice PDF — ${docCount} files came with this notice` : "Open the notice PDF in a new tab"} onClick={() => viewPdf(n)}>
+                    <Icon name="doc" size={12}/>PDF{docCount > 1 ? ` ·${docCount}` : ""}
                   </button>
                 ) : (
                   <button className="btn btn-ghost btn-xs" title="No PDF on file — open the notice record" onClick={() => onOpenNotice(n)}>

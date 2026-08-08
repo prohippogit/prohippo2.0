@@ -33,7 +33,7 @@
 import { createRequire } from "node:module";
 import process from "node:process";
 
-import { noticeFilename, returnOrderFilename, returnDocFilename } from "../src/downloadNames.js";
+import { noticeFilename, noticeDocFilename, returnOrderFilename, returnDocFilename } from "../src/downloadNames.js";
 
 const require = createRequire(new URL("../functions/", import.meta.url));
 
@@ -121,6 +121,10 @@ async function backfillUser(uid) {
     const n = d.data() || {};
     const who = n.assessee || nameForPan.get(String(n.pan || "").toUpperCase()) || "";
     await setName(n.storagePath, noticeFilename(n, who));
+    // The rest of the notice's set — the approval, the set note, the search
+    // print, or a ZIP. Named for what each one IS rather than after the notice,
+    // so four files from one notice do not all land under the same name.
+    for (const at of n.attachments || []) await setName(at.storagePath, noticeDocFilename(at, n, who));
     // Attachments a taxpayer filed in reply keep the portal's own filename —
     // it is already a human name ("Grounds of Appeal.pdf") and better than
     // anything we would synthesise.

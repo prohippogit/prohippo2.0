@@ -577,6 +577,11 @@
   // (satDocId) → GET /document/{satDocId} (PDF bytes). Auth is the session
   // cookie; "sn" is just the serviceName.
   const MAX_PDF_BYTES = 25 * 1024 * 1024; // skip storing absurdly large files
+  /* One notice, several files — see noticeDocuments() below. Ceilings so a
+     pathological set cannot stall a sync; how many the portal listed travels
+     with the notice either way, so the card can say "4 of 6". */
+  const MAX_SET_DOCS = 12;
+  const MAX_SET_BYTES = 60 * 1024 * 1024;
 
   // Fetch the responses filed against one notice (remarks + attachment PDFs),
   // and stream each to the app to attach to that notice.
@@ -627,9 +632,135 @@
     const m = /(\d{2})(\d{2})(\d{4})\.pdf$/i.exec(String(name || ""));
     return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
   }
+
+  /* EVERY document behind one "Notice/Letter pdf" screen.
+   *
+   * THE BUG THIS FIXES. noticeletterpdf names ONE document at the top level
+   * (satDocId + docNam) and lists the WHOLE set under `docMap`, keyed by
+   * satDocId — which is what the portal's own screen renders. A s.148 notice
+   * routinely carries four: the notice, the approval to the JAO, the set note
+   * and the print of the approval search. We read satDocId and stopped, so
+   * three of the four never left the portal.
+   *
+   * Sorted by satDocId ascending — the order the portal lists them in, and
+   * stable, so a re-sync numbers the same document the same way.
+   *
+   * Kept in step with noticeDocuments()/pickPrimaryDocument() in
+   * connector/src/main/portalApi.js. */
+  function noticeDocuments(json) {
+    const named = new Map();
+    const add = (id, nam) => {
+      const key = String(id == null ? "" : id).trim();
+      if (!key || !/^\d+$/.test(key)) return;
+      if (!named.has(key) || (nam && !named.get(key))) named.set(key, String(nam || ""));
+    };
+    const map = json && json.docMap;
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      for (const k of Object.keys(map)) add(k, map[k]);
+    }
+    if (json) add(json.satDocId, json.docNam);
+    return [...named.entries()]
+      .map((e) => ({ satDocId: e[0], docNam: e[1] }))
+      .sort((a, b) => Number(a.satDocId) - Number(b.satDocId));
+  }
+
+  /* Which of them is THE notice — what the "PDF" button saves and the summary
+     is read from. The portal's own satDocId is not a reliable answer: on the
+     s.148 set above it points at an 11 MB "APPROVAL TO JAO" while the notice
+     sits three files away. Scored on what the files are called; the portal's
+     pick is the tie-break. Everything is fetched either way. */
+  function pickPrimaryDocument(docs, section, declaredSatDocId) {
+    if (!docs.length) return -1;
+    const fallback = Math.max(0, docs.findIndex((d) => String(d.satDocId) === String(declaredSatDocId || "")));
+    if (docs.length === 1) return 0;
+    const sec = (String(section || "").match(/\d+/) || [])[0];
+    const secRe = sec ? new RegExp("(^|\\D)" + sec + "(\\D|$)") : null;
+    const score = (d) => {
+      const n = String(d.docNam || "").toLowerCase();
+      let s = 0;
+      if (secRe && secRe.test(n)) s += 4;
+      if (/\bnotice\b|\bletter\b|\bintimation\b|\bquestionnaire\b/.test(n)) s += 3;
+      if (/approval|set note|search|annexure|enclosure/.test(n)) s -= 3;
+      return s;
+    };
+    let best = fallback, bestScore = score(docs[fallback]);
+    docs.forEach((d, i) => { const s = score(d); if (s > bestScore) { best = i; bestScore = s; } });
+    return best;
+  }
+
+  // `docMap` keeps the storage name ("….pdf.gz"); Content-Disposition hands
+  // back the served name ("….pdf"). Same object, two spellings.
+  const normDoc = (s) => String(s || "").replace(/\.gz$/i, "").trim().toLowerCase();
+
+  /* Download every document behind one notice.
+   *
+   * `held` switches it to repair mode for a notice already on file: the file we
+   * already hold is matched by name and never downloaded twice, and everything
+   * else comes back as an attachment. A notice whose PDF never arrived passes
+   * no `held` and gets a primary chosen for it, which is how a failed first
+   * fetch heals.
+   *
+   * Returns { primary, attachments, docsTotal, docsFetched }. */
+  async function fetchNoticeSet({ pan, proceedingReqId, headerSeqNo, section, held }) {
+    const out = { primary: null, attachments: [], docsTotal: 0, docsFetched: 0 };
+    if (!headerSeqNo) return out;
+    const doc = await NET.apiCall({
+      path: SAVE_ENTITY_PATH, serviceName: "noticeletterpdf",
+      payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: proceedingReqId, loggedInUserId: pan, header: FORM },
+    });
+    const all = noticeDocuments(doc.json);
+    out.docsTotal = all.length;
+    if (!all.length) return out;
+
+    const heldIdx = held ? all.findIndex((d) => normDoc(d.docNam) === normDoc(held)) : -1;
+    let wantsPrimary = false;
+    let ordered;
+    if (heldIdx >= 0) {
+      ordered = all.filter((_, i) => i !== heldIdx);
+    } else {
+      const pi = pickPrimaryDocument(all, section, doc.json && doc.json.satDocId);
+      ordered = [all[pi]].concat(all.filter((_, i) => i !== pi));
+      wantsPrimary = true;
+    }
+
+    let budget = MAX_SET_BYTES;
+    for (let i = 0; i < ordered.length && i < MAX_SET_DOCS; i++) {
+      const d = ordered[i];
+      if (i > 0) await jsleep(120, 320);
+      const got = await NET.getDoc({ docId: String(d.satDocId) });
+      if (!got || !got.ok || !got.base64 || !got.bytes) continue;
+      if (got.bytes > MAX_PDF_BYTES || got.bytes > budget) { log("notices: skipping oversized doc", got.bytes); continue; }
+      budget -= got.bytes;
+      const entry = {
+        satDocId: String(d.satDocId),
+        filename: got.filename || String(d.docNam || "").replace(/\.gz$/i, "") || (d.satDocId + ".pdf"),
+        contentType: got.contentType || "application/pdf",
+        contentBase64: got.base64,
+        bytes: got.bytes,
+      };
+      if (wantsPrimary && i === 0) out.primary = entry;
+      else out.attachments.push(entry);
+      out.docsFetched++;
+    }
+    return out;
+  }
   async function syncNotices(creds, badge, pan, rows) {
     const known = new Set((creds.knownDins || []).map((d) => String(d)));
     const knownByProc = creds.knownByProc || {};
+    /* Notices on file from before the sync understood that ONE notice is a SET
+       of files. Each holds the single document the old code asked for, while
+       the approval, the set note and the search print that came with it are
+       still only on the portal. Fixing the fetch alone helps notices that
+       arrive AFTER the fix, which is no help to a file already open — so a
+       known notice listed here gets one sweep for what is missing.
+       `din -> the filename already held`, so nothing is downloaded twice.
+       Self-limiting: the ingest stamps `docsSyncedAt` whatever the portal
+       says, and the notice never appears here again. */
+    const pendingDocs = new Map();
+    for (const p of (creds.noticeDocsPending || [])) {
+      if (p && p.din) pendingDocs.set(String(p.din), String(p.fileName || ""));
+    }
+    const needsDocs = new Set((creds.procNeedsDocs || []).map((p) => String(p)));
     const isClosed = (r) => /information/i.test(r.tab || "") || r.proceedingStatus === "C";
     const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
     if (!targets.length) { log("notices: none to fetch"); return; }
@@ -646,7 +777,9 @@
       // closed proceedings, and in e-Proceedings-only mode for active ones too
       // (that mode treats a notice-count change as the only trigger, so an
       // unchanged FYA proceeding is left untouched — no detail, no reply calls).
-      if (countMatches && (isClosed(r) || creds.scope === "eproc")) {
+      // …unless one of its notices is still missing the rest of its documents.
+      if (countMatches && (isClosed(r) || creds.scope === "eproc")
+          && !needsDocs.has(String(r.proceedingReqId))) {
         skipped += (r.viewNoticeCount || 0); skippedProcs++;
         continue;
       }
@@ -665,20 +798,38 @@
         // against it below — those can be filed AFTER the notice first synced,
         // so skipping known notices entirely would never pick them up.
         const isKnown = din0 && known.has(String(din0));
-        if (!isKnown) {
-          let pdf = null;
-          if (headerSeqNo) {
-            const doc = await NET.apiCall({
-              path: SAVE_ENTITY_PATH, serviceName: "noticeletterpdf",
-              payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
+
+        // A notice already on file, stored back when one notice meant one file:
+        // fetch the rest of its set and attach them. Nothing about the notice
+        // itself — or anything the practitioner edited on it — is touched.
+        // Per-notice try/catch, deliberately: this repairs data that is already
+        // usable, so it must never fail a sync that would otherwise succeed. A
+        // miss is retried next run — the notice only leaves the repair list
+        // once the ingest lands.
+        if (isKnown && din0 && pendingDocs.has(String(din0))) {
+          try {
+            const set = await fetchNoticeSet({
+              pan, proceedingReqId: r.proceedingReqId, headerSeqNo,
+              section: it.noticeSection, held: pendingDocs.get(String(din0)),
             });
-            const satDocId = doc.json && doc.json.satDocId;
-            if (satDocId) {
-              const got = await NET.getDoc({ docId: String(satDocId) });
-              if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) pdf = got;
-              else if (got && got.bytes > MAX_PDF_BYTES) log("notices: skipping oversized pdf", got.bytes);
-            }
-          }
+            chrome.runtime.sendMessage({
+              type: "SYNC_DATA",
+              payload: {
+                assesseeId: creds.assesseeId, kind: "notice-docs",
+                noticeDocs: { din: String(din0), primary: set.primary, attachments: set.attachments, docsTotal: set.docsTotal },
+              },
+            }, () => {});
+            docCount += set.docsFetched;
+            log("notices: swept", set.docsFetched, "extra document(s) for DIN", din0);
+            await jsleep(120, 320);
+          } catch (e) { log("notices: document sweep failed for", din0, e); }
+        }
+
+        if (!isKnown) {
+          const set = await fetchNoticeSet({
+            pan, proceedingReqId: r.proceedingReqId, headerSeqNo, section: it.noticeSection,
+          });
+          const pdf = set.primary;
           const notice = {
             proceedingReqId: r.proceedingReqId,
             proceedingName: r.name || it.proceedingName || "",
@@ -694,11 +845,15 @@
             proceedingStatus: it.proceedingStatus || "",
             filename: (pdf && pdf.filename) || "",
             contentType: (pdf && pdf.contentType) || "application/pdf",
-            contentBase64: (pdf && pdf.base64) || null,
+            contentBase64: (pdf && pdf.contentBase64) || null,
             bytes: (pdf && pdf.bytes) || 0,
+            // The rest of the set — the approval, the set note, the search
+            // print, or a ZIP the department bundled instead of listing.
+            attachments: set.attachments,
+            docsTotal: set.docsTotal,
           };
           chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "notice", notice } }, () => {});
-          docCount++;
+          docCount += set.docsFetched;
           await jsleep(120, 320); // jittered pacing between documents
         } else {
           skipped++;

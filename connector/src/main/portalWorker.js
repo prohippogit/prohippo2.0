@@ -26,7 +26,10 @@ const { makeTimer } = require("./timing");
 async function runPanSync({ context, job, scope, emit }) {
   const page = await context.newPage();
 
-  const summary = { proceedings: 0, notices: 0, responses: 0, appeals: 0, returns: 0, orders: 0 };
+  // `notices` counts notices; `documents` counts FILES — a single s.148 notice
+  // routinely carries four, and the two numbers stopped being the same the day
+  // the whole set started coming down.
+  const summary = { proceedings: 0, notices: 0, documents: 0, responses: 0, appeals: 0, returns: 0, orders: 0 };
   // Shared stopwatch. Hung off the job the same way `knowns`/`scope` are, so the
   // fetch layer can charge its phases without threading a new parameter through
   // every signature.

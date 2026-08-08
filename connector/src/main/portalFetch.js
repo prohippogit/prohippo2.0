@@ -18,13 +18,19 @@
 "use strict";
 
 const { jsleep, PACE } = require("./pacing");
-const { PATHS, FORM, apiCall, getDoc, proceedings } = require("./portalApi");
+const { PATHS, FORM, apiCall, getDoc, proceedings, noticeDocuments, pickPrimaryDocument } = require("./portalApi");
 const { ingestSyncMessage } = require("./ingest");
 const { syncAppealForms } = require("./portalAppeals");
 const { syncReturns } = require("./portalReturns");
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
+/* One notice, several files. A s.148 set is four; the ceilings are here so a
+   pathological one cannot stall a whole practice's sync, and how many were
+   listed is reported either way (`docsTotal`) so the card can say "4 of 6"
+   rather than quietly showing four and implying that is all there was. */
+const MAX_SET_DOCS = 12;
+const MAX_SET_BYTES = 60 * 1024 * 1024;
 
 // Per-phase stopwatch, hung off the job by portalWorker. Falls back to a no-op
 // so this module stays usable without one.
@@ -97,6 +103,72 @@ function extraFields(row, mapped) {
     if (n >= 12) break;
     out[String(k).slice(0, 40)] = t === "string" ? v.slice(0, 120) : v;
     n++;
+  }
+  return out;
+}
+
+/* Two portal filenames for the same object. `docMap` keeps the storage name
+   ("….pdf.gz"); Content-Disposition hands back the served name ("….pdf"). */
+const normDoc = (s) => String(s || "").replace(/\.gz$/i, "").trim().toLowerCase();
+
+/* Download EVERY document behind one notice.
+ *
+ * A notice on e-Proceedings is a SET, not a file — see noticeDocuments() in
+ * portalApi.js for what the portal actually sends. This fetches all of them,
+ * puts the one that is the notice itself first, and returns the rest as
+ * attachments.
+ *
+ * `held` switches it to repair mode for a notice already on file: the document
+ * we already hold is identified by name and never re-downloaded, and everything
+ * else comes back as an attachment. A notice whose PDF never arrived at all
+ * passes no `held` and gets a primary chosen for it, which is how a failed
+ * first fetch heals.
+ *
+ * Returns { primary, attachments, docsTotal, docsFetched }. Both primary and
+ * attachments carry { satDocId, filename, contentType, contentBase64, bytes }. */
+async function fetchNoticeSet(page, t, { pan, proceedingReqId, headerSeqNo, section, held }) {
+  const out = { primary: null, attachments: [], docsTotal: 0, docsFetched: 0 };
+  if (!headerSeqNo) return out;
+
+  const doc = await t.time("pdf", () => apiCall(page, {
+    path: PATHS.SAVE_ENTITY, serviceName: "noticeletterpdf",
+    payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: proceedingReqId, loggedInUserId: pan, header: FORM },
+  }));
+  const all = noticeDocuments(doc.json);
+  out.docsTotal = all.length;
+  if (!all.length) return out;
+
+  const heldIdx = held ? all.findIndex((d) => normDoc(d.docNam) === normDoc(held)) : -1;
+  // Repair mode drops the document already on file; a first fetch promotes the
+  // notice itself to the front so a truncated set never loses it.
+  let wantsPrimary = false;
+  let ordered;
+  if (heldIdx >= 0) {
+    ordered = all.filter((_, i) => i !== heldIdx);
+  } else {
+    const pi = pickPrimaryDocument(all, { section, declaredSatDocId: doc.json && doc.json.satDocId });
+    ordered = [all[pi], ...all.filter((_, i) => i !== pi)];
+    wantsPrimary = true;
+  }
+
+  let budget = MAX_SET_BYTES;
+  for (let i = 0; i < ordered.length && i < MAX_SET_DOCS; i++) {
+    const d = ordered[i];
+    if (i > 0) await t.time("pacing", () => jsleep(...PACE.betweenDocs));
+    const got = await t.time("pdf", () => getDoc(page, { docId: String(d.satDocId) }));
+    if (!got || !got.ok || !got.base64 || !got.bytes) continue;
+    if (got.bytes > MAX_PDF_BYTES || got.bytes > budget) continue;
+    budget -= got.bytes;
+    const entry = {
+      satDocId: String(d.satDocId),
+      filename: got.filename || String(d.docNam || "").replace(/\.gz$/i, "") || `${d.satDocId}.pdf`,
+      contentType: got.contentType || "application/pdf",
+      contentBase64: got.base64,
+      bytes: got.bytes,
+    };
+    if (wantsPrimary && i === 0) out.primary = entry;
+    else out.attachments.push(entry);
+    out.docsFetched++;
   }
   return out;
 }
@@ -184,6 +256,23 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
    * replied-to notices has no metadata on file, so this costs one call each
    * until the answer lands and then nothing. */
   const needsMeta = new Set((job.knowns.procNeedsMeta || []).map((p) => String(p)));
+  /* Notices on file from before we understood that a notice is a SET of files.
+   *
+   * Every one of them was stored with exactly one document, because that is all
+   * the old code asked for — so on this assessee the s.148 notice, its approval,
+   * its set note and its search print exist on the portal and one of them
+   * exists here. Fixing the fetch alone would only ever help notices that
+   * arrive AFTER the fix, which is no help at all to a file already open.
+   *
+   * `din -> the filename we already hold`, so the repair re-downloads only what
+   * is missing. Self-limiting in exactly the way procNeedsMeta is: the ingest
+   * stamps `docsSyncedAt` whatever the portal says, so a notice appears here
+   * once and then never again. */
+  const pendingDocs = new Map();
+  for (const p of job.knowns.noticeDocsPending || []) {
+    if (p && p.din) pendingDocs.set(String(p.din), String(p.fileName || ""));
+  }
+  const needsDocs = new Set((job.knowns.procNeedsDocs || []).map((p) => String(p)));
   const scope = job.scope;
   const isClosed = (r) => /information/i.test(r.tab || "") || r.proceedingStatus === "C";
   const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
@@ -195,7 +284,9 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
     // Unchanged closed proceeding (or unchanged active one in eproc mode): skip
     // its detail call and every per-notice reply call entirely — unless its
     // notices are still missing the metadata that only that call carries.
-    if (countMatches && (isClosed(r) || scope === "eproc") && !needsMeta.has(String(r.proceedingReqId))) continue;
+    if (countMatches && (isClosed(r) || scope === "eproc")
+        && !needsMeta.has(String(r.proceedingReqId))
+        && !needsDocs.has(String(r.proceedingReqId))) continue;
     emit("fetch", `Notices ${i + 1}/${targets.length} — ${(r.name || "proceeding").slice(0, 28)}…`, "info", 30 + Math.round(((i + 1) / targets.length) * 50));
     const det = await t.time("notice-list", () => apiCall(page, {
       path: PATHS.GET_ENTITY, serviceName: "eProceedingDetailsService",
@@ -221,19 +312,37 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
           extra: extraFields(it, NOTICE_MAPPED),
         });
       }
-      if (!isKnown) {
-        let pdf = null;
-        if (headerSeqNo) {
-          const doc = await t.time("pdf", () => apiCall(page, {
-            path: PATHS.SAVE_ENTITY, serviceName: "noticeletterpdf",
-            payload: { serviceName: "noticeletterpdf", headerSeqNo: String(headerSeqNo), procdngReqId: r.proceedingReqId, loggedInUserId: pan, header: FORM },
+      /* A notice already on file, stored back when one notice meant one file:
+         fetch the rest of its set and attach them. No PDF we already hold is
+         downloaded twice, and nothing about the notice itself is touched.
+
+         Per-notice try/catch, deliberately: this is a repair on data that is
+         already usable, so it must never be able to fail a sync that would
+         otherwise have succeeded. A miss is retried next run — the notice is
+         only taken off the repair list once the ingest lands. */
+      if (isKnown && din0 && pendingDocs.has(String(din0))) {
+        try {
+          const set = await fetchNoticeSet(page, t, {
+            pan, proceedingReqId: r.proceedingReqId, headerSeqNo,
+            section: it.noticeSection, held: pendingDocs.get(String(din0)),
+          });
+          await t.time("ingest", () => ingestSyncMessage({
+            assesseeId: job.assesseeId, kind: "notice-docs",
+            noticeDocs: {
+              din: String(din0),
+              primary: set.primary,
+              attachments: set.attachments,
+              docsTotal: set.docsTotal,
+            },
           }));
-          const satDocId = doc.json && doc.json.satDocId;
-          if (satDocId) {
-            const got = await t.time("pdf", () => getDoc(page, { docId: String(satDocId) }));
-            if (got && got.ok && got.bytes && got.bytes <= MAX_PDF_BYTES) pdf = got;
-          }
-        }
+          summary.documents += set.docsFetched;
+        } catch { /* per-notice repair; keep going */ }
+      }
+      if (!isKnown) {
+        const set = await fetchNoticeSet(page, t, {
+          pan, proceedingReqId: r.proceedingReqId, headerSeqNo, section: it.noticeSection,
+        });
+        const pdf = set.primary;
         await t.time("ingest", () => ingestSyncMessage({
           assesseeId: job.assesseeId, kind: "notice",
           notice: {
@@ -252,11 +361,16 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
             extra: extraFields(it, NOTICE_MAPPED),
             filename: (pdf && pdf.filename) || "",
             contentType: (pdf && pdf.contentType) || "application/pdf",
-            contentBase64: (pdf && pdf.base64) || null,
+            contentBase64: (pdf && pdf.contentBase64) || null,
             bytes: (pdf && pdf.bytes) || 0,
+            // The rest of the set — the approval, the set note, the search
+            // print, or a ZIP the department bundled instead of listing.
+            attachments: set.attachments,
+            docsTotal: set.docsTotal,
           },
         }));
         summary.notices++;
+        summary.documents += set.docsFetched;
         await t.time("pacing", () => jsleep(...PACE.betweenDocs));
       }
       // Replies. A reply can be filed against a notice long after we first saw
@@ -318,6 +432,7 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
           },
         }));
         summary.notices++;
+        summary.documents += pdf ? 1 : 0;
         await t.time("pacing", () => jsleep(...PACE.betweenDocs));
       }
     } catch { /* per-proceeding; keep going */ }

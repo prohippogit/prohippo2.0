@@ -640,7 +640,25 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
    * resendWebhook in index.js.
    */
   const sarvamVoiceWebhook = onRequest(
-    { region: PRIMARY_REGION, secrets: [sarvamWebhookSecret], maxInstances: 20 },
+    /*
+     * maxInstances is a CPU RESERVATION, not just a ceiling. Cloud Run counts
+     * it against "total allowable CPU per project per region", and the 20 this
+     * used to ask for was enough to make a deploy fail outright:
+     *
+     *   Could not create or update Cloud Run service sarvamvoicewebhook,
+     *   Container Healthcheck failed. Quota exceeded for total allowable CPU
+     *   per project per region.
+     *
+     * Nothing about the request was wrong — there simply wasn't room left in
+     * the region to start the new revision, so the old one kept serving and the
+     * deploy looked like it had worked from the code's side.
+     *
+     * Three is ample. Each instance serves 80 concurrent requests by default,
+     * and a help line answers one caller at a time per call. The rate limits in
+     * this module (30 calls / 300 look-ups per account per day) cap the load
+     * long before instance count does.
+     */
+    { region: PRIMARY_REGION, secrets: [sarvamWebhookSecret], maxInstances: 3 },
     async (req, res) => {
       if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
 
@@ -797,7 +815,9 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
    * record, put there by linkPhone after an OTP proved possession.
    */
   const requestVoiceCallback = onCall(
-    { region: REGIONS, secrets: [sarvamApiKey, sarvamWebhookSecret], maxInstances: 10 },
+    // Same reasoning as the webhook, and this one deploys to BOTH regions, so
+    // its reservation is doubled. A button someone taps a few times a day.
+    { region: REGIONS, secrets: [sarvamApiKey, sarvamWebhookSecret], maxInstances: 2 },
     async (request) => {
       const uid = request.auth?.uid;
       if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");

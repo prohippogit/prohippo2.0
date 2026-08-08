@@ -49,6 +49,7 @@ const {
   spokenDate,
   spokenAmount,
   spokenList,
+  submittedDate,
   isKnownTool,
   greeting,
   withinRateLimit,
@@ -423,6 +424,115 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
   }
 
   /*
+   * "Is that name on my books?"
+   *
+   * assessee_summary answers a question ABOUT a client; this one answers
+   * whether the client exists at all, which is a different question and was the
+   * one the agent had no way to answer. Left to itself it guessed, which on a
+   * client register is the worst possible failure — a practitioner who is told
+   * "no such assessee" about someone they do act for will believe it.
+   *
+   * A miss also offers the nearest names it does hold. Speech-to-text mangles
+   * Indian surnames constantly, and "did you mean Mehul Patel?" recovers a call
+   * that a flat "no" would end.
+   */
+  async function findAssessee(uid, { query } = {}) {
+    const all = await readOwn(uid, "assessees");
+    if (!all.length) return toolResponse("There are no assessees on your register yet.");
+
+    const q = String(query || "").trim();
+    if (!q) {
+      return toolResponse(
+        `You have ${all.length} ${all.length === 1 ? "assessee" : "assessees"} on your register.`,
+        { count: all.length }
+      );
+    }
+
+    const { assessee: hit, confident, alternatives } = matchAssessee(all, q);
+    if (hit && confident) {
+      return toolResponse(
+        `Yes — ${hit.name} is on your register${hit.status ? `, ${hit.status}` : ""}, PAN ${maskPan(hit.pan)}.`,
+        { found: true, name: hit.name, pan: maskPan(hit.pan) }
+      );
+    }
+    if (hit && !confident) {
+      return toolResponse(
+        `I have more than one that could be — ${spokenList(alternatives.map((a) => a.name))}. Which one did you mean?`,
+        { found: true, ambiguous: true }
+      );
+    }
+
+    /* No match. Offer the nearest surnames rather than a bare no. */
+    const words = String(q).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+    const near = all
+      .filter((a) => words.some((w) => String(a.name || "").toLowerCase().includes(w)))
+      .slice(0, 3)
+      .map((a) => a.name);
+    return toolResponse(
+      near.length
+        ? `I can't see anyone by that exact name. The closest on your register are ${spokenList(near)}. Any of those?`
+        : `No — I can't see anyone called ${q} on your register of ${all.length} assessees. Could you spell the name, or give me the PAN?`,
+      { found: false }
+    );
+  }
+
+  /*
+   * "Has the reply gone in, and when?"
+   *
+   * Replies live on the notice as `responses[]`, written by the portal sync
+   * (ingestPortalResponse) with the submission timestamp the department
+   * recorded. That is the authoritative answer to a question practitioners ask
+   * constantly, and the agent had no tool for it — so it invented dates. This
+   * reports what is on file and, where a date cannot be read, says so rather
+   * than rounding to something plausible.
+   */
+  async function replyStatus(uid, { assessee, ay } = {}) {
+    if (!assessee) return toolResponse("Which client's reply would you like me to check?");
+    const today = istToday();
+    const all = await readOwn(uid, "assessees");
+    const { assessee: hit, confident, alternatives } = matchAssessee(all, assessee);
+    if (!hit) return toolResponse(`I couldn't find a client called ${assessee} on your register. Could you say the name again, or give me the PAN?`);
+    if (!confident) return toolResponse(`Did you mean ${spokenList(alternatives.map((a) => a.name))}?`);
+
+    const pan = String(hit.pan || "").toUpperCase();
+    const wantedAy = String(ay || "").trim();
+    let rows = (await readOwn(uid, "notices")).filter(
+      (n) => String(n.pan || "").toUpperCase() === pan || n.assessee === hit.name
+    );
+    if (wantedAy) {
+      const narrowed = rows.filter((n) => String(n.ay || "").includes(wantedAy.replace(/^20/, "").slice(0, 5)) || String(n.ay || "") === wantedAy);
+      if (narrowed.length) rows = narrowed;
+    }
+    if (!rows.length) {
+      return toolResponse(`I have no notices on file for ${hit.name}${wantedAy ? ` for ${wantedAy}` : ""}, so there is no reply to report.`);
+    }
+
+    rows.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const lines = rows.slice(0, SPEAK_CAP).map((n) => {
+      const which = `${n.section ? `section ${n.section}` : "notice"}${n.ay ? ` for ${n.ay}` : ""}`;
+      const responses = Array.isArray(n.responses) ? n.responses : [];
+      if (!responses.length) {
+        // `status` is the practitioner's own word for where it has got to, and
+        // is worth repeating: "reply drafted" is not the same as "nothing done".
+        return `${which} — no reply filed yet${n.status ? `, marked ${String(n.status).toLowerCase()}` : ""}`;
+      }
+      const dates = responses.map((r) => submittedDate(r.submittedOn)).filter(Boolean).sort();
+      const last = dates[dates.length - 1];
+      const count = responses.length === 1 ? "one reply" : `${responses.length} replies`;
+      return last
+        ? `${which} — ${count} filed, the last on ${spokenDate(last, today)}`
+        : `${which} — ${count} filed, but the submission date is not recorded`;
+    });
+
+    const more = rows.length > SPEAK_CAP ? ` And ${rows.length - SPEAK_CAP} more notices.` : "";
+    return toolResponse(`For ${hit.name}: ${lines.join(". ")}.${more}`, {
+      assessee: hit.name,
+      notices: rows.length,
+      replied: rows.filter((n) => (n.responses || []).length).length,
+    });
+  }
+
+  /*
    * Navigation. The one tool an unidentified caller may use — it reads the
    * product manual in voiceKnowledge.js and touches no account data at all,
    * so someone ringing from a number we don't know can still be told what the
@@ -461,6 +571,8 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     outstanding_invoices: { needsAccount: true, run: (uid, args) => outstandingInvoices(uid, args) },
     open_tasks: { needsAccount: true, run: (uid) => openTasks(uid) },
     today_brief: { needsAccount: true, run: (uid, _args, caller) => todayBrief(uid, caller) },
+    find_assessee: { needsAccount: true, run: (uid, args) => findAssessee(uid, args) },
+    reply_status: { needsAccount: true, run: (uid, args) => replyStatus(uid, args) },
   };
 
   const NOT_REGISTERED =

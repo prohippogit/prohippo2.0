@@ -27,6 +27,7 @@ const {
   spokenDate,
   spokenAmount,
   spokenList,
+  submittedDate,
   TOOLS,
   isKnownTool,
   buildSystemPrompt,
@@ -279,6 +280,32 @@ test("lists read as speech, not as CSV", () => {
 });
 
 /* ---------------- the tool surface ---------------- */
+
+test("a portal submission timestamp resolves to a date, or to nothing", () => {
+  // The portal writes epoch millis in a string; a hand-entered notice may carry
+  // an ISO date. Anything else must be null — a reply whose date we cannot read
+  // is reported as "date not recorded", never as a date we guessed.
+  assert.equal(submittedDate("1785000000000"), new Date(1785000000000).toISOString().slice(0, 10));
+  assert.equal(submittedDate("2026-08-02"), "2026-08-02");
+  assert.equal(submittedDate("2026-08-02T10:30:00Z"), "2026-08-02");
+  for (const junk of ["", null, undefined, "not a date", "02/08/2026", 0]) {
+    assert.equal(submittedDate(junk), null, String(junk));
+  }
+});
+
+test("the tools cover the questions a practitioner actually rings about", () => {
+  // Each of these was asked on a live call and had no tool behind it, so the
+  // agent invented an answer. A missing tool is an invitation to hallucinate.
+  const names = TOOLS.map((t) => t.name);
+  assert.ok(names.includes("find_assessee"), "no way to ask whether a name is on the register");
+  assert.ok(names.includes("reply_status"), "no way to ask whether a reply was filed");
+});
+
+test("the prompt forbids answering from memory, not just from an empty tool", () => {
+  const p = buildSystemPrompt(null);
+  assert.match(p, /no memory of this practice/i);
+  assert.match(p, /Never estimate/i);
+});
 
 test("the tool list is closed — an invented name is not a tool", () => {
   assert.ok(isKnownTool("upcoming_hearings"));

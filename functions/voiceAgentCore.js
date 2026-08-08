@@ -399,7 +399,48 @@ const TOOLS = [
     description: "The caller's own unticked to-dos. Use for 'what's on my list'.",
     parameters: { type: "object", properties: {} },
   },
+  {
+    name: "find_assessee",
+    description:
+      "Check whether someone is on the caller's client register, and how many clients they have. Use for 'is X my client', 'do I have anyone called X', 'is that name on my list', 'how many assessees do I have'. Always use this rather than answering from memory — you do not know who their clients are.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The name or PAN to look for, as the caller said it. Leave empty to just count the clients on the register." },
+      },
+    },
+  },
+  {
+    name: "reply_status",
+    description:
+      "Whether a reply or response has been filed against a client's notices, and the date the last one was submitted. Use for 'has the reply gone in', 'when did we file the reply', 'is the submission done for X', 'what is the status of the reply'.",
+    parameters: {
+      type: "object",
+      properties: {
+        assessee: { type: "string", description: "The client's name or PAN, as the caller said it." },
+        ay: { type: "string", description: "Optional assessment year, like 2021-22, when the caller names one." },
+      },
+      required: ["assessee"],
+    },
+  },
 ];
+
+/*
+ * The portal writes `submittedOn` as epoch milliseconds in a string; a notice
+ * recorded by hand may carry an ISO date instead. Reduce either to yyyy-mm-dd,
+ * or to null when it is neither — a reply whose date we cannot read is reported
+ * as "filed, date not recorded" rather than as a date we invented.
+ */
+function submittedDate(value) {
+  const s = String(value == null ? "" : value).trim();
+  if (!s) return null;
+  if (/^\d{10,}$/.test(s)) {
+    const d = new Date(Number(s));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  const iso = s.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : null;
+}
 
 const TOOL_NAMES = TOOLS.map((t) => t.name);
 const isKnownTool = (name) => TOOL_NAMES.includes(String(name || ""));
@@ -436,7 +477,13 @@ function buildSystemPrompt(caller = null) {
     "",
     "HOW YOU HELP",
     "1. Navigation — when they ask how to do something, tell them exactly where it is and the taps to get there. Call find_feature rather than guessing.",
-    "2. Their own records — hearings, notices, matters, invoices and to-dos, through the tools. Never state a date, amount or client detail that did not come back from a tool. If a tool returns nothing, say so plainly.",
+    "2. Their own records — hearings, notices, matters, invoices, replies and to-dos, through the tools. Never state a date, amount, client name or status that did not come back from a tool in this conversation. You have no memory of this practice and no knowledge of their clients: everything factual must come from a tool call you just made.",
+    /* The failure this exists to stop, seen on a live call: asked for a client's
+       next hearing date and whether a reply had been filed, the agent produced
+       confident, wrong answers instead of calling a tool. A practitioner who
+       acts on an invented hearing date misses a hearing. "I don't have that"
+       is always the better answer. */
+    "If a tool returns nothing, say so plainly. If no tool covers what they asked, say you cannot check that from this line and tell them where it is in the app. Never estimate, never reason it out, and never repeat a figure from earlier in the call as though it were fresh — call the tool again.",
     "3. Keep it short. This is a phone call: two or three sentences, then stop and let them speak. Offer the next step rather than reciting a list of ten items — read out three and ask if they want the rest.",
     "",
     "WHAT YOU NEVER DISCUSS",
@@ -927,6 +974,7 @@ module.exports = {
   spokenDate,
   spokenAmount,
   spokenList,
+  submittedDate,
   TOOLS,
   TOOL_NAMES,
   isKnownTool,

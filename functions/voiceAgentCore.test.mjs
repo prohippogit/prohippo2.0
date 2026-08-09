@@ -675,6 +675,26 @@ test("the shipped pin is new enough to know about session_token", () => {
   );
 });
 
+test("a secret that gained or lost a trailing newline still verifies its own tokens", () => {
+  /* The failure this replaces, live: known-caller identity was rejected on
+     every inbound call with "session token rejected — bad-signature", which
+     reads exactly like an attack. It wasn't. The secret is stored with a
+     trailing newline (`openssl rand -base64 32 | firebase functions:secrets:set`),
+     `$( )` strips one on the way out, and the CSV script and the webhook were
+     therefore hashing with secrets one invisible byte apart. verifyWebhook had
+     trimmed since the same bug bit the Bearer header; these two had not. */
+  const clean = "s3cr3t-value";
+  for (const padded of [`${clean}\n`, ` ${clean}`, `${clean} \n`]) {
+    assert.equal(verifySessionToken({ token: mintSessionToken({ uid: "u1", secret: clean }), secret: padded }).uid, "u1");
+    assert.equal(verifySessionToken({ token: mintSessionToken({ uid: "u1", secret: padded }), secret: clean }).uid, "u1");
+  }
+  // Trimming must not soften the check itself — a different secret still fails.
+  assert.equal(
+    verifySessionToken({ token: mintSessionToken({ uid: "u1", secret: clean }), secret: "s3cr3t-valu" }).reason,
+    "bad-signature"
+  );
+});
+
 test("a spoken token cannot impersonate — only a minted one verifies", () => {
   // The security argument for carrying identity as a token rather than a phone
   // number: the caller can say anything, but cannot produce a valid signature.

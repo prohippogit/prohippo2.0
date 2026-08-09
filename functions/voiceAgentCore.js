@@ -836,11 +836,30 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
 const TOKEN_TTL_MS = 15 * 60 * 1000;
 const b64url = (buf) => Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
+/*
+ * TRIM, ALWAYS, ON BOTH SIDES.
+ *
+ * `openssl rand -base64 32 | firebase functions:secrets:set` stores a trailing
+ * newline. Reading it back through `$( )` strips one. So a token minted by a
+ * script and a token verified inside the function were hashed with secrets
+ * differing by one invisible byte — and the only symptom was
+ *
+ *     voice: session token rejected — bad-signature
+ *
+ * which reads exactly like an attack. verifyWebhook() has trimmed since the
+ * same bug bit the Bearer header; these two were left raw, so known-caller
+ * identity failed on every inbound call while the Bearer auth beside it worked.
+ *
+ * A secret with meaningful leading or trailing whitespace is not a thing anyone
+ * wants; a secret that silently fails to match itself is.
+ */
+const hmacKey = (secret) => String(secret).trim();
+
 function mintSessionToken({ uid, secret, nowMs = Date.now(), ttlMs = TOKEN_TTL_MS }) {
   if (!uid || !secret) throw new Error("mintSessionToken needs a uid and a secret");
   const exp = nowMs + ttlMs;
   const body = `v1.${b64url(String(uid))}.${exp}`;
-  return `${body}.${b64url(crypto.createHmac("sha256", secret).update(body).digest())}`;
+  return `${body}.${b64url(crypto.createHmac("sha256", hmacKey(secret)).update(body).digest())}`;
 }
 
 function verifySessionToken({ token, secret, nowMs = Date.now() }) {
@@ -849,7 +868,7 @@ function verifySessionToken({ token, secret, nowMs = Date.now() }) {
   if (parts.length !== 4 || parts[0] !== "v1") return { ok: false, reason: "malformed" };
   const [, uidPart, expPart, sig] = parts;
   const body = `v1.${uidPart}.${expPart}`;
-  const expected = b64url(crypto.createHmac("sha256", secret).update(body).digest());
+  const expected = b64url(crypto.createHmac("sha256", hmacKey(secret)).update(body).digest());
   // Signature before expiry: an attacker must not learn that a forged token
   // would otherwise have been in date.
   if (!timingSafeEqual(sig, expected)) return { ok: false, reason: "bad-signature" };

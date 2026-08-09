@@ -56,6 +56,7 @@ const {
   dayKey,
   verifyWebhook,
   parseRequest,
+  describePayload,
   toolResponse,
   matchAssessee,
   findFeature,
@@ -762,6 +763,19 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
         }
 
         if (parsed.kind === "tool") {
+          /* An account tool asked for by someone we could not identify is the
+             one failure we cannot debug from the outside — it looks identical
+             whether the number never arrived, arrived under a field name we do
+             not read, or arrived for a number with no account. So say what the
+             body actually contained: key paths, and phone-shaped values masked
+             to their last four digits. Structure, never content. */
+          if (!caller.known && parsed.toolName !== "find_feature") {
+            const seen = describePayload(body);
+            console.warn(
+              `voice: unidentified caller on ${parsed.toolName} — from=${parsed.from || "(none)"} ` +
+              `phoneish=[${seen.phoneish.join(", ") || "none"}] keys=[${seen.keys.join(", ")}]`
+            );
+          }
           // The caller's own words, before the model got to choose a tool.
           const asked = restrictedTopic(parsed.utterance);
           if (asked) {

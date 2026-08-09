@@ -40,6 +40,7 @@ const {
   outboundUrl,
   buildOutboundCall,
   parseRequest,
+  describePayload,
   toolResponse,
 } = require("./voiceAgentCore.js");
 const {
@@ -305,6 +306,30 @@ test("the prompt forbids answering from memory, not just from an empty tool", ()
   const p = buildSystemPrompt(null);
   assert.match(p, /no memory of this practice/i);
   assert.match(p, /Never estimate/i);
+});
+
+test("a payload description names the shape and masks the numbers", () => {
+  // This is what tells us whether the platform passes the caller's number
+  // through at all. It must be safe to read in a support log: key paths yes,
+  // client names never, phone numbers only as their last four digits.
+  const seen = describePayload({
+    event: "tool",
+    call: { from: "+919825011234", id: "c1" },
+    arguments: { assessee: "Rajesh M. Shah" },
+    metadata: { lead: null },
+  });
+  assert.ok(seen.keys.includes("call.from"));
+  assert.ok(seen.keys.includes("arguments.assessee"));
+  assert.ok(seen.phoneish.some((p) => p.startsWith("call.from=")));
+  // The number is masked, and the client's name appears nowhere.
+  assert.ok(!JSON.stringify(seen).includes("9825011234"));
+  assert.ok(!JSON.stringify(seen).includes("Rajesh"));
+});
+
+test("payload description survives junk without throwing", () => {
+  for (const junk of [null, undefined, "", 42, [], {}, { a: { b: { c: { d: { e: { f: 1 } } } } } }]) {
+    assert.ok(describePayload(junk).keys.length >= 0, String(junk));
+  }
 });
 
 test("the tool list is closed — an invented name is not a tool", () => {

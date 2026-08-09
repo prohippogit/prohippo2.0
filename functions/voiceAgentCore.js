@@ -798,6 +798,46 @@ function buildOutboundCall({ config, toNumber, callerName, firmName, token, call
   };
 }
 
+/* ---------------- what did the platform actually send? ---------------- */
+
+/*
+ * A description of a request body, safe to write to a log.
+ *
+ * The inbound identity path rests on one unverified assumption: that the
+ * telephony platform passes the caller's number through to the webhook. When a
+ * call comes in and we cannot identify anyone, this says what DID arrive, so
+ * the answer comes from evidence rather than from another guess at field names.
+ *
+ * It deliberately logs STRUCTURE, not content. Key paths, and any value shaped
+ * like a phone number with all but the last four digits masked. A tool call
+ * body can carry a client's name; a log line is read by support, and the two
+ * should not meet.
+ */
+function describePayload(value, prefix = "", depth = 0, out = null) {
+  const acc = out || { keys: [], phoneish: [] };
+  if (depth > 5 || acc.keys.length > 60) return acc;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [k, v] of Object.entries(value)) {
+      const path = prefix ? `${prefix}.${k}` : k;
+      if (v && typeof v === "object") {
+        describePayload(v, path, depth + 1, acc);
+      } else {
+        acc.keys.push(path);
+        // 8-15 digits, optionally +-prefixed and punctuated: a phone number in
+        // any of the shapes a carrier might send one.
+        const s = String(v == null ? "" : v);
+        if (/^\+?[\d\s()-]{8,20}$/.test(s.trim()) && s.replace(/\D/g, "").length >= 8) {
+          acc.phoneish.push(`${path}=${maskPhone(s.replace(/[^\d+]/g, ""))}`);
+        }
+      }
+    }
+  } else if (Array.isArray(value)) {
+    // One element is enough to learn the shape.
+    if (value.length) describePayload(value[0], `${prefix}[0]`, depth + 1, acc);
+  }
+  return acc;
+}
+
 /* ---------------- reading Sarvam's request ---------------- */
 
 /*
@@ -991,6 +1031,7 @@ module.exports = {
   outboundUrl,
   buildOutboundCall,
   parseRequest,
+  describePayload,
   toolResponse,
   findFeature,
   RESTRICTED_REPLY,

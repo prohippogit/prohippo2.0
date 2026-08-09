@@ -180,7 +180,18 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
    * hook that fails silently on the first real call.
    */
   async function identifyForCall(parsed, body, secret) {
-    const phone = parsed.phone || normalisePhone((parsed.args || {}).caller_phone);
+    /* Whatever the body field ended up being called. Sarvam's SDK names the
+       caller's number `user_identifier`; the dashboard tool builder lets you
+       name the field anything and bind it to a variable. Reading every
+       plausible spelling costs nothing and saves a deploy cycle each time the
+       console configuration is adjusted. */
+    const args = parsed.args || {};
+    const phone =
+      parsed.phone ||
+      normalisePhone(args.caller_phone) ||
+      normalisePhone(args.user_identifier) ||
+      normalisePhone(args.phone) ||
+      normalisePhone(args.from);
     if (!phone) {
       /* Structure, never content — and the fastest way to learn the field name
          the platform actually uses, since the docs do not name it. */

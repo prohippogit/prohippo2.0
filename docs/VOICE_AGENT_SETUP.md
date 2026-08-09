@@ -36,13 +36,35 @@ never a number from the request, which would make this a free outbound dialler
 billed to us — and sends a signed, 15-minute token that the webhook checks. This
 is what "the person who has signed up and logged in" actually means.
 
-*Inbound is the weaker one.* It resolves the number on the wire with
-`admin.auth().getUserByPhoneNumber()` — the same lookup SMS login uses, so a
-number that can sign in is a number that can call. But caller ID is spoofable,
-which is why the token path exists and why the token wins whenever both are
-present. A number we don't recognise gets no account data at all: not a partial
-answer, not a hint. It can still be told what the app does, because that is a
-product manual and not anybody's data.
+*Inbound goes through Sarvam's known-callers list, because it has to.* The
+obvious design — resolve the number on the wire with
+`admin.auth().getUserByPhoneNumber()` — cannot be built on this platform.
+**Sarvam passes a tool only the body fields declared on that tool, and the
+caller's number is not among them under any name.** That is not a reading of the
+docs; it is what a live call logged:
+
+```
+voice: unidentified caller on upcoming_hearings — from=(none)
+phoneish=[none] keys=[days, assessee, session_token]
+```
+
+The number-on-the-wire path is still in `identifyCaller()` and still correct if
+a platform ever sends one. But what actually identifies an inbound caller today
+is the **known-callers CSV**: upload a list of numbers against the inbound
+deployment, and a call from one of them starts with that row's values already in
+the agent's variables. We put a signed token in the `session_token` column — the
+same variable, bound to the same body field, verified by the same signature as
+the "Call me" path. Two doors, one lock.
+
+The column could just as easily have held the caller's phone number, and that
+would work. It holds a token instead because a body field is one dropdown away
+from being model-filled rather than variable-bound, and the moment it is, anyone
+can *say* a number and be believed. A caller who reads a token down the phone
+still cannot produce an HMAC for it. See `scripts/known-callers-csv.mjs`.
+
+A number we don't recognise gets no account data at all: not a partial answer,
+not a hint. It can still be told what the app does, because that is a product
+manual and not anybody's data.
 
 **It is read-only.** Seven tools, all reads. Nothing adds, edits, deletes, sends
 or files. A misheard word must never become a changed hearing date, and the
@@ -193,6 +215,43 @@ shows the feature as coming, which is true.
 The card shows **Call me** as the primary action and the dial-in number
 alongside it, and — the useful part — warns anyone whose mobile isn't linked
 that neither path can work for them, **before** they try.
+
+---
+
+## Step 6 — Upload the known callers, or the phone line knows nobody
+
+Skip this and every account question on an inbound call comes back "I can only
+look up records for a registered ProHippo account" — for callers who *are*
+registered. Sarvam does not tell a tool who is calling; this is what does.
+
+```bash
+npm --prefix functions install   # once
+export SARVAM_WEBHOOK_SECRET="$(firebase functions:secrets:access SARVAM_WEBHOOK_SECRET --project prohippo2)"
+node scripts/known-callers-csv.mjs
+```
+
+That writes `known-callers.csv` — one row per user with a verified mobile,
+carrying their name, firm, and a signed token:
+
+```
+phone_number,caller_name,caller_firm,caller_known,session_token
+9879166912,Vivek Chavda,Chavda & Associates,yes,v1.…
+```
+
+Upload it at **Deploy → Inbound calls →** *the deployment* **→ Add known
+callers**. Sarvam matches the columns onto agent variables **by name**, so the
+header row has to keep matching the variables on the agent — rename one and the
+mapping silently stops.
+
+Three things that will bite:
+
+- **The file is a credential.** Each token grants read access to that account
+  over the phone. It is gitignored; delete it once uploaded.
+- **The tokens expire** — 180 days by default (`--days=`). Re-run and re-upload
+  before then, or the line quietly stops recognising everybody.
+- **A new user is not on the list.** Until someone re-runs this, they get the
+  unregistered-caller answer. This is the honest weak point of the design: the
+  list is a snapshot, and nothing yet keeps it in step with sign-ups.
 
 ---
 

@@ -225,6 +225,44 @@ test("an ambiguous name asks rather than picks — reading out the wrong client 
   assert.ok(r.alternatives.length >= 2);
 });
 
+test("a client named in Hindi or Gujarati reaches an English register", () => {
+  /* The failure this replaces, from a live call: the caller asked about मोनिका,
+     every non-Latin character was stripped, the query became empty, and the
+     tool answered "I couldn't find a client called मोनिका on your list" — after
+     which the agent invented a hearing date. A line that answers in Hindi but
+     cannot hear a Hindi name is not answering in Hindi. */
+  const INDIC = [
+    { name: "Monika Naval Wadhawa", pan: "ABCPM1234F" },
+    { name: "Raginiben Bipinchandra Seva Karya Trust", pan: "AAATR7621J" },
+    { name: "Dhiraj Laxmandas Shivnani", pan: "AAAPD3333C" },
+  ];
+  assert.equal(matchAssessee(INDIC, "मोनिका").assessee.name, "Monika Naval Wadhawa");
+  assert.equal(matchAssessee(INDIC, "મોનિકા").assessee.name, "Monika Naval Wadhawa"); // Gujarati
+  assert.equal(matchAssessee(INDIC, "मोनिका नवल वाधवा").assessee.name, "Monika Naval Wadhawa");
+  assert.equal(matchAssessee(INDIC, "रागिनीबेन").assessee.name, "Raginiben Bipinchandra Seva Karya Trust");
+  assert.equal(matchAssessee(INDIC, "धीरज").assessee.name, "Dhiraj Laxmandas Shivnani");
+  // Latin still works, and a name genuinely absent is still absent.
+  assert.equal(matchAssessee(INDIC, "monika").assessee.name, "Monika Naval Wadhawa");
+  assert.equal(matchAssessee(INDIC, "रमेश गुप्ता").assessee, null);
+});
+
+test("transliteration drops the word-final inherent vowel, as Hindi does", () => {
+  // "शाह" is Shah, not Shaha — otherwise no surname in the register matches.
+  assert.equal(normaliseName("शाह"), "shah");
+  // But a matra keeps it: मोनिका is monika, not monik.
+  assert.equal(normaliseName("मोनिका"), "monika");
+});
+
+test("interchangeable spellings of the same name fold together", () => {
+  // Wadhawa/Vadhava, Neeta/Nita, Falgun/Phalgun — one name, several spellings.
+  assert.equal(normaliseName("Wadhawa"), normaliseName("Vadhava"));
+  assert.equal(normaliseName("Neeta"), normaliseName("Nita"));
+  assert.equal(normaliseName("Falgun"), normaliseName("Phalgun"));
+  // The fold must not reach far enough to merge two different clients.
+  assert.notEqual(normaliseName("Mehta"), normaliseName("Mehul"));
+  assert.notEqual(normaliseName("Shah"), normaliseName("Sha"));
+});
+
 test("a name that isn't on the books returns nothing at all", () => {
   assert.equal(matchAssessee(BOOK, "Ramesh Gupta").assessee, null);
   assert.equal(matchAssessee([], "anyone").assessee, null);

@@ -178,6 +178,104 @@ function maskPan(pan) {
 
 /* ---------------- matching a name said out loud ---------------- */
 
+/*
+ * A caller speaking Hindi gets transcribed in Devanagari, and one speaking
+ * Gujarati in Gujarati script — but the client register is typed in English.
+ * So "मोनिका" has to reach "Monika Naval Wadhawa", or the whole promise of
+ * answering in the caller's own language stops at the first client name.
+ *
+ * This was not hypothetical. On a live call the caller asked about मोनिका, the
+ * old normaliser stripped every non-Latin character, the query became the empty
+ * string, the tool answered "I couldn't find a client called मोनिका" — and the
+ * agent then announced a hearing date of its own invention.
+ *
+ * The two scripts share the Brahmic layout: Gujarati sits exactly 0x180 above
+ * Devanagari, codepoint for codepoint, so shifting it down means one table
+ * serves both.
+ */
+const GUJARATI_TO_DEVANAGARI_OFFSET = 0x180;
+
+const DEV_VOWELS = {
+  "अ": "a", "आ": "a", "इ": "i", "ई": "i", "उ": "u", "ऊ": "u", "ऋ": "ri",
+  "ए": "e", "ऐ": "ai", "ऑ": "o", "ओ": "o", "औ": "au", "ऍ": "e",
+};
+
+/* Matras replace a consonant's inherent 'a' rather than following it. */
+const DEV_MATRAS = {
+  "ा": "a", "ि": "i", "ी": "i", "ु": "u", "ू": "u", "ृ": "ri",
+  "े": "e", "ै": "ai", "ॉ": "o", "ो": "o", "ौ": "au", "ॅ": "e",
+};
+
+/* Single letters, not scholarly ITRANS: the target is how an Indian
+   practitioner actually spells the name in the app — "Wadhawa", not "vaaDhavaa".
+   Retroflex and dental collapse together for the same reason. */
+const DEV_CONSONANTS = {
+  "क": "k", "ख": "kh", "ग": "g", "घ": "gh", "ङ": "n",
+  "च": "ch", "छ": "chh", "ज": "j", "झ": "jh", "ञ": "n",
+  "ट": "t", "ठ": "th", "ड": "d", "ढ": "dh", "ण": "n",
+  "त": "t", "थ": "th", "द": "d", "ध": "dh", "न": "n",
+  "प": "p", "फ": "ph", "ब": "b", "भ": "bh", "म": "m",
+  "य": "y", "र": "r", "ल": "l", "व": "v", "ळ": "l",
+  "श": "sh", "ष": "sh", "स": "s", "ह": "h",
+  "क़": "k", "ख़": "kh", "ग़": "g", "ज़": "z", "ड़": "r", "ढ़": "rh", "फ़": "f",
+};
+
+const DEV_VIRAMA = "्";
+const DEV_MARKS = { "ं": "n", "ँ": "n", "ः": "h" };
+
+/*
+ * Devanagari (and, shifted, Gujarati) to Latin.
+ *
+ * Latin text passes through untouched, so this is safe to run over the stored
+ * register as well as over the caller's words — both sides have to be mapped
+ * the same way or they meet nowhere.
+ */
+function latinise(raw) {
+  const src = String(raw || "").replace(/[઀-૿]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - GUJARATI_TO_DEVANAGARI_OFFSET)
+  );
+
+  let out = "";
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    // A nukta binds to the letter before it; try the pair first.
+    if (next === "़" && DEV_CONSONANTS[ch + next]) {
+      out += DEV_CONSONANTS[ch + next];
+      i += 1;
+      continue;
+    }
+
+    const consonant = DEV_CONSONANTS[ch];
+    if (consonant) {
+      out += consonant;
+      if (DEV_MATRAS[next]) {
+        out += DEV_MATRAS[next];
+        i += 1;
+      } else if (next === DEV_VIRAMA) {
+        i += 1; // conjunct: the inherent vowel is explicitly killed
+      } else {
+        /* Hindi drops the word-final inherent 'a' — "शाह" is Shah, not Shaha.
+           Everywhere else it is pronounced, which is what turns मोनिका into
+           "monika" rather than "monik". */
+        const atWordEnd = !next || /[\s।॥]/.test(next);
+        if (!atWordEnd) out += "a";
+      }
+      continue;
+    }
+
+    if (DEV_VOWELS[ch]) { out += DEV_VOWELS[ch]; continue; }
+    if (DEV_MATRAS[ch]) { out += DEV_MATRAS[ch]; continue; }
+    if (DEV_MARKS[ch]) { out += DEV_MARKS[ch]; continue; }
+    if (ch === "ऽ" || ch === "़" || ch === DEV_VIRAMA) continue; // avagraha, stray nukta, stray virama
+    if (ch >= "०" && ch <= "९") { out += String.fromCharCode(ch.charCodeAt(0) - 0x0966 + 48); continue; }
+    if (ch === "।" || ch === "॥") { out += " "; continue; } // danda
+    out += ch;
+  }
+  return out;
+}
+
 /* Speech-to-text does not punctuate, does not capitalise reliably, and drops
    the honorifics and suffixes a client register is full of. Strip everything
    that a caller would not say, so "Shah Textiles Pvt. Ltd." and a transcribed
@@ -186,12 +284,34 @@ function maskPan(pan) {
    punctuation is stripped first, so "M/s" has become the two tokens "m s". */
 const NAME_NOISE = /\b(pvt|private|ltd|limited|llp|and|co|company|sons?|huf|trust|firm|the|shri|smt|mr|mrs|ms|dr|m\s+s)\b/g;
 
+/*
+ * The spelling of an Indian name in English is not settled — Wadhawa/Vadhava,
+ * Neeta/Nita, Falgun/Phalgun are the same name twice. Transliteration adds its
+ * own share of that, since no table can know which variant the practitioner
+ * typed. Fold the handful of substitutions that are genuinely interchangeable
+ * and stop there: every extra rule buys a few more matches and risks collapsing
+ * two different clients into one, which on this line is the worse error.
+ *
+ * Runs AFTER the noise strip — folding "llp" to "lp" first would hide it.
+ */
+const spellingFold = (s) =>
+  s
+    .replace(/w/g, "v")
+    .replace(/ee/g, "i")
+    .replace(/oo/g, "u")
+    .replace(/ph/g, "f")
+    .replace(/(.)\1+/g, "$1");
+
 function normaliseName(raw) {
-  return String(raw || "")
+  return latinise(raw)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(NAME_NOISE, " ")
     .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map(spellingFold)
+    .join(" ")
     .trim();
 }
 

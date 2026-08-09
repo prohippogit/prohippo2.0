@@ -589,11 +589,46 @@ test("the trigger-call body matches the documented shape", () => {
   assert.match(body.app_config.app_overrides.initial_bot_message, /Jayesh/);
 });
 
-test("the token rides in both places, because only one of them may come back", () => {
+test("the token rides as an agent variable, which is how it reaches a tool", () => {
+  // Sarvam passes a tool only its declared body fields, so identity has to
+  // travel through the agent's context and back out via a session_token field.
   const body = buildOutboundCall({ config: OUTBOUND_CONFIG, toNumber: "+919825011234", token: "tok-1", callId: "cb-1" });
   assert.equal(body.app_config.agent_variables.session_token, "tok-1");
   assert.equal(body.webhook_config.metadata.session_token, "tok-1");
   assert.equal(body.webhook_config.metadata.call_id, "cb-1");
+});
+
+test("agent_variables carries only what the agent declares", () => {
+  // An undeclared variable has nowhere to land on the platform side.
+  const body = buildOutboundCall({ config: OUTBOUND_CONFIG, toNumber: "+919825011234", token: "tok-1", callId: "cb-1" });
+  assert.deepEqual(
+    Object.keys(body.app_config.agent_variables).sort(),
+    ["caller_firm", "caller_known", "caller_name", "session_token"]
+  );
+});
+
+test("app_version is sent as a number, matching Sarvam's own snippet", () => {
+  const body = buildOutboundCall({
+    config: { ...OUTBOUND_CONFIG, agentVersion: 2 },
+    toNumber: "+919825011234", token: "t", callId: "c",
+  });
+  assert.strictEqual(body.app_config.app_version, 2);
+  // A string from a config file is coerced rather than sent as "2".
+  const coerced = buildOutboundCall({
+    config: { ...OUTBOUND_CONFIG, agentVersion: "2" },
+    toNumber: "+919825011234", token: "t", callId: "c",
+  });
+  assert.strictEqual(coerced.app_config.app_version, 2);
+});
+
+test("a spoken token cannot impersonate — only a minted one verifies", () => {
+  // The security argument for carrying identity as a token rather than a phone
+  // number: the caller can say anything, but cannot produce a valid signature.
+  for (const madeUp of ["v1.dWlk.9999999999999.abcd", "tok-1", "hello", ""]) {
+    assert.equal(verifySessionToken({ token: madeUp, secret: SECRET }).ok, false, madeUp);
+  }
+  const real = mintSessionToken({ uid: "uid-9", secret: SECRET });
+  assert.equal(verifySessionToken({ token: real, secret: SECRET }).uid, "uid-9");
 });
 
 test("the webhook finds the token wherever Sarvam echoes it back", () => {

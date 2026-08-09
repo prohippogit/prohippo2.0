@@ -750,39 +750,44 @@ const outboundUrl = ({ orgId, workspaceId }) =>
 /*
  * Build the trigger-call body.
  *
- * Two things travel with the call and both matter:
+ * HOW IDENTITY REACHES THE TOOL, given what the platform actually does.
  *
- *   • `agent_variables` — what the agent knows before it speaks, so it opens
- *     with the practitioner's name instead of asking who it is calling.
- *   • `webhook_config.metadata` — echoed back to us on the call's webhooks,
- *     which is how the signed token gets from here to the tool handler.
+ * Sarvam passes a tool ONLY the body fields declared on that tool — no caller
+ * number, no call metadata. That is why identifying an inbound caller by their
+ * number is impossible here: the number never arrives.
  *
- * The token goes in BOTH. Which of the two Sarvam surfaces to a tool call isn't
- * documented yet, and putting it in one place only would make the identity path
- * depend on a coin flip. It costs nothing to send twice, and the webhook accepts
- * it from either.
+ * So the token travels as an `agent_variables` entry, the agent carries it in
+ * context, and each account tool declares a `session_token` body field for the
+ * agent to pass through. It also goes in `webhook_config.metadata`, which costs
+ * nothing and covers the call-status webhooks.
  *
- * Note that outbound identity is safe even if neither arrives: ProHippo chose
- * the number, and it is the one that account has verified. The token is the
- * belt; the dialled number is the braces.
+ * THE OBVIOUS OBJECTION, ANSWERED: if the agent fills that field from context,
+ * can a caller simply say a token out loud and be believed? No. The token is an
+ * HMAC over the uid and an expiry, signed with a secret that never leaves the
+ * server. A caller can say any string they like; only one this server minted in
+ * the last fifteen minutes verifies. That is precisely why identity travels as
+ * a signed token here and not as a phone number — a spoken phone number would
+ * be believed, and a spoken token cannot be.
  */
 function buildOutboundCall({ config, toNumber, callerName, firmName, token, callId }) {
   const first = String(callerName || "").trim().split(/\s+/)[0] || "";
   return {
     app_config: {
       app_id: config.agentId,
-      ...(config.agentVersion ? { app_version: config.agentVersion } : {}),
+      // Unquoted in Sarvam's own snippet, so send a number and not "2".
+      ...(config.agentVersion ? { app_version: Number(config.agentVersion) } : {}),
       app_type: "agent",
       connection_config: {
         connection_id: config.connectionId,
         agent_phone_number: config.agentPhoneNumber,
       },
+      /* Every key here must be declared as an input variable on the agent, or
+         the platform has nowhere to put it. Four, matching the agent exactly. */
       agent_variables: {
         caller_name: callerName || "",
         caller_firm: firmName || "",
         caller_known: "yes",
         session_token: token,
-        call_id: callId,
       },
       app_overrides: {
         initial_bot_message: first

@@ -48,19 +48,28 @@ voice: unidentified caller on upcoming_hearings — from=(none)
 phoneish=[none] keys=[days, assessee, session_token]
 ```
 
-The number-on-the-wire path is still in `identifyCaller()` and still correct if
-a platform ever sends one. But what actually identifies an inbound caller today
-is the **known-callers CSV**: upload a list of numbers against the inbound
-deployment, and a call from one of them starts with that row's values already in
-the agent's variables. We put a signed token in the `session_token` column — the
-same variable, bound to the same body field, verified by the same signature as
-the "Call me" path. Two doors, one lock.
+What identifies an inbound caller is the **on-start hook**: an API tool set to
+run *when the call starts*, which Sarvam fires once before the conversation
+begins, passing the caller's number from telephony metadata. The webhook
+resolves that number to an account and returns a `session_token` — the same
+variable, bound to the same body field, verified by the same signature as the
+"Call me" path. Two doors, one lock. See `identifyForCall()`.
 
-The column could just as easily have held the caller's phone number, and that
-would work. It holds a token instead because a body field is one dropdown away
-from being model-filled rather than variable-bound, and the moment it is, anyone
-can *say* a number and be believed. A caller who reads a token down the phone
-still cannot produce an HMAC for it. See `scripts/known-callers-csv.mjs`.
+The token is minted per call and lives fifteen minutes, which is a call.
+
+**The console invariant that carries the security:** the hook's `caller_phone`
+body field must be bound to an **agent variable**, never to "let the agent
+decide". A model-filled field would mean anyone could say a number out loud and
+be handed that account's token — worse than the caller-ID spoofing we already
+accept. The webhook cannot tell the two bindings apart, so this is written down
+rather than enforced.
+
+An earlier version of this used Sarvam's **known-callers CSV**, and
+`scripts/known-callers-csv.mjs` still generates one. It worked, but it was a
+snapshot: someone who signed up this morning stayed a stranger until a human
+re-ran the script and re-uploaded the file, and every row was a long-lived
+bearer credential sitting in a spreadsheet. Keep it as a fallback if the hook
+ever stops firing; don't run it as routine.
 
 A number we don't recognise gets no account data at all: not a partial answer,
 not a hint. It can still be told what the app does, because that is a product
@@ -218,40 +227,55 @@ that neither path can work for them, **before** they try.
 
 ---
 
-## Step 6 — Upload the known callers, or the phone line knows nobody
+## Step 6 — The on-start hook, or the phone line knows nobody
 
 Skip this and every account question on an inbound call comes back "I can only
 look up records for a registered ProHippo account" — for callers who *are*
-registered. Sarvam does not tell a tool who is calling; this is what does.
+registered. Sarvam does not pass the caller's number to a mid-call tool; this
+is what supplies it.
 
-```bash
-npm --prefix functions install   # once
-export SARVAM_WEBHOOK_SECRET="$(firebase functions:secrets:access SARVAM_WEBHOOK_SECRET --project prohippo2)"
-node scripts/known-callers-csv.mjs
-```
+**Build → Agents →** *the agent* **→ Tools → Add tool → API tool.**
 
-That writes `known-callers.csv` — one row per user with a verified mobile,
-carrying their name, firm, and a signed token:
+| Field | Value |
+| --- | --- |
+| Tool name | `identify_caller` |
+| When should this tool run? | **When the call starts** |
+| Method / URL | `POST` `https://asia-south1-prohippo2.cloudfunctions.net/sarvamVoiceWebhook/identify_caller` |
+| Auth | Bearer → `PROHIPPO_WEBHOOK_SECRET` |
+| Body | one field, `caller_phone`, bound via ⚙ → **Agent variable** → the telephony caller-number variable |
 
-```
-phone_number,caller_name,caller_firm,caller_known,session_token
-9879166912,Vivek Chavda,Chavda & Associates,yes,v1.…
-```
+Then map the reply back onto agent variables — **Save reply into variables**, or
+the `@` picker under *Send fields from the API response to the agent*:
 
-Upload it at **Deploy → Inbound calls →** *the deployment* **→ Add known
-callers**. Sarvam matches the columns onto agent variables **by name**, so the
-header row has to keep matching the variables on the agent — rename one and the
-mapping silently stops.
+| Response field | Agent variable |
+| --- | --- |
+| `session_token` | `session_token` |
+| `caller_name` | `caller_name` |
+| `caller_firm` | `caller_firm` |
+| `caller_known` | `caller_known` |
 
-Three things that will bite:
+Press **Send** once before using the `@` picker. Until Sarvam has seen a
+response it has no field names to offer, and a hand-typed `@session_token` is
+four literal characters that carry nothing — which cost us a day of believing
+the tools were broken when they were answering perfectly into a void.
 
-- **The file is a credential.** Each token grants read access to that account
-  over the phone. It is gitignored; delete it once uploaded.
-- **The tokens expire** — 180 days by default (`--days=`). Re-run and re-upload
-  before then, or the line quietly stops recognising everybody.
-- **A new user is not on the list.** Until someone re-runs this, they get the
-  unregistered-caller answer. This is the honest weak point of the design: the
-  list is a snapshot, and nothing yet keeps it in step with sign-ups.
+Two things that will bite:
+
+- **`caller_phone` must be an agent variable, not "let the agent decide".** See
+  the security note above; nothing in the code can check this for you.
+- **`identify_caller` must stay on "When the call starts".** The console has
+  been seen to revert this to "During the conversation" after a save — re-open
+  the tool and confirm it stuck, because a hook that fires mid-conversation
+  identifies nobody.
+
+### The fallback
+
+`scripts/known-callers-csv.mjs` writes a `phone_number,caller_name,caller_firm,
+caller_known,session_token` CSV for **Deploy → Inbound calls →** *the
+deployment* **→ Add known callers**, which Sarvam maps onto agent variables by
+column name. It is a snapshot — new sign-ups are strangers until someone re-runs
+it, and each row is a long-lived bearer credential (gitignored; delete after
+upload). Use it only if the hook stops firing.
 
 ---
 

@@ -340,6 +340,24 @@ test("the tools cover the questions a practitioner actually rings about", () => 
   assert.ok(names.includes("reply_status"), "no way to ask whether a reply was filed");
 });
 
+test("identify_caller exists, takes the number, and warns the model off it", () => {
+  /* The on-start hook is what lets an inbound call know who is on it, now that
+     Sarvam has confirmed the caller's number never reaches a mid-call tool. It
+     is registered as a tool so the dispatcher recognises the name, but it is
+     the platform that fires it, not the model — and its description has to say
+     so, because a model that calls it mid-conversation with a number it heard
+     is the impersonation route this design exists to close. */
+  const t = TOOLS.find((x) => x.name === "identify_caller");
+  assert.ok(t, "no on-start hook — an inbound caller cannot be identified at all");
+  assert.ok(t.parameters.properties.caller_phone, "the hook needs somewhere to receive the number");
+  assert.doesNotMatch(t.name, /^(add|create|update|edit|delete|remove|send|file|raise|set)_/);
+  // Both halves of the rule, in words the model reads on every turn.
+  assert.match(t.description, /never call this during the conversation/i);
+  assert.match(t.description, /says out loud/i);
+  // Nothing is required: a call from a number we don't know must still connect.
+  assert.ok(!t.parameters.required || !t.parameters.required.length);
+});
+
 test("the prompt forbids answering from memory, not just from an empty tool", () => {
   const p = buildSystemPrompt(null);
   assert.match(p, /no memory of this practice/i);

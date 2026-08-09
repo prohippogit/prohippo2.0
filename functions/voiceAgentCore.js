@@ -449,6 +449,39 @@ function spokenList(items) {
  * paste). Keep the descriptions written for the model, not for us.
  */
 const TOOLS = [
+  /*
+   * THE ON-START HOOK. Not a tool the model chooses — Sarvam fires it once,
+   * before the conversation begins, and it is what makes an inbound call know
+   * who is on it.
+   *
+   * It replaces the known-callers CSV. That list worked, but it was a snapshot:
+   * a practitioner who signed up this morning was a stranger to the phone line
+   * until somebody re-ran a script and re-uploaded a file, and the tokens in it
+   * were long-lived credentials sitting in a spreadsheet. This resolves the
+   * caller in real time and mints a token that dies with the call.
+   *
+   * SECURITY, AND IT IS THE WHOLE DESIGN: `caller_phone` must be bound in the
+   * console to an AGENT VARIABLE carrying telephony metadata — never to "let
+   * the agent decide". A model-filled field would mean anyone could say a
+   * number out loud and be handed that account's token, which is worse than
+   * the caller-ID spoofing we already accept. The webhook cannot tell the two
+   * bindings apart, so this is a console invariant, written down here and in
+   * docs/VOICE_AGENT_SETUP.md because nothing in the code can enforce it.
+   */
+  {
+    name: "identify_caller",
+    description:
+      "Runs automatically when the call starts, before anything is said. Turns the caller's number into their ProHippo account and produces the session token every other tool needs. Never call this during the conversation, and never with a number the caller says out loud.",
+    parameters: {
+      type: "object",
+      properties: {
+        caller_phone: {
+          type: "string",
+          description: "The number the call came from, supplied by the telephony platform. Bound to an agent variable — never filled in from the conversation.",
+        },
+      },
+    },
+  },
   {
     name: "find_feature",
     description:

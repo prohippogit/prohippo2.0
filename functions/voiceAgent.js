@@ -40,6 +40,7 @@ const admin = require("firebase-admin");
 const { VOICE_AGENT_CONFIG, missingConfig, isConfigured } = require("./voiceAgentConfig");
 
 const {
+  normalisePhone,
   maskPhone,
   maskPan,
   restrictedTopic,
@@ -162,6 +163,87 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     }
     return { ...(await loadProfile(user.uid, user.displayName)), via: "caller-id" };
   }
+
+  /*
+   * The on-start hook: number in, identity out.
+   *
+   * Sarvam calls this once before the conversation begins and maps the fields
+   * we return into agent variables. `session_token` is the one that matters —
+   * every account tool binds a body field to it, so from here on the call
+   * carries a signed identity that the webhook verifies on each tool call.
+   * Fifteen minutes, which is a call, and then it is worthless.
+   *
+   * The number can arrive either in the envelope (`from`, `user_phone_number`,
+   * and the rest of parseRequest's list) or as the `caller_phone` body field.
+   * We read both because the platform's on-start payload shape is not
+   * documented, and a hook that works only on the field name we guessed is a
+   * hook that fails silently on the first real call.
+   */
+  async function identifyForCall(parsed, body, secret) {
+    const phone = parsed.phone || normalisePhone((parsed.args || {}).caller_phone);
+    if (!phone) {
+      /* Structure, never content — and the fastest way to learn the field name
+         the platform actually uses, since the docs do not name it. */
+      const seen = describePayload(body);
+      console.warn(
+        `voice: identify_caller got no number — phoneish=[${seen.phoneish.join(", ") || "none"}] ` +
+        `keys=[${seen.keys.join(", ")}]`
+      );
+      return unknownCaller("no number on the request");
+    }
+
+    let user;
+    try {
+      user = await admin.auth().getUserByPhoneNumber(phone);
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") console.error("voice: identify_caller lookup failed", e.code || e.message);
+      console.info(`voice: identify_caller no account for ${maskPhone(phone)}`);
+      return unknownCaller("no account has this number");
+    }
+
+    const profile = await loadProfile(user.uid, user.displayName);
+    const { allowed } = await consumeRateLimit(user.uid, "call");
+    if (!allowed) {
+      return {
+        ok: true,
+        caller_known: "no",
+        session_token: "",
+        caller_name: profile.name || "",
+        caller_firm: profile.firmName || "",
+        speech: "This account has already used its calls for today. Everything is still in the app — please have a look there, or call back tomorrow.",
+      };
+    }
+
+    await logCall(user.uid, parsed.callId, {
+      startedAt: new Date().toISOString(),
+      from: maskPhone(phone),
+      language: safeTag(parsed.language),
+      tools: [],
+    });
+
+    console.log(`voice: identify_caller uid=${user.uid.slice(0, 8)} matched via=on-start`);
+    return {
+      ok: true,
+      caller_known: "yes",
+      session_token: mintSessionToken({ uid: user.uid, secret }),
+      caller_name: profile.name || "",
+      caller_firm: profile.firmName || "",
+      speech: greeting({ ...profile, known: true }),
+    };
+  }
+
+  /* Every field the mapping expects, always — a missing key leaves the agent
+     variable holding whatever the last call put there, and "whatever the last
+     call put there" is another practitioner's token. */
+  const unknownCaller = (why) => ({
+    ok: true,
+    caller_known: "no",
+    session_token: "",
+    caller_name: "",
+    caller_firm: "",
+    speech: greeting({ known: false }),
+    reason: why,
+  });
 
   /* The ONLY way this module reaches Firestore. Everything is a subcollection
      of the identified user's own document — there is no argument you can pass
@@ -747,6 +829,16 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
             known: caller.known,
             speech: greeting(caller),
             first_message: greeting(caller),
+            /* Flat as well as nested. The on-start API tool maps response
+               fields by name from the top level, and a platform that sends its
+               start event here rather than to identify_caller should still hand
+               the agent a usable token. */
+            caller_known: caller.known ? "yes" : "no",
+            caller_name: caller.name || "",
+            caller_firm: caller.firmName || "",
+            session_token: caller.known
+              ? mintSessionToken({ uid: caller.uid, secret: sarvamWebhookSecret.value() })
+              : "",
             // Prompt variables, for a Sarvam agent configured with placeholders.
             variables: {
               caller_name: caller.name || "",
@@ -777,6 +869,11 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
             ok: true,
           });
           res.status(200).json({ ok: true });
+          return;
+        }
+
+        if (parsed.kind === "tool" && parsed.toolName === "identify_caller") {
+          res.status(200).json(await identifyForCall(parsed, body, sarvamWebhookSecret.value()));
           return;
         }
 

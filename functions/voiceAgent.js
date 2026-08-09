@@ -138,7 +138,13 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
   async function identifyCaller(parsed, secret) {
     if (parsed.sessionToken) {
       const claim = verifySessionToken({ token: parsed.sessionToken, secret });
-      if (claim.ok) return { ...(await loadProfile(claim.uid)), via: "token" };
+      if (claim.ok) {
+        /* Which account, in eight characters — enough to tell "the token names
+           a different practitioner than the one who dialled" from "the read
+           came back empty", which are indistinguishable from the transcript. */
+        console.log(`voice: identified uid=${claim.uid.slice(0, 8)} via=token`);
+        return { ...(await loadProfile(claim.uid)), via: "token" };
+      }
       // A token that was sent and didn't verify is worth a line in the log: it
       // is either a clock problem, a rotated secret, or someone trying it on.
       console.warn("voice: session token rejected —", claim.reason);
@@ -205,9 +211,21 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
   async function upcomingHearings(uid, { days = 30, assessee } = {}) {
     const today = istToday();
     const until = addDays(today, Math.max(1, Math.min(365, Number(days) || 30)));
-    let rows = (await readOwn(uid, "hearings"))
+    const read = await readOwn(uid, "hearings");
+    let rows = read
       .filter((h) => h.date && h.date >= today && h.date <= until && isLive(h))
       .sort((a, b) => (a.date === b.date ? String(a.time || "").localeCompare(String(b.time || "")) : a.date.localeCompare(b.date)));
+
+    /* Counts and a uid prefix — never a client name, a date or an amount.
+       scripts/voice-doctor.mjs run against this account returns two hearings;
+       the line said none. One of the two is looking at something the other
+       isn't, and from outside a phone call there is no way to tell which. The
+       shape of the funnel, plus which account it ran for, distinguishes an
+       identity mismatch from a filter that is throwing rows away. */
+    console.log(
+      `voice: upcoming_hearings uid=${String(uid).slice(0, 8)} today=${today} until=${until} ` +
+      `read=${read.length} kept=${rows.length} named=${assessee ? "yes" : "no"}`
+    );
 
     if (assessee) {
       const all = await readOwn(uid, "assessees");

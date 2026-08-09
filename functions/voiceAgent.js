@@ -204,10 +204,10 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     const profile = await loadProfile(user.uid, user.displayName);
     const { allowed } = await consumeRateLimit(user.uid, "call");
     if (!allowed) {
+      // Same rule: no session_token key at all, so the day's limit cannot
+      // silently revoke an identity another mechanism established.
       return {
         ok: true,
-        caller_known: "no",
-        session_token: "",
         caller_name: profile.name || "",
         caller_firm: profile.firmName || "",
         speech: "This account has already used its calls for today. Everything is still in the app — please have a look there, or call back tomorrow.",
@@ -232,15 +232,21 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     };
   }
 
-  /* Every field the mapping expects, always — a missing key leaves the agent
-     variable holding whatever the last call put there, and "whatever the last
-     call put there" is another practitioner's token. */
+  /*
+   * A failed identification says nothing, rather than saying "empty".
+   *
+   * The first cut returned every field explicitly, reasoning that a missing key
+   * would leave a variable holding a previous call's value. That was the wrong
+   * risk: Sarvam initialises variables per call, so there is no stale token to
+   * displace — but the known-callers list DOES populate session_token before
+   * the hook runs, and returning "" wrote over it. One deploy turned a working
+   * line into one that recognised nobody.
+   *
+   * So when we cannot identify the caller we return the greeting and nothing
+   * else. Whatever another mechanism has already supplied survives.
+   */
   const unknownCaller = (why) => ({
     ok: true,
-    caller_known: "no",
-    session_token: "",
-    caller_name: "",
-    caller_firm: "",
     speech: greeting({ known: false }),
     reason: why,
   });

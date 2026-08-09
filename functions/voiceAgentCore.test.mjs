@@ -621,6 +621,22 @@ test("app_version is sent as a number, matching Sarvam's own snippet", () => {
   assert.strictEqual(coerced.app_config.app_version, 2);
 });
 
+test("the shipped pin is new enough to know about session_token", () => {
+  /* Not a style check — this is the 422 that broke "Call me" in production.
+     Sarvam validates agent_variables against the PINNED version, not the
+     draft, so a pin older than the commit that introduced session_token gets
+     "Agent variables '{'session_token'}' not found in agent variables of app".
+     v3 is the first committed version carrying that variable; anything below
+     it cannot accept the token this code sends on every outbound call. */
+  const { VOICE_AGENT_CONFIG, isConfigured } = require("./voiceAgentConfig.js");
+  assert.ok(isConfigured(), "the shipped config should be complete");
+  assert.equal(typeof VOICE_AGENT_CONFIG.agentVersion, "number");
+  assert.ok(
+    VOICE_AGENT_CONFIG.agentVersion >= 3,
+    `pinned to v${VOICE_AGENT_CONFIG.agentVersion}, which predates session_token`
+  );
+});
+
 test("a spoken token cannot impersonate — only a minted one verifies", () => {
   // The security argument for carrying identity as a token rather than a phone
   // number: the caller can say anything, but cannot produce a valid signature.

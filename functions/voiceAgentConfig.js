@@ -29,10 +29,17 @@ const VOICE_AGENT_CONFIG = {
   workspaceId: "019edd8a-9871-742d-97a0-7af9770aa41d",
   agentId: "prohippo-he-b17b4513-91d8",
 
-  /* A NUMBER, not a string — the trigger-call snippet sends `"app_version": 2`
+  /* A NUMBER, not a string — the trigger-call snippet sends `"app_version": 3`
      unquoted, and pinning it is deliberate: an edit committed in the console
-     must not change what a live feature does until someone raises this. */
-  agentVersion: 2,
+     must not change what a live feature does until someone raises this.
+
+     The pin is also load-bearing in a way that cost us a live failure. Sarvam
+     validates `agent_variables` against the pinned version, not the draft: with
+     this on 2, a call carrying `session_token` came back
+     "(422) Invalid Parameter … Agent variables '{'session_token'}' not found",
+     because v2 predated the variable. So whenever a console commit adds or
+     renames a variable, this number has to move with it. */
+  agentVersion: 3,
   connectionId: "3849bc9b-e5-51c864d5-6102",
 
   // The number ProHippo owns and calls from. Confirmed purchased; it is also

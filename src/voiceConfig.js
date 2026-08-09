@@ -30,7 +30,7 @@ export const VOICE_HELPLINE_TEL = VOICE_HELPLINE.replace(/[^\d+]/g, "");
  *
  * Until then the Settings card shows the feature as coming, which is true.
  */
-export const VOICE_LIVE = false;
+export const VOICE_LIVE = true;
 
 export const VOICE_ENABLED = VOICE_LIVE && Boolean(VOICE_HELPLINE_TEL);
 

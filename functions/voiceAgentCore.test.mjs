@@ -358,6 +358,29 @@ test("identify_caller exists, takes the number, and warns the model off it", () 
   assert.ok(!t.parameters.required || !t.parameters.required.length);
 });
 
+test("the caller's number is recognised under the name Sarvam's own SDK uses", () => {
+  /* Sarvam's on-start tool context exposes get_user_identifier(), which on an
+     inbound telephony call returns the caller's number as bare digits with no
+     plus. The dashboard's tool builder does not inject it automatically — that
+     gap is why the hook currently receives an empty field — but the moment a
+     body field is bound to it, or the platform starts sending it, this has to
+     resolve without a deploy. */
+  assert.equal(normalisePhone("919876543210"), "+919876543210");
+  for (const body of [
+    { user_identifier: "919879166912" },
+    { context: { user_identifier: "+91 98791 66912" } },
+    { metadata: { user_identifier: "919879166912" } },
+  ]) {
+    const parsed = parseRequest(body, "/sarvamVoiceWebhook/identify_caller");
+    assert.equal(parsed.toolName, "identify_caller", JSON.stringify(body));
+    assert.equal(parsed.phone, "+919879166912", JSON.stringify(body));
+  }
+  // A field named caller_phone reaches the handler as an argument instead —
+  // identifyForCall reads both, so either console spelling works.
+  const asArg = parseRequest({ caller_phone: "919879166912" }, "/sarvamVoiceWebhook/identify_caller");
+  assert.equal(asArg.args.caller_phone, "919879166912");
+});
+
 test("the prompt forbids answering from memory, not just from an empty tool", () => {
   const p = buildSystemPrompt(null);
   assert.match(p, /no memory of this practice/i);

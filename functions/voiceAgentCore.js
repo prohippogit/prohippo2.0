@@ -1118,11 +1118,20 @@ function parseRequest(body, pathname = "") {
 
   /* `user_config.user_phone_number` is the platform's own name for the person
      on the other end — it is what you supply when triggering an outbound call,
-     so it is the likeliest name for the caller on an inbound one too. */
+     so it is the likeliest name for the caller on an inbound one too.
+
+     `user_identifier` is the name Sarvam's own SDK gives it: the on-start tool
+     context exposes get_user_identifier(), which on an inbound telephony call
+     returns the caller's number as bare digits ("919876543210"). It is not
+     injected into a dashboard-configured tool's body automatically — that is
+     the documented gap — but if a body field is ever bound to it, or the
+     platform starts sending it, this reads it without a code change. */
   const from = pick(
     b,
     "from", "from_number", "fromNumber", "caller", "caller_id", "callerId",
     "customer_number", "user_config.user_phone_number", "user_phone_number",
+    "user_identifier", "userIdentifier", "context.user_identifier",
+    "metadata.user_identifier", "call.user_identifier",
     "call.from", "call.from_number", "metadata.from",
     "data.from", "data.caller_number", "session.from"
   );

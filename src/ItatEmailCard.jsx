@@ -142,14 +142,33 @@ export default function ItatEmailCard() {
       {pendingCode && (
         <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 12, background: "var(--p-lavender)", border: "1px solid var(--p-lavender-2)" }}>
           <div className="muted" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--p-primary-2)" }}>
-            Type this into Gmail
+            {pendingCode.code ? "Type this into Gmail" : "Gmail is waiting for you"}
           </div>
-          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: ".05em", fontVariantNumeric: "tabular-nums", margin: "6px 0 4px" }}>
-            {pendingCode.code}
-          </div>
+          {pendingCode.code && (
+            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: ".05em", fontVariantNumeric: "tabular-nums", margin: "6px 0 4px" }}>
+              {pendingCode.code}
+            </div>
+          )}
           <div className="muted" style={{ fontSize: 12 }}>
-            Gmail asked to forward {pendingCode.requester ? <b>{pendingCode.requester}</b> : "a mailbox"} here. Paste the code into the box it is showing you.
+            Gmail asked to forward {pendingCode.requester ? <b>{pendingCode.requester}</b> : "a mailbox"} here.
+            {pendingCode.code ? " Paste the code into the box it is showing you — click the word Verify in Gmail if you cannot see one." : ""}
           </div>
+
+          {/* The same email carries a one-click link, and it is the better
+              route: Gmail hides the box the code goes in behind a word that
+              does not look like a button. This finishes the handshake without
+              anyone having to find it. */}
+          {pendingCode.confirmUrl && (
+            <a
+              className="btn btn-primary btn-sm"
+              href={pendingCode.confirmUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ marginTop: 10, textDecoration: "none" }}
+            >
+              <Icon name="check" size={13} />Confirm forwarding in Gmail
+            </a>
+          )}
         </div>
       )}
 

@@ -84,7 +84,10 @@ export function usePendingGmailCode() {
   const pending = cfg?.pendingCode || null;
   const now = React.useSyncExternalStore(clock.subscribe, clock.now, clock.now);
 
-  if (!pending?.code || !pending.at) return null;
+  if (!pending?.at) return null;
+  // Either half is enough to be worth showing: the link alone completes the
+  // handshake, and the code alone is what Gmail's own settings box wants.
+  if (!pending.code && !pending.confirmUrl) return null;
   // A dead code left on screen is worse than none: someone comes back an hour
   // later, types a number Gmail has already forgotten, and concludes the whole
   // feature is broken.

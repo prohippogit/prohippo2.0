@@ -161,7 +161,30 @@ function build({ PRIMARY_REGION, db }) {
 
   async function ensureAddress(uid) {
     const snap = await integrationRef(uid).get();
-    if (snap.exists && snap.data().address) return snap.data();
+    const existing = snap.exists ? normaliseAddress(snap.data().address) : "";
+    if (existing) {
+      /* Re-claim an address whose alias has gone missing.
+       *
+       * The lookup key used to be the token — inboundAliases/<local part> —
+       * and became a hash of the whole address when providers that issue their
+       * own addresses had to be supported. An address minted before that change
+       * still sits on the integration document, and still shows on the Settings
+       * card, but has no alias under the new key. Every message to it then
+       * resolves to nobody.
+       *
+       * Silently, which is the part that makes this worth healing rather than
+       * detecting: "no alias" is the ordinary outcome for mail we were never
+       * meant to receive, so it is answered 200 and logged nowhere the
+       * practitioner looks. The provider reports a clean delivery, the app
+       * reports nothing at all, and the address simply appears not to work.
+       *
+       * Settings calls this on mount, so opening the page repairs it. */
+      if (!(await aliasRef(existing).get()).exists) {
+        console.warn(`itat: re-claiming orphaned alias for ${uid}`);
+        await claimAddress(uid, existing, {});
+      }
+      return snap.data();
+    }
 
     /* Mint one on ProHippo's own mail domain. This is the address a practice
        gets if its provider lets it receive on a domain we control — and the one
@@ -280,7 +303,15 @@ function build({ PRIMARY_REGION, db }) {
       const aliasSnaps = candidates.length ? await db.getAll(...candidates.map(aliasRef)) : [];
       const hit = aliasSnaps.find((snap) => snap.exists);
       const uid = hit ? hit.data().uid : "";
-      if (!uid) { console.warn("itatInboundEmail: no alias matched"); res.status(200).send("no-alias"); return; }
+      /* Say WHICH addresses were tried. A bare "no alias matched" is the least
+         useful line in the log precisely when it matters most: a provider
+         reporting a clean delivery, an app showing nothing, and no way to tell
+         a typo in a forwarding rule from an alias that was never registered. */
+      if (!uid) {
+        console.warn(`itatInboundEmail: no alias matched among [${candidates.join(", ")}]`);
+        res.status(200).send("no-alias");
+        return;
+      }
 
       msg.originalFrom = originalSenderOf(msg);
       const result = parseItatEmail(msg);

@@ -239,6 +239,41 @@ right instruction is the one that never sends it.
 
 ---
 
+## Step 5 — The notices already in the mailbox
+
+**A Gmail filter forwards new mail only.** The "Also apply filter to N matching
+conversations" checkbox applies labels, archiving and starring to what is
+already there; Gmail deliberately excludes forwarding from it. So a practice
+that signs up today gets every notice from tomorrow and none of the four
+months behind it — which is most of the pending hearings they actually have.
+
+The way in is Gmail's own bulk export, **Forward as attachment**:
+
+1. Search `from:no-reply@itat.nic.in`.
+2. Tick the box at the top left to select the page, then **Select all
+   conversations that match this search**.
+3. Three-dot menu → **Forward as attachment**.
+4. Send it to the practice address.
+
+Gmail caps a message at 25 MB, so a large mailbox takes a few sends rather than
+one. Each attached message is filed as its own card, with its assessee opened
+from its PAN, and the whole lot waits on the review queue to be confirmed one
+at a time.
+
+**Sending the same batch twice costs nothing.** A carried email keeps the
+Message-ID the Tribunal stamped on it, so the second send re-files none of them
+— unlike an ordinary forward, which the forwarding client gives a new ID every
+time. Someone who loses track of which notices they have already sent can
+simply send the lot again.
+
+Most of those old notices are for hearings that have already been heard. That
+is worth having: the matter is created either way, and a later notice for the
+same appeal marks the earlier date **Adjourned**, so a matter put off four times
+reads as four dates — which is the history a practitioner is asked about at the
+hearing.
+
+---
+
 ## How it works
 
 | Piece | What it does |

@@ -24,6 +24,7 @@ const {
   matterIdFor, hearingIdFor, fromJson, fromForm,
   emailAddressesIn, addressKey, normaliseAddress, isEmailAddress,
   tableRows, partiesOf, statusFromPan,
+  fromRfc822, decodeWords, decodePart, headerIn, splitMime, partsOf,
 } = require("../functions/itatEmailParse.js");
 
 const ALIAS = "a1b2c3d4e5f60718@prohippo.info";
@@ -199,6 +200,132 @@ test("the notice of hearing is read", () => {
   assert.equal(fields.caseType, "DBC");
   assert.match(fields.venue, /Abhinav Arcade/);
   assert.equal(fields.lastFixedOn, "", "a first hearing has no earlier date, and must not invent one");
+});
+
+/* ---------------- an email carried inside another email ----------------
+ *
+ * Gmail's "Forward as attachment" is the only bulk export a practitioner has,
+ * and it is how four months of notices already sitting in a mailbox get in — a
+ * Gmail filter forwards new mail only. Each selected message arrives whole, as
+ * raw RFC 822, so what is pinned here is that a message read out of an
+ * attachment is indistinguishable downstream from one delivered directly.
+ */
+
+// A real message on the wire: CRLF line endings, a folded Content-Type, an
+// encoded-word subject, quoted-printable text and base64 HTML.
+const CRLF = (s) => s.replace(/\n/g, "\r\n");
+const b64 = (s) => Buffer.from(s, "utf8").toString("base64").replace(/(.{76})/g, "$1\n").trim();
+
+const CARRIED_HEARING = CRLF(`Delivered-To: chavdagreen@gmail.com
+Message-ID: <hearing-2530-original@itat.nic.in>
+Date: Fri, 31 Jul 2026 18:04:11 +0530
+From: ITAT Online <no-reply@itat.nic.in>
+To: chavdagreen@gmail.com
+Subject: Notice of Hearing in ITA 2530/AHD/2026 (Date of Hearing: 2026-Sep-15)
+Content-Type: multipart/mixed;
+ boundary="----=_Part_9_1234567"
+
+------=_Part_9_1234567
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+Please see the notice of hearing. Fees =3D Rs. 500.
+------=_Part_9_1234567
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+${b64(HEARING.html)}
+------=_Part_9_1234567
+Content-Type: application/pdf; name="notice.pdf"
+Content-Disposition: attachment; filename="notice.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJeLjz9MK
+------=_Part_9_1234567--
+`);
+
+test("a message is split into its headers and its body", () => {
+  const { headers, body } = splitMime("A: 1\r\nB: 2\r\n\r\nthe body\r\n");
+  assert.equal(headers, "A: 1\r\nB: 2");
+  assert.match(body, /^the body/);
+  assert.equal(splitMime("no blank line").body, "", "a message with no body is not a message with no headers");
+});
+
+test("a header folded across lines is still one header", () => {
+  // The boundary routinely lands on the continuation line. Miss the fold and
+  // the message looks like it has no parts at all.
+  const folded = "Content-Type: multipart/mixed;\r\n boundary=\"abc123\"\r\nSubject: hi";
+  assert.equal(headerIn(folded, "Content-Type"), 'multipart/mixed; boundary="abc123"');
+  assert.equal(headerIn(folded, "Subject"), "hi");
+  assert.equal(headerIn(folded, "Nothing-Like-This"), "");
+});
+
+test("the parts between the boundaries, and neither marker", () => {
+  const parts = partsOf("preamble\r\n--b\r\nfirst\r\n--b\r\nsecond\r\n--b--\r\n", "b");
+  assert.equal(parts.length, 2);
+  assert.match(parts[0], /^first/);
+  assert.match(parts[1], /^second/);
+});
+
+test("an encoded-word subject is a subject", () => {
+  assert.equal(decodeWords("=?UTF-8?B?4KSG4KSv4KSV4KSw?="), "आयकर");
+  assert.equal(decodeWords("=?UTF-8?Q?Notice_of_Hearing?="), "Notice of Hearing");
+  assert.equal(decodeWords("Notice of Hearing"), "Notice of Hearing", "plain ASCII passes through");
+  // A long Hindi header is split into several words because each one has a
+  // length limit. The space between them belongs to the encoding, not to the
+  // subject, and leaving it in puts a gap through the middle of a word.
+  assert.equal(decodeWords("=?UTF-8?B?4KSG4KSv?= =?UTF-8?B?4KSV4KSw?="), "आयकर");
+  assert.equal(decodeWords("=?UTF-8?Q?Notice?= of =?UTF-8?Q?Hearing?="), "Notice of Hearing",
+    "but a real word between them keeps its spaces");
+});
+
+test("quoted-printable and base64 both come back as the text they encode", () => {
+  assert.equal(decodePart("Fees =3D Rs. 500", "quoted-printable", "utf-8"), "Fees = Rs. 500");
+  assert.equal(decodePart("a very long line that wa=\r\ns wrapped", "quoted-printable", "utf-8"), "a very long line that was wrapped");
+  assert.equal(decodePart(Buffer.from("आयकर", "utf8").toString("base64"), "base64", "utf-8"), "आयकर");
+  assert.equal(decodePart("plain text", "7bit", "utf-8"), "plain text");
+});
+
+test("a notice read out of an attachment is read exactly as one delivered direct", () => {
+  const msg = fromRfc822(CARRIED_HEARING);
+  assert.equal(msg.from, "ITAT Online <no-reply@itat.nic.in>");
+  assert.equal(msg.messageId, "<hearing-2530-original@itat.nic.in>");
+  assert.match(msg.text, /Fees = Rs\. 500/, "quoted-printable is decoded, not passed through");
+  assert.match(msg.html, /JAPAN RAJNIKANT GANDHI/, "and the base64 HTML part is the Tribunal's table");
+
+  const { kind, fields } = parseItatEmail(msg);
+  assert.equal(kind, "hearing");
+  assert.equal(fields.appealNo, "ITA 2530/AHD/2026");
+  assert.equal(fields.date, "2026-09-15");
+  assert.equal(fields.time, "10:30");
+  assert.equal(fields.ay, "2016-17");
+  assert.equal(fields.pan, "BLGPG1814C");
+  assert.equal(fields.bench, "Ahmedabad 'D' Bench");
+  assert.equal(fields.appellant, "JAPAN RAJNIKANT GANDHI");
+});
+
+test("the Tribunal's own Message-ID survives the trip, so an import can be repeated", () => {
+  // Fifty notices sent twice must re-file none of them. The carried message
+  // keeps the ID ITAT stamped on it, unlike a forward, which gets a new one
+  // from the forwarding client every single time.
+  assert.equal(
+    messageKey(fromRfc822(CARRIED_HEARING)),
+    messageKey({ messageId: "<hearing-2530-original@itat.nic.in>" })
+  );
+});
+
+test("a PDF inside the notice is not mistaken for the notice", () => {
+  const msg = fromRfc822(CARRIED_HEARING);
+  assert.ok(!/JVBERi/.test(msg.text + msg.html), "an attachment's bytes are not body text");
+});
+
+test("nothing readable is null rather than a message full of empty strings", () => {
+  assert.equal(fromRfc822(""), null);
+  assert.equal(fromRfc822("   "), null);
+  // A bare single-part message with no MIME headers at all is still a message.
+  const plain = fromRfc822("From: a@b.com\r\nSubject: hi\r\n\r\nbody here");
+  assert.equal(plain.subject, "hi");
+  assert.equal(plain.text, "body here");
 });
 
 /* ---------------- who the appeal belongs to ----------------

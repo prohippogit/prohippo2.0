@@ -75,6 +75,44 @@ And after paying that price it still only sees the consultant's mailbox. It
 belongs on the roadmap as convenience for practices that file under their own
 address, never as the mechanism.
 
+The one thing reading the mailbox would genuinely have solved — importing the
+notices already sitting in it — is solved instead by **Forward as attachment**,
+below. Gmail's own button does the export, and it costs nothing.
+
+---
+
+## The mailbox as it stands on day one
+
+A Gmail filter forwards **new mail only**. "Also apply filter to N matching
+conversations" applies labels, archiving and starring retroactively; forwarding
+is deliberately excluded. So a practice that signs up today gets everything from
+tomorrow and none of the four months behind it — which is where most of their
+pending hearings are, and the difference between the feature looking useful on
+day one and looking empty.
+
+Gmail's answer is **Forward as attachment**: select any number of messages, and
+each is sent whole as a `message/rfc822` part. The webhook opens them and files
+each as its own card, so a mailbox is imported in one send rather than a hundred
+forwards.
+
+Three properties make it the right mechanism rather than a workaround:
+
+- **It is exact.** The original message arrives byte for byte — the Tribunal's
+  own HTML table, not a forwarding client's lossy plain-text rendition of it.
+  The appellant's name and address read out of a carried notice where they can
+  be lost in an inline forward.
+- **It is safe to repeat.** A carried email keeps the Message-ID ITAT stamped on
+  it, so the same batch sent twice re-files none of it. An ordinary forward gets
+  a fresh ID from the forwarding client every time and would duplicate.
+- **The carrier is not a message.** Gmail's wrapper is written by the
+  practitioner, says nothing, and is not from the Tribunal. When there are
+  emails inside, they are the delivery and the wrapper is discarded without
+  being counted — otherwise every import would report a discarded message.
+
+Only `message/rfc822` parts are read. A PDF attached to a notice is streamed to
+the floor as before: nothing reads them, and a notice's attachment can be
+several megabytes held in memory for no purpose.
+
 ---
 
 ## Recommended mechanism
@@ -489,7 +527,7 @@ everything awaiting one click. Empty most days; that is the point.
 
 | Phase | Ships | Depends on |
 | --- | --- | --- |
-| **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue — plus the practitioner's own forwarding rule and the three-screen guide for setting it. | A domain with an MX record, and an inbound provider account. Nothing else. |
+| **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue — plus the practitioner's own forwarding rule and the three-screen guide for setting it, and the Forward-as-attachment import for the mail already in the mailbox. | A domain with an MX record, and an inbound provider account. Nothing else. |
 | **2** | Client-facing setup: per-assessee links, the live code-catching page, forwarding status on the assessee, auto-apply for authenticated messages. | Phase 1 in the field, and knowing how many appeals actually sit outside route 1. |
 | **3** | Extend the allowlist and parsers to CIT(A)/NFAC and departmental mail — much higher volume, same pipeline. | Sample emails. |
 | **4** | Optional client-side "Connect Gmail", if enough appeals are registered under client addresses to justify Google's review and the annual assessment. Optional IMAP polling in the desktop connector for non-Google mailboxes, where credentials are already vaulted. | A commercial decision, not a technical one. |

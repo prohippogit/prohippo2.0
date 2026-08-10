@@ -522,6 +522,149 @@ function emailAddressesIn(text) {
  * object, and the parser above never learns which is in front of it.
  * ------------------------------------------------------------------------- */
 
+/* ---------------- an email carried inside another email ----------------
+ *
+ * Gmail's "Forward as attachment" puts the original messages in whole, one
+ * .eml per attachment, and that is the only bulk export a practitioner has: a
+ * Gmail filter forwards new mail only and will not touch what is already in the
+ * mailbox, so a firm arriving with four months of notices behind them has no
+ * other way in short of forwarding a hundred emails by hand.
+ *
+ * Reading them means opening a raw RFC 822 message, which is why this lives
+ * here rather than in the provider readers above: it is the same job they do —
+ * turn somebody else's format into { from, subject, text, html } — and it wants
+ * the same tests. What is implemented is what the Tribunal's mail actually
+ * uses: folded headers, encoded-word subjects, multipart/alternative, base64
+ * and quoted-printable. Not a general MIME library, and not trying to be.
+ */
+
+const CHARSETS = { "utf-8": "utf8", utf8: "utf8", "us-ascii": "latin1", "iso-8859-1": "latin1", "windows-1252": "latin1" };
+const nodeCharset = (name) => CHARSETS[clean(name).toLowerCase().replace(/["']/g, "")] || "utf8";
+
+// Bytes in, text out. The raw message is held as latin1 so every byte survives
+// the trip; only here, once the part's own charset is known, does it become
+// characters.
+const asText = (bytes, charset) => Buffer.from(bytes, "latin1").toString(nodeCharset(charset));
+
+/* A header written across several lines is one header. RFC 822 folds anything
+   long onto continuation lines beginning with a space, and a Content-Type with
+   its boundary on the second line is the common case — miss it and the message
+   looks like it has no parts at all. */
+const unfold = (headers) => clean(headers).replace(/\r?\n[ \t]+/g, " ");
+
+function headerIn(headers, name) {
+  const m = new RegExp(`^${name.replace(/[-]/g, "\\-")}\\s*:\\s*(.*)$`, "im").exec(unfold(headers));
+  return m ? m[1].trim() : "";
+}
+
+/* "=?UTF-8?B?4KS44KWC?=" is a subject, not a subject line's worth of noise.
+   The Tribunal writes its Hindi headers this way and Gmail re-encodes anything
+   non-ASCII when it forwards, so without this a bench name arrives as gibberish
+   and the appeal number next to it is missed along with it. */
+function decodeWords(s) {
+  return clean(s)
+    /* Whitespace BETWEEN two encoded words is punctuation of the encoding, not
+       of the subject, and RFC 2047 says to drop it. A long Hindi header is
+       split into several words precisely because each one has a length limit,
+       and leaving the joins in puts spaces through the middle of a word. Done
+       first, because afterwards there are no encoded words left to join. */
+    .replace(/\?=[ \t]*(?:\r?\n[ \t]+)?=\?/g, "?==?")
+    .replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset, enc, text) => {
+      try {
+        if (enc.toUpperCase() === "B") return asText(Buffer.from(text, "base64").toString("latin1"), charset);
+        const bytes = text.replace(/_/g, " ").replace(/=([0-9A-Fa-f]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)));
+        return asText(bytes, charset);
+      } catch { return whole; }
+    });
+}
+
+function decodePart(body, encoding, charset) {
+  const enc = clean(encoding).toLowerCase();
+  if (enc === "base64") {
+    try { return asText(Buffer.from(body.replace(/\s+/g, ""), "base64").toString("latin1"), charset); }
+    catch { return ""; }
+  }
+  if (enc === "quoted-printable") {
+    const bytes = body
+      .replace(/=\r?\n/g, "")
+      .replace(/=([0-9A-Fa-f]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)));
+    return asText(bytes, charset);
+  }
+  return asText(body, charset);
+}
+
+const boundaryOf = (contentType) => {
+  const m = /boundary\s*=\s*(?:"([^"]+)"|([^;\s]+))/i.exec(clean(contentType));
+  return m ? m[1] || m[2] : "";
+};
+
+/* The parts between one boundary marker and the next. The closing marker is
+   consumed by the same expression, so the first chunk is the preamble and the
+   last is the epilogue — both discarded, both usually empty. */
+function partsOf(body, boundary) {
+  const b = boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const chunks = body.split(new RegExp(`(?:\r?\n)?--${b}(--)?[ \t]*(?:\r?\n|$)`));
+  const parts = chunks.slice(1).filter((c) => c !== undefined && c !== "--" && clean(c) !== "");
+  return parts;
+}
+
+const splitMime = (raw) => {
+  const at = raw.search(/\r?\n\r?\n/);
+  return at < 0 ? { headers: raw, body: "" } : { headers: raw.slice(0, at), body: raw.slice(at).replace(/^\r?\n\r?\n/, "") };
+};
+
+/* Walk the tree, keeping the first text/plain and the first text/html found.
+   Depth-limited rather than trusted: a malformed message can nest boundaries
+   into each other for as long as it likes, and this runs on a public endpoint. */
+function collectBodies(headers, body, out, depth) {
+  if (depth > 8 || (out.text && out.html)) return;
+  const type = headerIn(headers, "Content-Type");
+  const mime = clean(type).split(";")[0].toLowerCase();
+
+  if (mime.startsWith("multipart/")) {
+    const boundary = boundaryOf(type);
+    if (!boundary) return;
+    for (const part of partsOf(body, boundary)) {
+      const inner = splitMime(part);
+      collectBodies(inner.headers, inner.body, out, depth + 1);
+    }
+    return;
+  }
+
+  // An attachment inside the attachment — a PDF notice, most often. Nothing
+  // here reads them, and its filename is not the email's body.
+  if (/attachment/i.test(headerIn(headers, "Content-Disposition"))) return;
+
+  const charset = (/charset\s*=\s*(?:"([^"]+)"|([^;\s]+))/i.exec(type) || []).slice(1).find(Boolean) || "utf-8";
+  const decoded = decodePart(body, headerIn(headers, "Content-Transfer-Encoding"), charset);
+  if (mime === "text/plain" && !out.text) out.text = decoded;
+  else if (mime === "text/html" && !out.html) out.html = decoded;
+  // A single-part message with no Content-Type at all is text/plain by default.
+  else if (!mime && !out.text) out.text = decoded;
+}
+
+/* One raw message in, the same shape every provider reader returns out, so
+   everything downstream — the sender allowlist, the classifier, the parser —
+   cannot tell a carried email from a delivered one. */
+function fromRfc822(raw) {
+  const source = clean(raw);
+  if (!source) return null;
+  const { headers, body } = splitMime(source);
+  const out = { text: "", html: "" };
+  collectBodies(headers, body, out, 0);
+
+  return {
+    from: decodeWords(headerIn(headers, "From")),
+    to: recipientsOf(headerIn(headers, "To"), headerIn(headers, "Cc"), headerIn(headers, "Delivered-To")),
+    subject: decodeWords(headerIn(headers, "Subject")),
+    text: out.text,
+    html: out.html,
+    headers: unfold(headers),
+    messageId: headerIn(headers, "Message-Id"),
+    date: headerIn(headers, "Date"),
+  };
+}
+
 /* Every address the message might have been delivered to, as one string.
  *
  * This is the field the practice's alias is found in, and getting it from the
@@ -622,5 +765,6 @@ module.exports = {
   classify, parseRegistration, parseHearing, parseItatEmail, originalSenderOf, forwardedByOf,
   messageKey, matterIdFor, hearingIdFor, MAIL_DOMAIN, recipientsOf, fromJson, fromForm,
   tableRows, partiesOf, statusFromPan,
+  fromRfc822, decodeWords, decodePart, headerIn, partsOf, splitMime,
   normaliseAddress, addressKey, isEmailAddress, emailAddressesIn,
 };

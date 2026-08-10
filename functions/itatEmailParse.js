@@ -29,10 +29,16 @@
 
 const crypto = require("node:crypto");
 
-/* The mail domain the practice addresses live on. A SUBDOMAIN on purpose: the
-   MX record for it points at the inbound provider, and prohippo.in's own mail —
-   the website's, Resend's — is left completely alone. */
-const MAIL_DOMAIN = "itat.prohippo.in";
+/* The mail domain the practice addresses live on.
+ *
+ * A DOMAIN OF ITS OWN, not a subdomain of prohippo.in. The MX record here points
+ * at the inbound provider, and every address under it is a firehose pointed at a
+ * public webhook — so it must not share a zone with the mail the product depends
+ * on. prohippo.in carries the login emails Resend sends; a fat-fingered MX record
+ * there would lock every practitioner out of the app, and that risk is not worth
+ * running to save the price of a domain. Isolation by separate registration is
+ * absolute in a way isolation by subdomain is not. */
+const MAIL_DOMAIN = "prohippo.info";
 
 /* Who we accept mail from. Anything else is dropped before it is written
    anywhere, which is what makes the promise on the client setup page true: if

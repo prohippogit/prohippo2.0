@@ -24,7 +24,7 @@ const {
   matterIdFor, hearingIdFor, fromJson, fromForm,
 } = require("../functions/itatEmailParse.js");
 
-const ALIAS = "a1b2c3d4e5f60718@itat.prohippo.in";
+const ALIAS = "a1b2c3d4e5f60718@prohippo.info";
 
 const ITAT = "ITAT Online <no-reply@itat.nic.in>";
 
@@ -160,7 +160,7 @@ test("a client's inline forward is still recognised by what it quotes", () => {
 
 test("a rule-based forward says which mailbox it came through", () => {
   assert.equal(
-    forwardedByOf("Subject: x\nX-Forwarded-For: chavdagreen@gmail.com abc123@itat.prohippo.in\nTo: y"),
+    forwardedByOf("Subject: x\nX-Forwarded-For: chavdagreen@gmail.com abc123@prohippo.info\nTo: y"),
     "chavdagreen@gmail.com"
   );
   assert.equal(forwardedByOf("Subject: x"), "");
@@ -257,7 +257,7 @@ test("a filter-forwarded email is found by its envelope, not its To: header", ()
     subject: HEARING.subject,
     text: "fixed for hearing at 10.30 a.m on 15-Sep-2026 (Tue).",
   });
-  assert.match(sendgrid.to, /a1b2c3d4e5f60718@itat\.prohippo\.in/, "the alias must survive into `to`");
+  assert.match(sendgrid.to, /a1b2c3d4e5f60718@prohippo\.info/, "the alias must survive into `to`");
   assert.match(sendgrid.to, /chavdagreen@gmail\.com/, "and the original recipient is kept beside it");
 
   const postmark = fromJson({
@@ -267,7 +267,7 @@ test("a filter-forwarded email is found by its envelope, not its To: header", ()
     Subject: HEARING.subject,
     TextBody: "fixed for hearing",
   });
-  assert.match(postmark.to, /a1b2c3d4e5f60718@itat\.prohippo\.in/);
+  assert.match(postmark.to, /a1b2c3d4e5f60718@prohippo\.info/);
 });
 
 test("an address in Cc is still an address", () => {

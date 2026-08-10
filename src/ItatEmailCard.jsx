@@ -78,17 +78,29 @@ export default function ItatEmailCard() {
     }
   }, []);
 
-  /* Fired from a timer rather than straight out of the effect body: mint() sets
-     state the moment it is entered, and a synchronous setState inside an effect
-     cascades renders. The ref makes it one attempt per mount rather than one
-     per render — after that the Try again button is the way back in. */
+  /* Called on every mount, EVEN WHEN AN ADDRESS IS ALREADY ON SCREEN.
+   *
+   * The obvious guard — skip it when we have an address — is what made an
+   * earlier repair useless. getItatEmailAddress does not only mint: it also
+   * re-registers an address whose alias went missing when the lookup key
+   * changed. An account in that state has an address to display and a lookup
+   * that resolves to nobody, so guarding on "do we have an address" skipped the
+   * repair in exactly the case that needed it, and mail went on being accepted
+   * and discarded.
+   *
+   * The call is idempotent and costs one round trip per visit to Settings.
+   *
+   * Fired from a timer rather than straight out of the effect body, because
+   * mint() sets state the moment it is entered and a synchronous setState
+   * inside an effect cascades renders. The ref keeps it to one attempt per
+   * mount; after that the Try again button is the way back in. */
   const attempted = React.useRef(false);
   React.useEffect(() => {
-    if (loading || address || attempted.current) return undefined;
+    if (loading || attempted.current) return undefined;
     attempted.current = true;
     const id = setTimeout(mint, 0);
     return () => clearTimeout(id);
-  }, [loading, address, mint]);
+  }, [loading, mint]);
 
   const copy = async () => {
     try {

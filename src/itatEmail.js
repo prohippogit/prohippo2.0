@@ -43,7 +43,16 @@ export function useItatEmailConfig() {
 
   const loading = Boolean(uid) && snapshot.uid !== uid;
   const cfg = loading ? null : snapshot.cfg;
-  return { cfg, loading, address: cfg?.address || "", connected: Boolean(cfg?.lastReceivedAt) };
+  return {
+    cfg,
+    loading,
+    address: cfg?.address || "",
+    // True when the address came from the practice's own mail provider rather
+    // than being minted on ProHippo's domain. The two are set up differently,
+    // so the card has to know which it is looking at.
+    provided: Boolean(cfg?.provided),
+    connected: Boolean(cfg?.lastReceivedAt),
+  };
 }
 
 /* Gmail's verification code, while it is still worth showing.
@@ -127,6 +136,7 @@ const call = (name) => (payload) => httpsCallable(functions, name)(payload || {}
 export const itatEmailActions = {
   ensureAddress: call("getItatEmailAddress"),
   resetAddress: call("resetItatEmailAddress"),
+  useAddress: call("useItatEmailAddress"),
   apply: call("applyItatMail"),
   dismiss: call("dismissItatMail"),
 };

@@ -350,6 +350,43 @@ const messageKey = (msg) => sha(clean(msg.messageId) || `${clean(msg.from)}|${cl
 const matterIdFor = (appealNo) => `itat_${sha(canonicalAppealNo(appealNo), 20)}`;
 const hearingIdFor = (appealNo, date) => `itath_${sha(`${canonicalAppealNo(appealNo)}|${date}`, 20)}`;
 
+/* ---------------- the address a practice receives on ----------------
+ *
+ * ProHippo can mint one — <token>@MAIL_DOMAIN — but it cannot insist on it.
+ * Whether a practice can have an address on its own domain at all is a decision
+ * its mail provider makes: CloudMailin's free tier, for one, hands out an
+ * address on cloudmailin.net and puts custom domains behind a paid plan. Paying
+ * a monthly fee to change the words after the @ would be a poor trade for a
+ * mailbox that receives a few dozen messages a month.
+ *
+ * So an address is whatever the practice tells us to expect, and the lookup is
+ * keyed by the ADDRESS rather than by a token parsed out of one. That also
+ * makes the feature provider-agnostic by construction — a Mailgun route or a
+ * Postmark inbound address needs no code change to work.
+ */
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+const normaliseAddress = (v) => clean(v).toLowerCase();
+
+// The document id an address is registered under. Hashed rather than used raw:
+// an address is a personal identifier, and a top-level collection keyed by
+// plain addresses would leak the set of them to anyone who could guess an id.
+const addressKey = (v) => sha(normaliseAddress(v), 32);
+
+const isEmailAddress = (v) => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(clean(v));
+
+/* Every address in a recipients blob, de-duplicated, in the order found.
+ *
+ * The blob is deliberately everything a provider offered — envelope, To, Cc,
+ * Delivered-To — because which of those carries the practice's address depends
+ * on how the mail was forwarded, and a Gmail filter forward leaves To: pointing
+ * somewhere else entirely. Most of what comes back belongs to nobody we know;
+ * that is fine, they simply do not resolve. */
+function emailAddressesIn(text) {
+  const found = String(text || "").toLowerCase().match(EMAIL_RE) || [];
+  return [...new Set(found)];
+}
+
 /* Matching an assessee by NAME is deliberately absent. Neither email carries
    the appellant's name in a field a pattern can trust — the hearing notice lays
    the parties out in a two-column table whose cells interleave once flattened,
@@ -452,4 +489,5 @@ module.exports = {
   plainTextOf, bodyTextOf, findPan, findAy, senderDomain, isTribunalSender, gmailConfirmation,
   classify, parseRegistration, parseHearing, parseItatEmail, originalSenderOf, forwardedByOf,
   messageKey, matterIdFor, hearingIdFor, MAIL_DOMAIN, recipientsOf, fromJson, fromForm,
+  normaliseAddress, addressKey, isEmailAddress, emailAddressesIn,
 };

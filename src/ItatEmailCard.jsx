@@ -17,13 +17,14 @@
  *     instruction is the one that never sends it in the first place.
  */
 import React from "react";
-import { Icon } from "./shared";
+import { Icon, TextInput } from "./shared";
 import { useData } from "./store";
 import { useItatEmailConfig, usePendingGmailCode, itatEmailActions, relativeTime } from "./itatEmail";
 
 const GMAIL_FORWARDING_URL = "https://mail.google.com/mail/u/0/#settings/fwdandpop";
 const GMAIL_FILTERS_URL = "https://mail.google.com/mail/u/0/#settings/filters";
 const TRIBUNAL_SENDER = "no-reply@itat.nic.in";
+const MAIL_DOMAIN = "prohippo.info";
 
 function Step({ n, children }) {
   return (
@@ -39,11 +40,12 @@ function Step({ n, children }) {
 
 export default function ItatEmailCard() {
   const { notify } = useData();
-  const { cfg, loading, address, connected } = useItatEmailConfig();
+  const { cfg, loading, address, provided, connected } = useItatEmailConfig();
   const pendingCode = usePendingGmailCode();
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
   const [showSteps, setShowSteps] = React.useState(false);
+  const [ownAddress, setOwnAddress] = React.useState("");
 
   const run = (label, fn) => async () => {
     setBusy(label);
@@ -97,6 +99,14 @@ export default function ItatEmailCard() {
     }
   };
 
+  const useOwn = run("own", async () => {
+    const wanted = ownAddress.trim();
+    if (!window.confirm(`Receive ProHippo's ITAT email at ${wanted}?\n\nThe current address stops working at once, so any forwarding rule pointing at it must be changed.`)) return;
+    await itatEmailActions.useAddress({ address: wanted });
+    setOwnAddress("");
+    notify("Now listening on your provider's address");
+  });
+
   const reset = run("reset", async () => {
     if (!window.confirm("Get a new address? The current one stops working at once, and every forwarding rule pointing at it must be changed to the new one.")) return;
     await itatEmailActions.resetAddress();
@@ -145,7 +155,7 @@ export default function ItatEmailCard() {
 
       <div style={{ marginTop: 14 }}>
         <div className="muted" style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 6 }}>
-          Your practice address
+          Your practice address{provided ? " · from your mail provider" : ""}
         </div>
         <div className="between" style={{ gap: 10, padding: "10px 12px", borderRadius: 10, background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", flexWrap: "wrap" }}>
           <code style={{ fontSize: 13, fontWeight: 600, color: mintErr ? "var(--p-danger)" : "var(--p-primary-2)", wordBreak: "break-all" }}>
@@ -204,9 +214,32 @@ export default function ItatEmailCard() {
             switch, which would send this address your whole inbox. The filter sends only what the
             Tribunal wrote.
           </div>
+          {/* Not every mail provider will hand a practice an address on a
+              domain we control — CloudMailin's free tier issues one on
+              cloudmailin.net and charges for custom domains. Rather than make
+              that a paid prerequisite, let the practice say what to expect. The
+              rest of the feature never cared which domain the address was on. */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--p-line-2)" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>
+              Your mail provider gave you a different address?
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 8 }}>
+              Some only offer an address on their own domain unless you pay for a custom one.
+              Paste theirs here and ProHippo will listen on it instead.
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 240px", minWidth: 200 }}>
+                <TextInput value={ownAddress} onChange={setOwnAddress} placeholder="e.g. f6012235e360a493f857@cloudmailin.net" mono/>
+              </div>
+              <button className="btn btn-secondary btn-sm" disabled={!ownAddress.trim() || Boolean(busy)} onClick={useOwn}>
+                {busy === "own" ? "Saving…" : "Use this address"}
+              </button>
+            </div>
+          </div>
+
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--p-line-2)" }}>
             <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={reset}>
-              {busy === "reset" ? "Issuing…" : "Get a new address"}
+              {busy === "reset" ? "Issuing…" : `Get a new ${MAIL_DOMAIN} address`}
             </button>
             <span className="muted" style={{ fontSize: 11.5, marginLeft: 8 }}>
               If this one has been shared with the wrong person.

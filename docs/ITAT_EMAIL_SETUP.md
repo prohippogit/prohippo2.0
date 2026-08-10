@@ -42,7 +42,7 @@ three common shapes, so this is a free choice:
 
 | Provider | Posts as | Free allowance | Notes |
 | --- | --- | --- | --- |
-| **CloudMailin** | JSON | 10,000 inbound messages/month | Inbound is the whole product rather than a feature bolted to a sender, and its free tier is far beyond what a practice will ever use. **Recommended.** |
+| **CloudMailin** | JSON | 10,000 inbound messages/month, but **custom domains need the $25/mo plan** | Inbound is the whole product rather than a feature bolted to a sender. Use the address it issues on `cloudmailin.net` and tell ProHippo to listen on that — see below. **Recommended.** |
 | **Mailgun Routes** | form fields | 1 inbound route on the free plan | Fine, and the free plan is permanent. Its 100-messages-a-day cap is a sending limit, but check it still suits before relying on it. |
 | **SendGrid Inbound Parse** | multipart/form-data | none — the free tier became a 60-day trial | Works, but there is no longer a free plan to sit on. |
 | **Postmark inbound** | JSON | none — inbound needs the Pro tier | Technically the cleanest payload; inbound is not on the free or Basic plans. |
@@ -103,12 +103,26 @@ nothing through this domain — the app's own mail goes out through Resend on
 DKIM key avoids the registrar TXT-length fight it usually starts. CloudMailin's
 own page labels the MX row "Inbound", which is the one to trust.
 
-**The local part must match the address ProHippo minted.** Unless the account is
-set up to accept every address at the domain, CloudMailin routes one named
-address; ProHippo generates its own 16-character token and expects mail at that.
-So deploy first, read the address off **Settings → Integrations → ITAT email**,
-and give CloudMailin that exact local part — or turn on a catch-all, which is
-what a multi-practice deployment needs anyway.
+**Custom domains are a paid feature.** CloudMailin's free tier — 10,000 messages
+a month, and generous with everything else — issues an address on
+`cloudmailin.net` and puts `prohippo.info` behind the $25/month Starter plan.
+Three hundred dollars a year to change the words after the `@`, on a mailbox
+receiving a few dozen messages a month, is a poor trade.
+
+So don't. Take the address CloudMailin gives you and tell ProHippo to listen on
+it: **Settings → Integrations → ITAT email → "Your mail provider gave you a
+different address?"**, paste it, save. Nothing downstream cares which domain an
+address is on — the webhook looks up whichever address the mail was sent to, and
+the same is true of a Mailgun route or a Postmark inbound address.
+
+What is given up is cosmetic and one operational nicety: the address is not on
+your own domain, and a single CloudMailin address serves one practice, so a
+multi-practice deployment eventually wants either the paid plan's catch-all or
+one address per practice. Neither is worth paying for on day one.
+
+If you *do* have custom domains, set the local part to the 16 characters
+ProHippo minted, or turn on the catch-all — then every practice's address works
+with no further setup.
 
 ### Setting the MX record at BigRock
 

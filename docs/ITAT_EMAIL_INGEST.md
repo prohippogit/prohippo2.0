@@ -21,18 +21,38 @@ control into `users/{uid}/…`, safely.*
 
 ---
 
-## The awkward part: whose mailbox
+## Whose mailbox — and the thing the samples actually show
 
-ITAT mails the address entered on the portal at registration. For a practice
-that is sometimes the consultant's own address and sometimes the client's — the
-sample registration summary in hand shows an **Appellant Email** belonging to the
-assessee, not the firm. So any design that assumes "the user's inbox" covers
-maybe half the appeals in a practice and silently misses the rest, which is the
-worst possible failure mode for a hearing date.
+ITAT mails the one address entered on the portal at registration. It does not
+accept a second one: there is no field for the representative's address
+alongside the appellant's, which was checked with a practitioner rather than
+assumed. Whatever went on the record at filing is the only address the Tribunal
+will ever write to.
 
-That single fact rules the architecture. **A per-practice inbound address that
-anything can forward to** works for both cases. Reading the user's own mailbox
-works for one of them, and costs far more to ship.
+An earlier draft of this document read the sample registration summary as
+carrying the *client's* address and built the architecture around that. It is
+worth stating plainly that this was wrong, because the correction changes what
+gets built first. The **Appellant Email** on that summary —
+`chavdagreen@gmail.com`, against an appellant named Ramniklal M. Makwana — is the
+**consultant's own address**. The second sample, a hearing notice for a different
+appellant entirely, arrived in that same consultant's inbox. Two different
+clients, one mailbox: the practitioner had registered both appeals under their
+own address, which is ordinary practice.
+
+That reorders everything. The common case is not "the email is somewhere we
+cannot reach" — it is **"the email is already in the practitioner's own inbox,
+and nothing is reading it."** One forwarding rule, set once by the practitioner
+on their own mailbox, covers every appeal registered that way: all clients, past
+and future, with no client ever involved.
+
+Client-side setup does not disappear, because appeals registered under a client's
+address still exist. But it stops being the mechanism and becomes the exception
+handler — which is a much easier thing to ship, and a much easier thing to sell
+to someone who was never going to open Gmail's settings.
+
+The architecture is unchanged by any of this: **a per-practice inbound address
+that anything can forward to** serves both, and the practitioner's own rule is
+simply its first and biggest source.
 
 ### Why not just read Gmail
 
@@ -78,13 +98,15 @@ earns its keep.
 
 Four ways mail reaches them, and a practice will use several at once:
 
-1. **Register the alias with the Tribunal.** Where the portal accepts a
-   representative's address alongside the appellant's, put the alias there at
-   filing time. The Tribunal then mails ProHippo directly and there is no
-   forwarding at all. Best outcome; only available for appeals filed from now on.
-2. **A forwarding rule in the consultant's mailbox**, scoped to
-   `from:no-reply@itat.nic.in`. Two minutes, one time, covers every appeal filed
-   under the firm's address, past and future.
+1. **One forwarding rule in the practitioner's own mailbox**, scoped to
+   `from:no-reply@itat.nic.in`. Set once, in five minutes, by the one person in
+   this story who is comfortable in Gmail's settings — and it covers every appeal
+   registered under the firm's address, for every client, past and future. This
+   is the mechanism. Everything else handles what it misses.
+2. **Making that the filing habit.** Where the client is content for the firm to
+   be the contact, registering future appeals under the firm's address puts them
+   inside route 1 automatically. Nothing to build; worth saying out loud because
+   it quietly shrinks routes 3 and 4 to nothing.
 3. **A forwarding rule in the client's mailbox**, set by the client from a link
    the consultant sends them. This is the one that decides whether the feature
    covers a whole practice or half of it, and it has a section to itself below.
@@ -430,13 +452,17 @@ everything awaiting one click. Empty most days; that is the point.
 
 | Phase | Ships | Depends on |
 | --- | --- | --- |
-| **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue. Manual forwarding only. | An MX subdomain and an inbound provider account. Nothing else. |
-| **2** | Per-assessee aliases, the client setup link and its live code-catching page, forwarding status on the assessee, auto-apply for authenticated messages. | Phase 1 in the field. |
+| **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue — plus the practitioner's own forwarding rule and the three-screen guide for setting it. | An MX subdomain and an inbound provider account. Nothing else. |
+| **2** | Client-facing setup: per-assessee links, the live code-catching page, forwarding status on the assessee, auto-apply for authenticated messages. | Phase 1 in the field, and knowing how many appeals actually sit outside route 1. |
 | **3** | Extend the allowlist and parsers to CIT(A)/NFAC and departmental mail — much higher volume, same pipeline. | Sample emails. |
-| **4** | Optional `gmail.readonly` connect for practices filing under their own address, if the CASA cost is ever worth it. Optional IMAP polling in the desktop connector for non-Google mailboxes, where credentials are already vaulted. | A commercial decision, not a technical one. |
+| **4** | Optional client-side "Connect Gmail", if enough appeals are registered under client addresses to justify Google's review and the annual assessment. Optional IMAP polling in the desktop connector for non-Google mailboxes, where credentials are already vaulted. | A commercial decision, not a technical one. |
 
-Phase 1 is the whole value: hearing dates stop depending on somebody noticing an
-email. Everything after it is a reduction in setup friction.
+Phase 1 is now most of the value on its own, which was not true of the earlier
+draft. One rule, set by the practitioner on their own mailbox, and every appeal
+registered under the firm's address starts filing itself — no client asked to do
+anything. Phase 2 exists for the appeals registered under a client's address, and
+its size should be measured before it is built: a practice that files everything
+under its own address may never need it.
 
 A worthwhile companion, independent of email: the Tribunal publishes daily
 **cause lists**. Scraping them for appeal numbers already on file corroborates
@@ -451,9 +477,13 @@ all. Two independent sources agreeing is a much stronger promise than one.
   copy of either sample. It decides whether auto-apply can be authenticated or
   whether everything routes through the review queue at first.
 - **Which inbound provider**, and is `in.prohippo.in` free to take an MX record?
-- **Does the ITAT portal accept a representative's email** alongside the
-  appellant's at registration? If it does, route 1 above is the one to push in
-  the product, because it removes forwarding from the picture entirely.
-- **How many of the practice's clients are on Gmail?** It decides how much the
-  desktop-only limitation actually costs. If most are, the setup page should
-  lead with "open this on a computer" rather than treating it as a caveat.
+- **Of the appeals a practice is running, how many were registered under a
+  client's address rather than the firm's?** This is the size of Phase 2 and the
+  only thing that decides whether it is worth building at all. Answered by
+  counting, not by guessing — and once Phase 1 is live the answer arrives on its
+  own, as the appeals that never produce an email.
+
+**Answered:** the ITAT portal does **not** accept a representative's email
+alongside the appellant's. There is one address per appeal, fixed at
+registration, which is why route 1 is a forwarding rule rather than a change on
+the portal.

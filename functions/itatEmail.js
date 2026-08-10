@@ -329,6 +329,7 @@ function build({ PRIMARY_REGION, db }) {
           pendingCode: { ...result.fields, at: nowISO() },
           lastReceivedAt: nowISO(),
         }, { merge: true });
+        console.log("itatInboundEmail: code — Gmail's forwarding confirmation, recorded");
         res.status(200).send("code");
         return;
       }
@@ -339,13 +340,26 @@ function build({ PRIMARY_REGION, db }) {
          forwarding rule costs them nothing. */
       if (result.reason === "sender-not-allowed") {
         await integrationRef(uid).set({ droppedCount: countUp(), lastDroppedAt: nowISO() }, { merge: true });
+        /* The outcome and nothing else. Cloud Logging is storage like any
+           other, and "not a byte of the message is kept" has to mean the log
+           too — otherwise the promise made to a client about an over-broad
+           forwarding rule is not one this code actually keeps. */
+        console.log("itatInboundEmail: dropped — sender is not the Tribunal");
         res.status(200).send("dropped");
         return;
       }
 
       const id = messageKey(msg);
       const ref = db.doc(`users/${uid}/itatMail/${id}`);
-      if ((await ref.get()).exists) { res.status(200).send("duplicate"); return; }
+      if ((await ref.get()).exists) {
+        // Named, because this is the one outcome that looks identical to a
+        // delivery that never arrived: the provider reports success and the app
+        // shows nothing new. Dismissing does not delete the record, so the same
+        // message sent twice lands here rather than on the queue.
+        console.log(`itatInboundEmail: duplicate — already on file as ${id}`);
+        res.status(200).send("duplicate");
+        return;
+      }
 
       const match = await matchAssessee(uid, result.fields);
 
@@ -370,6 +384,16 @@ function build({ PRIMARY_REGION, db }) {
         }, { merge: true }),
       ]);
 
+      /* What was made of it, in one line. Between them these five outcomes
+         account for every delivery, so a provider reporting success and an app
+         showing nothing is always explained by the log rather than guessed at
+         from the outside. */
+      console.log(
+        `itatInboundEmail: ok — ${result.kind}`
+        + `${result.fields.appealNo ? ` ${result.fields.appealNo}` : ""}`
+        + `${result.fields.appellant ? `, appellant read` : ""}`
+        + `${match.assesseeId ? `, matched ${match.matchedBy}` : ", no assessee matched"}`
+      );
       res.status(200).send("ok");
     }
   );

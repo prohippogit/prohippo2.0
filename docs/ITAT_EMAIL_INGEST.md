@@ -1,5 +1,13 @@
 # ITAT email ingest — design
 
+> **Phase 1 is built.** The address, the webhook, the parser, the matcher, the
+> matter and hearing writers and the review queue are in
+> `functions/itatEmail.js`, `functions/itatEmailParse.js`, `src/itatEmail.js`,
+> `src/ItatInbox.jsx` and `src/ItatEmailCard.jsx`. To put it into service —
+> subdomain, provider, secret, and the one forwarding rule — see
+> `ITAT_EMAIL_SETUP.md`. This document is the reasoning behind it, and the plan
+> for what comes next.
+
 The Tribunal already tells us everything we want to know. It emails it.
 
 Two templated emails come off the ITAT e-filing portal from

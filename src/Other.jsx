@@ -10,6 +10,7 @@ import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee }
 import { downloadLedgerPDF, ledgerPDFDataUri, downloadReceiptPDF, receiptPDFDataUri } from './ledgerPdf';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
 import VoiceHelpLineCard from './voiceAssistant';
+import ItatEmailCard from './ItatEmailCard';
 
 const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
 
@@ -1807,6 +1808,9 @@ export function SettingsPage() {
       <div className="card-title mb-3" style={{fontSize: 15}}>Integrations</div>
       <div style={{marginBottom: 16}}><VoiceHelpLineCard/></div>
       <div style={{marginBottom: 16}}><GoogleCalendarCard/></div>
+      {/* Next to the calendar on purpose: a hearing this brings in reaches
+          Google through that sync, so the two are read as one arrangement. */}
+      <div style={{marginBottom: 16}}><ItatEmailCard/></div>
       <div style={{marginBottom: 16}}><AutoReadCard/></div>
       <div className="grid-split" style={{gap: 16}}>
         {integrations.map(i => (

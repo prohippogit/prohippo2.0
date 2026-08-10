@@ -100,8 +100,27 @@ async function readInboundMessage(req) {
  * The deployed functions.
  * ------------------------------------------------------------------------- */
 
-function build({ REGIONS, PRIMARY_REGION, db }) {
-  const KEEP = { region: REGIONS, maxInstances: 10 };
+function build({ PRIMARY_REGION, db }) {
+  /* ONE region, and a small ceiling.
+   *
+   * The rest of this project deploys its callables to both regions because the
+   * desktop connector has no auto-update and an installed copy keeps calling
+   * us-central1. Nothing here is called by the connector — these five are used
+   * by the web app, which pins itself to asia-south1 (src/firebase.js) — so a
+   * second copy of each would serve no caller at all.
+   *
+   * That matters beyond tidiness. Cloud Functions' CPU quota is per region and
+   * counts maxInstances, not instances actually running; this project has
+   * already had to cut a feature's ceiling to fit inside it once. Deploying
+   * four callables at 10 instances across two regions plus a webhook at 20
+   * claims a hundred instances' worth of quota for a feature that receives a
+   * few emails a day, and a deploy that exceeds the quota fails EVERY function
+   * in the project, not just the greedy one.
+   *
+   * Three is ample: these are one-at-a-time UI actions — read the address,
+   * confirm an email — and a practitioner cannot press a button ten times at
+   * once. */
+  const KEEP = { region: PRIMARY_REGION, maxInstances: 3 };
   const integrationRef = (uid) => db.doc(`users/${uid}/integrations/itatEmail`);
   const aliasRef = (token) => db.doc(`inboundAliases/${token}`);
   const nowISO = () => new Date().toISOString();
@@ -175,9 +194,11 @@ function build({ REGIONS, PRIMARY_REGION, db }) {
    * retries for hours will not fix a message we have decided not to accept, and
    * a 4xx here just means the same rejected mail arrives ten more times. */
   const itatInboundEmail = onRequest(
-    // Single region: the provider is configured with one fixed URL, and unlike
-    // the callables there is no older desktop connector pinned to us-central1.
-    { region: PRIMARY_REGION, secrets: [itatInboundSecret], maxInstances: 20 },
+    // Single region: the provider is configured with one fixed URL. Five
+    // instances, not twenty — the Tribunal sends a practice a few emails a day,
+    // and every unit of maxInstances is charged against the region's CPU quota
+    // whether or not it ever runs.
+    { region: PRIMARY_REGION, secrets: [itatInboundSecret], maxInstances: 5 },
     async (req, res) => {
       if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
 

@@ -2855,7 +2855,10 @@ Object.assign(
    split again into itatEmailParse.js, which stays free of firebase imports so
    the repository's own `npm test` can run it against the real emails.
    Setup: docs/ITAT_EMAIL_SETUP.md */
-Object.assign(exports, require("./itatEmail").build({ REGIONS, PRIMARY_REGION, db }));
+// PRIMARY_REGION only, deliberately — see the note on KEEP in that module. The
+// connector never calls these, so a us-central1 copy would serve nobody while
+// still claiming its share of that region's CPU quota.
+Object.assign(exports, require("./itatEmail").build({ PRIMARY_REGION, db }));
 
 /* ---------- Admin console + referral/growth system ----------
    Two modules sharing functions/adminCore.js. They own the top-level

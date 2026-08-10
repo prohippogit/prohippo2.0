@@ -103,7 +103,7 @@ export default function AdminApp() {
     case "referrals": content = <AdminReferrals notify={notify} />; break;
     case "costs": content = <AdminCosts notify={notify} onOpenAccount={openAccount} />; break;
     case "audit": content = <AdminAudit />; break;
-    default: content = <AdminOverview onOpenAccount={openAccount} />;
+    default: content = <AdminOverview onOpenAccount={openAccount} notify={notify} />;
   }
 
   return (

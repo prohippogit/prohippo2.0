@@ -273,6 +273,68 @@ test("the hearing date survives a forward that keeps only the subject", () => {
   assert.equal(fields.time, "", "what was not sent is left empty rather than guessed");
 });
 
+/* ---------------- what a forward does to the message ----------------
+ *
+ * A forward arrives as two alternatives: the Tribunal's HTML, and a plain-text
+ * rendition the forwarding client made from it. The rendition is lossy — Gmail
+ * drops table cells — and it carries a header of its own that looks a great
+ * deal like the fields being searched for. Both facts have put wrong data on a
+ * card, so both are pinned here. */
+
+// Gmail's own preamble, above a rendition that lost the particulars cell.
+const GMAIL_FORWARD_TEXT = `---------- Forwarded message ---------
+From: ITAT Online <no-reply@itat.nic.in>
+Date: Mon, 10 Aug 2026 at 5:24 PM
+Subject: Notice of Hearing in ITA 2530/AHD/2026 (Date of Hearing: 2026-Sep-15)
+To: <chavdagreen@gmail.com>
+
+INCOME TAX APPELLATE TRIBUNAL, AHMEDABAD`;
+
+test("a forward's own timestamp is never read as the hearing time", () => {
+  // "Date: … at 5:24 PM" is when the email was sent. Writing that into a diary
+  // as the hearing time is the worst thing this parser could do quietly.
+  const forwarded = { ...HEARING, text: GMAIL_FORWARD_TEXT };
+  const { fields } = parseItatEmail(forwarded);
+  assert.equal(fields.time, "10:30", "the Tribunal's time, not the forwarder's clock");
+  assert.equal(fields.date, "2026-09-15");
+});
+
+test("a time with nothing around it to anchor it is left blank", () => {
+  const noNotice = { ...HEARING, html: "", text: GMAIL_FORWARD_TEXT };
+  const { fields } = parseItatEmail(noNotice);
+  assert.equal(fields.time, "", "blank is a visible gap; a wrong time is not");
+  assert.equal(fields.date, "2026-09-15", "the quoted subject still carries the date");
+});
+
+test("a field the text rendition lost is still read out of the HTML", () => {
+  // This is the reported failure: the card showed the appeal number and PAN but
+  // no assessment year and a bench with no letter, because the text part won
+  // outright and the Tribunal's own table was never looked at.
+  const forwarded = { ...HEARING, text: GMAIL_FORWARD_TEXT };
+  const { fields } = parseItatEmail(forwarded);
+  assert.equal(fields.ay, "2016-17");
+  assert.equal(fields.benchLetter, "D");
+  assert.equal(fields.caseType, "DBC");
+  assert.equal(fields.bench, "Ahmedabad 'D' Bench");
+  assert.equal(fields.appellant, "JAPAN RAJNIKANT GANDHI", "the party table is in the HTML too");
+});
+
+test("emphasis left behind by a text rendition is not part of the value", () => {
+  const asText = {
+    ...HEARING,
+    html: "",
+    text: `In Appeal No. ITA 2530/AHD/2026
+(Assessment Year: 2016-17)
+(Permanent Account Number: BLGPG1814C)
+Hearing Bench: *D* , Case Type: *DBC*
+fixed for hearing at Abhinav Arcade, Ahmedabad at 10.30 a.m on 15-Sep-2026 (Tue).`,
+  };
+  const { fields } = parseItatEmail(asText);
+  assert.equal(fields.benchLetter, "D", "*D* is bench D, not a bench called '*D*'");
+  assert.equal(fields.caseType, "DBC");
+  assert.equal(fields.time, "10:30");
+});
+
 test("an adjourned hearing carries the date it displaced", () => {
   const refixed = {
     ...HEARING,

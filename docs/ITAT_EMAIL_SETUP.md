@@ -62,12 +62,22 @@ all four are read.
 > build. The requirement is specifically *inbound parse*, and it is worth
 > checking a provider's docs for that phrase before signing up.
 
-Point the domain's MX at the provider as it instructs, then give it this webhook
-URL — with the secret from step 3 on the end:
+Point the domain's MX at the provider as it instructs, then give it the webhook
+URL with the secret from step 3 on the end.
+
+**Take the URL from what the deploy prints**, rather than assembling one. These
+are 2nd-gen functions, so they run on Cloud Run and the deploy ends with the
+address to use:
 
 ```
-https://asia-south1-prohippo2.cloudfunctions.net/itatInboundEmail?key=YOUR_SECRET
+Function URL (itatInboundEmail(asia-south1)): https://itatinboundemail-XXXXXXXX-el.a.run.app
 ```
+
+The provider gets that, with `?key=YOUR_SECRET` appended. The older
+`https://asia-south1-<project>.cloudfunctions.net/itatInboundEmail` form still
+resolves as a compatibility alias, but the printed one is the address the
+function actually answers on, and it is right by construction rather than by
+someone remembering the pattern.
 
 > The endpoint refuses anything that does not present the key, so configure the
 > secret first or the first test message is silently rejected.
@@ -233,7 +243,7 @@ dead code left on screen reads as a broken feature.
 ## Testing it without waiting for the Tribunal
 
 ```
-curl -X POST "https://asia-south1-prohippo2.cloudfunctions.net/itatInboundEmail?key=YOUR_SECRET" \
+curl -X POST "PASTE_THE_FUNCTION_URL_FROM_THE_DEPLOY?key=YOUR_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
     "from": "ITAT Online <no-reply@itat.nic.in>",

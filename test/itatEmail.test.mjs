@@ -388,6 +388,33 @@ test("Gmail's forwarding code is caught, with the account that asked for it", ()
     "two clients setting up on one day must not be crossed");
 });
 
+test("the one-click confirmation link is caught too", () => {
+  /* Gmail hides the box its code goes into behind a word that does not look
+     like a button, so plenty of people never find it. The same email carries a
+     link that finishes the handshake on its own — and it lives in an href, so
+     it has to be read before the HTML is flattened. */
+  const confirm = gmailConfirmation({
+    from: "Gmail Team <forwarding-noreply@google.com>",
+    subject: "(#429106883) Gmail Forwarding Confirmation - Receive Mail from chavdagreen@gmail.com",
+    text: "",
+    html: '<p>Confirmation code: 429106883</p><p><a href="https://mail.google.com/mail/vf-%5BANGjdJ8%5D-abc?a=1&amp;b=2">Confirm</a></p>',
+  });
+  assert.equal(confirm.code, "429106883");
+  assert.equal(confirm.confirmUrl, "https://mail.google.com/mail/vf-%5BANGjdJ8%5D-abc?a=1&b=2",
+    "entities decoded, and the whole query string kept");
+});
+
+test("a confirmation with only a link is still worth surfacing", () => {
+  const confirm = gmailConfirmation({
+    from: "forwarding-noreply@google.com",
+    subject: "Gmail Forwarding Confirmation",
+    text: "Please click https://mail-settings.google.com/mail/vf-xyz123 to confirm.",
+    html: "",
+  });
+  assert.equal(confirm.code, "", "no code in this one");
+  assert.equal(confirm.confirmUrl, "https://mail-settings.google.com/mail/vf-xyz123");
+});
+
 test("the code is only taken from Google", () => {
   assert.equal(gmailConfirmation({
     from: "attacker@example.com",

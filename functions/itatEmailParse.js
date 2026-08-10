@@ -225,8 +225,19 @@ function gmailConfirmation({ from, subject, text, html }) {
   if (!/forwarding\s+confirmation/i.test(subj) && !/confirmation\s+code/i.test(body)) return null;
   const code = (/\(#(\d{6,12})\)/.exec(subj) || /confirmation\s+code\s*[:\s]\s*(\d{6,12})/i.exec(body) || [])[1] || "";
   const requester = (/receive\s+mail\s+from\s+([^\s<>]+@[^\s<>,]+)/i.exec(`${subj}\n${body}`) || [])[1] || "";
-  if (!code) return null;
-  return { code, requester: requester.toLowerCase().replace(/[.,;]$/, "") };
+
+  /* The same email also carries a one-click confirmation link, and it is the
+     better of the two routes: where the code has to be found in Gmail's
+     settings — which hides the box it goes in until the right word is clicked —
+     the link completes the handshake on its own.
+
+     Taken from the RAW parts rather than the flattened body, because the link
+     lives in an href and flattening strips attributes along with the tags. */
+  const raw = `${clean(text)} ${clean(html)}`.replace(/&amp;/gi, "&");
+  const confirmUrl = (/https:\/\/mail[\w.-]*\.google\.com\/mail\/vf-[^\s"'<>)\]]+/i.exec(raw) || [])[0] || "";
+
+  if (!code && !confirmUrl) return null;
+  return { code, confirmUrl, requester: requester.toLowerCase().replace(/[.,;]$/, "") };
 }
 
 /* Which of the Tribunal's two messages this is. Decided from the subject first

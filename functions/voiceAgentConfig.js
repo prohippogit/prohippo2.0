@@ -42,6 +42,11 @@ const VOICE_AGENT_CONFIG = {
   agentVersion: 5,
   connectionId: "3849bc9b-e5-51c864d5-6102",
 
+  /* The INBOUND DEPLOYMENT, not the agent. From the deployment page's URL:
+     .../deploy-v2/inbounds/{deployment_id}. It is what the Cohorts API hangs
+     the known-callers list off — see functions/voiceKnownCallers.js. */
+  deploymentId: "prohippo-he-901c6295-7397",
+
   // The number ProHippo owns and calls from. Confirmed purchased; it is also
   // the number the inbound line answers on.
   agentPhoneNumber: "+918071582778",

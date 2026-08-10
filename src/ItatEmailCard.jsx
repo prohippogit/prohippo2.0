@@ -19,7 +19,7 @@
 import React from "react";
 import { Icon, TextInput } from "./shared";
 import { useData } from "./store";
-import { useItatEmailConfig, usePendingGmailCode, itatEmailActions, relativeTime } from "./itatEmail";
+import { useItatEmailConfig, usePendingGmailCode, itatEmailActions, relativeTime, mailTally } from "./itatEmail";
 
 const GMAIL_FORWARDING_URL = "https://mail.google.com/mail/u/0/#settings/fwdandpop";
 const GMAIL_FILTERS_URL = "https://mail.google.com/mail/u/0/#settings/filters";
@@ -129,6 +129,13 @@ export default function ItatEmailCard() {
     : connected ? <span className="pill" style={{ background: "var(--p-mint)", color: "#1B8C5C" }}>Receiving</span>
       : <span className="pill pill-muted">Not set up yet</span>;
 
+  /* What became of everything the address has taken. Shown only once some of it
+     did NOT become a card, because that is the only time the numbers need
+     reconciling: five emails forwarded and three on the queue is alarming until
+     it says where the other two went. */
+  const tally = mailTally(cfg);
+  const unaccounted = tally.duplicate + tally.dropped;
+
   return (
     <div className="card">
       <div className="between" style={{ gap: 12, flexWrap: "wrap" }}>
@@ -147,6 +154,15 @@ export default function ItatEmailCard() {
         </div>
         {statusPill}
       </div>
+
+      {unaccounted > 0 && (
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.6 }}>
+          {tally.total} email{tally.total === 1 ? "" : "s"} have reached this address
+          {" — "}{tally.filed} put on the review list
+          {tally.duplicate ? `, ${tally.duplicate} recognised as a copy of one already received` : ""}
+          {tally.dropped ? `, ${tally.dropped} from senders other than the Tribunal and discarded unread` : ""}.
+        </div>
+      )}
 
       {/* Gmail's verification code. It appears here because Gmail sends it to
           THIS address to prove the address is real — so without showing it, the

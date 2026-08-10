@@ -95,6 +95,43 @@ export function usePendingGmailCode() {
   return pending;
 }
 
+/* An arrival that produced no card, while it still explains something.
+ *
+ * The queue counts what is waiting and says nothing about the rest, so forward
+ * two emails, see one card, and there is no way to tell a message that was
+ * rejected from one that never arrived. Both look like mail going missing, and
+ * only one of them is a problem worth chasing. */
+const UNFILED_FRESH_MS = 24 * 60 * 60 * 1000;
+
+export const UNFILED_REASON = {
+  duplicate: "it was a copy of one already on this list",
+  dropped: "it was not from the Tribunal, so it was discarded unread",
+};
+
+export function useUnfiledArrival() {
+  const { cfg } = useItatEmailConfig();
+  const now = React.useSyncExternalStore(clock.subscribe, clock.now, clock.now);
+
+  const at = cfg?.lastUnfiledAt;
+  if (!at) return null;
+  const ms = new Date(at).getTime();
+  // Past a day it stops explaining today's missing email and starts being a
+  // notice about something nobody is looking for any more.
+  if (!Number.isFinite(ms) || now - ms > UNFILED_FRESH_MS) return null;
+  return { at, outcome: cfg.lastUnfiledOutcome || "" };
+}
+
+/* Every message the address has taken, by what became of it. Cumulative since
+   setup — the point is that the numbers add up, so nothing that arrived is
+   unaccounted for. */
+export function mailTally(cfg) {
+  const n = (v) => Number(v) || 0;
+  const filed = n(cfg?.receivedCount);
+  const duplicate = n(cfg?.duplicateCount);
+  const dropped = n(cfg?.droppedCount);
+  return { filed, duplicate, dropped, total: filed + duplicate + dropped };
+}
+
 /* ---------------- the review queue ---------------- */
 
 /* Everything the address has received that is still waiting for a decision.

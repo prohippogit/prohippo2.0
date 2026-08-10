@@ -261,6 +261,37 @@ export default function ItatEmailCard() {
             switch, which would send this address your whole inbox. The filter sends only what the
             Tribunal wrote.
           </div>
+
+          {/* The filter covers everything from tomorrow and nothing from
+              yesterday — Gmail will not forward retroactively, and the notices
+              already in the mailbox are where most of a new practice's pending
+              hearings are. Left out, the feature looks empty on the day someone
+              signs up. */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--p-line-2)" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>
+              Bringing across the notices you already have
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.6, marginBottom: 10 }}>
+              The filter only forwards mail that arrives from now on — Gmail will not apply it to
+              what is already in your inbox. To bring in the last few months, send them all at once:
+            </div>
+            <Step n={1}>
+              Search Gmail for <b>from:{TRIBUNAL_SENDER}</b>.
+            </Step>
+            <Step n={2}>
+              Tick the box at the top left to select the page, then click{" "}
+              <b>Select all conversations that match this search</b>.
+            </Step>
+            <Step n={3}>
+              Three-dot menu → <b>Forward as attachment</b>, and send it to the address above.
+            </Step>
+            <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.55, marginTop: 4 }}>
+              Each notice becomes its own card to confirm, with the assessee opened from its PAN.
+              Gmail limits one message to 25&nbsp;MB, so a large mailbox takes a few sends — and
+              sending the same batch twice is harmless, since anything already received is
+              recognised and skipped.
+            </div>
+          </div>
           {/* Not every mail provider will hand a practice an address on a
               domain we control — CloudMailin's free tier issues one on
               cloudmailin.net and charges for custom domains. Rather than make

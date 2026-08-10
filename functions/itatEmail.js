@@ -41,6 +41,7 @@ const {
   parseItatEmail, originalSenderOf, forwardedByOf, canonicalAppealNo,
   messageKey, matterIdFor, hearingIdFor, MAIL_DOMAIN, fromJson, fromForm,
   normaliseAddress, addressKey, isEmailAddress, emailAddressesIn, statusFromPan,
+  fromRfc822,
 } = require("./itatEmailParse");
 
 /* The avatar palette the app assigns round-robin as assessees are added, kept
@@ -76,6 +77,22 @@ const clean = (v) => (typeof v === "string" ? v.trim() : "");
    require at module load that fails takes down the credential vault and OTP
    sign-in alongside this webhook. Confined here, a missing dependency breaks
    multipart delivery only, and says so. */
+/* Attachments that are themselves emails, and nothing else.
+ *
+ * Gmail's "Forward as attachment" sends one message/rfc822 part per selected
+ * message, which is how a practice imports the notices already sitting in a
+ * mailbox — a Gmail filter only ever forwards new mail. A PDF is streamed to
+ * the floor as before: nothing reads them, and a notice's attachment can be
+ * several megabytes that would otherwise be held in memory for no purpose. */
+const CARRIED_EMAIL = /message\/rfc822/i;
+const MAX_CARRIED = 50;
+const MAX_CARRIED_BYTES = 10 * 1024 * 1024;
+
+/* Multipart needs busboy, which is required LAZILY and on purpose. Every
+   function in this project deploys as one bundle from one node_modules; a
+   require at module load that fails takes down the credential vault and OTP
+   sign-in alongside this webhook. Confined here, a missing dependency breaks
+   multipart delivery only, and says so. */
 function parseMultipart(req) {
   return new Promise((resolve, reject) => {
     let Busboy;
@@ -85,21 +102,43 @@ function parseMultipart(req) {
       reject(new Error("multipart delivery needs the busboy dependency; use a JSON-posting provider or deploy with it installed"));
       return;
     }
-    const bb = Busboy({ headers: req.headers, limits: { fieldSize: MAX_BODY_CHARS, files: 0 } });
+    const bb = Busboy({
+      headers: req.headers,
+      limits: { fieldSize: MAX_BODY_CHARS, files: MAX_CARRIED, fileSize: MAX_CARRIED_BYTES },
+    });
     const fields = {};
+    const carried = [];
     bb.on("field", (name, value) => { fields[name] = value; });
-    bb.on("file", (_n, stream) => stream.resume()); // Phase 1 keeps no attachments
+    bb.on("file", (_name, stream, info) => {
+      const isEmail = CARRIED_EMAIL.test(info?.mimeType || "") || /\.eml$/i.test(info?.filename || "");
+      if (!isEmail) { stream.resume(); return; }
+      /* latin1, so the message arrives byte for byte. Its parts each declare
+         their own charset, and guessing one for the whole file would corrupt
+         precisely the Hindi headers the Tribunal writes. */
+      const chunks = [];
+      let truncated = false;
+      stream.on("limit", () => { truncated = true; });
+      stream.on("data", (d) => chunks.push(d));
+      stream.on("end", () => {
+        if (truncated) { console.warn(`itatInboundEmail: carried email over ${MAX_CARRIED_BYTES} bytes, skipped`); return; }
+        carried.push(Buffer.concat(chunks).toString("latin1"));
+      });
+    });
+    bb.on("filesLimit", () => console.warn(`itatInboundEmail: more than ${MAX_CARRIED} attachments; the rest were ignored`));
     bb.on("error", reject);
-    bb.on("close", () => resolve(fields));
+    bb.on("close", () => resolve({ fields, carried }));
     bb.end(req.rawBody);
   });
 }
 
 async function readInboundMessage(req) {
   const type = String(req.headers["content-type"] || "").toLowerCase();
-  if (type.includes("multipart/form-data")) return fromForm(await parseMultipart(req));
-  if (type.includes("application/x-www-form-urlencoded")) return fromForm(req.body || {});
-  return fromJson(req.body || {});
+  if (type.includes("multipart/form-data")) {
+    const { fields, carried } = await parseMultipart(req);
+    return { msg: fromForm(fields), carried: carried.map(fromRfc822).filter(Boolean) };
+  }
+  if (type.includes("application/x-www-form-urlencoded")) return { msg: fromForm(req.body || {}), carried: [] };
+  return { msg: fromJson(req.body || {}), carried: [] };
 }
 
 /* ---------------------------------------------------------------------------
@@ -307,8 +346,9 @@ function build({ PRIMARY_REGION, db }) {
       if (!ok) { console.warn("itatInboundEmail: bad or missing key"); res.status(401).send("Unauthorised"); return; }
 
       let msg;
+      let carried;
       try {
-        msg = await readInboundMessage(req);
+        ({ msg, carried } = await readInboundMessage(req));
       } catch (e) {
         console.error("itatInboundEmail: unreadable payload:", e.message || e);
         res.status(200).send("unreadable");
@@ -336,86 +376,114 @@ function build({ PRIMARY_REGION, db }) {
         return;
       }
 
-      msg.originalFrom = originalSenderOf(msg);
-      const result = parseItatEmail(msg);
+      /* One delivery can be many emails.
+       *
+       * Gmail's "Forward as attachment" wraps the selected messages in a
+       * carrier written by the practitioner, whose body says nothing and whose
+       * sender is not the Tribunal. When there are emails inside, THEY are the
+       * delivery and the carrier is discarded without being counted — counting
+       * it would report a discarded message on every single import, which is
+       * both alarming and false.
+       *
+       * Anything else — a plain forward, a filter forward, a PDF attached to a
+       * notice — is the one message it has always been. */
+      const batch = carried.length ? carried : [msg];
+      const via = forwardedByOf(msg.headers) || (emailAddressesIn(msg.from)[0] || "");
 
-      /* Gmail's verification code. Recorded on the integration document and
-         nowhere else — it is not mail about an appeal, it never becomes a
-         matter, and it is worthless within the hour. */
-      if (result.kind === "gmail-confirmation") {
-        await integrationRef(uid).set({
-          pendingCode: { ...result.fields, at: nowISO() },
-          lastReceivedAt: nowISO(),
-        }, { merge: true });
-        console.log("itatInboundEmail: code — Gmail's forwarding confirmation, recorded");
-        res.status(200).send("code");
-        return;
-      }
+      const outcomes = [];
+      for (const one of batch) outcomes.push(await fileOne(uid, one, via));
 
-      /* Not from the Tribunal: counted, and dropped. Nothing about the message
-         is stored — not the subject, not the sender, not a byte of the body —
-         which is the whole basis of telling a client that an over-broad
-         forwarding rule costs them nothing. */
-      if (result.reason === "sender-not-allowed") {
-        await noteUnfiled(uid, "dropped");
-        /* The outcome and nothing else. Cloud Logging is storage like any
-           other, and "not a byte of the message is kept" has to mean the log
-           too — otherwise the promise made to a client about an over-broad
-           forwarding rule is not one this code actually keeps. */
-        console.log("itatInboundEmail: dropped — sender is not the Tribunal");
-        res.status(200).send("dropped");
-        return;
-      }
-
-      const id = messageKey(msg);
-      const ref = db.doc(`users/${uid}/itatMail/${id}`);
-      if ((await ref.get()).exists) {
-        // Named, because this is the one outcome that looks identical to a
-        // delivery that never arrived: the provider reports success and the app
-        // shows nothing new. Dismissing does not delete the record, so the same
-        // message sent twice lands here rather than on the queue.
-        await noteUnfiled(uid, "duplicate");
-        console.log(`itatInboundEmail: duplicate — already on file as ${id}`);
-        res.status(200).send("duplicate");
-        return;
-      }
-
-      const match = await matchAssessee(uid, result.fields);
-
-      await Promise.all([
-        ref.set({
-          receivedAt: nowISO(),
-          from: clean(msg.from),
-          originalFrom: clean(msg.originalFrom),
-          forwardedBy: forwardedByOf(msg.headers),
-          subject: clean(msg.subject),
-          messageId: clean(msg.messageId),
-          kind: result.kind,
-          parsed: result.fields,
-          reason: result.reason || "",
-          ...match,
-          status: result.kind === "unrecognised" ? "unrecognised" : "needs-review",
-        }),
-        integrationRef(uid).set({
-          lastReceivedAt: nowISO(),
-          lastSubject: clean(msg.subject),
-          receivedCount: countUp(),
-        }, { merge: true }),
-      ]);
-
-      /* What was made of it, in one line. Between them these five outcomes
-         account for every delivery, so a provider reporting success and an app
-         showing nothing is always explained by the log rather than guessed at
-         from the outside. */
-      console.log(
-        `itatInboundEmail: ok — ${result.kind}`
-        + `${result.fields.appealNo ? ` ${result.fields.appealNo}` : ""}`
-        + `${result.fields.appellant ? `, appellant read` : ""}`
-        + `${match.assesseeId ? `, matched ${match.matchedBy}` : ", no assessee matched"}`
-      );
-      res.status(200).send("ok");
+      const tally = outcomes.reduce((acc, o) => ({ ...acc, [o]: (acc[o] || 0) + 1 }), {});
+      const summary = Object.entries(tally).map(([k, v]) => `${k}:${v}`).join(" ");
+      if (batch.length > 1) console.log(`itatInboundEmail: ${batch.length} carried emails — ${summary}`);
+      res.status(200).send(summary || "ok");
     }
   );
+
+  /* What becomes of a single message, whether it arrived on its own or inside
+     another one. Returns the outcome as a word, so a bundle can be summarised
+     without the caller knowing what any of them mean. */
+  async function fileOne(uid, msg, via) {
+    msg.originalFrom = originalSenderOf(msg);
+    const result = parseItatEmail(msg);
+
+    /* Gmail's verification code. Recorded on the integration document and
+       nowhere else — it is not mail about an appeal, it never becomes a
+       matter, and it is worthless within the hour. */
+    if (result.kind === "gmail-confirmation") {
+      await integrationRef(uid).set({
+        pendingCode: { ...result.fields, at: nowISO() },
+        lastReceivedAt: nowISO(),
+      }, { merge: true });
+      console.log("itatInboundEmail: code — Gmail's forwarding confirmation, recorded");
+      return "code";
+    }
+
+    /* Not from the Tribunal: counted, and dropped. Nothing about the message
+       is stored — not the subject, not the sender, not a byte of the body —
+       which is the whole basis of telling a client that an over-broad
+       forwarding rule costs them nothing. */
+    if (result.reason === "sender-not-allowed") {
+      await noteUnfiled(uid, "dropped");
+      /* The outcome and nothing else. Cloud Logging is storage like any
+         other, and "not a byte of the message is kept" has to mean the log
+         too — otherwise the promise made to a client about an over-broad
+         forwarding rule is not one this code actually keeps. */
+      console.log("itatInboundEmail: dropped — sender is not the Tribunal");
+      return "dropped";
+    }
+
+    const id = messageKey(msg);
+    const ref = db.doc(`users/${uid}/itatMail/${id}`);
+    if ((await ref.get()).exists) {
+      /* Named, because this is the one outcome that looks identical to a
+         delivery that never arrived: the provider reports success and the app
+         shows nothing new. Dismissing does not delete the record, so the same
+         message sent twice lands here rather than on the queue.
+
+         It is also what makes importing a mailbox safe to repeat. A carried
+         email keeps the Tribunal's own Message-ID, so sending the same fifty
+         notices again re-files none of them. */
+      await noteUnfiled(uid, "duplicate");
+      console.log(`itatInboundEmail: duplicate — already on file as ${id}`);
+      return "duplicate";
+    }
+
+    const match = await matchAssessee(uid, result.fields);
+
+    await Promise.all([
+      ref.set({
+        receivedAt: nowISO(),
+        from: clean(msg.from),
+        originalFrom: clean(msg.originalFrom),
+        forwardedBy: clean(via) || forwardedByOf(msg.headers),
+        subject: clean(msg.subject),
+        messageId: clean(msg.messageId),
+        kind: result.kind,
+        parsed: result.fields,
+        reason: result.reason || "",
+        ...match,
+        status: result.kind === "unrecognised" ? "unrecognised" : "needs-review",
+      }),
+      integrationRef(uid).set({
+        lastReceivedAt: nowISO(),
+        lastSubject: clean(msg.subject),
+        receivedCount: countUp(),
+      }, { merge: true }),
+    ]);
+
+    /* What was made of it, in one line. Between them these five outcomes
+       account for every delivery, so a provider reporting success and an app
+       showing nothing is always explained by the log rather than guessed at
+       from the outside. */
+    console.log(
+      `itatInboundEmail: ok — ${result.kind}`
+      + `${result.fields.appealNo ? ` ${result.fields.appealNo}` : ""}`
+      + `${result.fields.appellant ? ", appellant read" : ""}`
+      + `${match.assesseeId ? `, matched ${match.matchedBy}` : ", no assessee matched"}`
+    );
+    return "ok";
+  }
 
   const NO_MATCH = { assesseeId: "", assesseeName: "", matchedBy: "" };
 

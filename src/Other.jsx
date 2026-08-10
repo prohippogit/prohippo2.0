@@ -1,6 +1,7 @@
 /* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, Table, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { hapticsAvailable } from './haptics';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO,
   assesseeLedger, groupLedger, groupsOf, assesseeOutstanding, allocatePayment, docRequestProgress, derivedRequestStatus } from './store';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
@@ -632,7 +633,7 @@ function LedgersPanel() {
       {filtered.length === 0 ? (
         <EmptyState icon="wallet" title="No billed assessees yet" sub="Raise an invoice and the assessee's ledger appears here."/>
       ) : (
-        <table className="tbl">
+        <Table>
           <thead><tr><th>Assessee</th><th>Group</th><th>Billed</th><th>Outstanding</th><th></th></tr></thead>
           <tbody>
             {filtered.map(({ a, billed, outstanding }) => (
@@ -650,7 +651,7 @@ function LedgersPanel() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       )}
       {payFor && <AssesseePaymentModal assessee={payFor} onClose={() => setPayFor(null)} onReceipt={setReceipt}/>}
       {ledgerFor && <LedgerView {...ledgerFor} onClose={() => setLedgerFor(null)}/>}
@@ -870,7 +871,7 @@ export function Invoices() {
             action={invoices.length === 0 ? <button className="btn btn-primary" onClick={() => setShowNew(true)}><Icon name="plus" size={14}/>New invoice</button> : undefined}
           />
         ) : (
-          <table className="tbl">
+          <Table>
             <thead><tr><th>Invoice #</th><th>Assessee</th><th>Service</th><th>AY</th><th>Issued</th><th>Due</th><th>Amount</th><th>Balance</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {filtered.map(inv => (
@@ -897,7 +898,7 @@ export function Invoices() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
       </>}
@@ -1051,7 +1052,7 @@ export function Matters({ onOpenMatter }) {
             action={data.matters.length === 0 ? <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>New matter</button> : undefined}
           />
         ) : (
-          <table className="tbl">
+          <Table>
             <thead><tr><th>Matter</th><th>Assessee</th><th>AY</th><th>Section</th><th>Bench / Officer</th><th>Status</th><th>Next hearing</th><th>Staff</th><th></th></tr></thead>
             <tbody>
               {filtered.map(m => {
@@ -1090,7 +1091,7 @@ export function Matters({ onOpenMatter }) {
                 );
               })}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
 
@@ -1687,6 +1688,48 @@ function GoogleCalendarCard() {
  * money on its own. What it costs is answerable — the admin console meters
  * automatic reads apart from manual ones — and turning it back off is this
  * toggle, not a deploy. */
+/* Touch feedback, and an honest answer where it cannot happen.
+ *
+ * A toggle that controls nothing is worse than no toggle, so on a device with
+ * no Vibration API this says so instead of pretending. That is most iPhones:
+ * Apple has never shipped it, in Safari or in a standalone PWA. See
+ * src/haptics.js for why the known workaround is not in here. */
+function HapticsCard() {
+  const { profile, setProfile, notify } = useData();
+  const on = profile?.haptics !== false;
+  const available = hapticsAvailable();
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">Touch feedback</div>
+      </div>
+      <div className="muted" style={{fontSize: 12.5, lineHeight: 1.6}}>
+        A short tick when you tap a control on a phone, and two when something saves or sends. Short enough to feel
+        like a response rather than an alert — the longest is a third of a blink.
+      </div>
+      {available ? (
+        <CalendarSwitch
+          name="Vibrate on tap"
+          sub={on ? "On — buttons, tabs and toasts answer back." : "Off — nothing vibrates."}
+          checked={on}
+          onChange={() => { setProfile({ haptics: !on }); notify(on ? "Touch feedback off" : "Touch feedback on"); }}
+        />
+      ) : (
+        <div className="center" style={{gap: 8, padding: "9px 11px", background: "var(--p-card-tint)", borderRadius: 10, fontSize: 12, marginTop: 10}}>
+          <Icon name="info" size={13}/>
+          <span>
+            This device can't vibrate from a web app. On iPhone that is Apple's decision, not a setting —
+            iOS has never supported it in Safari or in an installed app. Everything still answers visually.
+          </span>
+        </div>
+      )}
+      <div className="muted" style={{fontSize: 11.5, marginTop: 8, lineHeight: 1.5}}>
+        Off automatically if your phone is set to reduce motion.
+      </div>
+    </div>
+  );
+}
+
 function AutoReadCard() {
   const { profile, setProfile, notify } = useData();
   const on = Boolean(profile?.autoReadIntimations);
@@ -1812,6 +1855,7 @@ export function SettingsPage() {
           Google through that sync, so the two are read as one arrangement. */}
       <div style={{marginBottom: 16}}><ItatEmailCard/></div>
       <div style={{marginBottom: 16}}><AutoReadCard/></div>
+      <div style={{marginBottom: 16}}><HapticsCard/></div>
       <div className="grid-split" style={{gap: 16}}>
         {integrations.map(i => (
           <div key={i.t} className="card">

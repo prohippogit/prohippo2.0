@@ -87,7 +87,11 @@ How the pieces work:
 
 ### How to test it and read the per-PAN number
 
-1. Reload the extension at `chrome://extensions` (it must show **v0.11.0**).
+1. Reload the extension at `chrome://extensions`, and check the version Chrome
+   shows matches the `version` in `manifest.json`. That is the only way to tell
+   a reload took: this extension is loaded unpacked, so Chrome will happily go
+   on running the code it read the first time. (The number here used to be
+   hard-coded, and was 34 versions stale by the time anyone read it.)
 2. Open DevTools → **Console** on the portal tab before/while syncing.
 3. Run a sync for one assessee. Watch the purple badge and the console:
    - **Fast path worked:** badge shows `API sync ✓ N proceedings in XXX ms`, and

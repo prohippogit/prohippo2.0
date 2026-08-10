@@ -114,6 +114,46 @@ export const StatusPill = ({ status }) => {
   return <span className={`pill pill-${map[status] || "muted"}`}><span className="pill-dot" style={{background: "currentColor"}}/>{status}</span>;
 };
 
+/* A table that survives being read on a phone.
+ *
+ * On a narrow screen `.tbl` stops being a table: each row becomes a card and
+ * each cell a labelled line (see "TABLES BECOME CARDS" in app.css). The labels
+ * have to come from somewhere, and CSS cannot read another element's text — so
+ * this copies each column's own <th> onto the cells beneath it as `data-label`.
+ *
+ * DERIVED, NOT DECLARED. Writing the labels by hand would have meant editing
+ * every <td> in the app and would have let a heading and its label drift apart
+ * the first time a column was renamed. Here a table cannot disagree with
+ * itself: the label IS the heading.
+ *
+ * Pass `wide` for a table whose columns are the point — a genuine matrix, where
+ * stacking would destroy the comparison. Those scroll sideways as before.
+ */
+export function Table({ wide = false, className = "", children, ...rest }) {
+  const ref = React.useRef(null);
+  // No dependency array on purpose: rows change as data arrives, and a new row
+  // with no labels would render as unlabelled lines on a phone.
+  React.useEffect(() => {
+    const table = ref.current;
+    if (!table) return;
+    const heads = [...table.querySelectorAll("thead th")].map((th) => (th.textContent || "").trim());
+    if (!heads.length) return;
+    for (const row of table.querySelectorAll("tbody tr")) {
+      [...row.children].forEach((cell, i) => {
+        // A spanning cell is a message ("No hearings yet"), not a field, and
+        // its position says nothing about which column it belongs to.
+        if (cell.hasAttribute("colspan")) return;
+        cell.setAttribute("data-label", heads[i] || "");
+      });
+    }
+  });
+  return (
+    <table ref={ref} className={`tbl${wide ? " tbl-wide" : ""}${className ? ` ${className}` : ""}`} {...rest}>
+      {children}
+    </table>
+  );
+}
+
 export const Avatar = ({ name, color, size = "", round = false, soft = false }) => {
   const initials = name.split(" ").filter(p => p[0] && /[A-Z]/i.test(p[0])).slice(0, 2).map(p => p[0]).join("").toUpperCase() || "?";
   const grads = {

@@ -227,4 +227,86 @@ function proceedings(page, { pan, statusFlag, pageSize, pageNo }) {
   });
 }
 
-module.exports = { PATHS, FORM, ITR_FORM, apiCall, getDoc, postDoc, postBinary, proceedings };
+/* EVERY document behind one "Notice/Letter pdf" screen.
+ *
+ * THIS IS THE BUG THIS MODULE EXISTED WITH. The noticeletterpdf response names
+ * ONE document at the top level — `satDocId` + `docNam` — and then lists the
+ * WHOLE set under `docMap`, keyed by satDocId:
+ *
+ *   satDocId: 442426058,
+ *   docNam:  "…_AST_APPROVAL TO JAO.pdf.gz",
+ *   docMap: {
+ *     "442426058": "…_AST_APPROVAL TO JAO.pdf.gz",
+ *     "442426042": "…_AST_SET NOTE APPROVAL.pdf.gz",
+ *     "442426059": "…_AST_AXIPP8954H_Notice us 148_….pdf.gz",
+ *     "442426040": "…_AST_AXIPP8954H_Print Approval Search_….pdf.gz"
+ *   }
+ *
+ * `docMap` is what the portal's own screen renders — four Download buttons. We
+ * read `satDocId` and stopped, so three of the four never left the portal, and
+ * on this notice the one we DID take was the internal approval rather than the
+ * s.148 notice the assessee has to answer.
+ *
+ * Sorted by satDocId ascending, which is the order the portal lists them in
+ * (the docMap's own key order is not it). Stable, so a re-sync numbers the same
+ * document the same way. */
+function noticeDocuments(json) {
+  const named = new Map();
+  const add = (id, nam) => {
+    const key = String(id == null ? "" : id).trim();
+    if (!key || !/^\d+$/.test(key)) return;
+    if (!named.has(key) || (nam && !named.get(key))) named.set(key, String(nam || ""));
+  };
+  const map = json && json.docMap;
+  if (map && typeof map === "object" && !Array.isArray(map)) {
+    for (const [id, nam] of Object.entries(map)) add(id, nam);
+  }
+  // The top-level pair, for the (older, single-document) responses with no map.
+  if (json) add(json.satDocId, json.docNam);
+  return [...named.entries()]
+    .map(([satDocId, docNam]) => ({ satDocId, docNam }))
+    .sort((a, b) => Number(a.satDocId) - Number(b.satDocId));
+}
+
+/* Which of them is THE notice.
+ *
+ * It matters: the primary is what the "PDF" button saves, what the summary is
+ * read from, and what the appeal detection parses. The portal's own `satDocId`
+ * is NOT a reliable answer — on the s.148 set above it points at an 11 MB
+ * "APPROVAL TO JAO" while the notice sits three files away — so the set is
+ * scored on what the files are CALLED, and the portal's pick is kept only as
+ * the tie-break. Everything not chosen is still fetched; this decides billing
+ * of attention, not what gets downloaded.
+ *
+ * Returns an index into `docs`. */
+function pickPrimaryDocument(docs, { section, declaredSatDocId } = {}) {
+  if (!docs.length) return -1;
+  const fallback = Math.max(0, docs.findIndex((d) => String(d.satDocId) === String(declaredSatDocId || "")));
+  if (docs.length === 1) return 0;
+  // "143(2)" → 143. The filename writes it as "Notice us 143(2)" or "u_s 143",
+  // so the bare number is the part worth matching.
+  const sec = (String(section || "").match(/\d+/) || [])[0];
+  const secRe = sec ? new RegExp(`(^|\\D)${sec}(\\D|$)`) : null;
+  const score = (d) => {
+    const n = String(d.docNam || "").toLowerCase();
+    let s = 0;
+    if (secRe && secRe.test(n)) s += 4;
+    if (/\bnotice\b|\bletter\b|\bintimation\b|\bquestionnaire\b/.test(n)) s += 3;
+    // The paperwork the department attaches to a notice, never the notice.
+    if (/approval|set note|search|annexure|enclosure/.test(n)) s -= 3;
+    return s;
+  };
+  let best = fallback;
+  let bestScore = score(docs[fallback]);
+  docs.forEach((d, i) => {
+    const s = score(d);
+    if (s > bestScore) { best = i; bestScore = s; }
+  });
+  return best;
+}
+
+module.exports = {
+  PATHS, FORM, ITR_FORM,
+  apiCall, getDoc, postDoc, postBinary, proceedings,
+  noticeDocuments, pickPrimaryDocument,
+};

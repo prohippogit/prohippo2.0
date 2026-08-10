@@ -25,18 +25,33 @@
 "use strict";
 
 const VOICE_AGENT_CONFIG = {
-  orgId: "",
-  workspaceId: "",
-  agentId: "",
-  agentVersion: "", // optional — empty means whatever is live
-  connectionId: "",
+  orgId: "019edd8a-986b-7a82-bed5-8b69117dd61c",
+  workspaceId: "019edd8a-9871-742d-97a0-7af9770aa41d",
+  agentId: "prohippo-he-b17b4513-91d8",
+
+  /* A NUMBER, not a string — the trigger-call snippet sends `"app_version": 8`
+     unquoted, and pinning it is deliberate: an edit committed in the console
+     must not change what a live feature does until someone raises this.
+
+     The pin is also load-bearing in a way that cost us a live failure. Sarvam
+     validates `agent_variables` against the pinned version, not the draft: with
+     this on 2, a call carrying `session_token` came back
+     "(422) Invalid Parameter … Agent variables '{'session_token'}' not found",
+     because v2 predated the variable. So whenever a console commit adds or
+     renames a variable, this number has to move with it. */
+  agentVersion: 8,
+  connectionId: "3849bc9b-e5-51c864d5-6102",
+
+  /* The INBOUND DEPLOYMENT, not the agent. From the deployment page's URL:
+     .../deploy-v2/inbounds/{deployment_id}. It is what the Cohorts API hangs
+     the known-callers list off — see functions/voiceKnownCallers.js. */
+  deploymentId: "prohippo-he-901c6295-7397",
 
   // The number ProHippo owns and calls from. Confirmed purchased; it is also
   // the number the inbound line answers on.
   agentPhoneNumber: "+918071582778",
 
-  // Set after `firebase deploy --only functions:sarvamVoiceWebhook` prints it.
-  webhookUrl: "",
+  webhookUrl: "https://asia-south1-prohippo2.cloudfunctions.net/sarvamVoiceWebhook",
 };
 
 /* Every field except agentVersion has to be present before a call can be

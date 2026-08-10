@@ -27,6 +27,7 @@ const {
   spokenDate,
   spokenAmount,
   spokenList,
+  submittedDate,
   TOOLS,
   isKnownTool,
   buildSystemPrompt,
@@ -39,6 +40,7 @@ const {
   outboundUrl,
   buildOutboundCall,
   parseRequest,
+  describePayload,
   toolResponse,
 } = require("./voiceAgentCore.js");
 const {
@@ -223,6 +225,44 @@ test("an ambiguous name asks rather than picks — reading out the wrong client 
   assert.ok(r.alternatives.length >= 2);
 });
 
+test("a client named in Hindi or Gujarati reaches an English register", () => {
+  /* The failure this replaces, from a live call: the caller asked about मोनिका,
+     every non-Latin character was stripped, the query became empty, and the
+     tool answered "I couldn't find a client called मोनिका on your list" — after
+     which the agent invented a hearing date. A line that answers in Hindi but
+     cannot hear a Hindi name is not answering in Hindi. */
+  const INDIC = [
+    { name: "Monika Naval Wadhawa", pan: "ABCPM1234F" },
+    { name: "Raginiben Bipinchandra Seva Karya Trust", pan: "AAATR7621J" },
+    { name: "Dhiraj Laxmandas Shivnani", pan: "AAAPD3333C" },
+  ];
+  assert.equal(matchAssessee(INDIC, "मोनिका").assessee.name, "Monika Naval Wadhawa");
+  assert.equal(matchAssessee(INDIC, "મોનિકા").assessee.name, "Monika Naval Wadhawa"); // Gujarati
+  assert.equal(matchAssessee(INDIC, "मोनिका नवल वाधवा").assessee.name, "Monika Naval Wadhawa");
+  assert.equal(matchAssessee(INDIC, "रागिनीबेन").assessee.name, "Raginiben Bipinchandra Seva Karya Trust");
+  assert.equal(matchAssessee(INDIC, "धीरज").assessee.name, "Dhiraj Laxmandas Shivnani");
+  // Latin still works, and a name genuinely absent is still absent.
+  assert.equal(matchAssessee(INDIC, "monika").assessee.name, "Monika Naval Wadhawa");
+  assert.equal(matchAssessee(INDIC, "रमेश गुप्ता").assessee, null);
+});
+
+test("transliteration drops the word-final inherent vowel, as Hindi does", () => {
+  // "शाह" is Shah, not Shaha — otherwise no surname in the register matches.
+  assert.equal(normaliseName("शाह"), "shah");
+  // But a matra keeps it: मोनिका is monika, not monik.
+  assert.equal(normaliseName("मोनिका"), "monika");
+});
+
+test("interchangeable spellings of the same name fold together", () => {
+  // Wadhawa/Vadhava, Neeta/Nita, Falgun/Phalgun — one name, several spellings.
+  assert.equal(normaliseName("Wadhawa"), normaliseName("Vadhava"));
+  assert.equal(normaliseName("Neeta"), normaliseName("Nita"));
+  assert.equal(normaliseName("Falgun"), normaliseName("Phalgun"));
+  // The fold must not reach far enough to merge two different clients.
+  assert.notEqual(normaliseName("Mehta"), normaliseName("Mehul"));
+  assert.notEqual(normaliseName("Shah"), normaliseName("Sha"));
+});
+
 test("a name that isn't on the books returns nothing at all", () => {
   assert.equal(matchAssessee(BOOK, "Ramesh Gupta").assessee, null);
   assert.equal(matchAssessee([], "anyone").assessee, null);
@@ -279,6 +319,97 @@ test("lists read as speech, not as CSV", () => {
 });
 
 /* ---------------- the tool surface ---------------- */
+
+test("a portal submission timestamp resolves to a date, or to nothing", () => {
+  // The portal writes epoch millis in a string; a hand-entered notice may carry
+  // an ISO date. Anything else must be null — a reply whose date we cannot read
+  // is reported as "date not recorded", never as a date we guessed.
+  assert.equal(submittedDate("1785000000000"), new Date(1785000000000).toISOString().slice(0, 10));
+  assert.equal(submittedDate("2026-08-02"), "2026-08-02");
+  assert.equal(submittedDate("2026-08-02T10:30:00Z"), "2026-08-02");
+  for (const junk of ["", null, undefined, "not a date", "02/08/2026", 0]) {
+    assert.equal(submittedDate(junk), null, String(junk));
+  }
+});
+
+test("the tools cover the questions a practitioner actually rings about", () => {
+  // Each of these was asked on a live call and had no tool behind it, so the
+  // agent invented an answer. A missing tool is an invitation to hallucinate.
+  const names = TOOLS.map((t) => t.name);
+  assert.ok(names.includes("find_assessee"), "no way to ask whether a name is on the register");
+  assert.ok(names.includes("reply_status"), "no way to ask whether a reply was filed");
+});
+
+test("identify_caller exists, takes the number, and warns the model off it", () => {
+  /* The on-start hook is what lets an inbound call know who is on it, now that
+     Sarvam has confirmed the caller's number never reaches a mid-call tool. It
+     is registered as a tool so the dispatcher recognises the name, but it is
+     the platform that fires it, not the model — and its description has to say
+     so, because a model that calls it mid-conversation with a number it heard
+     is the impersonation route this design exists to close. */
+  const t = TOOLS.find((x) => x.name === "identify_caller");
+  assert.ok(t, "no on-start hook — an inbound caller cannot be identified at all");
+  assert.ok(t.parameters.properties.caller_phone, "the hook needs somewhere to receive the number");
+  assert.doesNotMatch(t.name, /^(add|create|update|edit|delete|remove|send|file|raise|set)_/);
+  // Both halves of the rule, in words the model reads on every turn.
+  assert.match(t.description, /never call this during the conversation/i);
+  assert.match(t.description, /says out loud/i);
+  // Nothing is required: a call from a number we don't know must still connect.
+  assert.ok(!t.parameters.required || !t.parameters.required.length);
+});
+
+test("the caller's number is recognised under the name Sarvam's own SDK uses", () => {
+  /* Sarvam's on-start tool context exposes get_user_identifier(), which on an
+     inbound telephony call returns the caller's number as bare digits with no
+     plus. The dashboard's tool builder does not inject it automatically — that
+     gap is why the hook currently receives an empty field — but the moment a
+     body field is bound to it, or the platform starts sending it, this has to
+     resolve without a deploy. */
+  assert.equal(normalisePhone("919876543210"), "+919876543210");
+  for (const body of [
+    { user_identifier: "919879166912" },
+    { context: { user_identifier: "+91 98791 66912" } },
+    { metadata: { user_identifier: "919879166912" } },
+  ]) {
+    const parsed = parseRequest(body, "/sarvamVoiceWebhook/identify_caller");
+    assert.equal(parsed.toolName, "identify_caller", JSON.stringify(body));
+    assert.equal(parsed.phone, "+919879166912", JSON.stringify(body));
+  }
+  // A field named caller_phone reaches the handler as an argument instead —
+  // identifyForCall reads both, so either console spelling works.
+  const asArg = parseRequest({ caller_phone: "919879166912" }, "/sarvamVoiceWebhook/identify_caller");
+  assert.equal(asArg.args.caller_phone, "919879166912");
+});
+
+test("the prompt forbids answering from memory, not just from an empty tool", () => {
+  const p = buildSystemPrompt(null);
+  assert.match(p, /no memory of this practice/i);
+  assert.match(p, /Never estimate/i);
+});
+
+test("a payload description names the shape and masks the numbers", () => {
+  // This is what tells us whether the platform passes the caller's number
+  // through at all. It must be safe to read in a support log: key paths yes,
+  // client names never, phone numbers only as their last four digits.
+  const seen = describePayload({
+    event: "tool",
+    call: { from: "+919825011234", id: "c1" },
+    arguments: { assessee: "Rajesh M. Shah" },
+    metadata: { lead: null },
+  });
+  assert.ok(seen.keys.includes("call.from"));
+  assert.ok(seen.keys.includes("arguments.assessee"));
+  assert.ok(seen.phoneish.some((p) => p.startsWith("call.from=")));
+  // The number is masked, and the client's name appears nowhere.
+  assert.ok(!JSON.stringify(seen).includes("9825011234"));
+  assert.ok(!JSON.stringify(seen).includes("Rajesh"));
+});
+
+test("payload description survives junk without throwing", () => {
+  for (const junk of [null, undefined, "", 42, [], {}, { a: { b: { c: { d: { e: { f: 1 } } } } } }]) {
+    assert.ok(describePayload(junk).keys.length >= 0, String(junk));
+  }
+});
 
 test("the tool list is closed — an invented name is not a tool", () => {
   assert.ok(isKnownTool("upcoming_hearings"));
@@ -537,11 +668,82 @@ test("the trigger-call body matches the documented shape", () => {
   assert.match(body.app_config.app_overrides.initial_bot_message, /Jayesh/);
 });
 
-test("the token rides in both places, because only one of them may come back", () => {
+test("the token rides as an agent variable, which is how it reaches a tool", () => {
+  // Sarvam passes a tool only its declared body fields, so identity has to
+  // travel through the agent's context and back out via a session_token field.
   const body = buildOutboundCall({ config: OUTBOUND_CONFIG, toNumber: "+919825011234", token: "tok-1", callId: "cb-1" });
   assert.equal(body.app_config.agent_variables.session_token, "tok-1");
   assert.equal(body.webhook_config.metadata.session_token, "tok-1");
   assert.equal(body.webhook_config.metadata.call_id, "cb-1");
+});
+
+test("agent_variables carries only what the agent declares", () => {
+  // An undeclared variable has nowhere to land on the platform side.
+  const body = buildOutboundCall({ config: OUTBOUND_CONFIG, toNumber: "+919825011234", token: "tok-1", callId: "cb-1" });
+  assert.deepEqual(
+    Object.keys(body.app_config.agent_variables).sort(),
+    ["caller_firm", "caller_known", "caller_name", "session_token"]
+  );
+});
+
+test("app_version is sent as a number, matching Sarvam's own snippet", () => {
+  const body = buildOutboundCall({
+    config: { ...OUTBOUND_CONFIG, agentVersion: 2 },
+    toNumber: "+919825011234", token: "t", callId: "c",
+  });
+  assert.strictEqual(body.app_config.app_version, 2);
+  // A string from a config file is coerced rather than sent as "2".
+  const coerced = buildOutboundCall({
+    config: { ...OUTBOUND_CONFIG, agentVersion: "2" },
+    toNumber: "+919825011234", token: "t", callId: "c",
+  });
+  assert.strictEqual(coerced.app_config.app_version, 2);
+});
+
+test("the shipped pin is new enough to know about session_token", () => {
+  /* Not a style check — this is the 422 that broke "Call me" in production.
+     Sarvam validates agent_variables against the PINNED version, not the
+     draft, so a pin older than the commit that introduced session_token gets
+     "Agent variables '{'session_token'}' not found in agent variables of app".
+     v3 is the first committed version carrying that variable; anything below
+     it cannot accept the token this code sends on every outbound call. */
+  const { VOICE_AGENT_CONFIG, isConfigured } = require("./voiceAgentConfig.js");
+  assert.ok(isConfigured(), "the shipped config should be complete");
+  assert.equal(typeof VOICE_AGENT_CONFIG.agentVersion, "number");
+  assert.ok(
+    VOICE_AGENT_CONFIG.agentVersion >= 3,
+    `pinned to v${VOICE_AGENT_CONFIG.agentVersion}, which predates session_token`
+  );
+});
+
+test("a secret that gained or lost a trailing newline still verifies its own tokens", () => {
+  /* The failure this replaces, live: known-caller identity was rejected on
+     every inbound call with "session token rejected — bad-signature", which
+     reads exactly like an attack. It wasn't. The secret is stored with a
+     trailing newline (`openssl rand -base64 32 | firebase functions:secrets:set`),
+     `$( )` strips one on the way out, and the CSV script and the webhook were
+     therefore hashing with secrets one invisible byte apart. verifyWebhook had
+     trimmed since the same bug bit the Bearer header; these two had not. */
+  const clean = "s3cr3t-value";
+  for (const padded of [`${clean}\n`, ` ${clean}`, `${clean} \n`]) {
+    assert.equal(verifySessionToken({ token: mintSessionToken({ uid: "u1", secret: clean }), secret: padded }).uid, "u1");
+    assert.equal(verifySessionToken({ token: mintSessionToken({ uid: "u1", secret: padded }), secret: clean }).uid, "u1");
+  }
+  // Trimming must not soften the check itself — a different secret still fails.
+  assert.equal(
+    verifySessionToken({ token: mintSessionToken({ uid: "u1", secret: clean }), secret: "s3cr3t-valu" }).reason,
+    "bad-signature"
+  );
+});
+
+test("a spoken token cannot impersonate — only a minted one verifies", () => {
+  // The security argument for carrying identity as a token rather than a phone
+  // number: the caller can say anything, but cannot produce a valid signature.
+  for (const madeUp of ["v1.dWlk.9999999999999.abcd", "tok-1", "hello", ""]) {
+    assert.equal(verifySessionToken({ token: madeUp, secret: SECRET }).ok, false, madeUp);
+  }
+  const real = mintSessionToken({ uid: "uid-9", secret: SECRET });
+  assert.equal(verifySessionToken({ token: real, secret: SECRET }).uid, "uid-9");
 });
 
 test("the webhook finds the token wherever Sarvam echoes it back", () => {

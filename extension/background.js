@@ -47,6 +47,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           knownDins: Array.isArray(creds.knownDins) ? creds.knownDins : [],
           knownByProc: (creds.knownByProc && typeof creds.knownByProc === "object") ? creds.knownByProc : {},
           knownResponseIds: Array.isArray(creds.knownResponseIds) ? creds.knownResponseIds : [],
+          // Notices held with only one of their documents — see syncNotices.
+          noticeDocsPending: Array.isArray(creds.noticeDocsPending) ? creds.noticeDocsPending : [],
+          procNeedsDocs: Array.isArray(creds.procNeedsDocs) ? creds.procNeedsDocs : [],
           knownActiveProcs: Array.isArray(creds.knownActiveProcs) ? creds.knownActiveProcs : [],
           knownAckNums: Array.isArray(creds.knownAckNums) ? creds.knownAckNums : [],
           knownOrderRefs: Array.isArray(creds.knownOrderRefs) ? creds.knownOrderRefs : [],

@@ -40,6 +40,7 @@ const admin = require("firebase-admin");
 const { VOICE_AGENT_CONFIG, missingConfig, isConfigured } = require("./voiceAgentConfig");
 
 const {
+  normalisePhone,
   maskPhone,
   maskPan,
   restrictedTopic,
@@ -49,12 +50,14 @@ const {
   spokenDate,
   spokenAmount,
   spokenList,
+  submittedDate,
   isKnownTool,
   greeting,
   withinRateLimit,
   dayKey,
   verifyWebhook,
   parseRequest,
+  describePayload,
   toolResponse,
   matchAssessee,
   findFeature,
@@ -136,7 +139,13 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
   async function identifyCaller(parsed, secret) {
     if (parsed.sessionToken) {
       const claim = verifySessionToken({ token: parsed.sessionToken, secret });
-      if (claim.ok) return { ...(await loadProfile(claim.uid)), via: "token" };
+      if (claim.ok) {
+        /* Which account, in eight characters — enough to tell "the token names
+           a different practitioner than the one who dialled" from "the read
+           came back empty", which are indistinguishable from the transcript. */
+        console.log(`voice: identified uid=${claim.uid.slice(0, 8)} via=token`);
+        return { ...(await loadProfile(claim.uid)), via: "token" };
+      }
       // A token that was sent and didn't verify is worth a line in the log: it
       // is either a clock problem, a rotated secret, or someone trying it on.
       console.warn("voice: session token rejected —", claim.reason);
@@ -154,6 +163,104 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     }
     return { ...(await loadProfile(user.uid, user.displayName)), via: "caller-id" };
   }
+
+  /*
+   * The on-start hook: number in, identity out.
+   *
+   * Sarvam calls this once before the conversation begins and maps the fields
+   * we return into agent variables. `session_token` is the one that matters —
+   * every account tool binds a body field to it, so from here on the call
+   * carries a signed identity that the webhook verifies on each tool call.
+   * Fifteen minutes, which is a call, and then it is worthless.
+   *
+   * The number can arrive either in the envelope (`from`, `user_phone_number`,
+   * and the rest of parseRequest's list) or as the `caller_phone` body field.
+   * We read both because the platform's on-start payload shape is not
+   * documented, and a hook that works only on the field name we guessed is a
+   * hook that fails silently on the first real call.
+   */
+  async function identifyForCall(parsed, body, secret) {
+    /* Whatever the body field ended up being called. Sarvam's SDK names the
+       caller's number `user_identifier`; the dashboard tool builder lets you
+       name the field anything and bind it to a variable. Reading every
+       plausible spelling costs nothing and saves a deploy cycle each time the
+       console configuration is adjusted. */
+    const args = parsed.args || {};
+    const phone =
+      parsed.phone ||
+      normalisePhone(args.caller_phone) ||
+      normalisePhone(args.user_identifier) ||
+      normalisePhone(args.phone) ||
+      normalisePhone(args.from);
+    if (!phone) {
+      /* Structure, never content — and the fastest way to learn the field name
+         the platform actually uses, since the docs do not name it. */
+      const seen = describePayload(body);
+      console.warn(
+        `voice: identify_caller got no number — phoneish=[${seen.phoneish.join(", ") || "none"}] ` +
+        `keys=[${seen.keys.join(", ")}]`
+      );
+      return unknownCaller("no number on the request");
+    }
+
+    let user;
+    try {
+      user = await admin.auth().getUserByPhoneNumber(phone);
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") console.error("voice: identify_caller lookup failed", e.code || e.message);
+      console.info(`voice: identify_caller no account for ${maskPhone(phone)}`);
+      return unknownCaller("no account has this number");
+    }
+
+    const profile = await loadProfile(user.uid, user.displayName);
+    const { allowed } = await consumeRateLimit(user.uid, "call");
+    if (!allowed) {
+      // Same rule: no session_token key at all, so the day's limit cannot
+      // silently revoke an identity another mechanism established.
+      return {
+        ok: true,
+        caller_name: profile.name || "",
+        caller_firm: profile.firmName || "",
+        speech: "This account has already used its calls for today. Everything is still in the app — please have a look there, or call back tomorrow.",
+      };
+    }
+
+    await logCall(user.uid, parsed.callId, {
+      startedAt: new Date().toISOString(),
+      from: maskPhone(phone),
+      language: safeTag(parsed.language),
+      tools: [],
+    });
+
+    console.log(`voice: identify_caller uid=${user.uid.slice(0, 8)} matched via=on-start`);
+    return {
+      ok: true,
+      caller_known: "yes",
+      session_token: mintSessionToken({ uid: user.uid, secret }),
+      caller_name: profile.name || "",
+      caller_firm: profile.firmName || "",
+      speech: greeting({ ...profile, known: true }),
+    };
+  }
+
+  /*
+   * A failed identification says nothing, rather than saying "empty".
+   *
+   * The first cut returned every field explicitly, reasoning that a missing key
+   * would leave a variable holding a previous call's value. That was the wrong
+   * risk: Sarvam initialises variables per call, so there is no stale token to
+   * displace — but the known-callers list DOES populate session_token before
+   * the hook runs, and returning "" wrote over it. One deploy turned a working
+   * line into one that recognised nobody.
+   *
+   * So when we cannot identify the caller we return the greeting and nothing
+   * else. Whatever another mechanism has already supplied survives.
+   */
+  const unknownCaller = (why) => ({
+    ok: true,
+    speech: greeting({ known: false }),
+    reason: why,
+  });
 
   /* The ONLY way this module reaches Firestore. Everything is a subcollection
      of the identified user's own document — there is no argument you can pass
@@ -203,9 +310,21 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
   async function upcomingHearings(uid, { days = 30, assessee } = {}) {
     const today = istToday();
     const until = addDays(today, Math.max(1, Math.min(365, Number(days) || 30)));
-    let rows = (await readOwn(uid, "hearings"))
+    const read = await readOwn(uid, "hearings");
+    let rows = read
       .filter((h) => h.date && h.date >= today && h.date <= until && isLive(h))
       .sort((a, b) => (a.date === b.date ? String(a.time || "").localeCompare(String(b.time || "")) : a.date.localeCompare(b.date)));
+
+    /* Counts and a uid prefix — never a client name, a date or an amount.
+       scripts/voice-doctor.mjs run against this account returns two hearings;
+       the line said none. One of the two is looking at something the other
+       isn't, and from outside a phone call there is no way to tell which. The
+       shape of the funnel, plus which account it ran for, distinguishes an
+       identity mismatch from a filter that is throwing rows away. */
+    console.log(
+      `voice: upcoming_hearings uid=${String(uid).slice(0, 8)} today=${today} until=${until} ` +
+      `read=${read.length} kept=${rows.length} named=${assessee ? "yes" : "no"}`
+    );
 
     if (assessee) {
       const all = await readOwn(uid, "assessees");
@@ -423,6 +542,115 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
   }
 
   /*
+   * "Is that name on my books?"
+   *
+   * assessee_summary answers a question ABOUT a client; this one answers
+   * whether the client exists at all, which is a different question and was the
+   * one the agent had no way to answer. Left to itself it guessed, which on a
+   * client register is the worst possible failure — a practitioner who is told
+   * "no such assessee" about someone they do act for will believe it.
+   *
+   * A miss also offers the nearest names it does hold. Speech-to-text mangles
+   * Indian surnames constantly, and "did you mean Mehul Patel?" recovers a call
+   * that a flat "no" would end.
+   */
+  async function findAssessee(uid, { query } = {}) {
+    const all = await readOwn(uid, "assessees");
+    if (!all.length) return toolResponse("There are no assessees on your register yet.");
+
+    const q = String(query || "").trim();
+    if (!q) {
+      return toolResponse(
+        `You have ${all.length} ${all.length === 1 ? "assessee" : "assessees"} on your register.`,
+        { count: all.length }
+      );
+    }
+
+    const { assessee: hit, confident, alternatives } = matchAssessee(all, q);
+    if (hit && confident) {
+      return toolResponse(
+        `Yes — ${hit.name} is on your register${hit.status ? `, ${hit.status}` : ""}, PAN ${maskPan(hit.pan)}.`,
+        { found: true, name: hit.name, pan: maskPan(hit.pan) }
+      );
+    }
+    if (hit && !confident) {
+      return toolResponse(
+        `I have more than one that could be — ${spokenList(alternatives.map((a) => a.name))}. Which one did you mean?`,
+        { found: true, ambiguous: true }
+      );
+    }
+
+    /* No match. Offer the nearest surnames rather than a bare no. */
+    const words = String(q).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+    const near = all
+      .filter((a) => words.some((w) => String(a.name || "").toLowerCase().includes(w)))
+      .slice(0, 3)
+      .map((a) => a.name);
+    return toolResponse(
+      near.length
+        ? `I can't see anyone by that exact name. The closest on your register are ${spokenList(near)}. Any of those?`
+        : `No — I can't see anyone called ${q} on your register of ${all.length} assessees. Could you spell the name, or give me the PAN?`,
+      { found: false }
+    );
+  }
+
+  /*
+   * "Has the reply gone in, and when?"
+   *
+   * Replies live on the notice as `responses[]`, written by the portal sync
+   * (ingestPortalResponse) with the submission timestamp the department
+   * recorded. That is the authoritative answer to a question practitioners ask
+   * constantly, and the agent had no tool for it — so it invented dates. This
+   * reports what is on file and, where a date cannot be read, says so rather
+   * than rounding to something plausible.
+   */
+  async function replyStatus(uid, { assessee, ay } = {}) {
+    if (!assessee) return toolResponse("Which client's reply would you like me to check?");
+    const today = istToday();
+    const all = await readOwn(uid, "assessees");
+    const { assessee: hit, confident, alternatives } = matchAssessee(all, assessee);
+    if (!hit) return toolResponse(`I couldn't find a client called ${assessee} on your register. Could you say the name again, or give me the PAN?`);
+    if (!confident) return toolResponse(`Did you mean ${spokenList(alternatives.map((a) => a.name))}?`);
+
+    const pan = String(hit.pan || "").toUpperCase();
+    const wantedAy = String(ay || "").trim();
+    let rows = (await readOwn(uid, "notices")).filter(
+      (n) => String(n.pan || "").toUpperCase() === pan || n.assessee === hit.name
+    );
+    if (wantedAy) {
+      const narrowed = rows.filter((n) => String(n.ay || "").includes(wantedAy.replace(/^20/, "").slice(0, 5)) || String(n.ay || "") === wantedAy);
+      if (narrowed.length) rows = narrowed;
+    }
+    if (!rows.length) {
+      return toolResponse(`I have no notices on file for ${hit.name}${wantedAy ? ` for ${wantedAy}` : ""}, so there is no reply to report.`);
+    }
+
+    rows.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const lines = rows.slice(0, SPEAK_CAP).map((n) => {
+      const which = `${n.section ? `section ${n.section}` : "notice"}${n.ay ? ` for ${n.ay}` : ""}`;
+      const responses = Array.isArray(n.responses) ? n.responses : [];
+      if (!responses.length) {
+        // `status` is the practitioner's own word for where it has got to, and
+        // is worth repeating: "reply drafted" is not the same as "nothing done".
+        return `${which} — no reply filed yet${n.status ? `, marked ${String(n.status).toLowerCase()}` : ""}`;
+      }
+      const dates = responses.map((r) => submittedDate(r.submittedOn)).filter(Boolean).sort();
+      const last = dates[dates.length - 1];
+      const count = responses.length === 1 ? "one reply" : `${responses.length} replies`;
+      return last
+        ? `${which} — ${count} filed, the last on ${spokenDate(last, today)}`
+        : `${which} — ${count} filed, but the submission date is not recorded`;
+    });
+
+    const more = rows.length > SPEAK_CAP ? ` And ${rows.length - SPEAK_CAP} more notices.` : "";
+    return toolResponse(`For ${hit.name}: ${lines.join(". ")}.${more}`, {
+      assessee: hit.name,
+      notices: rows.length,
+      replied: rows.filter((n) => (n.responses || []).length).length,
+    });
+  }
+
+  /*
    * Navigation. The one tool an unidentified caller may use — it reads the
    * product manual in voiceKnowledge.js and touches no account data at all,
    * so someone ringing from a number we don't know can still be told what the
@@ -461,6 +689,8 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
     outstanding_invoices: { needsAccount: true, run: (uid, args) => outstandingInvoices(uid, args) },
     open_tasks: { needsAccount: true, run: (uid) => openTasks(uid) },
     today_brief: { needsAccount: true, run: (uid, _args, caller) => todayBrief(uid, caller) },
+    find_assessee: { needsAccount: true, run: (uid, args) => findAssessee(uid, args) },
+    reply_status: { needsAccount: true, run: (uid, args) => replyStatus(uid, args) },
   };
 
   const NOT_REGISTERED =
@@ -528,7 +758,25 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
    * resendWebhook in index.js.
    */
   const sarvamVoiceWebhook = onRequest(
-    { region: PRIMARY_REGION, secrets: [sarvamWebhookSecret], maxInstances: 20 },
+    /*
+     * maxInstances is a CPU RESERVATION, not just a ceiling. Cloud Run counts
+     * it against "total allowable CPU per project per region", and the 20 this
+     * used to ask for was enough to make a deploy fail outright:
+     *
+     *   Could not create or update Cloud Run service sarvamvoicewebhook,
+     *   Container Healthcheck failed. Quota exceeded for total allowable CPU
+     *   per project per region.
+     *
+     * Nothing about the request was wrong — there simply wasn't room left in
+     * the region to start the new revision, so the old one kept serving and the
+     * deploy looked like it had worked from the code's side.
+     *
+     * Three is ample. Each instance serves 80 concurrent requests by default,
+     * and a help line answers one caller at a time per call. The rate limits in
+     * this module (30 calls / 300 look-ups per account per day) cap the load
+     * long before instance count does.
+     */
+    { region: PRIMARY_REGION, secrets: [sarvamWebhookSecret], maxInstances: 3 },
     async (req, res) => {
       if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
 
@@ -598,6 +846,16 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
             known: caller.known,
             speech: greeting(caller),
             first_message: greeting(caller),
+            /* Flat as well as nested. The on-start API tool maps response
+               fields by name from the top level, and a platform that sends its
+               start event here rather than to identify_caller should still hand
+               the agent a usable token. */
+            caller_known: caller.known ? "yes" : "no",
+            caller_name: caller.name || "",
+            caller_firm: caller.firmName || "",
+            session_token: caller.known
+              ? mintSessionToken({ uid: caller.uid, secret: sarvamWebhookSecret.value() })
+              : "",
             // Prompt variables, for a Sarvam agent configured with placeholders.
             variables: {
               caller_name: caller.name || "",
@@ -631,7 +889,25 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
           return;
         }
 
+        if (parsed.kind === "tool" && parsed.toolName === "identify_caller") {
+          res.status(200).json(await identifyForCall(parsed, body, sarvamWebhookSecret.value()));
+          return;
+        }
+
         if (parsed.kind === "tool") {
+          /* An account tool asked for by someone we could not identify is the
+             one failure we cannot debug from the outside — it looks identical
+             whether the number never arrived, arrived under a field name we do
+             not read, or arrived for a number with no account. So say what the
+             body actually contained: key paths, and phone-shaped values masked
+             to their last four digits. Structure, never content. */
+          if (!caller.known && parsed.toolName !== "find_feature") {
+            const seen = describePayload(body);
+            console.warn(
+              `voice: unidentified caller on ${parsed.toolName} — from=${parsed.from || "(none)"} ` +
+              `phoneish=[${seen.phoneish.join(", ") || "none"}] keys=[${seen.keys.join(", ")}]`
+            );
+          }
           // The caller's own words, before the model got to choose a tool.
           const asked = restrictedTopic(parsed.utterance);
           if (asked) {
@@ -685,7 +961,9 @@ module.exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend
    * record, put there by linkPhone after an OTP proved possession.
    */
   const requestVoiceCallback = onCall(
-    { region: REGIONS, secrets: [sarvamApiKey, sarvamWebhookSecret], maxInstances: 10 },
+    // Same reasoning as the webhook, and this one deploys to BOTH regions, so
+    // its reservation is doubled. A button someone taps a few times a day.
+    { region: REGIONS, secrets: [sarvamApiKey, sarvamWebhookSecret], maxInstances: 2 },
     async (request) => {
       const uid = request.auth?.uid;
       if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");

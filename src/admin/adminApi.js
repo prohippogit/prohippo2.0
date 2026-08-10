@@ -22,6 +22,11 @@ export const adminCreateReferralCode = call("adminCreateReferralCode");
 export const adminUpdateReferralCode = call("adminUpdateReferralCode");
 export const adminReverseRedemption = call("adminReverseRedemption");
 
+/* Voice help line — rebuild Sarvam's known-callers list on demand.
+   It also runs nightly; this is for the moment right after onboarding someone,
+   when waiting until 03:10 for them to be able to ring the line is silly. */
+export const syncVoiceKnownCallers = call("syncVoiceKnownCallersNow");
+
 /* Costs */
 export const adminCostSummary = call("adminCostSummary");
 export const adminSetManualCost = call("adminSetManualCost");

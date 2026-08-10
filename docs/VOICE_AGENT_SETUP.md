@@ -36,13 +36,44 @@ never a number from the request, which would make this a free outbound dialler
 billed to us — and sends a signed, 15-minute token that the webhook checks. This
 is what "the person who has signed up and logged in" actually means.
 
-*Inbound is the weaker one.* It resolves the number on the wire with
-`admin.auth().getUserByPhoneNumber()` — the same lookup SMS login uses, so a
-number that can sign in is a number that can call. But caller ID is spoofable,
-which is why the token path exists and why the token wins whenever both are
-present. A number we don't recognise gets no account data at all: not a partial
-answer, not a hint. It can still be told what the app does, because that is a
-product manual and not anybody's data.
+*Inbound goes through Sarvam's known-callers list, because it has to.* The
+obvious design — resolve the number on the wire with
+`admin.auth().getUserByPhoneNumber()` — cannot be built on this platform.
+**Sarvam passes a tool only the body fields declared on that tool, and the
+caller's number is not among them under any name.** That is not a reading of the
+docs; it is what a live call logged:
+
+```
+voice: unidentified caller on upcoming_hearings — from=(none)
+phoneish=[none] keys=[days, assessee, session_token]
+```
+
+What identifies an inbound caller is the **on-start hook**: an API tool set to
+run *when the call starts*, which Sarvam fires once before the conversation
+begins, passing the caller's number from telephony metadata. The webhook
+resolves that number to an account and returns a `session_token` — the same
+variable, bound to the same body field, verified by the same signature as the
+"Call me" path. Two doors, one lock. See `identifyForCall()`.
+
+The token is minted per call and lives fifteen minutes, which is a call.
+
+**The console invariant that carries the security:** the hook's `caller_phone`
+body field must be bound to an **agent variable**, never to "let the agent
+decide". A model-filled field would mean anyone could say a number out loud and
+be handed that account's token — worse than the caller-ID spoofing we already
+accept. The webhook cannot tell the two bindings apart, so this is written down
+rather than enforced.
+
+An earlier version of this used Sarvam's **known-callers CSV**, and
+`scripts/known-callers-csv.mjs` still generates one. It worked, but it was a
+snapshot: someone who signed up this morning stayed a stranger until a human
+re-ran the script and re-uploaded the file, and every row was a long-lived
+bearer credential sitting in a spreadsheet. Keep it as a fallback if the hook
+ever stops firing; don't run it as routine.
+
+A number we don't recognise gets no account data at all: not a partial answer,
+not a hint. It can still be told what the app does, because that is a product
+manual and not anybody's data.
 
 **It is read-only.** Seven tools, all reads. Nothing adds, edits, deletes, sends
 or files. A misheard word must never become a changed hearing date, and the
@@ -193,6 +224,88 @@ shows the feature as coming, which is true.
 The card shows **Call me** as the primary action and the dial-in number
 alongside it, and — the useful part — warns anyone whose mobile isn't linked
 that neither path can work for them, **before** they try.
+
+---
+
+## Step 6 — The on-start hook, or the phone line knows nobody
+
+Skip this and every account question on an inbound call comes back "I can only
+look up records for a registered ProHippo account" — for callers who *are*
+registered. Sarvam does not pass the caller's number to a mid-call tool; this
+is what supplies it.
+
+**Build → Agents →** *the agent* **→ Tools → Add tool → API tool.**
+
+| Field | Value |
+| --- | --- |
+| Tool name | `identify_caller` |
+| When should this tool run? | **When the call starts** |
+| Method / URL | `POST` `https://asia-south1-prohippo2.cloudfunctions.net/sarvamVoiceWebhook/identify_caller` |
+| Auth | Bearer → `PROHIPPO_WEBHOOK_SECRET` |
+| Body | one field, `caller_phone`, bound via ⚙ → **Agent variable** → the telephony caller-number variable |
+
+Then map the reply back onto agent variables — **Save reply into variables**, or
+the `@` picker under *Send fields from the API response to the agent*:
+
+| Response field | Agent variable |
+| --- | --- |
+| `session_token` | `session_token` |
+| `caller_name` | `caller_name` |
+| `caller_firm` | `caller_firm` |
+| `caller_known` | `caller_known` |
+
+Press **Send** once before using the `@` picker. Until Sarvam has seen a
+response it has no field names to offer, and a hand-typed `@session_token` is
+four literal characters that carry nothing — which cost us a day of believing
+the tools were broken when they were answering perfectly into a void.
+
+Two things that will bite:
+
+- **`caller_phone` must be an agent variable, not "let the agent decide".** See
+  the security note above; nothing in the code can check this for you.
+- **`identify_caller` must stay on "When the call starts".** The console has
+  been seen to revert this to "During the conversation" after a save — re-open
+  the tool and confirm it stuck, because a hook that fires mid-conversation
+  identifies nobody.
+
+### If the hook cannot get the number — which is where we are
+
+It can't, today. Sarvam's SDK exposes the caller as `user_identifier` on the
+on-start tool context, but that is a property of a *self-hosted SDK tool*; a
+console-configured API tool has no way to bind a body field to it. Declaring an
+input variable of that name does not get it populated — we tested it, and the
+field arrives empty. Sarvam confirmed the gap.
+
+So identity is staged **ahead** of the call, through Sarvam's Cohorts API, and
+`functions/voiceKnownCallers.js` keeps it current:
+
+- **`syncVoiceKnownCallers`** runs nightly at 03:10 IST — outside the line's
+  07:00–23:00 window, so a list is never swapped mid-call. It rebuilds the
+  roster from every user with a verified mobile and uploads it as a cohort.
+- **`syncVoiceKnownCallersNow`** is the same job as an admin-only callable, for
+  when you have just onboarded someone and don't want to wait for tonight.
+
+Two things it does that are worth knowing about:
+
+- **It skips the upload when nothing has changed.** Sarvam creates a new cohort
+  per upload and documents no delete, so an unconditional nightly job would
+  leave a cohort a day behind it forever. The cohort's *name* carries the roster
+  fingerprint, so an unchanged roster is a no-op.
+- **…but not forever.** The name also carries a period counter that ticks every
+  `COHORT_REFRESH_DAYS` (7), because the tokens expire after
+  `COHORT_TOKEN_DAYS` (14) whether the roster moved or not. Without that, a
+  practice with a settled client list would stop being recognised on an ordinary
+  Tuesday with nothing failing anywhere.
+
+It needs `deploymentId` in `functions/voiceAgentConfig.js` — the **inbound
+deployment**, from its page URL (`.../deploy-v2/inbounds/{deployment_id}`), not
+the agent id.
+
+`scripts/known-callers-csv.mjs` still writes the same CSV by hand for **Deploy →
+Inbound calls →** *the deployment* **→ Add known callers**. Keep it for
+bootstrapping a new environment or for when the API is unavailable; it is not
+part of the routine any more. Its output is a credential — gitignored, and
+delete it after upload.
 
 ---
 

@@ -178,6 +178,104 @@ function maskPan(pan) {
 
 /* ---------------- matching a name said out loud ---------------- */
 
+/*
+ * A caller speaking Hindi gets transcribed in Devanagari, and one speaking
+ * Gujarati in Gujarati script — but the client register is typed in English.
+ * So "मोनिका" has to reach "Monika Naval Wadhawa", or the whole promise of
+ * answering in the caller's own language stops at the first client name.
+ *
+ * This was not hypothetical. On a live call the caller asked about मोनिका, the
+ * old normaliser stripped every non-Latin character, the query became the empty
+ * string, the tool answered "I couldn't find a client called मोनिका" — and the
+ * agent then announced a hearing date of its own invention.
+ *
+ * The two scripts share the Brahmic layout: Gujarati sits exactly 0x180 above
+ * Devanagari, codepoint for codepoint, so shifting it down means one table
+ * serves both.
+ */
+const GUJARATI_TO_DEVANAGARI_OFFSET = 0x180;
+
+const DEV_VOWELS = {
+  "अ": "a", "आ": "a", "इ": "i", "ई": "i", "उ": "u", "ऊ": "u", "ऋ": "ri",
+  "ए": "e", "ऐ": "ai", "ऑ": "o", "ओ": "o", "औ": "au", "ऍ": "e",
+};
+
+/* Matras replace a consonant's inherent 'a' rather than following it. */
+const DEV_MATRAS = {
+  "ा": "a", "ि": "i", "ी": "i", "ु": "u", "ू": "u", "ृ": "ri",
+  "े": "e", "ै": "ai", "ॉ": "o", "ो": "o", "ौ": "au", "ॅ": "e",
+};
+
+/* Single letters, not scholarly ITRANS: the target is how an Indian
+   practitioner actually spells the name in the app — "Wadhawa", not "vaaDhavaa".
+   Retroflex and dental collapse together for the same reason. */
+const DEV_CONSONANTS = {
+  "क": "k", "ख": "kh", "ग": "g", "घ": "gh", "ङ": "n",
+  "च": "ch", "छ": "chh", "ज": "j", "झ": "jh", "ञ": "n",
+  "ट": "t", "ठ": "th", "ड": "d", "ढ": "dh", "ण": "n",
+  "त": "t", "थ": "th", "द": "d", "ध": "dh", "न": "n",
+  "प": "p", "फ": "ph", "ब": "b", "भ": "bh", "म": "m",
+  "य": "y", "र": "r", "ल": "l", "व": "v", "ळ": "l",
+  "श": "sh", "ष": "sh", "स": "s", "ह": "h",
+  "क़": "k", "ख़": "kh", "ग़": "g", "ज़": "z", "ड़": "r", "ढ़": "rh", "फ़": "f",
+};
+
+const DEV_VIRAMA = "्";
+const DEV_MARKS = { "ं": "n", "ँ": "n", "ः": "h" };
+
+/*
+ * Devanagari (and, shifted, Gujarati) to Latin.
+ *
+ * Latin text passes through untouched, so this is safe to run over the stored
+ * register as well as over the caller's words — both sides have to be mapped
+ * the same way or they meet nowhere.
+ */
+function latinise(raw) {
+  const src = String(raw || "").replace(/[઀-૿]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - GUJARATI_TO_DEVANAGARI_OFFSET)
+  );
+
+  let out = "";
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    // A nukta binds to the letter before it; try the pair first.
+    if (next === "़" && DEV_CONSONANTS[ch + next]) {
+      out += DEV_CONSONANTS[ch + next];
+      i += 1;
+      continue;
+    }
+
+    const consonant = DEV_CONSONANTS[ch];
+    if (consonant) {
+      out += consonant;
+      if (DEV_MATRAS[next]) {
+        out += DEV_MATRAS[next];
+        i += 1;
+      } else if (next === DEV_VIRAMA) {
+        i += 1; // conjunct: the inherent vowel is explicitly killed
+      } else {
+        /* Hindi drops the word-final inherent 'a' — "शाह" is Shah, not Shaha.
+           Everywhere else it is pronounced, which is what turns मोनिका into
+           "monika" rather than "monik". */
+        const atWordEnd = !next || /[\s।॥]/.test(next);
+        if (!atWordEnd) out += "a";
+      }
+      continue;
+    }
+
+    if (DEV_VOWELS[ch]) { out += DEV_VOWELS[ch]; continue; }
+    if (DEV_MATRAS[ch]) { out += DEV_MATRAS[ch]; continue; }
+    if (DEV_MARKS[ch]) { out += DEV_MARKS[ch]; continue; }
+    if (ch === "ऽ" || ch === "़" || ch === DEV_VIRAMA) continue; // avagraha, stray nukta, stray virama
+    if (ch >= "०" && ch <= "९") { out += String.fromCharCode(ch.charCodeAt(0) - 0x0966 + 48); continue; }
+    if (ch === "।" || ch === "॥") { out += " "; continue; } // danda
+    out += ch;
+  }
+  return out;
+}
+
 /* Speech-to-text does not punctuate, does not capitalise reliably, and drops
    the honorifics and suffixes a client register is full of. Strip everything
    that a caller would not say, so "Shah Textiles Pvt. Ltd." and a transcribed
@@ -186,12 +284,34 @@ function maskPan(pan) {
    punctuation is stripped first, so "M/s" has become the two tokens "m s". */
 const NAME_NOISE = /\b(pvt|private|ltd|limited|llp|and|co|company|sons?|huf|trust|firm|the|shri|smt|mr|mrs|ms|dr|m\s+s)\b/g;
 
+/*
+ * The spelling of an Indian name in English is not settled — Wadhawa/Vadhava,
+ * Neeta/Nita, Falgun/Phalgun are the same name twice. Transliteration adds its
+ * own share of that, since no table can know which variant the practitioner
+ * typed. Fold the handful of substitutions that are genuinely interchangeable
+ * and stop there: every extra rule buys a few more matches and risks collapsing
+ * two different clients into one, which on this line is the worse error.
+ *
+ * Runs AFTER the noise strip — folding "llp" to "lp" first would hide it.
+ */
+const spellingFold = (s) =>
+  s
+    .replace(/w/g, "v")
+    .replace(/ee/g, "i")
+    .replace(/oo/g, "u")
+    .replace(/ph/g, "f")
+    .replace(/(.)\1+/g, "$1");
+
 function normaliseName(raw) {
-  return String(raw || "")
+  return latinise(raw)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(NAME_NOISE, " ")
     .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map(spellingFold)
+    .join(" ")
     .trim();
 }
 
@@ -329,6 +449,39 @@ function spokenList(items) {
  * paste). Keep the descriptions written for the model, not for us.
  */
 const TOOLS = [
+  /*
+   * THE ON-START HOOK. Not a tool the model chooses — Sarvam fires it once,
+   * before the conversation begins, and it is what makes an inbound call know
+   * who is on it.
+   *
+   * It replaces the known-callers CSV. That list worked, but it was a snapshot:
+   * a practitioner who signed up this morning was a stranger to the phone line
+   * until somebody re-ran a script and re-uploaded a file, and the tokens in it
+   * were long-lived credentials sitting in a spreadsheet. This resolves the
+   * caller in real time and mints a token that dies with the call.
+   *
+   * SECURITY, AND IT IS THE WHOLE DESIGN: `caller_phone` must be bound in the
+   * console to an AGENT VARIABLE carrying telephony metadata — never to "let
+   * the agent decide". A model-filled field would mean anyone could say a
+   * number out loud and be handed that account's token, which is worse than
+   * the caller-ID spoofing we already accept. The webhook cannot tell the two
+   * bindings apart, so this is a console invariant, written down here and in
+   * docs/VOICE_AGENT_SETUP.md because nothing in the code can enforce it.
+   */
+  {
+    name: "identify_caller",
+    description:
+      "Runs automatically when the call starts, before anything is said. Turns the caller's number into their ProHippo account and produces the session token every other tool needs. Never call this during the conversation, and never with a number the caller says out loud.",
+    parameters: {
+      type: "object",
+      properties: {
+        caller_phone: {
+          type: "string",
+          description: "The number the call came from, supplied by the telephony platform. Bound to an agent variable — never filled in from the conversation.",
+        },
+      },
+    },
+  },
   {
     name: "find_feature",
     description:
@@ -399,7 +552,48 @@ const TOOLS = [
     description: "The caller's own unticked to-dos. Use for 'what's on my list'.",
     parameters: { type: "object", properties: {} },
   },
+  {
+    name: "find_assessee",
+    description:
+      "Check whether someone is on the caller's client register, and how many clients they have. Use for 'is X my client', 'do I have anyone called X', 'is that name on my list', 'how many assessees do I have'. Always use this rather than answering from memory — you do not know who their clients are.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The name or PAN to look for, as the caller said it. Leave empty to just count the clients on the register." },
+      },
+    },
+  },
+  {
+    name: "reply_status",
+    description:
+      "Whether a reply or response has been filed against a client's notices, and the date the last one was submitted. Use for 'has the reply gone in', 'when did we file the reply', 'is the submission done for X', 'what is the status of the reply'.",
+    parameters: {
+      type: "object",
+      properties: {
+        assessee: { type: "string", description: "The client's name or PAN, as the caller said it." },
+        ay: { type: "string", description: "Optional assessment year, like 2021-22, when the caller names one." },
+      },
+      required: ["assessee"],
+    },
+  },
 ];
+
+/*
+ * The portal writes `submittedOn` as epoch milliseconds in a string; a notice
+ * recorded by hand may carry an ISO date instead. Reduce either to yyyy-mm-dd,
+ * or to null when it is neither — a reply whose date we cannot read is reported
+ * as "filed, date not recorded" rather than as a date we invented.
+ */
+function submittedDate(value) {
+  const s = String(value == null ? "" : value).trim();
+  if (!s) return null;
+  if (/^\d{10,}$/.test(s)) {
+    const d = new Date(Number(s));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  const iso = s.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : null;
+}
 
 const TOOL_NAMES = TOOLS.map((t) => t.name);
 const isKnownTool = (name) => TOOL_NAMES.includes(String(name || ""));
@@ -436,7 +630,20 @@ function buildSystemPrompt(caller = null) {
     "",
     "HOW YOU HELP",
     "1. Navigation — when they ask how to do something, tell them exactly where it is and the taps to get there. Call find_feature rather than guessing.",
-    "2. Their own records — hearings, notices, matters, invoices and to-dos, through the tools. Never state a date, amount or client detail that did not come back from a tool. If a tool returns nothing, say so plainly.",
+    "2. Their own records — hearings, notices, matters, invoices, replies and to-dos, through the tools. Never state a date, amount, client name or status that did not come back from a tool in this conversation. You have no memory of this practice and no knowledge of their clients: everything factual must come from a tool call you just made.",
+    /* The failure this exists to stop, seen on a live call: asked for a client's
+       next hearing date and whether a reply had been filed, the agent produced
+       confident, wrong answers instead of calling a tool. A practitioner who
+       acts on an invented hearing date misses a hearing. "I don't have that"
+       is always the better answer. */
+    "If a tool returns nothing, say so plainly. If no tool covers what they asked, say you cannot check that from this line and tell them where it is in the app. Never estimate, never reason it out, and never repeat a figure from earlier in the call as though it were fresh — call the tool again.",
+    /* A refusal is not a blank the model may fill. When identity was not
+       reaching the tools, every account tool answered "not a registered
+       account" — and the agent went on to give a hearing date and a reply
+       status anyway, because a refusal reads as an absence of data rather than
+       as an instruction to stop. Naming the refusal in the prompt is what turns
+       it back into a wall. */
+    "A tool that refuses is an answer, not a gap to fill. If it says the caller is not a registered account, or returns an error, repeat that and stop — do not then produce a date, a name, an amount, a status or a case number from any other source. Saying you could not check is always better than an answer that merely sounds right.",
     "3. Keep it short. This is a phone call: two or three sentences, then stop and let them speak. Offer the next step rather than reciting a list of ten items — read out three and ask if they want the rest.",
     "",
     "WHAT YOU NEVER DISCUSS",
@@ -662,11 +869,30 @@ function verifyWebhook({ headers = {}, rawBody = "", secret, nowMs = Date.now(),
 const TOKEN_TTL_MS = 15 * 60 * 1000;
 const b64url = (buf) => Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
+/*
+ * TRIM, ALWAYS, ON BOTH SIDES.
+ *
+ * `openssl rand -base64 32 | firebase functions:secrets:set` stores a trailing
+ * newline. Reading it back through `$( )` strips one. So a token minted by a
+ * script and a token verified inside the function were hashed with secrets
+ * differing by one invisible byte — and the only symptom was
+ *
+ *     voice: session token rejected — bad-signature
+ *
+ * which reads exactly like an attack. verifyWebhook() has trimmed since the
+ * same bug bit the Bearer header; these two were left raw, so known-caller
+ * identity failed on every inbound call while the Bearer auth beside it worked.
+ *
+ * A secret with meaningful leading or trailing whitespace is not a thing anyone
+ * wants; a secret that silently fails to match itself is.
+ */
+const hmacKey = (secret) => String(secret).trim();
+
 function mintSessionToken({ uid, secret, nowMs = Date.now(), ttlMs = TOKEN_TTL_MS }) {
   if (!uid || !secret) throw new Error("mintSessionToken needs a uid and a secret");
   const exp = nowMs + ttlMs;
   const body = `v1.${b64url(String(uid))}.${exp}`;
-  return `${body}.${b64url(crypto.createHmac("sha256", secret).update(body).digest())}`;
+  return `${body}.${b64url(crypto.createHmac("sha256", hmacKey(secret)).update(body).digest())}`;
 }
 
 function verifySessionToken({ token, secret, nowMs = Date.now() }) {
@@ -675,7 +901,7 @@ function verifySessionToken({ token, secret, nowMs = Date.now() }) {
   if (parts.length !== 4 || parts[0] !== "v1") return { ok: false, reason: "malformed" };
   const [, uidPart, expPart, sig] = parts;
   const body = `v1.${uidPart}.${expPart}`;
-  const expected = b64url(crypto.createHmac("sha256", secret).update(body).digest());
+  const expected = b64url(crypto.createHmac("sha256", hmacKey(secret)).update(body).digest());
   // Signature before expiry: an attacker must not learn that a forged token
   // would otherwise have been in date.
   if (!timingSafeEqual(sig, expected)) return { ok: false, reason: "bad-signature" };
@@ -703,39 +929,44 @@ const outboundUrl = ({ orgId, workspaceId }) =>
 /*
  * Build the trigger-call body.
  *
- * Two things travel with the call and both matter:
+ * HOW IDENTITY REACHES THE TOOL, given what the platform actually does.
  *
- *   • `agent_variables` — what the agent knows before it speaks, so it opens
- *     with the practitioner's name instead of asking who it is calling.
- *   • `webhook_config.metadata` — echoed back to us on the call's webhooks,
- *     which is how the signed token gets from here to the tool handler.
+ * Sarvam passes a tool ONLY the body fields declared on that tool — no caller
+ * number, no call metadata. That is why identifying an inbound caller by their
+ * number is impossible here: the number never arrives.
  *
- * The token goes in BOTH. Which of the two Sarvam surfaces to a tool call isn't
- * documented yet, and putting it in one place only would make the identity path
- * depend on a coin flip. It costs nothing to send twice, and the webhook accepts
- * it from either.
+ * So the token travels as an `agent_variables` entry, the agent carries it in
+ * context, and each account tool declares a `session_token` body field for the
+ * agent to pass through. It also goes in `webhook_config.metadata`, which costs
+ * nothing and covers the call-status webhooks.
  *
- * Note that outbound identity is safe even if neither arrives: ProHippo chose
- * the number, and it is the one that account has verified. The token is the
- * belt; the dialled number is the braces.
+ * THE OBVIOUS OBJECTION, ANSWERED: if the agent fills that field from context,
+ * can a caller simply say a token out loud and be believed? No. The token is an
+ * HMAC over the uid and an expiry, signed with a secret that never leaves the
+ * server. A caller can say any string they like; only one this server minted in
+ * the last fifteen minutes verifies. That is precisely why identity travels as
+ * a signed token here and not as a phone number — a spoken phone number would
+ * be believed, and a spoken token cannot be.
  */
 function buildOutboundCall({ config, toNumber, callerName, firmName, token, callId }) {
   const first = String(callerName || "").trim().split(/\s+/)[0] || "";
   return {
     app_config: {
       app_id: config.agentId,
-      ...(config.agentVersion ? { app_version: config.agentVersion } : {}),
+      // Unquoted in Sarvam's own snippet, so send a number and not "2".
+      ...(config.agentVersion ? { app_version: Number(config.agentVersion) } : {}),
       app_type: "agent",
       connection_config: {
         connection_id: config.connectionId,
         agent_phone_number: config.agentPhoneNumber,
       },
+      /* Every key here must be declared as an input variable on the agent, or
+         the platform has nowhere to put it. Four, matching the agent exactly. */
       agent_variables: {
         caller_name: callerName || "",
         caller_firm: firmName || "",
         caller_known: "yes",
         session_token: token,
-        call_id: callId,
       },
       app_overrides: {
         initial_bot_message: first
@@ -749,6 +980,46 @@ function buildOutboundCall({ config, toNumber, callerName, firmName, token, call
       metadata: { session_token: token, call_id: callId },
     },
   };
+}
+
+/* ---------------- what did the platform actually send? ---------------- */
+
+/*
+ * A description of a request body, safe to write to a log.
+ *
+ * The inbound identity path rests on one unverified assumption: that the
+ * telephony platform passes the caller's number through to the webhook. When a
+ * call comes in and we cannot identify anyone, this says what DID arrive, so
+ * the answer comes from evidence rather than from another guess at field names.
+ *
+ * It deliberately logs STRUCTURE, not content. Key paths, and any value shaped
+ * like a phone number with all but the last four digits masked. A tool call
+ * body can carry a client's name; a log line is read by support, and the two
+ * should not meet.
+ */
+function describePayload(value, prefix = "", depth = 0, out = null) {
+  const acc = out || { keys: [], phoneish: [] };
+  if (depth > 5 || acc.keys.length > 60) return acc;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [k, v] of Object.entries(value)) {
+      const path = prefix ? `${prefix}.${k}` : k;
+      if (v && typeof v === "object") {
+        describePayload(v, path, depth + 1, acc);
+      } else {
+        acc.keys.push(path);
+        // 8-15 digits, optionally +-prefixed and punctuated: a phone number in
+        // any of the shapes a carrier might send one.
+        const s = String(v == null ? "" : v);
+        if (/^\+?[\d\s()-]{8,20}$/.test(s.trim()) && s.replace(/\D/g, "").length >= 8) {
+          acc.phoneish.push(`${path}=${maskPhone(s.replace(/[^\d+]/g, ""))}`);
+        }
+      }
+    }
+  } else if (Array.isArray(value)) {
+    // One element is enough to learn the shape.
+    if (value.length) describePayload(value[0], `${prefix}[0]`, depth + 1, acc);
+  }
+  return acc;
 }
 
 /* ---------------- reading Sarvam's request ---------------- */
@@ -847,11 +1118,20 @@ function parseRequest(body, pathname = "") {
 
   /* `user_config.user_phone_number` is the platform's own name for the person
      on the other end — it is what you supply when triggering an outbound call,
-     so it is the likeliest name for the caller on an inbound one too. */
+     so it is the likeliest name for the caller on an inbound one too.
+
+     `user_identifier` is the name Sarvam's own SDK gives it: the on-start tool
+     context exposes get_user_identifier(), which on an inbound telephony call
+     returns the caller's number as bare digits ("919876543210"). It is not
+     injected into a dashboard-configured tool's body automatically — that is
+     the documented gap — but if a body field is ever bound to it, or the
+     platform starts sending it, this reads it without a code change. */
   const from = pick(
     b,
     "from", "from_number", "fromNumber", "caller", "caller_id", "callerId",
     "customer_number", "user_config.user_phone_number", "user_phone_number",
+    "user_identifier", "userIdentifier", "context.user_identifier",
+    "metadata.user_identifier", "call.user_identifier",
     "call.from", "call.from_number", "metadata.from",
     "data.from", "data.caller_number", "session.from"
   );
@@ -927,6 +1207,7 @@ module.exports = {
   spokenDate,
   spokenAmount,
   spokenList,
+  submittedDate,
   TOOLS,
   TOOL_NAMES,
   isKnownTool,
@@ -943,6 +1224,7 @@ module.exports = {
   outboundUrl,
   buildOutboundCall,
   parseRequest,
+  describePayload,
   toolResponse,
   findFeature,
   RESTRICTED_REPLY,

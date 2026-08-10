@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ProHippo Sync",
-  "version": "0.45.0",
+  "version": "0.46.0",
   "description": "Logs into the Income-tax e-filing portal for the selected assessee and (later) syncs e-Proceedings into ProHippo.",
   "permissions": ["tabs", "scripting", "storage"],
   "host_permissions": [

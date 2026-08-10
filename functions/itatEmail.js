@@ -40,8 +40,13 @@ const crypto = require("node:crypto");
 const {
   parseItatEmail, originalSenderOf, forwardedByOf, canonicalAppealNo,
   messageKey, matterIdFor, hearingIdFor, MAIL_DOMAIN, fromJson, fromForm,
-  normaliseAddress, addressKey, isEmailAddress, emailAddressesIn,
+  normaliseAddress, addressKey, isEmailAddress, emailAddressesIn, statusFromPan,
 } = require("./itatEmailParse");
+
+/* The avatar palette the app assigns round-robin as assessees are added, kept
+   in step with nextColor() in src/store.jsx. An assessee opened from an email
+   should be indistinguishable from one typed in by hand. */
+const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
 
 // Counters are bumped atomically: two emails landing in the same second must
 // not read the same value and each write it back plus one.
@@ -426,17 +431,74 @@ function build({ PRIMARY_REGION, db }) {
     const mail = snap.data();
     if (mail.status === "applied") return { already: true, ...(mail.applied || {}) };
 
-    const chosenId = clean(assesseeId) || clean(mail.assesseeId);
-    if (!chosenId) throw new HttpsError("failed-precondition", "Choose which assessee this belongs to first.");
-    const aSnap = await db.doc(`users/${uid}/assessees/${chosenId}`).get();
-    if (!aSnap.exists) throw new HttpsError("not-found", "That assessee is no longer on file.");
-    const assessee = aSnap.data();
-
     const f = mail.parsed || {};
+    const pan = clean(f.pan).toUpperCase();
+
+    /* Which client this is for.
+     *
+     * The practitioner's choice wins, then the PAN match the webhook already
+     * made. Failing both, open the file from the email itself — because the PAN
+     * is an exact key, not a resemblance. The earlier refusal to create anything
+     * here was aimed at matching by NAME, where a near-miss silently forks a
+     * client's records in two; a PAN either is on file or it is not.
+     *
+     * The lookup runs again rather than trusting what the webhook recorded: an
+     * assessee added by hand in the minutes between the email arriving and
+     * somebody pressing Confirm must be found, not duplicated. */
+    let chosenId = clean(assesseeId) || clean(mail.assesseeId);
+    let assessee = null;
+
+    if (chosenId) {
+      const aSnap = await db.doc(`users/${uid}/assessees/${chosenId}`).get();
+      if (!aSnap.exists) throw new HttpsError("not-found", "That assessee is no longer on file.");
+      assessee = aSnap.data();
+    } else if (pan) {
+      const byPan = await db.collection(`users/${uid}/assessees`).where("pan", "==", pan).limit(1).get();
+      if (!byPan.empty) {
+        chosenId = byPan.docs[0].id;
+        assessee = byPan.docs[0].data();
+      }
+    }
+
+    let createdAssessee = false;
+    if (!chosenId) {
+      const name = clean(f.appellant);
+      if (!pan || !name) {
+        throw new HttpsError("failed-precondition", "Choose which assessee this belongs to first.");
+      }
+      /* Colour by position, the same round-robin the Add assessee form uses, so
+         a file opened from an email does not stand out from one typed in. */
+      const count = (await db.collection(`users/${uid}/assessees`).count().get()).data().count || 0;
+      assessee = {
+        name,
+        pan,
+        // From the fourth character of the PAN — a rule of the Act, so a trust
+        // is filed as a trust rather than defaulting to Individual.
+        status: statusFromPan(pan),
+        group: "",
+        mobile: "",
+        email: "",
+        staff: "",
+        address: clean(f.appellantAddress),
+        dob: "",
+        jurisdiction: null,
+        color: AVATAR_COLORS[count % AVATAR_COLORS.length],
+        createdAt: nowISO(),
+        source: "itat-email",
+      };
+      const created = await db.collection(`users/${uid}/assessees`).add(assessee);
+      chosenId = created.id;
+      createdAssessee = true;
+    } else if (clean(f.appellantAddress) && !clean(assessee.address)) {
+      /* Fill a blank, never overwrite. What a practitioner typed is theirs; the
+         Tribunal's copy is only better than nothing. */
+      await db.doc(`users/${uid}/assessees/${chosenId}`).set({ address: clean(f.appellantAddress) }, { merge: true });
+      assessee = { ...assessee, address: clean(f.appellantAddress) };
+    }
+
     const appealNo = clean(f.appealNo);
     if (!appealNo) throw new HttpsError("failed-precondition", "No appeal number was found in this email.");
 
-    const pan = clean(assessee.pan).toUpperCase();
     const ay = clean(f.ay);
     const applied = {};
     const writes = [];
@@ -512,10 +574,11 @@ function build({ PRIMARY_REGION, db }) {
       assesseeId: chosenId,
       assesseeName: assessee.name || "",
       applied,
+      createdAssessee,
     }, { merge: true }));
 
     await Promise.all(writes);
-    return applied;
+    return { ...applied, assesseeId: chosenId, assesseeName: assessee.name || "", createdAssessee };
   });
 
   // Not every message needs to become something: a duplicate a client forwarded

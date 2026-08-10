@@ -23,6 +23,7 @@ const {
   classify, parseItatEmail, originalSenderOf, forwardedByOf, messageKey,
   matterIdFor, hearingIdFor, fromJson, fromForm,
   emailAddressesIn, addressKey, normaliseAddress, isEmailAddress,
+  tableRows, partiesOf, statusFromPan,
 } = require("../functions/itatEmailParse.js");
 
 const ALIAS = "a1b2c3d4e5f60718@prohippo.info";
@@ -198,6 +199,68 @@ test("the notice of hearing is read", () => {
   assert.equal(fields.caseType, "DBC");
   assert.match(fields.venue, /Abhinav Arcade/);
   assert.equal(fields.lastFixedOn, "", "a first hearing has no earlier date, and must not invent one");
+});
+
+/* ---------------- who the appeal belongs to ----------------
+ *
+ * The name, the address and the PAN are what let the client's file be opened
+ * from the email instead of typed, so they are pinned as hard as the date is.
+ * The trap throughout is the second column: the respondent is the Department,
+ * and filing an appeal under the Assessing Officer's name would be worse than
+ * reading no name at all. */
+
+test("a notice is read as a table, not as a line of run-together text", () => {
+  const rows = tableRows("<table><tr><td>A</td><td>B</td></tr><tr><th>C</th></tr></table>");
+  assert.deepEqual(rows, [["A", "B"], ["C"]]);
+  assert.deepEqual(tableRows(""), [], "an email with no HTML part is no rows, not a crash");
+});
+
+test("the appellant is read from the column the word Appellant labels", () => {
+  const { fields } = parseItatEmail(HEARING);
+  assert.equal(fields.appellant, "JAPAN RAJNIKANT GANDHI");
+  assert.equal(fields.appellantAddress, "", "this notice gives no address, and one is not invented");
+  assert.ok(!/Ward 1/i.test(fields.appellant), "the respondent is the Department, never the client");
+});
+
+test("an address written under the name comes through as one line", () => {
+  const withAddress = {
+    ...HEARING,
+    html: HEARING.html.replace(
+      "<tr><td>JAPAN RAJNIKANT GANDHI</td>",
+      "<tr><td>SANJAYKUMAR DEVCHANDBHAI PATEL<br>401, AVDHESH HOUSE, OPP. GURUDWARA<br>S. G. HIGH WAY, Ahmedabad, Gujarat, 380054</td>"
+    ),
+  };
+  const { fields } = parseItatEmail(withAddress);
+  assert.equal(fields.appellant, "SANJAYKUMAR DEVCHANDBHAI PATEL");
+  assert.equal(
+    fields.appellantAddress,
+    "401, AVDHESH HOUSE, OPP. GURUDWARA, S. G. HIGH WAY, Ahmedabad, Gujarat, 380054"
+  );
+});
+
+test("the appeal's own particulars are not mistaken for a party", () => {
+  // The row above the label carries the appeal number and PAN when the party
+  // block is short; opening a client's file named "In Appeal No. …" is the
+  // failure this guards.
+  assert.deepEqual(partiesOf("<table><tr><td>In Appeal No. ITA 1/AHD/2026</td></tr><tr><td>Appellant</td></tr></table>"), {});
+  assert.deepEqual(partiesOf("<table><tr><td>Nobody here</td></tr></table>"), {}, "no label, no party");
+  assert.deepEqual(partiesOf(""), {});
+});
+
+test("what a PAN says the assessee is", () => {
+  // The fourth character, by the rule in the Act — so a trust is filed as a
+  // trust rather than defaulting to Individual and being quietly wrong.
+  assert.equal(statusFromPan("BLGPG1814C"), "Individual");
+  assert.equal(statusFromPan("aawcm8125c"), "Company", "lower case is the same PAN");
+  assert.equal(statusFromPan("AAAHM1234F"), "HUF");
+  assert.equal(statusFromPan("AAAFM1234F"), "Firm");
+  assert.equal(statusFromPan("AAATM1234F"), "Trust");
+  assert.equal(statusFromPan("AAAAM1234F"), "AOP/BOI");
+  // Blank, not a plausible wrong answer, for the letters the rule does not
+  // cover and for anything that is not a PAN — the same as typing one in by
+  // hand does (entityFromPan in src/AssesseeModal.jsx).
+  assert.equal(statusFromPan("AAAGM1234F"), "", "a government PAN is not an individual");
+  assert.equal(statusFromPan(""), "", "an unreadable PAN is left blank rather than throwing");
 });
 
 test("the hearing date survives a forward that keeps only the subject", () => {

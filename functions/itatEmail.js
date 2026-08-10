@@ -40,6 +40,7 @@ const crypto = require("node:crypto");
 const {
   parseItatEmail, originalSenderOf, forwardedByOf, canonicalAppealNo,
   messageKey, matterIdFor, hearingIdFor, MAIL_DOMAIN, fromJson, fromForm,
+  normaliseAddress, addressKey, isEmailAddress, emailAddressesIn,
 } = require("./itatEmailParse");
 
 // Counters are bumped atomically: two emails landing in the same second must
@@ -122,7 +123,7 @@ function build({ PRIMARY_REGION, db }) {
    * once. */
   const KEEP = { region: PRIMARY_REGION, maxInstances: 3 };
   const integrationRef = (uid) => db.doc(`users/${uid}/integrations/itatEmail`);
-  const aliasRef = (token) => db.doc(`inboundAliases/${token}`);
+  const aliasRef = (address) => db.doc(`inboundAliases/${addressKey(address)}`);
   const nowISO = () => new Date().toISOString();
 
   const requireUid = (request) => {
@@ -137,31 +138,51 @@ function build({ PRIMARY_REGION, db }) {
      a route in even before the endpoint's own shared secret. */
   const mintToken = () => crypto.randomBytes(8).toString("hex");
 
+  /* Register an address as this practice's, and stand down the one it replaces.
+     Registering is what makes mail to it findable at all — the webhook looks the
+     recipient up here, so an address nobody claimed simply does not resolve. */
+  async function claimAddress(uid, address, extra = {}) {
+    const clean_ = normaliseAddress(address);
+    const snap = await aliasRef(clean_).get();
+    if (snap.exists && snap.data().uid !== uid) {
+      throw new HttpsError("already-exists", "Another ProHippo practice is already receiving on that address.");
+    }
+    const current = await integrationRef(uid).get();
+    const previous = normaliseAddress(current.exists ? current.data().address : "");
+    const writes = [
+      aliasRef(clean_).set({ uid, address: clean_, createdAt: nowISO() }),
+      integrationRef(uid).set({ address: clean_, ...extra }, { merge: true }),
+    ];
+    // Only after the new one is claimed, and never the same document twice.
+    if (previous && previous !== clean_) writes.push(aliasRef(previous).delete().catch(() => {}));
+    await Promise.all(writes);
+    return clean_;
+  }
+
   async function ensureAddress(uid) {
     const snap = await integrationRef(uid).get();
-    if (snap.exists && snap.data().token) return snap.data();
+    if (snap.exists && snap.data().address) return snap.data();
 
-    let token = "";
-    for (let i = 0; i < 5 && !token; i++) {
-      const candidate = mintToken();
-      if (!(await aliasRef(candidate).get()).exists) token = candidate;
+    /* Mint one on ProHippo's own mail domain. This is the address a practice
+       gets if its provider lets it receive on a domain we control — and the one
+       it replaces with useItatEmailAddress if the provider does not. */
+    let address = "";
+    for (let i = 0; i < 5 && !address; i++) {
+      const candidate = `${mintToken()}@${MAIL_DOMAIN}`;
+      if (!(await aliasRef(candidate).get()).exists) address = candidate;
     }
-    if (!token) throw new HttpsError("internal", "Could not allocate an address. Try again.");
+    if (!address) throw new HttpsError("internal", "Could not allocate an address. Try again.");
 
-    const record = {
-      token,
-      address: `${token}@${MAIL_DOMAIN}`,
+    await integrationRef(uid).set({
       createdAt: nowISO(),
       lastReceivedAt: null,
       receivedCount: 0,
       droppedCount: 0,
       pendingCode: null,
-    };
-    await Promise.all([
-      aliasRef(token).set({ uid, createdAt: record.createdAt }),
-      integrationRef(uid).set(record, { merge: true }),
-    ]);
-    return record;
+      provided: false,
+    }, { merge: true });
+    await claimAddress(uid, address, { provided: false });
+    return (await integrationRef(uid).get()).data();
   }
 
   // The address, minting it on first ask. Idempotent, so the Settings screen can
@@ -178,12 +199,38 @@ function build({ PRIMARY_REGION, db }) {
      address has to be repointed, which the caller is warned about in the UI. */
   const resetItatEmailAddress = onCall(KEEP, async (request) => {
     const uid = requireUid(request);
-    const snap = await integrationRef(uid).get();
-    const old = snap.exists ? snap.data().token : "";
-    if (old) await aliasRef(old).delete().catch(() => {});
-    await integrationRef(uid).set({ token: null, address: null }, { merge: true });
-    const record = await ensureAddress(uid);
-    return { address: record.address };
+    let address = "";
+    for (let i = 0; i < 5 && !address; i++) {
+      const candidate = `${mintToken()}@${MAIL_DOMAIN}`;
+      if (!(await aliasRef(candidate).get()).exists) address = candidate;
+    }
+    if (!address) throw new HttpsError("internal", "Could not allocate an address. Try again.");
+    await claimAddress(uid, address, { provided: false });
+    return { address };
+  });
+
+  /* Receive on an address the practice's own mail provider issued.
+   *
+   * Whether a practice can have an address on prohippo.info at all is its
+   * provider's decision, not ours: CloudMailin's free tier issues one on
+   * cloudmailin.net and puts custom domains behind a paid plan, and paying a
+   * monthly fee to change the words after the @ is a poor trade for a mailbox
+   * that receives a few dozen messages a month. So the practice tells us what
+   * to expect instead, and everything downstream is unchanged — the webhook
+   * looks up whatever address the mail was addressed to, and never cared which
+   * domain it was on.
+   *
+   * The address is claimed, not merely recorded: a second practice cannot point
+   * itself at an address already receiving for someone else, which is the whole
+   * of the multi-tenancy guarantee here. */
+  const useItatEmailAddress = onCall(KEEP, async (request) => {
+    const uid = requireUid(request);
+    const address = clean((request.data || {}).address);
+    if (!isEmailAddress(address)) {
+      throw new HttpsError("invalid-argument", "That does not look like an email address.");
+    }
+    const claimed = await claimAddress(uid, address, { provided: true });
+    return { address: claimed };
   });
 
   /* Where the mail arrives.
@@ -222,17 +269,17 @@ function build({ PRIMARY_REGION, db }) {
         return;
       }
 
-      // Which practice this belongs to, from the alias in the recipient. Every
-      // address on the envelope is tried: a forward can put ours in Cc.
-      const tokens = String(`${msg.to} ${req.query.to || ""}`)
-        .toLowerCase()
-        .match(new RegExp(`([a-z0-9]+)@${MAIL_DOMAIN.replace(/\./g, "\\.")}`, "g")) || [];
-      let uid = "";
-      for (const addr of tokens) {
-        const token = addr.split("@")[0];
-        const snap = await aliasRef(token).get();
-        if (snap.exists) { uid = snap.data().uid; break; }
-      }
+      /* Which practice this belongs to. Every address the provider offered is
+         tried — envelope, To, Cc, Delivered-To — because which one carries the
+         practice's address depends on how the mail was forwarded, and a Gmail
+         filter forward leaves To: pointing at the practitioner's own mailbox.
+         Most of these belong to nobody we know and simply do not resolve.
+         Capped, because a mailing list can carry a hundred addresses and each
+         one is a read. */
+      const candidates = emailAddressesIn(`${msg.to} ${req.query.to || ""}`).slice(0, 10);
+      const aliasSnaps = candidates.length ? await db.getAll(...candidates.map(aliasRef)) : [];
+      const hit = aliasSnaps.find((snap) => snap.exists);
+      const uid = hit ? hit.data().uid : "";
       if (!uid) { console.warn("itatInboundEmail: no alias matched"); res.status(200).send("no-alias"); return; }
 
       msg.originalFrom = originalSenderOf(msg);
@@ -450,7 +497,7 @@ function build({ PRIMARY_REGION, db }) {
     return { ok: true };
   });
 
-  return { getItatEmailAddress, resetItatEmailAddress, itatInboundEmail, applyItatMail, dismissItatMail };
+  return { getItatEmailAddress, resetItatEmailAddress, useItatEmailAddress, itatInboundEmail, applyItatMail, dismissItatMail };
 }
 
 module.exports = { build };

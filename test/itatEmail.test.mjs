@@ -22,6 +22,7 @@ const {
   plainTextOf, findPan, findAy, senderDomain, isTribunalSender, gmailConfirmation,
   classify, parseItatEmail, originalSenderOf, forwardedByOf, messageKey,
   matterIdFor, hearingIdFor, fromJson, fromForm,
+  emailAddressesIn, addressKey, normaliseAddress, isEmailAddress,
 } = require("../functions/itatEmailParse.js");
 
 const ALIAS = "a1b2c3d4e5f60718@prohippo.info";
@@ -370,4 +371,45 @@ test("a confirmation is never mistaken for an appeal", () => {
     html: "",
   });
   assert.equal(kind, "gmail-confirmation");
+});
+
+/* ---------------- the address a practice receives on ----------------
+ *
+ * ProHippo mints one on its own domain, but cannot insist on it: whether a
+ * practice can have an address there at all is a decision its mail provider
+ * makes, and CloudMailin's free tier issues one on cloudmailin.net. So the
+ * lookup is keyed by the address rather than by a token parsed out of one. */
+
+test("an address is found wherever in the recipients it appears", () => {
+  const provider = "f6012235e360a493f857@cloudmailin.net";
+  // Envelope first, header To: second — the order a filter forward produces.
+  const blob = `${provider} chavdagreen@gmail.com no-reply@itat.nic.in`;
+  assert.deepEqual(emailAddressesIn(blob), [provider, "chavdagreen@gmail.com", "no-reply@itat.nic.in"]);
+  assert.ok(emailAddressesIn(blob).includes(provider));
+});
+
+test("the same address in any casing is the same address", () => {
+  assert.equal(addressKey("F6012235E360A493F857@CloudMailin.net"), addressKey("f6012235e360a493f857@cloudmailin.net"));
+  assert.notEqual(addressKey("a@cloudmailin.net"), addressKey("b@cloudmailin.net"));
+  assert.equal(normaliseAddress("  A@B.com "), "a@b.com");
+});
+
+test("a recipients blob with no addresses yields none, and does not throw", () => {
+  assert.deepEqual(emailAddressesIn(""), []);
+  assert.deepEqual(emailAddressesIn(undefined), []);
+  assert.deepEqual(emailAddressesIn("no addresses here"), []);
+});
+
+test("only something that looks like an address can be claimed", () => {
+  assert.ok(isEmailAddress("f6012235e360a493f857@cloudmailin.net"));
+  assert.ok(isEmailAddress("db321d575601cc66@prohippo.info"));
+  assert.ok(!isEmailAddress("not an address"));
+  assert.ok(!isEmailAddress("missing@tld"));
+  assert.ok(!isEmailAddress(""));
+});
+
+test("one address is listed once however many fields carried it", () => {
+  const a = "x@cloudmailin.net";
+  assert.deepEqual(emailAddressesIn(`${a} ${a.toUpperCase()} ${a}`), [a],
+    "duplicates across envelope, To and Delivered-To must not each cost a lookup");
 });

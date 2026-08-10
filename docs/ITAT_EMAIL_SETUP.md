@@ -85,20 +85,50 @@ The envelope is what matters: a Gmail filter forward leaves `To:` pointing at
 the practitioner's own mailbox, and `envelope.to` is the only field carrying the
 practice address.
 
+**Only the MX record is needed.** CloudMailin's DNS page offers five records,
+and four of them exist so you can *send* through CloudMailin: a `mta.` CNAME, a
+`._domainkey` DKIM key, a `_dmarc` policy, and an SPF `include:`. ProHippo sends
+nothing through this domain — the app's own mail goes out through Resend on
+`prohippo.in` — so those four can be skipped entirely, and skipping the 2048-bit
+DKIM key avoids the registrar TXT-length fight it usually starts. CloudMailin's
+own page labels the MX row "Inbound", which is the one to trust.
+
+**The local part must match the address ProHippo minted.** Unless the account is
+set up to accept every address at the domain, CloudMailin routes one named
+address; ProHippo generates its own 16-character token and expects mail at that.
+So deploy first, read the address off **Settings → Integrations → ITAT email**,
+and give CloudMailin that exact local part — or turn on a catch-all, which is
+what a multi-practice deployment needs anyway.
+
 ### Setting the MX record at BigRock
 
 `prohippo.info` is registered at BigRock and still on BigRock's own nameservers
 (`dns1.bigrock.in` … `dns4.bigrock.in`), so the record is added in their panel —
 there is no need to move nameservers anywhere.
 
-**Orders → prohippo.info → DNS Records → MX Records → Add MX Record.** Leave the
-host name blank (or `@`) so it applies to the domain itself, and use the
-destination and priority your provider gives you. Delete any MX record BigRock
-created by default, or mail will be delivered to whichever has the lower
-priority number and the webhook will never fire.
+**Orders → prohippo.info → DNS Records → MX.** Open that tab and **delete
+anything already there first.** A registrar's default MX record, or one left by
+a bundled mailbox product, wins if its priority number is lower, and mail then
+goes to a mailbox nobody reads while the webhook never fires. For the same
+reason, do not activate the bundled Titan Email trial on this domain — it sets
+its own MX records.
 
-DNS takes anything from a few minutes to a few hours to take effect. Check it
-with `dig MX prohippo.info +short` before assuming something is broken.
+Then add one record per host CloudMailin lists, leaving the host name blank (or
+`@`) so it applies to the domain itself:
+
+| Host name | Value | Priority |
+| --- | --- | --- |
+| *(blank)* | `client1.cloudmailin.net` | 10 |
+| *(blank)* | `client2.cloudmailin.net` | 20 |
+| *(blank)* | `client3.cloudmailin.net` | 30 |
+
+Three records, not one: the second and third are the fallbacks a sending server
+tries when the first does not answer, which is why they take ascending
+priorities rather than the equal 10s the panel displays. Pick the shortest TTL
+offered while setting up — a wrong record cached for a day is a slow afternoon.
+
+BigRock says 4–6 hours; it is usually much faster. Check with
+`dig MX prohippo.info +short` before assuming something is broken.
 
 ## Step 3 — The secret, and deploy
 

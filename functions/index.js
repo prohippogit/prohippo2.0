@@ -2873,6 +2873,13 @@ Object.assign(exports, require("./costs").build({ REGIONS, db }));
    prompt. Setup: docs/VOICE_AGENT_SETUP.md */
 Object.assign(exports, require("./voiceAgent").build({ REGIONS, PRIMARY_REGION, db, recordSpend }));
 
+/* Keeps Sarvam's known-callers list in step with who has signed up. It exists
+   because an inbound call cannot be identified from the request — the platform
+   never sends the caller's number to a tool — so identity has to be staged
+   ahead of the call. Nightly, and skipped entirely when the roster hasn't
+   moved. See functions/voiceKnownCallers.js. */
+Object.assign(exports, require("./voiceKnownCallers").build({ PRIMARY_REGION, db }));
+
 /* ---------- Computation of Income ----------
    Turns the HTML the browser builds from a filed ITR JSON into a PDF, using
    headless Chromium so the house design renders exactly as designed. The

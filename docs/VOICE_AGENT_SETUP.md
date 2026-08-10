@@ -268,14 +268,44 @@ Two things that will bite:
   the tool and confirm it stuck, because a hook that fires mid-conversation
   identifies nobody.
 
-### The fallback
+### If the hook cannot get the number — which is where we are
 
-`scripts/known-callers-csv.mjs` writes a `phone_number,caller_name,caller_firm,
-caller_known,session_token` CSV for **Deploy → Inbound calls →** *the
-deployment* **→ Add known callers**, which Sarvam maps onto agent variables by
-column name. It is a snapshot — new sign-ups are strangers until someone re-runs
-it, and each row is a long-lived bearer credential (gitignored; delete after
-upload). Use it only if the hook stops firing.
+It can't, today. Sarvam's SDK exposes the caller as `user_identifier` on the
+on-start tool context, but that is a property of a *self-hosted SDK tool*; a
+console-configured API tool has no way to bind a body field to it. Declaring an
+input variable of that name does not get it populated — we tested it, and the
+field arrives empty. Sarvam confirmed the gap.
+
+So identity is staged **ahead** of the call, through Sarvam's Cohorts API, and
+`functions/voiceKnownCallers.js` keeps it current:
+
+- **`syncVoiceKnownCallers`** runs nightly at 03:10 IST — outside the line's
+  07:00–23:00 window, so a list is never swapped mid-call. It rebuilds the
+  roster from every user with a verified mobile and uploads it as a cohort.
+- **`syncVoiceKnownCallersNow`** is the same job as an admin-only callable, for
+  when you have just onboarded someone and don't want to wait for tonight.
+
+Two things it does that are worth knowing about:
+
+- **It skips the upload when nothing has changed.** Sarvam creates a new cohort
+  per upload and documents no delete, so an unconditional nightly job would
+  leave a cohort a day behind it forever. The cohort's *name* carries the roster
+  fingerprint, so an unchanged roster is a no-op.
+- **…but not forever.** The name also carries a period counter that ticks every
+  `COHORT_REFRESH_DAYS` (7), because the tokens expire after
+  `COHORT_TOKEN_DAYS` (14) whether the roster moved or not. Without that, a
+  practice with a settled client list would stop being recognised on an ordinary
+  Tuesday with nothing failing anywhere.
+
+It needs `deploymentId` in `functions/voiceAgentConfig.js` — the **inbound
+deployment**, from its page URL (`.../deploy-v2/inbounds/{deployment_id}`), not
+the agent id.
+
+`scripts/known-callers-csv.mjs` still writes the same CSV by hand for **Deploy →
+Inbound calls →** *the deployment* **→ Add known callers**. Keep it for
+bootstrapping a new environment or for when the API is unavailable; it is not
+part of the routine any more. Its output is a credential — gitignored, and
+delete it after upload.
 
 ---
 

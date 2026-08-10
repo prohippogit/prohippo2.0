@@ -2847,6 +2847,16 @@ Object.assign(
   })
 );
 
+/* ---------- ITAT email ingest ----------
+   One inbound address per practice; the Tribunal's registration and hearing
+   emails, forwarded to it, become matters and hearings. Its own module for the
+   same reason as the calendar: a self-contained feature with an endpoint the
+   outside world posts to, and this file is long enough. The parsing half is
+   split again into itatEmailParse.js, which stays free of firebase imports so
+   the repository's own `npm test` can run it against the real emails.
+   Setup: docs/ITAT_EMAIL_SETUP.md */
+Object.assign(exports, require("./itatEmail").build({ REGIONS, PRIMARY_REGION, db }));
+
 /* ---------- Admin console + referral/growth system ----------
    Two modules sharing functions/adminCore.js. They own the top-level
    `accounts`, `referralCodes`, `referralRedemptions` and `adminAudit`

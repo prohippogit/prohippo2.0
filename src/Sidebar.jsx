@@ -3,6 +3,7 @@ import { useData } from './store';
 import { useAuth } from './auth';
 import { appealableOrders } from './appeals';
 import { useAdminClaim } from './admin/useAdminClaim';
+import { useItatMail } from './itatEmail';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -29,9 +30,15 @@ export default function Sidebar({ active, onNav, open }) {
      only decides whether one link is drawn. A claim granted in the last hour
      shows up on the next sign-in, and /admin re-checks properly on arrival. */
   const { isAdmin } = useAdminClaim({ force: false });
+  /* The Tribunal's emails wait on the Hearings page, so the count that says
+     "something arrived" belongs on that link. Without it the queue is only
+     found by someone who already went looking, which defeats the point of
+     receiving the mail at all. */
+  const { pending: itatPending } = useItatMail();
   const badges = {
     assessees: data.assessees.length || null,
     appeals: appealableOrders(data).length || null,
+    hearings: itatPending.length || null,
   };
 
   return (

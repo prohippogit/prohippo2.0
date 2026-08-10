@@ -49,8 +49,15 @@ service cloud.firestore {
     }
 
     // Everything else is denied by default. That includes otpChallenges,
-    // deviceSessions, portalCreds, googleTokens, referralVisits, rateLimits
-    // and voiceRateLimits, which only Admin-SDK functions ever touch.
+    // deviceSessions, portalCreds, googleTokens, inboundAliases, referralVisits,
+    // rateLimits and voiceRateLimits, which only Admin-SDK functions ever touch.
+    //
+    // inboundAliases maps an ITAT email address back to the practice that owns
+    // it. It is top-level for the same reason googleTokens is: the webhook has
+    // no signed-in user to scope the lookup by, and a client able to read the
+    // collection could learn which addresses exist. The practice's own copy of
+    // its address lives under users/{uid}/integrations/itatEmail, which the rule
+    // above already covers.
     //
     // The voice agent needs no rule of its own: it reads users/{uid}/… under
     // the practitioner's own subtree above, and writes its call log to

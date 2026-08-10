@@ -4,6 +4,7 @@ import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, Emp
 import { useData, downloadCSV, toISO, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
+import ItatInbox from './ItatInbox';
 
 const AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
 const MODES = ["Physical", "Video Conference", "e-Proceeding"];
@@ -476,6 +477,12 @@ export default function Hearings({ onOpenHearing, onNav }) {
           <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>Add hearing</button>
         </div>
       </div>
+
+      {/* Above the calendar rather than beside it: an email waiting to be
+          confirmed is a hearing that is NOT yet on any of the views below, and
+          the whole point is that it does not sit there unnoticed. Renders
+          nothing at all when the queue is empty. */}
+      <ItatInbox/>
 
       <div className="between" style={{marginBottom: 16, alignItems: "center", flexWrap: "wrap", gap: 12}}>
         <div className="tabs">

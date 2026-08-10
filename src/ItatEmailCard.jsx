@@ -1,0 +1,183 @@
+/* ProHippo — Settings → the practice's ITAT email address, and how to point
+ * Gmail at it.
+ *
+ * The Tribunal writes to whichever single address was entered on the portal when
+ * the appeal was registered — usually the practitioner's own. So the setup that
+ * covers most of a practice is one forwarding rule on that mailbox, done once,
+ * by the one person in this story who is comfortable in Gmail's settings.
+ *
+ * Two things on this card are doing real work and look like decoration:
+ *
+ *   • The steps say "on a computer" first. Gmail's phone apps do not offer
+ *     forwarding settings at all, and somebody who discovers that three steps in
+ *     gives up rather than moving to a laptop.
+ *   • They lead to a FILTER, not to Gmail's "forward a copy of incoming mail"
+ *     switch. That switch would send this address the whole mailbox. Everything
+ *     not from the Tribunal is discarded unread on arrival, but the right
+ *     instruction is the one that never sends it in the first place.
+ */
+import React from "react";
+import { Icon } from "./shared";
+import { useData } from "./store";
+import { useItatEmailConfig, usePendingGmailCode, itatEmailActions, relativeTime } from "./itatEmail";
+
+const GMAIL_FORWARDING_URL = "https://mail.google.com/mail/u/0/#settings/fwdandpop";
+const GMAIL_FILTERS_URL = "https://mail.google.com/mail/u/0/#settings/filters";
+const TRIBUNAL_SENDER = "no-reply@itat.nic.in";
+
+function Step({ n, children }) {
+  return (
+    <div className="row" style={{ gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
+      <div style={{
+        flex: "none", width: 20, height: 20, borderRadius: 7, background: "var(--p-lavender-2)",
+        color: "var(--p-primary-2)", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", marginTop: 1,
+      }}>{n}</div>
+      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: "var(--p-text-2)" }}>{children}</div>
+    </div>
+  );
+}
+
+export default function ItatEmailCard() {
+  const { notify } = useData();
+  const { cfg, loading, address, connected } = useItatEmailConfig();
+  const pendingCode = usePendingGmailCode();
+  const [busy, setBusy] = React.useState("");
+  const [err, setErr] = React.useState("");
+  const [showSteps, setShowSteps] = React.useState(false);
+
+  const run = (label, fn) => async () => {
+    setBusy(label);
+    setErr("");
+    try { await fn(); }
+    catch (e) { console.error(e); setErr(e?.message || "Something went wrong. Please try again."); }
+    finally { setBusy(""); }
+  };
+
+  // Minting is idempotent, so asking on mount is safe and means the address is
+  // simply there when someone opens Settings looking for it.
+  React.useEffect(() => {
+    if (loading || address) return;
+    itatEmailActions.ensureAddress().catch((e) => console.error("itat address:", e));
+  }, [loading, address]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      notify("Address copied");
+    } catch {
+      setErr("Couldn't copy — select the address and copy it by hand.");
+    }
+  };
+
+  const reset = run("reset", async () => {
+    if (!window.confirm("Get a new address? The current one stops working at once, and every forwarding rule pointing at it must be changed to the new one.")) return;
+    await itatEmailActions.resetAddress();
+    notify("New address issued — update your forwarding rule");
+  });
+
+  const statusPill = loading ? <span className="pill pill-muted">Checking…</span>
+    : connected ? <span className="pill" style={{ background: "var(--p-mint)", color: "#1B8C5C" }}>Receiving</span>
+      : <span className="pill pill-muted">Not set up yet</span>;
+
+  return (
+    <div className="card">
+      <div className="between" style={{ gap: 12, flexWrap: "wrap" }}>
+        <div className="center" style={{ gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: "var(--p-card-tint)", color: "var(--p-primary)", display: "grid", placeItems: "center" }}>
+            <Icon name="mail" size={18} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>ITAT email</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              {connected
+                ? `Last email ${relativeTime(cfg?.lastReceivedAt)}${cfg?.receivedCount ? ` · ${cfg.receivedCount} received` : ""}`
+                : "Forward the Tribunal's emails here and they become matters and hearings"}
+            </div>
+          </div>
+        </div>
+        {statusPill}
+      </div>
+
+      {/* Gmail's verification code. It appears here because Gmail sends it to
+          THIS address to prove the address is real — so without showing it, the
+          person setting up forwarding has no way to get it. */}
+      {pendingCode && (
+        <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 12, background: "var(--p-lavender)", border: "1px solid var(--p-lavender-2)" }}>
+          <div className="muted" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--p-primary-2)" }}>
+            Type this into Gmail
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: ".05em", fontVariantNumeric: "tabular-nums", margin: "6px 0 4px" }}>
+            {pendingCode.code}
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            Gmail asked to forward {pendingCode.requester ? <b>{pendingCode.requester}</b> : "a mailbox"} here. Paste the code into the box it is showing you.
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 14 }}>
+        <div className="muted" style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 6 }}>
+          Your practice address
+        </div>
+        <div className="between" style={{ gap: 10, padding: "10px 12px", borderRadius: 10, background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", flexWrap: "wrap" }}>
+          <code style={{ fontSize: 13, fontWeight: 600, color: "var(--p-primary-2)", wordBreak: "break-all" }}>
+            {address || (loading ? "…" : "Preparing your address…")}
+          </code>
+          <button className="btn btn-secondary btn-sm" disabled={!address} onClick={copy}>
+            <Icon name="doc" size={13} />Copy
+          </button>
+        </div>
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+          Only mail from the Income Tax Appellate Tribunal is kept. Anything else is discarded unread
+          {cfg?.droppedCount ? ` — ${cfg.droppedCount} so far` : ""}.
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowSteps((s) => !s)}>
+          <Icon name={showSteps ? "chevron-down" : "chevron-right"} size={13} />
+          How to forward the Tribunal's emails here
+        </button>
+      </div>
+
+      {showSteps && (
+        <div style={{ marginTop: 14, padding: "16px 18px", borderRadius: 12, background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 12 }}>
+            In the mailbox the Tribunal writes to — usually your own. Five minutes, once.
+          </div>
+          <Step n={1}>
+            Open Gmail <b>on a computer</b>. Its phone apps do not offer these settings at all.
+          </Step>
+          <Step n={2}>
+            Go to <a href={GMAIL_FORWARDING_URL} target="_blank" rel="noreferrer">Forwarding and POP/IMAP</a>,
+            click <b>Add a forwarding address</b>, and paste the address above.
+          </Step>
+          <Step n={3}>
+            Gmail sends a confirmation code here to check the address is real. It appears
+            on this card — come back, copy it, and paste it into Gmail.
+          </Step>
+          <Step n={4}>
+            Leave forwarding itself set to <b>Disable forwarding</b>. Then open{" "}
+            <a href={GMAIL_FILTERS_URL} target="_blank" rel="noreferrer">Filters and Blocked Addresses</a>,
+            create a filter with <b>From: {TRIBUNAL_SENDER}</b>, and tick <b>Forward it to</b> your address.
+          </Step>
+          <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.55, marginTop: 4 }}>
+            Step 4 is the one that matters: Gmail also offers a “forward a copy of incoming mail”
+            switch, which would send this address your whole inbox. The filter sends only what the
+            Tribunal wrote.
+          </div>
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--p-line-2)" }}>
+            <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={reset}>
+              {busy === "reset" ? "Issuing…" : "Get a new address"}
+            </button>
+            <span className="muted" style={{ fontSize: 11.5, marginLeft: 8 }}>
+              If this one has been shared with the wrong person.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {err && <div style={{ fontSize: 12.5, color: "var(--p-danger)", marginTop: 10 }}>{err}</div>}
+    </div>
+  );
+}

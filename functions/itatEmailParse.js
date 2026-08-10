@@ -178,12 +178,25 @@ function plainTextOf(html) {
     .trim();
 }
 
-// The body to run the patterns over: the text part when there is one, the
-// flattened HTML otherwise. Capped, because a forwarded thread can be enormous
-// and nothing we look for is a hundred kilobytes in.
+/* The body to run the patterns over: BOTH parts, not the better-looking one.
+ *
+ * A forward arrives as two alternatives — the Tribunal's HTML, and a plain-text
+ * rendition the forwarding client generated from it. Preferring the text part
+ * (which this did, whenever it ran past forty characters) throws the HTML away,
+ * and Gmail's rendition of the notice's table is lossy in exactly the places
+ * that matter: the assessment year, the bench letter and the case type sit in a
+ * cell that can come through as nothing at all. The result is a card reporting
+ * fields as missing that arrived perfectly well in the other part.
+ *
+ * Text first, so a message where both parts carry a field reads the same as it
+ * always did; the HTML is appended as the place to look when the rendition lost
+ * something. Capped, because a forwarded thread can be enormous and nothing we
+ * look for is a hundred kilobytes in.
+ */
 function bodyTextOf({ text, html }) {
   const t = clean(text);
-  const body = t.length > 40 ? t : plainTextOf(html) || t;
+  const h = plainTextOf(html);
+  const body = t && h && t !== h ? `${t}\n${h}` : t || h;
   return body.slice(0, MAX_BODY_CHARS);
 }
 
@@ -347,8 +360,12 @@ const statusFromPan = (pan) => {
 function parseHearing({ subject, body, html }) {
   const all = `${subject}\n${body}`;
   const appealNo = findAppealNo(all);
-  const benchLetter = (/Hearing\s*Bench\s*[:\s]\s*([A-Z0-9]{1,4})\b/i.exec(body) || [])[1] || "";
-  const caseType = (/Case\s*Type\s*[:\s]\s*([A-Z]{2,8})\b/i.exec(body) || [])[1] || "";
+  /* Both sit in bold in the notice, and a plain-text rendition leaves the
+     emphasis behind as asterisks or underscores — "Hearing Bench: *D*". Skipped
+     rather than treated as part of the value, which is why an otherwise perfect
+     notice used to come through as a bench with no letter. */
+  const benchLetter = (/Hearing\s*Bench\s*[:\s]\s*[*_]*([A-Z0-9]{1,4})\b/i.exec(body) || [])[1] || "";
+  const caseType = (/Case\s*Type\s*[:\s]\s*[*_]*([A-Z]{2,8})\b/i.exec(body) || [])[1] || "";
 
   /* The date appears twice, in two formats: "Date of Hearing: 2026-Sep-15" in
      the subject and "on 15-Sep-2026 (Tue)" in the body. The body is preferred —
@@ -359,7 +376,17 @@ function parseHearing({ subject, body, html }) {
   const subjDate = (/Date\s+of\s+Hearing\s*[:\s]\s*(\d{4}-[A-Za-z]{3}-\d{1,2})/i.exec(subject) || [])[1] || "";
   const date = toISODate(bodyDate) || toISODate(subjDate);
 
-  const t = /\bat\s*(\d{1,2})[.:](\d{2})\s*([ap]\.?\s?m)/i.exec(body);
+  /* The time, and only the Tribunal's own.
+   *
+   * A forward puts its own header above the notice — "Date: Mon, 10 Aug 2026 at
+   * 5:24 PM" — and a bare search for "at H:MM pm" finds that first and writes
+   * the moment the email was sent into somebody's diary as the hearing time.
+   * So the pattern is anchored to what the notice says around it: the time is
+   * the one followed by "on <date>", or failing that the one inside the
+   * "fixed for hearing" sentence. An unanchored match is not taken at all —
+   * blank is a visible gap, a wrong time is not. */
+  const t = /\bat\s*(\d{1,2})[.:](\d{2})\s*([ap]\.?\s?m)\.?\s+on\s+\d{1,2}-[A-Za-z]{3}-\d{4}/i.exec(body)
+    || /fixed\s+for\s+hearing[\s\S]{0,400}?\bat\s*(\d{1,2})[.:](\d{2})\s*([ap]\.?\s?m)/i.exec(body);
   const time = t ? toISOTime(t[1], t[2], t[3]) : "";
 
   /* Where it will be heard. The sentence is "…fixed for hearing at <address> at

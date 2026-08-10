@@ -100,7 +100,7 @@ Then **Receiving → Create Route**, one of them:
 | --- | --- |
 | Expression type | Match Recipient |
 | Recipient | `.*@prohippo.info` |
-| Action | Forward → the webhook URL with `?key=YOUR_SECRET` |
+| Action | **Forward** → the webhook URL with `?key=YOUR_SECRET` |
 | Priority | 0 |
 
 That single route is the catch-all. Nothing more is needed per practice: an
@@ -111,10 +111,23 @@ Mailgun posts form fields rather than JSON, which the webhook reads — and its
 block, which `fromForm` understands. The recipient is in `recipient`, the
 envelope address, so a Gmail filter forward resolves correctly.
 
-Two things to confirm on the free plan before relying on it: whether its
-100-messages-a-day figure counts received mail as well as sent, and that log
-retention of one day is enough for the delivery log to still be useful when
-something needs diagnosing. Neither is likely to bite at a few emails a day.
+**Forward, not Store.** Mailgun offers both as route actions, and only Forward
+works here: Store keeps the message for the app to fetch later, and *message
+retention is not on the free plan at all*. Forward POSTs the message as it
+arrives and needs nothing kept, which is why the free plan's missing retention
+costs this feature nothing.
+
+The free plan's one genuine limitation is **one day of log retention**. That
+log is the only place a delivery failure is visible — the practitioner sees an
+address that is simply quiet — so a failure left unexamined over a weekend
+cannot be diagnosed afterwards. Worth knowing before something goes wrong
+rather than after.
+
+Its other numbers are comfortable: one custom domain is exactly what this needs,
+and the 100-messages-a-day figure sits in the sending section of Mailgun's own
+feature table, with inbound routing counted in routes rather than messages.
+Confirm that reading against a real delivery before it matters — though at a few
+emails a day, even the pessimistic version is a long way from binding.
 
 ### With CloudMailin, specifically
 

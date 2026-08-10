@@ -12,7 +12,7 @@
 import React from "react";
 import { Icon, SelectInput, titleCase, fmtDateLong } from "./shared";
 import { useData } from "./store";
-import { useItatMail, itatEmailActions, describeMail, MAIL_KIND_LABEL, relativeTime } from "./itatEmail";
+import { useItatMail, useUnfiledArrival, UNFILED_REASON, itatEmailActions, describeMail, MAIL_KIND_LABEL, relativeTime } from "./itatEmail";
 
 const KIND_TINT = {
   registration: { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
@@ -157,7 +157,13 @@ function MailRow({ row }) {
 
 export default function ItatInbox() {
   const { rows, loading } = useItatMail();
-  if (loading || rows.length === 0) return null;
+  /* Read before the early return, because hooks are not optional — and because
+     an arrival that produced no card is precisely the case where there are no
+     rows to render and something still needs saying. */
+  const unfiled = useUnfiledArrival();
+
+  if (loading) return null;
+  if (rows.length === 0 && !unfiled) return null;
 
   const actionable = rows.filter((r) => r.status === "needs-review").length;
 
@@ -178,6 +184,21 @@ export default function ItatInbox() {
           </div>
         </div>
       </div>
+
+      {/* Two emails forwarded and one card is not a bug, but it looks exactly
+          like one. Say which of the two harmless things happened, so the count
+          above can be trusted to mean what it says rather than being quietly
+          short of what was sent. */}
+      {unfiled && (
+        <div
+          className="muted"
+          style={{ fontSize: 12, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--p-line-2)" }}
+        >
+          One more arrived {relativeTime(unfiled.at)} and is not on this list —{" "}
+          {UNFILED_REASON[unfiled.outcome] || "it could not be read"}.
+        </div>
+      )}
+
       {rows.map((row) => <MailRow key={row.id} row={row} />)}
     </div>
   );

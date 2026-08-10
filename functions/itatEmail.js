@@ -131,6 +131,24 @@ function build({ PRIMARY_REGION, db }) {
   const aliasRef = (address) => db.doc(`inboundAliases/${addressKey(address)}`);
   const nowISO = () => new Date().toISOString();
 
+  /* An arrival that produced no card, written down so it is not invisible.
+   *
+   * Forward two emails, see one card, and the app gives you no way to tell
+   * whether the second was rejected, recognised as a copy, or never arrived at
+   * all — the count is honest about what is waiting and silent about the rest,
+   * which reads as mail going missing. A timestamp and a one-word reason are
+   * enough for the app to say which of those happened.
+   *
+   * A time and an outcome, and deliberately nothing else. For a message from a
+   * sender we do not accept there is no subject and no address here for the
+   * same reason there is none in the log or the database: what a client is told
+   * about an over-broad forwarding rule has to be true everywhere. */
+  const noteUnfiled = (uid, outcome) => integrationRef(uid).set({
+    lastUnfiledAt: nowISO(),
+    lastUnfiledOutcome: outcome,
+    [`${outcome}Count`]: countUp(),
+  }, { merge: true });
+
   const requireUid = (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
@@ -339,7 +357,7 @@ function build({ PRIMARY_REGION, db }) {
          which is the whole basis of telling a client that an over-broad
          forwarding rule costs them nothing. */
       if (result.reason === "sender-not-allowed") {
-        await integrationRef(uid).set({ droppedCount: countUp(), lastDroppedAt: nowISO() }, { merge: true });
+        await noteUnfiled(uid, "dropped");
         /* The outcome and nothing else. Cloud Logging is storage like any
            other, and "not a byte of the message is kept" has to mean the log
            too — otherwise the promise made to a client about an over-broad
@@ -356,6 +374,7 @@ function build({ PRIMARY_REGION, db }) {
         // delivery that never arrived: the provider reports success and the app
         // shows nothing new. Dismissing does not delete the record, so the same
         // message sent twice lands here rather than on the queue.
+        await noteUnfiled(uid, "duplicate");
         console.log(`itatInboundEmail: duplicate — already on file as ${id}`);
         res.status(200).send("duplicate");
         return;

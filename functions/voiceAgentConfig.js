@@ -29,7 +29,7 @@ const VOICE_AGENT_CONFIG = {
   workspaceId: "019edd8a-9871-742d-97a0-7af9770aa41d",
   agentId: "prohippo-he-b17b4513-91d8",
 
-  /* A NUMBER, not a string — the trigger-call snippet sends `"app_version": 5`
+  /* A NUMBER, not a string — the trigger-call snippet sends `"app_version": 8`
      unquoted, and pinning it is deliberate: an edit committed in the console
      must not change what a live feature does until someone raises this.
 
@@ -39,7 +39,7 @@ const VOICE_AGENT_CONFIG = {
      "(422) Invalid Parameter … Agent variables '{'session_token'}' not found",
      because v2 predated the variable. So whenever a console commit adds or
      renames a variable, this number has to move with it. */
-  agentVersion: 5,
+  agentVersion: 8,
   connectionId: "3849bc9b-e5-51c864d5-6102",
 
   /* The INBOUND DEPLOYMENT, not the agent. From the deployment page's URL:

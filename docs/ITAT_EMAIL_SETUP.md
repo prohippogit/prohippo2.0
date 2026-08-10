@@ -266,6 +266,29 @@ Change `messageId` between runs, or the second call is correctly ignored.
 
 ## Troubleshooting
 
+**The Settings card says "No address yet", and the browser console shows a CORS
+error on `getItatEmailAddress`** — this is almost never really about CORS. A
+2nd-gen function runs on Cloud Run, and if that service does not allow public
+invocation the request is refused by Google's infrastructure *before* it reaches
+any of this code. That refusal carries no `Access-Control-Allow-Origin` header,
+so the browser reports the only thing it can see: a CORS failure.
+
+Firebase grants the permission as part of a normal deploy. A deploy that errored
+partway through — over quota, or rate-limited on a large batch — can leave a
+function created but unreachable. Grant it directly:
+
+```
+for s in getitatemailaddress resetitatemailaddress applyitatmail dismissitatmail itatinboundemail; do
+  gcloud run services add-iam-policy-binding "$s" \
+    --region=asia-south1 --member=allUsers --role=roles/run.invoker --project=prohippo2
+done
+```
+
+Cloud Run lower-cases the service names; the function URL printed by the deploy
+shows the form it uses. Do not skip `itatinboundemail` because it has no screen
+of its own — the mail provider reaches it from the open internet and fails the
+same way, silently, in its own delivery log rather than in a browser console.
+
 **Nothing arrives at all** — check the provider's own delivery log first. If it
 shows a 401, the key in the URL does not match the secret. If it shows 200 and
 `no-alias`, the practice address is not in any recipient field the provider

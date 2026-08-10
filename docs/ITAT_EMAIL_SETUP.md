@@ -5,7 +5,7 @@ Tribunal is read, and offered as a matter or a hearing for one click of
 confirmation. Why it is an address rather than a mailbox read — and the routes
 for appeals registered under a client's address — is in `ITAT_EMAIL_INGEST.md`.
 
-Four one-time steps: a subdomain, an inbound provider, one secret, deploy.
+Four one-time steps: a domain, an inbound provider, one secret, deploy.
 
 **No OAuth and no verification review.** Nothing here reads anybody's mailbox,
 so there is no Google scope to be assessed and no annual security review. That
@@ -13,17 +13,23 @@ is the main reason this shape was chosen over `gmail.readonly`.
 
 ---
 
-## Step 1 — A subdomain to receive on
-
-Use a **subdomain**, not `prohippo.in` itself:
+## Step 1 — A domain to receive on
 
 ```
-itat.prohippo.in
+prohippo.info
 ```
 
-Its MX record points at the inbound provider. The MX for `prohippo.in` — which
-is what Resend and the website's own mail depend on — is untouched, and a
-mistake here cannot cost you the ability to send login emails.
+**A domain of its own, not a subdomain of `prohippo.in`.** Every address under
+this domain is a firehose pointed at a public webhook, and `prohippo.in` carries
+the login emails Resend sends. A fat-fingered MX record on that zone locks every
+practitioner out of the app. A separate registration makes that impossible
+rather than merely unlikely, and a second domain costs less than one support
+call.
+
+The whole domain is used, not a subdomain of it — addresses are
+`<16 hex characters>@prohippo.info`. There is nothing else on this domain to
+disturb, and it keeps the MX record at the zone apex where every inbound
+provider expects it.
 
 The domain is a constant, `MAIL_DOMAIN`, at the top of
 `functions/itatEmailParse.js`. Change it there if you use a different name;
@@ -31,18 +37,28 @@ addresses already issued keep their old domain until each practice resets.
 
 ## Step 2 — An inbound provider
 
-Any provider that receives mail and POSTs it to a URL. The webhook reads all
+Any provider that **receives** mail and POSTs it to a URL. The webhook reads all
 three common shapes, so this is a free choice:
 
 | Provider | Posts as | Notes |
 | --- | --- | --- |
 | **Postmark inbound** | JSON | The least to go wrong — no multipart, and `OriginalRecipient` carries the envelope address the alias is found in. Recommended. |
-| **SendGrid Inbound Parse** | multipart/form-data | Free tier is ample. Needs the `busboy` dependency, which `functions/package.json` already lists. |
+| **SendGrid Inbound Parse** | multipart/form-data | Needs the `busboy` dependency, which `functions/package.json` already lists. |
 | **Mailgun Routes** | form fields | Equivalent; its webhook signing is a little better out of the box. |
-| **Cloudflare Email Worker** | whatever you write | Free. Have the Worker POST `{from, to, subject, text, html, headers, messageId}` as JSON. |
+| **Cloudflare Email Worker** | whatever you write | No per-message cost, but the Worker has to parse MIME itself and needs a build step. Only worth it at volume. |
 
-Point the subdomain's MX at the provider as it instructs, then give it this
-webhook URL — with the secret from step 3 on the end:
+> **Sending services cannot do this.** Resend, Zoho ZeptoMail, Amazon SES's
+> sending side, Brevo and the rest are transactional *senders*. Their webhooks
+> report what happened to mail you sent — delivered, bounced, opened — and none
+> of them receives mail on your behalf or posts an inbound message anywhere.
+> Neither will a mailbox host such as Zoho Mail or Google Workspace: they will
+> happily receive at this domain, but they deliver into a mailbox, and getting it
+> out again means polling IMAP, which is a different design and a different
+> build. The requirement is specifically *inbound parse*, and it is worth
+> checking a provider's docs for that phrase before signing up.
+
+Point the domain's MX at the provider as it instructs, then give it this webhook
+URL — with the secret from step 3 on the end:
 
 ```
 https://asia-south1-prohippo2.cloudfunctions.net/itatInboundEmail?key=YOUR_SECRET
@@ -50,6 +66,21 @@ https://asia-south1-prohippo2.cloudfunctions.net/itatInboundEmail?key=YOUR_SECRE
 
 > The endpoint refuses anything that does not present the key, so configure the
 > secret first or the first test message is silently rejected.
+
+### Setting the MX record at BigRock
+
+`prohippo.info` is registered at BigRock and still on BigRock's own nameservers
+(`dns1.bigrock.in` … `dns4.bigrock.in`), so the record is added in their panel —
+there is no need to move nameservers anywhere.
+
+**Orders → prohippo.info → DNS Records → MX Records → Add MX Record.** Leave the
+host name blank (or `@`) so it applies to the domain itself, and use the
+destination and priority your provider gives you. Delete any MX record BigRock
+created by default, or mail will be delivered to whichever has the lower
+priority number and the webhook will never fire.
+
+DNS takes anything from a few minutes to a few hours to take effect. Check it
+with `dig MX prohippo.info +short` before assuming something is broken.
 
 ## Step 3 — The secret, and deploy
 
@@ -158,7 +189,7 @@ curl -X POST "https://asia-south1-prohippo2.cloudfunctions.net/itatInboundEmail?
   -H "Content-Type: application/json" \
   -d '{
     "from": "ITAT Online <no-reply@itat.nic.in>",
-    "to": "YOUR_PRACTICE_ADDRESS@itat.prohippo.in",
+    "to": "YOUR_PRACTICE_ADDRESS@prohippo.info",
     "subject": "Notice of Hearing in ITA 2530/AHD/2026 (Date of Hearing: 2026-Sep-15)",
     "text": "In Appeal No. ITA 2530/AHD/2026 Assessment Year: 2016-17 Permanent Account Number: BLGPG1814C Hearing Bench: D , Case Type: DBC. Take notice that the above appeal has been fixed for hearing at 3rd & 4th Floor, Abhinav Arcade, Ellis Bridge, Ahmedabad - 380006, Gujarat at 10.30 a.m on 15-Sep-2026 (Tue).",
     "messageId": "<smoke-test-1@itat.nic.in>"

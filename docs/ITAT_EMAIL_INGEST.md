@@ -4,7 +4,7 @@
 > matter and hearing writers and the review queue are in
 > `functions/itatEmail.js`, `functions/itatEmailParse.js`, `src/itatEmail.js`,
 > `src/ItatInbox.jsx` and `src/ItatEmailCard.jsx`. To put it into service —
-> subdomain, provider, secret, and the one forwarding rule — see
+> domain, provider, secret, and the one forwarding rule — see
 > `ITAT_EMAIL_SETUP.md`. This document is the reasoning behind it, and the plan
 > for what comes next.
 
@@ -85,7 +85,7 @@ ITAT (no-reply@itat.nic.in)
         ├─► consultant's mailbox ─┐
         └─► client's mailbox ─────┤ forwarding rule (or a manual forward)
                                   ▼
-              <token>@in.prohippo.in     ← one per practice, one per assessee
+              <token>@prohippo.info      ← one per practice, one per assessee
                                   │
                  inbound provider (MX → webhook)
                                   ▼
@@ -127,14 +127,20 @@ the client, it does not matter which of the four routes a given message took.
 
 ### Getting the MX in place
 
-Put it on a **subdomain** — `in.prohippo.in` — so the MX for `prohippo.in`
-itself, and everything already sending as that domain, is untouched.
+Put it on a **domain of its own** — `prohippo.info` — rather than a subdomain of
+`prohippo.in`. Every address under it is a firehose pointed at a public webhook,
+and `prohippo.in` carries the login emails Resend sends: a fat-fingered MX record
+on that zone locks every practitioner out of the app. A separate registration
+makes that impossible rather than merely unlikely.
 
 | Option | Notes |
 | --- | --- |
-| **SendGrid Inbound Parse** | Point the subdomain's MX at SendGrid, give it the function URL. Posts multipart form data with attachments and the raw MIME. Free tier is ample. Simplest thing that works. |
+| **Postmark inbound** | Point the domain's MX at Postmark, give it the function URL. Posts JSON, and its `OriginalRecipient` carries the envelope address the alias is found in. Least to go wrong. |
 | **Mailgun Routes** | Equivalent, with a signed webhook (timestamp + token + HMAC) — slightly better authentication story out of the box. |
-| **Cloudflare Email Routing + Email Worker** | Free and no per-message cost; the Worker `fetch`es the raw message to our function. Confirm current subdomain support before committing to it. |
+| **SendGrid Inbound Parse** | Equivalent; posts multipart form data, which the webhook also reads. |
+| **Cloudflare Email Routing + Email Worker** | No per-message cost, but the Worker must parse MIME itself and needs a build step. Only worth it at volume. |
+
+What none of them can be is a transactional *sender* — Resend, ZeptoMail, SES's sending side. Those report on mail you sent; they never receive any. Nor a mailbox host: Zoho Mail and Google Workspace will receive at this domain perfectly well, but they deliver into a mailbox, and getting it out again means polling IMAP.
 
 Whichever is chosen, the Cloud Function is a public `onRequest` and must not
 trust the caller: verify the provider's signature or a long secret path segment,
@@ -152,7 +158,7 @@ finish it without a phone call.
 ### The shape of it
 
 **Issue the client their own address.** From the assessee's profile:
-*Set up ITAT email forwarding* mints `<token>@in.prohippo.in` bound to that one
+*Set up ITAT email forwarding* mints `<token>@prohippo.info` bound to that one
 assessee, and produces a **setup link** — an unguessable, no-login page the
 consultant sends over WhatsApp or email using the delivery that already exists
 (`sendClientMessage`, which will already translate the covering message into the
@@ -460,7 +466,7 @@ everything awaiting one click. Empty most days; that is the point.
 
 | Phase | Ships | Depends on |
 | --- | --- | --- |
-| **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue — plus the practitioner's own forwarding rule and the three-screen guide for setting it. | An MX subdomain and an inbound provider account. Nothing else. |
+| **1** | Alias, inbound webhook, parser, matcher, matter/hearing writers, review queue — plus the practitioner's own forwarding rule and the three-screen guide for setting it. | A domain with an MX record, and an inbound provider account. Nothing else. |
 | **2** | Client-facing setup: per-assessee links, the live code-catching page, forwarding status on the assessee, auto-apply for authenticated messages. | Phase 1 in the field, and knowing how many appeals actually sit outside route 1. |
 | **3** | Extend the allowlist and parsers to CIT(A)/NFAC and departmental mail — much higher volume, same pipeline. | Sample emails. |
 | **4** | Optional client-side "Connect Gmail", if enough appeals are registered under client addresses to justify Google's review and the annual assessment. Optional IMAP polling in the desktop connector for non-Google mailboxes, where credentials are already vaulted. | A commercial decision, not a technical one. |
@@ -484,7 +490,7 @@ all. Two independent sources agreeing is a much stronger promise than one.
 - **Does `itat.nic.in` sign with DKIM?** Check `Authentication-Results` on a raw
   copy of either sample. It decides whether auto-apply can be authenticated or
   whether everything routes through the review queue at first.
-- **Which inbound provider**, and is `in.prohippo.in` free to take an MX record?
+- **Which inbound provider?** It must do *inbound parse* — a transactional sender (Resend, ZeptoMail, SES's sending side) reports on mail you sent and cannot receive any, and a mailbox host delivers into a mailbox rather than to a webhook.
 - **Of the appeals a practice is running, how many were registered under a
   client's address rather than the firm's?** This is the size of Phase 2 and the
   only thing that decides whether it is worth building at all. Answered by

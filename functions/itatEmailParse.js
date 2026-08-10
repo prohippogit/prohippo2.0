@@ -378,8 +378,40 @@ const hearingIdFor = (appealNo, date) => `itath_${sha(`${canonicalAppealNo(appea
  * appear SOMEWHERE in here to be found. */
 const recipientsOf = (...values) => values.flat().filter(Boolean).map(String).join(" ");
 
-// Postmark-style JSON, plus the plain shape our own tests and a Worker would use.
+/* CloudMailin's JSON: an `envelope`, a `headers` OBJECT, and the body split into
+   `plain` and `html`. Nothing like Postmark's shape, so it gets its own reader.
+   Header names are matched case- and punctuation-insensitively because
+   CloudMailin offers two JSON formats — one keeps the header's original casing,
+   the other lower-cases it and turns Message-ID into message_id — and which one
+   an account is set to is not worth making the practice care about. */
+function fromCloudMailin(b) {
+  const h = b.headers || {};
+  const flat = (v) => (Array.isArray(v) ? v.join(" ") : clean(v));
+  const keys = Object.keys(h);
+  const headerOf = (name) => {
+    const want = name.toLowerCase().replace(/[-_]/g, "");
+    const key = keys.find((k) => k.toLowerCase().replace(/[-_]/g, "") === want);
+    return key ? flat(h[key]) : "";
+  };
+  const env = b.envelope || {};
+  return {
+    from: clean(env.from) || headerOf("From"),
+    to: recipientsOf(env.to, env.recipients, headerOf("To"), headerOf("Cc"), headerOf("Delivered-To")),
+    subject: headerOf("Subject"),
+    text: clean(b.plain),
+    html: clean(b.html),
+    headers: keys.map((k) => `${k}: ${flat(h[k])}`).join("\n"),
+    messageId: headerOf("Message-ID"),
+    date: headerOf("Date"),
+  };
+}
+
+/* Postmark-style JSON, the CloudMailin shape, and the plain object our own
+   smoke test and a Cloudflare Worker would post. Told apart by structure rather
+   than by a configured provider name: there is nothing to get out of step, and
+   changing provider needs no redeploy. */
 function fromJson(b) {
+  if (b && b.envelope && (b.plain !== undefined || b.html !== undefined)) return fromCloudMailin(b);
   const headerList = Array.isArray(b.Headers) ? b.Headers : [];
   const headerText = headerList.map((h) => `${h.Name}: ${h.Value}`).join("\n");
   const headerOf = (name) => (headerList.find((h) => String(h.Name).toLowerCase() === name) || {}).Value || "";

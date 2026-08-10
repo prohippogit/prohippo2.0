@@ -40,12 +40,17 @@ addresses already issued keep their old domain until each practice resets.
 Any provider that **receives** mail and POSTs it to a URL. The webhook reads all
 three common shapes, so this is a free choice:
 
-| Provider | Posts as | Notes |
-| --- | --- | --- |
-| **Postmark inbound** | JSON | The least to go wrong — no multipart, and `OriginalRecipient` carries the envelope address the alias is found in. Recommended. |
-| **SendGrid Inbound Parse** | multipart/form-data | Needs the `busboy` dependency, which `functions/package.json` already lists. |
-| **Mailgun Routes** | form fields | Equivalent; its webhook signing is a little better out of the box. |
-| **Cloudflare Email Worker** | whatever you write | No per-message cost, but the Worker has to parse MIME itself and needs a build step. Only worth it at volume. |
+| Provider | Posts as | Free allowance | Notes |
+| --- | --- | --- | --- |
+| **CloudMailin** | JSON | 10,000 inbound messages/month | Inbound is the whole product rather than a feature bolted to a sender, and its free tier is far beyond what a practice will ever use. **Recommended.** |
+| **Mailgun Routes** | form fields | 1 inbound route on the free plan | Fine, and the free plan is permanent. Its 100-messages-a-day cap is a sending limit, but check it still suits before relying on it. |
+| **SendGrid Inbound Parse** | multipart/form-data | none — the free tier became a 60-day trial | Works, but there is no longer a free plan to sit on. |
+| **Postmark inbound** | JSON | none — inbound needs the Pro tier | Technically the cleanest payload; inbound is not on the free or Basic plans. |
+| **Cloudflare Email Worker** | whatever you write | free within Workers' limits | No per-message cost, but the Worker must parse MIME itself and needs a build step, and the domain's DNS has to move to Cloudflare. Only worth it at volume. |
+
+Prices move. Check the provider's own page before signing up — what matters here
+is only that it does **inbound parse**, and the payload shape does not, because
+all four are read.
 
 > **Sending services cannot do this.** Resend, Zoho ZeptoMail, Amazon SES's
 > sending side, Brevo and the rest are transactional *senders*. Their webhooks
@@ -66,6 +71,19 @@ https://asia-south1-prohippo2.cloudfunctions.net/itatInboundEmail?key=YOUR_SECRE
 
 > The endpoint refuses anything that does not present the key, so configure the
 > secret first or the first test message is silently rejected.
+
+### With CloudMailin, specifically
+
+Sign up, create an address, and it hands you an MX destination and a target URL
+field. Paste the webhook URL above into it, set the format to **JSON**, and add
+the MX record below. Its JSON is an `envelope` plus a `headers` object — a
+different shape from Postmark's, and read by its own branch in `fromJson`,
+matching header names case- and punctuation-insensitively so either of
+CloudMailin's two JSON formats works without a setting to get wrong.
+
+The envelope is what matters: a Gmail filter forward leaves `To:` pointing at
+the practitioner's own mailbox, and `envelope.to` is the only field carrying the
+practice address.
 
 ### Setting the MX record at BigRock
 

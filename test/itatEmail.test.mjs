@@ -299,6 +299,38 @@ test("the provider's own field names all land in the same object", () => {
   assert.equal(parseItatEmail(postmark).fields.appealNo, "ITA 2635/AHD/2026");
 });
 
+test("CloudMailin's envelope-and-headers shape reads the same as any other", () => {
+  const cloudmailin = fromJson({
+    envelope: { to: ALIAS, from: "no-reply@itat.nic.in", recipients: [ALIAS] },
+    headers: {
+      To: "chavdagreen@gmail.com", // the forward left this pointing at the practitioner
+      From: ITAT,
+      Subject: HEARING.subject,
+      "Message-ID": "<cm-1@itat.nic.in>",
+      Date: "Fri, 31 Jul 2026 17:24:00 +0530",
+    },
+    plain: "fixed for hearing at 10.30 a.m on 15-Sep-2026 (Tue).",
+    html: "<p>x</p>",
+  });
+  assert.match(cloudmailin.to, /a1b2c3d4e5f60718@prohippo\.info/);
+  assert.equal(cloudmailin.subject, HEARING.subject);
+  assert.equal(cloudmailin.messageId, "<cm-1@itat.nic.in>");
+  assert.equal(parseItatEmail(cloudmailin).fields.date, "2026-09-15");
+});
+
+test("and reads the same when CloudMailin lower-cases the header names", () => {
+  // Their normalised JSON format writes message_id, not Message-ID.
+  const normalised = fromJson({
+    envelope: { to: ALIAS, from: "no-reply@itat.nic.in" },
+    headers: { subject: REGISTRATION.subject, from: ITAT, message_id: "<cm-2@itat.nic.in>" },
+    plain: "has been registered as ITA 2635/AHD/2026 filed by you in AAWPM8125C on 23-Jul-2026",
+    html: "",
+  });
+  assert.equal(normalised.messageId, "<cm-2@itat.nic.in>", "message_id and Message-ID are one header");
+  assert.equal(normalised.subject, REGISTRATION.subject);
+  assert.equal(parseItatEmail(normalised).fields.appealNo, "ITA 2635/AHD/2026");
+});
+
 test("a payload with nothing in it does not throw", () => {
   for (const empty of [fromJson({}), fromForm({}), fromForm({ envelope: "not json" })]) {
     assert.equal(empty.from, "");

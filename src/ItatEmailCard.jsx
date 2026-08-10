@@ -53,12 +53,40 @@ export default function ItatEmailCard() {
     finally { setBusy(""); }
   };
 
-  // Minting is idempotent, so asking on mount is safe and means the address is
-  // simply there when someone opens Settings looking for it.
+  /* Minting is idempotent, so asking on mount is safe and means the address is
+     simply there when someone opens Settings looking for it.
+
+     A failure here USED TO go to console.error alone, which left the card
+     saying "Preparing your address…" for ever — the reader had no way to tell a
+     slow call from a backend that was never deployed, and nothing to press. A
+     spinner that cannot fail is a lie; say what went wrong and offer the retry. */
+  const [minting, setMinting] = React.useState(false);
+  const [mintErr, setMintErr] = React.useState("");
+
+  const mint = React.useCallback(async () => {
+    setMinting(true);
+    setMintErr("");
+    try {
+      await itatEmailActions.ensureAddress();
+    } catch (e) {
+      console.error("itat address:", e);
+      setMintErr(e?.message || "Could not reach ProHippo's server.");
+    } finally {
+      setMinting(false);
+    }
+  }, []);
+
+  /* Fired from a timer rather than straight out of the effect body: mint() sets
+     state the moment it is entered, and a synchronous setState inside an effect
+     cascades renders. The ref makes it one attempt per mount rather than one
+     per render — after that the Try again button is the way back in. */
+  const attempted = React.useRef(false);
   React.useEffect(() => {
-    if (loading || address) return;
-    itatEmailActions.ensureAddress().catch((e) => console.error("itat address:", e));
-  }, [loading, address]);
+    if (loading || address || attempted.current) return undefined;
+    attempted.current = true;
+    const id = setTimeout(mint, 0);
+    return () => clearTimeout(id);
+  }, [loading, address, mint]);
 
   const copy = async () => {
     try {
@@ -120,13 +148,23 @@ export default function ItatEmailCard() {
           Your practice address
         </div>
         <div className="between" style={{ gap: 10, padding: "10px 12px", borderRadius: 10, background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", flexWrap: "wrap" }}>
-          <code style={{ fontSize: 13, fontWeight: 600, color: "var(--p-primary-2)", wordBreak: "break-all" }}>
-            {address || (loading ? "…" : "Preparing your address…")}
+          <code style={{ fontSize: 13, fontWeight: 600, color: mintErr ? "var(--p-danger)" : "var(--p-primary-2)", wordBreak: "break-all" }}>
+            {address || (mintErr ? "No address yet" : "Preparing your address…")}
           </code>
-          <button className="btn btn-secondary btn-sm" disabled={!address} onClick={copy}>
-            <Icon name="doc" size={13} />Copy
-          </button>
+          {address
+            ? <button className="btn btn-secondary btn-sm" onClick={copy}><Icon name="doc" size={13} />Copy</button>
+            : <button className="btn btn-secondary btn-sm" disabled={minting} onClick={mint}>{minting ? "Trying…" : "Try again"}</button>}
         </div>
+
+        {/* Named plainly, because the two likely causes have different fixes and
+            the practitioner cannot see which applies from a spinner: the
+            functions have not been deployed yet, or the browser cannot reach
+            them. Both are worth saying out loud. */}
+        {mintErr && (
+          <div style={{ fontSize: 12, color: "var(--p-danger)", marginTop: 6, lineHeight: 1.5 }}>
+            {mintErr} — if ProHippo's ITAT functions have just been deployed, give it a moment and press Try again.
+          </div>
+        )}
         <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
           Only mail from the Income Tax Appellate Tribunal is kept. Anything else is discarded unread
           {cfg?.droppedCount ? ` — ${cfg.droppedCount} so far` : ""}.

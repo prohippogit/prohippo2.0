@@ -470,7 +470,22 @@ function fromForm(f) {
   const envelope = (() => {
     try { return JSON.parse(f.envelope || "{}"); } catch { return {}; }
   })();
-  const headers = clean(f.headers || f["message-headers"]);
+  /* Mailgun posts `message-headers` as a JSON array of [name, value] pairs;
+     SendGrid posts a raw header block. Flatten either into "Name: value" lines
+     so one lookup serves both.
+
+     This is not cosmetic. Without it the Message-ID is never found on a Mailgun
+     delivery, and the dedupe key falls back to sender-plus-subject-plus-date —
+     which still catches a provider retry, but is a weaker promise than the
+     header the sender stamped precisely to identify the message. */
+  const raw = clean(f.headers || f["message-headers"]);
+  const headers = (() => {
+    if (!raw.startsWith("[")) return raw;
+    try {
+      const pairs = JSON.parse(raw);
+      return Array.isArray(pairs) ? pairs.map((p) => `${p[0]}: ${p[1]}`).join("\n") : raw;
+    } catch { return raw; }
+  })();
   const headerOf = (name) => (new RegExp(`^${name}\\s*:\\s*(.+)$`, "im").exec(headers) || [])[1] || "";
   return {
     from: clean(f.from || f.sender || envelope.from),

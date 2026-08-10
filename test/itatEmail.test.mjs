@@ -332,6 +332,40 @@ test("and reads the same when CloudMailin lower-cases the header names", () => {
   assert.equal(parseItatEmail(normalised).fields.appealNo, "ITA 2635/AHD/2026");
 });
 
+test("Mailgun's route delivery reads like any other", () => {
+  /* A Mailgun route forwards as form fields, and posts message-headers as a
+     JSON array of pairs rather than as a header block — so the Message-ID is
+     only found if that array is understood. Losing it would not break ingest,
+     but it would downgrade duplicate detection from "the sender said this is
+     the same message" to a guess built out of subject and date. */
+  const mailgun = fromForm({
+    recipient: ALIAS,
+    sender: "no-reply@itat.nic.in",
+    from: ITAT,
+    subject: HEARING.subject,
+    "body-plain": "fixed for hearing at 10.30 a.m on 15-Sep-2026 (Tue).",
+    "message-headers": JSON.stringify([
+      ["From", ITAT],
+      ["Subject", HEARING.subject],
+      ["Message-Id", "<mg-1@itat.nic.in>"],
+      ["Date", "Fri, 31 Jul 2026 17:24:00 +0530"],
+    ]),
+  });
+  assert.match(mailgun.to, /a1b2c3d4e5f60718@prohippo\.info/, "`recipient` is the envelope address");
+  assert.equal(mailgun.messageId, "<mg-1@itat.nic.in>", "read out of the JSON header array");
+  assert.equal(parseItatEmail(mailgun).fields.date, "2026-09-15");
+});
+
+test("a header block that is not JSON is still read as one", () => {
+  const sendgrid = fromForm({
+    to: ALIAS,
+    from: ITAT,
+    subject: "x",
+    headers: "Message-Id: <sg-1@itat.nic.in>\nDate: Fri, 31 Jul 2026 17:24:00 +0530",
+  });
+  assert.equal(sendgrid.messageId, "<sg-1@itat.nic.in>");
+});
+
 test("a payload with nothing in it does not throw", () => {
   for (const empty of [fromJson({}), fromForm({}), fromForm({ envelope: "not json" })]) {
     assert.equal(empty.from, "");

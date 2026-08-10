@@ -42,15 +42,21 @@ three common shapes, so this is a free choice:
 
 | Provider | Posts as | Free allowance | Notes |
 | --- | --- | --- | --- |
-| **CloudMailin** | JSON | 10,000 inbound messages/month, but **custom domains need the $25/mo plan** | Inbound is the whole product rather than a feature bolted to a sender. Use the address it issues on `cloudmailin.net` and tell ProHippo to listen on that — see below. **Recommended.** |
-| **Mailgun Routes** | form fields | 1 inbound route on the free plan | Fine, and the free plan is permanent. Its 100-messages-a-day cap is a sending limit, but check it still suits before relying on it. |
+| **CloudMailin** | JSON | 10,000 inbound messages/month, but **custom domains need the $25/mo plan** | Inbound is the whole product rather than a feature bolted to a sender. Free, but on `cloudmailin.net` and one address per practice — fine for a single practice, see below. |
+| **Mailgun Routes** | form fields | 1 inbound route **and a custom domain**, on the permanent free plan | One route can catch every address at the domain, so one free route serves every practice. The strongest free option for a multi-practice deployment. |
 | **SendGrid Inbound Parse** | multipart/form-data | none — the free tier became a 60-day trial | Works, but there is no longer a free plan to sit on. |
 | **Postmark inbound** | JSON | none — inbound needs the Pro tier | Technically the cleanest payload; inbound is not on the free or Basic plans. |
 | **Cloudflare Email Worker** | whatever you write | free within Workers' limits | No per-message cost, but the Worker must parse MIME itself and needs a build step, and the domain's DNS has to move to Cloudflare. Only worth it at volume. |
 
-Prices move. Check the provider's own page before signing up — what matters here
-is only that it does **inbound parse**, and the payload shape does not, because
-all four are read.
+**For more than one practice, Mailgun's free plan is the one to reach for.** Its
+single inbound route takes a pattern, so `match_recipient(".*@prohippo.info")`
+catches every address at the domain and forwards all of them to the one webhook
+— which is exactly the catch-all the other providers charge for. Every practice
+then gets a working `<token>@prohippo.info` with no per-customer setup at all.
+
+Prices move, and the free tiers move faster. Check the provider's own page
+before signing up — what matters here is only that it does **inbound parse**,
+and the payload shape does not, because all of these are read.
 
 > **Sending services cannot do this.** Resend, Zoho ZeptoMail, Amazon SES's
 > sending side, Brevo and the rest are transactional *senders*. Their webhooks
@@ -81,6 +87,34 @@ someone remembering the pattern.
 
 > The endpoint refuses anything that does not present the key, so configure the
 > secret first or the first test message is silently rejected.
+
+### With Mailgun, specifically
+
+**Receiving → Add domain** `prohippo.info`, then point its MX at the hosts
+Mailgun gives (`mxa.mailgun.org` and `mxb.mailgun.org`, priority 10 and 10) —
+see the BigRock steps below, and delete whatever MX records were there before.
+
+Then **Receiving → Create Route**, one of them:
+
+| Field | Value |
+| --- | --- |
+| Expression type | Match Recipient |
+| Recipient | `.*@prohippo.info` |
+| Action | Forward → the webhook URL with `?key=YOUR_SECRET` |
+| Priority | 0 |
+
+That single route is the catch-all. Nothing more is needed per practice: an
+address minted in Settings works the moment it is minted.
+
+Mailgun posts form fields rather than JSON, which the webhook reads — and its
+`message-headers` arrive as a JSON array of pairs rather than as a header
+block, which `fromForm` understands. The recipient is in `recipient`, the
+envelope address, so a Gmail filter forward resolves correctly.
+
+Two things to confirm on the free plan before relying on it: whether its
+100-messages-a-day figure counts received mail as well as sent, and that log
+retention of one day is enough for the delivery log to still be useful when
+something needs diagnosing. Neither is likely to bite at a few emails a day.
 
 ### With CloudMailin, specifically
 

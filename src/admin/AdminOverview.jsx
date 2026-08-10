@@ -3,7 +3,70 @@ import React from "react";
 import { orderBy, limit } from "firebase/firestore";
 import { Icon, fmtDateLong, EmptyState } from "../shared";
 import { useCollection } from "./useCollection";
-import { adminOverview, STATUS_PILL, STATUS_LABEL } from "./adminApi";
+import { adminOverview, syncVoiceKnownCallers, STATUS_PILL, STATUS_LABEL } from "./adminApi";
+import { VOICE_HELPLINE } from "../voiceConfig";
+
+/*
+ * The voice help line can only recognise an inbound caller whose number is on
+ * Sarvam's known-callers list, because the platform never passes a tool the
+ * number that dialled. The list is rebuilt nightly, so this button is for the
+ * one case the schedule handles badly: someone has just linked their mobile and
+ * wants to ring the line now rather than tomorrow.
+ *
+ * It is deliberately not on the sign-up path. A failed upload must never be
+ * able to fail a registration, and the nightly run picks up anyone this misses.
+ */
+function VoiceCallerList({ notify }) {
+  const [busy, setBusy] = React.useState(false);
+  const [last, setLast] = React.useState(null);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const res = await syncVoiceKnownCallers();
+      /* Say which of the three things happened. "Nothing to do" is a success
+         and should read like one — the alternative is an admin pressing the
+         button repeatedly wondering whether it worked. */
+      const msg = res.uploaded
+        ? `Caller list updated — ${res.callers} ${res.callers === 1 ? "caller" : "callers"}`
+        : res.unchanged
+          ? `Already up to date — ${res.callers} ${res.callers === 1 ? "caller" : "callers"}`
+          : res.skipped === "empty-roster"
+            ? "No accounts have a verified mobile yet"
+            : res.skipped === "not-configured"
+              ? "The voice agent isn't configured yet"
+              : "Couldn't reach Sarvam — try again shortly";
+      setLast(msg);
+      notify?.(msg);
+    } catch (e) {
+      const msg = e.message || "Couldn't update the caller list.";
+      setLast(msg);
+      notify?.(msg, "alert");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <div className="card-title">Voice help line</div>
+          <div className="card-sub">Who can ring {VOICE_HELPLINE} and be recognised</div>
+        </div>
+        <button className="btn btn-secondary" disabled={busy} onClick={run}>
+          {busy ? "Updating…" : "Update caller list"}
+        </button>
+      </div>
+      <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+        Every account with a verified mobile is sent to Sarvam so the line knows
+        who is calling. This runs by itself at 03:10 every night — press this
+        only when someone has just linked their mobile and wants to call today.
+        {last && <div style={{ marginTop: 8, color: "var(--p-ink-2)" }}>{last}</div>}
+      </div>
+    </div>
+  );
+}
 
 function Stat({ label, value, sub, icon, tone = "primary" }) {
   return (
@@ -20,7 +83,7 @@ function Stat({ label, value, sub, icon, tone = "primary" }) {
   );
 }
 
-export default function AdminOverview({ onOpenAccount }) {
+export default function AdminOverview({ onOpenAccount, notify }) {
   const [stats, setStats] = React.useState(null);
   const [error, setError] = React.useState(null);
 
@@ -67,6 +130,10 @@ export default function AdminOverview({ onOpenAccount }) {
         <Stat label="Active this week" value={stats ? stats.growth.active7 : "—"} sub="Opened the app in 7 days" icon="sparkle" />
         <Stat label="Live referral codes" value={stats ? stats.referrals.activeCodes : "—"} icon="tag" />
         <Stat label="Attributed signups" value={stats ? stats.referrals.redemptions : "—"} icon="link" />
+      </div>
+
+      <div className="mb-5">
+        <VoiceCallerList notify={notify} />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))" }}>

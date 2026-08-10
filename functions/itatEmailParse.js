@@ -252,7 +252,7 @@ function classify({ subject, body }) {
   return "unrecognised";
 }
 
-function parseRegistration({ subject, body }) {
+function parseRegistration({ subject, body, html }) {
   const all = `${subject}\n${body}`;
   const appealNo = findAppealNo(all);
   // "filed by you in AAWPM8125C on 23-Jul-2026 for the Assessment Year 2014-15"
@@ -263,10 +263,88 @@ function parseRegistration({ subject, body }) {
     ay: findAy(all),
     filedOn,
     bench: benchName(appealNo, ""),
+    /* Today's summary email opens "Dear Assessee" and names nobody, so this
+       finds nothing and adds nothing. It is asked anyway because the two
+       templates are maintained together: the day a party block appears here,
+       the client's file opens from it without another release. */
+    ...partiesOf(html),
   };
 }
 
-function parseHearing({ subject, body }) {
+/* ---------------- who the parties are ----------------
+ *
+ * The notice lays the parties out in a two-column table: appellant on the left,
+ * respondent on the right, with the words "Appellant" and "Respondent" as the
+ * last row under them. Flattened into a line of text that interleaves beyond
+ * recovery, which is why an earlier version of this file did not attempt it at
+ * all and left the practitioner to pick the client from a list.
+ *
+ * Read as a TABLE it is perfectly tractable: find the row that labels the
+ * columns, then look up the same column in the rows above it. That is the whole
+ * trick, and it is worth doing because the name and address are what let a
+ * client's file be opened from the email rather than typed.
+ */
+function tableRows(html) {
+  const rows = [];
+  const trRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let tr;
+  while ((tr = trRe.exec(clean(html))) !== null) {
+    const cells = [];
+    const cellRe = /<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+    let cell;
+    while ((cell = cellRe.exec(tr[1])) !== null) cells.push(plainTextOf(cell[2]));
+    if (cells.length) rows.push(cells);
+  }
+  return rows;
+}
+
+// The cells above the label carry the appeal's own particulars when the party
+// block is short, and those are not somebody's name.
+const NOT_A_PARTY = /Appeal\s*No|Assessment\s*Year|Permanent\s*Account|Hearing\s*Bench|Case\s*Type|आयकर|अपील/i;
+
+function partiesOf(html) {
+  const rows = tableRows(html);
+  const labelAt = rows.findIndex((cells) => cells.some((c) => /^appellant$/i.test(clean(c))));
+  if (labelAt < 1) return {};
+  const col = rows[labelAt].findIndex((c) => /^appellant$/i.test(clean(c)));
+
+  /* Two rows above at most: the Tribunal writes the name in one and the address
+     in the next, or both in one cell separated by a line break. Either way the
+     first line is the name and the rest is where they live. */
+  const lines = [];
+  for (let i = Math.max(0, labelAt - 2); i < labelAt; i++) {
+    const cell = clean(rows[i][col] ?? rows[i][0] ?? "");
+    if (!cell || NOT_A_PARTY.test(cell)) continue;
+    lines.push(...cell.split("\n").map(clean).filter(Boolean));
+  }
+  if (!lines.length) return {};
+
+  return {
+    appellant: lines[0].slice(0, 120),
+    appellantAddress: lines.slice(1).join(", ").slice(0, 300),
+  };
+}
+
+/* What kind of person or body a PAN belongs to, from its fourth character.
+   A rule of the Act rather than a guess — P for an individual, C for a company,
+   and so on — so an assessee opened from an email starts out correctly typed
+   instead of defaulting to Individual and being quietly wrong for a trust.
+
+   The same table, and the same blank for a letter it does not cover, as
+   entityFromPan() in src/AssesseeModal.jsx: a record opened from an email and
+   one typed in by hand have to agree about what a PAN says, and the honest
+   answer to G or J or L is nothing rather than a plausible wrong one. */
+const PAN_HOLDER = {
+  P: "Individual", C: "Company", H: "HUF", F: "Firm",
+  A: "AOP/BOI", B: "AOP/BOI", T: "Trust",
+};
+const statusFromPan = (pan) => {
+  const p = clean(pan).toUpperCase();
+  if (!/^[A-Z]{4}/.test(p)) return "";
+  return PAN_HOLDER[p.charAt(3)] || "";
+};
+
+function parseHearing({ subject, body, html }) {
   const all = `${subject}\n${body}`;
   const appealNo = findAppealNo(all);
   const benchLetter = (/Hearing\s*Bench\s*[:\s]\s*([A-Z0-9]{1,4})\b/i.exec(body) || [])[1] || "";
@@ -305,6 +383,7 @@ function parseHearing({ subject, body }) {
     caseType: clean(caseType).toUpperCase(),
     venue,
     lastFixedOn,
+    ...partiesOf(html),
   };
 }
 
@@ -326,8 +405,8 @@ function parseItatEmail(msg) {
   }
 
   const kind = classify({ subject, body });
-  if (kind === "registration") return { kind, fields: parseRegistration({ subject, body }) };
-  if (kind === "hearing") return { kind, fields: parseHearing({ subject, body }) };
+  if (kind === "registration") return { kind, fields: parseRegistration({ subject, body, html: msg.html }) };
+  if (kind === "hearing") return { kind, fields: parseHearing({ subject, body, html: msg.html }) };
   return { kind: "unrecognised", fields: {}, reason: "no-template-match" };
 }
 
@@ -515,5 +594,6 @@ module.exports = {
   plainTextOf, bodyTextOf, findPan, findAy, senderDomain, isTribunalSender, gmailConfirmation,
   classify, parseRegistration, parseHearing, parseItatEmail, originalSenderOf, forwardedByOf,
   messageKey, matterIdFor, hearingIdFor, MAIL_DOMAIN, recipientsOf, fromJson, fromForm,
+  tableRows, partiesOf, statusFromPan,
   normaliseAddress, addressKey, isEmailAddress, emailAddressesIn,
 };

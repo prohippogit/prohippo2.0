@@ -27,6 +27,7 @@ function factsOf(row) {
   const f = row.parsed || {};
   const facts = [];
   if (f.appealNo) facts.push(["Appeal", f.appealNo]);
+  if (f.appellant) facts.push(["Appellant", titleCase(f.appellant)]);
   if (f.ay) facts.push(["AY", f.ay]);
   if (f.pan) facts.push(["PAN", f.pan]);
   if (f.date) facts.push(["Hearing", `${fmtDateLong(f.date)}${f.time ? ` · ${f.time}` : ""}`]);
@@ -52,7 +53,14 @@ function MailRow({ row }) {
 
   const tint = KIND_TINT[row.kind] || KIND_TINT.unrecognised;
   const chosen = data.assessees.find((a) => a.id === assesseeId);
-  const canApply = row.kind !== "unrecognised" && Boolean(chosen) && Boolean(row.parsed?.appealNo);
+
+  /* With nobody on file for this PAN, the email itself opens the client — the
+     PAN is an exact key, so a name and a PAN together are a file, not a guess.
+     Said on the button before it is pressed, because "Confirm" quietly adding a
+     client to somebody's list is not a confirmation of anything. */
+  const f = row.parsed || {};
+  const willCreate = !chosen && Boolean(f.pan) && Boolean(f.appellant);
+  const canApply = row.kind !== "unrecognised" && Boolean(f.appealNo) && (Boolean(chosen) || willCreate);
 
   const run = (label, fn) => async () => {
     setBusy(label);
@@ -63,8 +71,11 @@ function MailRow({ row }) {
   };
 
   const confirm = run("apply", async () => {
-    await itatEmailActions.apply({ id: row.id, assesseeId });
-    notify(row.kind === "hearing" ? "Hearing added to your calendar" : "Matter added");
+    const out = await itatEmailActions.apply({ id: row.id, assesseeId });
+    const what = row.kind === "hearing" ? "Hearing added to your calendar" : "Matter added";
+    // Say when a client was opened. It is the one side effect a practitioner
+    // would otherwise only discover later, in a list that has grown by one.
+    notify(out?.createdAssessee ? `${titleCase(out.assesseeName || "Assessee")} added · ${what.toLowerCase()}` : what);
   });
 
   const dismiss = run("dismiss", async () => {
@@ -113,11 +124,12 @@ function MailRow({ row }) {
               value={chosen ? chosen.id : ""}
               onChange={setAssesseeId}
               options={data.assessees.map((a) => ({ value: a.id, label: `${titleCase(a.name)} · ${a.pan || "no PAN"}` }))}
-              placeholder={data.assessees.length ? "Which assessee?" : "No assessees yet"}
+              placeholder={willCreate ? `Open ${titleCase(f.appellant)}'s file` : data.assessees.length ? "Which assessee?" : "No assessees yet"}
             />
           </div>
           <button className="btn btn-primary btn-sm" disabled={!canApply || Boolean(busy)} style={{ opacity: canApply && !busy ? 1 : 0.5 }} onClick={confirm}>
-            <Icon name="check" size={13} />{busy === "apply" ? "Adding…" : "Confirm"}
+            <Icon name="check" size={13} />
+            {busy === "apply" ? "Adding…" : willCreate ? "Confirm & add client" : "Confirm"}
           </button>
           <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={dismiss}>
             {busy === "dismiss" ? "…" : "Dismiss"}
@@ -126,13 +138,15 @@ function MailRow({ row }) {
       )}
 
       {/* The PAN on the email is what found the assessee. When it found nobody,
-          say so plainly — the practitioner may need to add the client first, and
-          silently offering an empty picker does not tell them that. */}
+          say what pressing the button will do about it — a file opened from the
+          email, or nothing until somebody picks one. */}
       {!chosen && row.kind !== "unrecognised" && (
         <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-          {row.parsed?.pan
-            ? `No assessee on file with PAN ${row.parsed.pan}. Add them, or pick the right one above.`
-            : "No PAN was found in this email — choose the assessee yourself."}
+          {willCreate
+            ? `Nobody on file with PAN ${f.pan}. Confirming opens ${titleCase(f.appellant)}${f.appellantAddress ? ", with the address on this notice" : ""}. Pick someone above instead if this appeal is already on file under another PAN.`
+            : f.pan
+              ? `No assessee on file with PAN ${f.pan}, and this email does not name one. Add them, or pick the right one above.`
+              : "No PAN was found in this email — choose the assessee yourself."}
         </div>
       )}
 

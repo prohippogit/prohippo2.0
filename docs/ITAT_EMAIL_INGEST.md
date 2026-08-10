@@ -380,9 +380,32 @@ In order, stopping at the first hit:
 3. **Appellant name**, normalised (case, punctuation, `&`/`AND`, honorifics),
    plus AY. Suggestion only — never auto-applied.
 
-No match means the review queue, showing the parsed appellant and PAN with an
-**Add this assessee** button. An assessee is never created silently; a
-misparsed name would otherwise quietly fork a client's file in two.
+No match means the review queue, showing the parsed appellant and PAN. If the
+email carried **both a name and a PAN**, Confirm reads *Confirm & add client*
+and opens the file from the email itself: name, address, and entity type from
+the PAN's fourth character (the same rule as `entityFromPan` in
+`src/AssesseeModal.jsx`). Nothing is created without that press — the ban is on
+creating an assessee *silently*, not on creating one at all, and the distinction
+is the PAN. A name match is a resemblance and would quietly fork a client's file
+in two; a PAN either is on file or it is not.
+
+The PAN lookup runs again at Confirm rather than trusting what the webhook
+recorded, so a client added by hand in the minutes between the email arriving
+and somebody pressing the button is found rather than duplicated.
+
+**Where the name comes from.** The notice of hearing lays the parties out in a
+two-column table — appellant left, respondent right, with the words *Appellant*
+and *Respondent* as the last row under them. Flattened to text they interleave
+beyond recovery, which is why an earlier version of this file said the name
+could not be read; parsed as a table it is simply "find the label row, read the
+same column above it". The respondent column is the Department, and filing an
+appeal under the Assessing Officer's name is the failure that shape guards
+against.
+
+**Matching an existing assessee enriches it, but only into blanks.** An address
+on the notice fills an empty `address` field and never overwrites one somebody
+typed. What a practitioner entered is theirs; the Tribunal's copy is only better
+than nothing.
 
 ---
 

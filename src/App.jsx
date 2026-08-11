@@ -112,6 +112,30 @@ function Shell() {
     setMenuOpen(false);
   };
 
+  /* Open the proceeding a NOTICE belongs to — the assessee's profile, Matters
+     tab, with that proceeding's card expanded.
+   *
+   * This is where a notice is read in context: the card carries the whole
+   * proceeding — every notice and order in it, the replies filed, the hearings
+   * — which is what somebody clicking a notice on the dashboard is actually
+   * looking for. The review screen shows the one document and none of that.
+   *
+   * A notice with no proceeding behind it (keyed in by hand, or parsed from a
+   * PDF, so it never came through the portal sync) has no card to open; those
+   * fall back to the review screen, which at least shows that exact notice. */
+  const openNoticeInProfile = (notice) => {
+    const a = assesseeForRecord(notice);
+    const match = a && notice.proceedingReqId
+      ? data.matters.find((m) => m.proceedingReqId === notice.proceedingReqId
+        && (m.pan || "").toUpperCase() === (notice.pan || "").toUpperCase())
+      : null;
+    if (!match) { openReview(notice); return; }
+    setReviewNotice(null);
+    setOpenAssesseeId(a.id);
+    setProfileFocus({ tab: "Matters", matterId: match.id });
+    setMenuOpen(false);
+  };
+
   // Open the proceeding a hearing belongs to; fall back to the Hearings tab when
   // no matching matter exists for it.
   const openHearingInProfile = (hearing) => {
@@ -153,7 +177,7 @@ function Shell() {
     );
   } else {
     switch (route) {
-      case "dashboard": content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>; break;
+      case "dashboard": content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onOpenProceeding={openNoticeInProfile} onSearch={handleSearch}/>; break;
       case "assessees": content = <Assessees onOpen={(a) => { setProfileFocus(null); setOpenAssesseeId(a.id); }} initialSearch={assesseeQuery}/>; break;
       case "matters": content = <Matters onOpenMatter={openMatterInProfile}/>; break;
       case "hearings": content = <Hearings onOpenHearing={openHearingInProfile} onNav={handleNav}/>; break;
@@ -165,7 +189,7 @@ function Shell() {
       case "reports": content = <Reports/>; break;
       case "connector": content = <ConnectorDownload/>; break;
       case "settings": content = <SettingsPage/>; break;
-      default: content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onSearch={handleSearch}/>;
+      default: content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onOpenProceeding={openNoticeInProfile} onSearch={handleSearch}/>;
     }
   }
 

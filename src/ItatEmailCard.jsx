@@ -134,7 +134,7 @@ export default function ItatEmailCard() {
      reconciling: five emails forwarded and three on the queue is alarming until
      it says where the other two went. */
   const tally = mailTally(cfg);
-  const unaccounted = tally.duplicate + tally.dropped;
+  const unaccounted = tally.duplicate + tally.dropped + tally.routine;
 
   return (
     <div className="card">
@@ -159,6 +159,7 @@ export default function ItatEmailCard() {
         <div className="muted" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.6 }}>
           {tally.total} email{tally.total === 1 ? "" : "s"} have reached this address
           {" — "}{tally.filed} put on the review list
+          {tally.routine ? `, ${tally.routine} routine Tribunal mail (acknowledgements, verifications, passwords)` : ""}
           {tally.duplicate ? `, ${tally.duplicate} recognised as a copy of one already received` : ""}
           {tally.dropped ? `, ${tally.dropped} from senders other than the Tribunal and discarded unread` : ""}.
         </div>

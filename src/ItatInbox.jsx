@@ -112,10 +112,19 @@ function MailRow({ row }) {
       <div style={{ fontSize: 12.5, color: "var(--p-text-2)", marginBottom: 10 }}>{describeMail(row)}</div>
 
       {row.kind === "unrecognised" ? (
-        <div className="muted" style={{ fontSize: 12.5 }}>
-          Kept so you can see it. ProHippo did not recognise this as a registration
-          or a notice of hearing — if the Tribunal has changed its wording, this is
-          where it shows.
+        /* Dismissable, like everything else. Kept so a changed template is
+           visible — but something shown with no way to remove it is not a
+           record, it is litter, and a queue nobody can empty is one nobody
+           reads. */
+        <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="muted" style={{ fontSize: 12.5, flex: "1 1 260px" }}>
+            Kept so you can see it. ProHippo did not recognise this as a registration
+            or a notice of hearing — if the Tribunal has changed its wording, this is
+            where it shows.
+          </div>
+          <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={dismiss}>
+            {busy === "dismiss" ? "…" : "Dismiss"}
+          </button>
         </div>
       ) : (
         <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -161,6 +170,17 @@ export default function ItatInbox() {
      an arrival that produced no card is precisely the case where there are no
      rows to render and something still needs saying. */
   const unfiled = useUnfiledArrival();
+  const [clearing, setClearing] = React.useState(false);
+
+  const unreadable = rows.filter((r) => r.kind === "unrecognised");
+  const clearUnreadable = async () => {
+    setClearing(true);
+    // One at a time rather than at once: a queue of a dozen is small, and a
+    // failure halfway through leaves the rest still there to try again.
+    try { for (const r of unreadable) await itatEmailActions.dismiss({ id: r.id }); }
+    catch (e) { console.error(e); }
+    finally { setClearing(false); }
+  };
 
   if (loading) return null;
   if (rows.length === 0 && !unfiled) return null;
@@ -180,9 +200,18 @@ export default function ItatInbox() {
               {actionable
                 ? `${actionable} email${actionable === 1 ? "" : "s"} to check — nothing is added until you confirm`
                 : "Nothing to confirm"}
+              {unreadable.length ? ` · ${unreadable.length} not recognised` : ""}
             </div>
           </div>
         </div>
+
+        {/* One import can leave a run of these behind. Clearing them one at a
+            time is the kind of chore that ends with the whole queue ignored. */}
+        {unreadable.length > 1 && (
+          <button className="btn btn-ghost btn-sm" disabled={clearing} onClick={clearUnreadable}>
+            {clearing ? "Clearing…" : `Dismiss all ${unreadable.length} not recognised`}
+          </button>
+        )}
       </div>
 
       {/* Two emails forwarded and one card is not a bug, but it looks exactly
@@ -194,7 +223,7 @@ export default function ItatInbox() {
           className="muted"
           style={{ fontSize: 12, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--p-line-2)" }}
         >
-          One more arrived {relativeTime(unfiled.at)} and is not on this list —{" "}
+          Something else arrived {relativeTime(unfiled.at)} and is not on this list —{" "}
           {UNFILED_REASON[unfiled.outcome] || "it could not be read"}.
         </div>
       )}

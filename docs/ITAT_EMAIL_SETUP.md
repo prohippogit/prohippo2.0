@@ -334,6 +334,29 @@ The one exception is Gmail's own forwarding-confirmation mail from
 becomes a matter, and the code is hidden again after thirty minutes because a
 dead code left on screen reads as a broken feature.
 
+### What is recognised and passed over
+
+The Tribunal sends more than the two messages this reads. An e-filing
+acknowledgement goes out for every appeal uploaded; there are email
+verifications, one-time passwords, password resets. All genuinely from
+`itat.nic.in`, none of them a matter or a hearing.
+
+These are counted and not filed. Keeping them "so a changed template is
+visible" reads well and fails in practice: import a mailbox and the review
+queue fills with a dozen acknowledgements to be read and rejected one by one,
+which teaches a practitioner to skip past the queue — the one habit this
+feature cannot afford.
+
+**Recognised-and-passed-over is not the same as unrecognised.** A Tribunal
+email matching none of the known shapes is still kept and shown, because that
+is how a changed template surfaces. It now carries a Dismiss button, and a run
+of them can be cleared in one click: something displayed with no way to remove
+it is not a record, it is litter.
+
+The routine list is matched on the subject and checked **after** registration
+and hearing, so the day an acknowledgement starts carrying a hearing date, the
+date wins.
+
 ---
 
 ## Testing it without waiting for the Tribunal

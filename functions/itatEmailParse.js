@@ -256,12 +256,36 @@ function gmailConfirmation({ from, subject, text, html }) {
 /* Which of the Tribunal's two messages this is. Decided from the subject first
    because both subjects are templated and unambiguous, then from the body, so a
    forward that mangles the subject line still classifies. */
+/* The Tribunal's other mail: real, routine, and of no interest here.
+ *
+ * The portal sends an e-filing acknowledgement for every appeal uploaded, an
+ * email verification when an address is added, one-time passwords at sign-in.
+ * All genuinely from itat.nic.in, so the sender allowlist passes them, and none
+ * of them is a matter or a hearing.
+ *
+ * Keeping them "so a changed template is visible" was right in principle and
+ * wrong in practice: import a mailbox and the review queue fills with a dozen
+ * acknowledgements a practitioner has to read and reject one by one, which
+ * teaches them to ignore the queue — the one habit this feature cannot afford.
+ * Recognised and passed over is a different thing from unrecognised, and only
+ * the second is worth showing. */
+const ROUTINE_SUBJECT = [
+  /e[-\s]?filing\s+acknowledge?ment/i,
+  /email\s+verification/i,
+  /\bOTP\b|one[-\s]time\s+password/i,
+  /password\s+(?:has\s+been\s+)?(?:reset|changed)/i,
+  /user\s+(?:id\s+)?(?:registration|created)/i,
+];
+
 function classify({ subject, body }) {
   const s = clean(subject);
   if (/registration\s*&?(amp;)?\s*scrutiny\s*summary/i.test(s) || /has\s+been\s+registered\s+as/i.test(body)) {
     return "registration";
   }
   if (/notice\s+of\s+hearing/i.test(s) || /fixed\s+for\s+hearing/i.test(body)) return "hearing";
+  // Checked last, so a subject that is BOTH — an acknowledgement that also
+  // carries a hearing date one day — is read for the date rather than skipped.
+  if (ROUTINE_SUBJECT.some((re) => re.test(s))) return "routine";
   return "unrecognised";
 }
 
@@ -434,6 +458,7 @@ function parseItatEmail(msg) {
   const kind = classify({ subject, body });
   if (kind === "registration") return { kind, fields: parseRegistration({ subject, body, html: msg.html }) };
   if (kind === "hearing") return { kind, fields: parseHearing({ subject, body, html: msg.html }) };
+  if (kind === "routine") return { kind, fields: {}, reason: "routine-tribunal-mail" };
   return { kind: "unrecognised", fields: {}, reason: "no-template-match" };
 }
 

@@ -5,6 +5,8 @@ import { useData, downloadCSV, toISO, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
 import ItatInbox from './ItatInbox';
+import { downloadCauseListPDF } from './causeListPdf';
+import { weekRange, monthRange, addDays, causeListRows, causeListSummary, rangeDays, MAX_RANGE_DAYS } from './causeList';
 
 const AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Other"];
 const MODES = ["Physical", "Video Conference", "e-Proceeding"];
@@ -196,8 +198,10 @@ function startOfWeek(d) {
   return x;
 }
 
-function WeekView({ hearings, onOpenHearing }) {
-  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
+/* The week grid. `weekStart` is owned by the page rather than by this view,
+   because the cause list offers "the week you are looking at" and cannot ask a
+   child component which week that is. */
+function WeekView({ hearings, onOpenHearing, weekStart, setWeekStart }) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
@@ -540,11 +544,124 @@ function GoogleSyncChip({ onNav }) {
   );
 }
 
+
+/* ---------------- Cause list ---------------- */
+
+/* The week's hearings as a document you can print, file or send on.
+ *
+ * The week on screen is the default because that is what somebody has in front
+ * of them when the thought occurs; any other stretch of dates is two fields
+ * away. The sheet itself is drawn in causeListPdf.js.
+ *
+ * The counts update as the dates and filters change, so nobody downloads a
+ * cause list to find out it was empty. */
+function CauseListModal({ weekStart, authority, onClose }) {
+  const { data, notify } = useData();
+  const week = weekRange(weekStart || new Date());
+  const [from, setFrom] = React.useState(week.from);
+  const [to, setTo] = React.useState(week.to);
+  const [auth, setAuth] = React.useState(authority || "All");
+  const [includeAdjourned, setIncludeAdjourned] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+
+  const preset = (range) => { setFrom(range.from); setTo(range.to); };
+  const presets = [
+    { label: "Week shown", range: week },
+    { label: "Next week", range: weekRange(addDays(week.from, 7)) },
+    { label: "Next 7 days", range: { from: todayISO(), to: addDays(todayISO(), 6) } },
+    { label: "This month", range: monthRange(new Date()) },
+  ];
+  const active = presets.find((p) => p.range.from === from && p.range.to === to);
+
+  const rows = React.useMemo(
+    () => causeListRows(data.hearings, { from, to, authority: auth, includeAdjourned }),
+    [data.hearings, from, to, auth, includeAdjourned]
+  );
+  const s = causeListSummary(rows);
+  const spanDays = rangeDays(from, to).length;
+  const badRange = !from || !to || to < from;
+
+  const download = () => {
+    if (badRange || busy) return;
+    setBusy(true);
+    try {
+      downloadCauseListPDF({ hearings: data.hearings, from, to, authority: auth, includeAdjourned, profile: data.profile });
+      notify(rows.length ? `Cause list downloaded — ${rows.length} hearing${rows.length === 1 ? "" : "s"}` : "Cause list downloaded — nothing listed in those dates");
+      onClose();
+    } catch (e) {
+      console.error("cause list failed", e);
+      notify("Couldn't build the cause list — try a shorter range.", "alert");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Download cause list"
+      sub="Every hearing in the dates you choose, as a printable PDF"
+      onClose={onClose}
+      width={560}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={badRange || busy} style={{opacity: badRange || busy ? 0.5 : 1}} onClick={download}>
+          <Icon name="download" size={14}/>{busy ? "Building…" : "Download PDF"}
+        </button>
+      </>}
+    >
+      <div className="row" style={{gap: 6, flexWrap: "wrap", marginBottom: 14}}>
+        {presets.map((p) => (
+          <span key={p.label} className={`fchip ${active?.label === p.label ? "active" : ""}`} onClick={() => preset(p.range)}>{p.label}</span>
+        ))}
+      </div>
+
+      <div className="form-grid">
+        <FormField label="From" required><TextInput value={from} onChange={setFrom} type="date"/></FormField>
+        <FormField label="To" required><TextInput value={to} onChange={setTo} type="date"/></FormField>
+        <FormField label="Authority">
+          <SelectInput value={auth} onChange={setAuth} options={["All", "Scrutiny", "CIT(A)", "ITAT", "Penalty", "High Court"]}/>
+        </FormField>
+        <FormField label="Adjourned hearings">
+          <Toggle checked={includeAdjourned} onChange={setIncludeAdjourned} label={includeAdjourned ? "Included" : "Left out"}/>
+        </FormField>
+      </div>
+
+      {/* What the button is about to produce. A cause list nobody can check
+          before downloading is one that gets downloaded twice. */}
+      <div style={{marginTop: 14, padding: "12px 14px", background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", borderRadius: 12}}>
+        {badRange ? (
+          <div className="center" style={{gap: 8, justifyContent: "flex-start", fontSize: 12.5, color: "#B8463A"}}>
+            <Icon name="alert" size={14}/>The "to" date falls before the "from" date.
+          </div>
+        ) : (
+          <>
+            <div className="center" style={{gap: 8, justifyContent: "flex-start"}}>
+              <Icon name="calendar" size={14}/>
+              <div style={{fontSize: 13, fontWeight: 700}}>
+                {s.hearings ? `${s.hearings} hearing${s.hearings === 1 ? "" : "s"} · ${s.days} day${s.days === 1 ? "" : "s"} · ${s.assessees} assessee${s.assessees === 1 ? "" : "s"}` : "Nothing listed in these dates"}
+              </div>
+            </div>
+            <div className="muted" style={{fontSize: 11.5, marginTop: 6, lineHeight: 1.5}}>
+              {spanDays} day{spanDays === 1 ? "" : "s"} covered{s.videoConference ? ` · ${s.videoConference} by video conference` : ""}.
+              {" "}{includeAdjourned ? "Adjourned hearings are included." : "Adjourned hearings are left out — the new date is listed on its own."}
+              {spanDays >= MAX_RANGE_DAYS ? " Only the first year of the range is printed." : ""}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export default function Hearings({ onOpenHearing, onNav }) {
   const { data } = useData();
   const [view, setView] = React.useState("Week");
   const [filterAuthority, setFilterAuthority] = React.useState("All");
   const [modal, setModal] = React.useState(null); // null | {} | hearing record
+  const [causeList, setCauseList] = React.useState(false);
+  // Owned here, not in WeekView, so "the week shown" is something the cause
+  // list can offer — see WeekView.
+  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
 
   const filtered = data.hearings.filter(h => filterAuthority === "All" || h.authority === filterAuthority);
   const upcoming = data.hearings.filter(h => h.date >= todayISO() && h.status !== "Adjourned");
@@ -567,6 +684,7 @@ export default function Hearings({ onOpenHearing, onNav }) {
         </div>
         <div className="topbar-actions">
           <GoogleSyncChip onNav={onNav}/>
+          <button className="btn btn-secondary" onClick={() => setCauseList(true)} title="Print the week's hearings, or any dates you choose"><Icon name="doc" size={14}/>Cause list</button>
           <button className="btn btn-secondary" onClick={exportCSV}><Icon name="download" size={14}/>Export CSV</button>
           <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>Add hearing</button>
         </div>
@@ -591,13 +709,20 @@ export default function Hearings({ onOpenHearing, onNav }) {
         </div>
       </div>
 
-      {view === "Week" && <WeekView hearings={filtered} onOpenHearing={onOpenHearing}/>}
+      {view === "Week" && <WeekView hearings={filtered} onOpenHearing={onOpenHearing} weekStart={weekStart} setWeekStart={setWeekStart}/>}
       {view === "Calendar" && <CalendarView hearings={filtered} onOpenHearing={onOpenHearing}/>}
       {view === "List" && <ListView hearings={[...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))} onEdit={(h) => setModal(h)} onOpenHearing={onOpenHearing}/>}
       {view === "Authority-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="authority" onOpenHearing={onOpenHearing}/>}
       {view === "Staff-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="staff" onOpenHearing={onOpenHearing}/>}
 
       {modal && <HearingModal initial={modal.id ? modal : undefined} onClose={() => setModal(null)}/>}
+      {causeList && (
+        <CauseListModal
+          weekStart={weekStart}
+          authority={filterAuthority}
+          onClose={() => setCauseList(false)}
+        />
+      )}
     </div>
   );
 }

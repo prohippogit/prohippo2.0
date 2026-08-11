@@ -1001,3 +1001,21 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .assessee-contact { flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
   .assessee-contact span { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 }
+
+/* Sortable table headers (Matters).
+   A button rather than a clickable <th>, so the column can be reached and
+   fired from the keyboard; it inherits the header's own type so the row still
+   reads as a header rather than a strip of controls. */
+.tbl thead th .th-sort {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  font: inherit; letter-spacing: inherit; text-transform: inherit;
+  color: inherit; transition: color 0.12s ease;
+}
+.tbl thead th .th-sort:hover { color: var(--p-primary-2); }
+.tbl thead th .th-sort.on { color: var(--p-primary-2); font-weight: 800; }
+/* The caret only shows on the sorted column, and on hover as an invitation —
+   eight permanently-visible arrows read as clutter, not as affordance. */
+.tbl thead th .th-caret { opacity: 0; transition: opacity 0.12s ease; }
+.tbl thead th .th-sort:hover .th-caret,
+.tbl thead th .th-sort.on .th-caret { opacity: 1; }

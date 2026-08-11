@@ -1,16 +1,23 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Icon, Avatar, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, titleCase, fmtINR, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { openFromStorage } from './downloadFile';
 import { InstallAppButton } from './InstallApp';
-import { useData, upcomingHearings, awaitingNotices, totalOutstanding, overdueAmount, invoiceOutstanding, toISO, todayISO } from './store';
+import { useData, upcomingHearings, awaitingNotices, invoiceOutstanding, toISO, todayISO } from './store';
 import { appealableOrders } from './appeals';
 import { intimationVariances, varianceSummary, needsVarianceBackfill, DEFAULT_WINDOW_MONTHS } from './intimations';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { AskDocsButton } from './askForDocuments';
 import { noticeDocumentCount } from './noticeDocs';
+import { noticesIssuedInLast24h, noticesAwaitingReply, countIssuedToday, countPastDue } from './noticeQueues';
+import { noticeDeadline } from './noticeDates';
 import { KeepBoard } from './Tasks';
+
+/* How far back "no reply filed" looks. Fifteen days is the practical window: a
+   compliance notice normally allows fifteen, so anything older than that is
+   either answered, extended, or already a problem the appeals card is tracking. */
+const NO_REPLY_DAYS = 15;
 
 export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
   const { data, loadSampleData, addTodo, notify } = useData();
@@ -26,6 +33,9 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
   };
   const [query, setQuery] = React.useState("");
   const [showNotices, setShowNotices] = React.useState(false);
+  // Which of the two notice queues is open as a list, or null. One piece of
+  // state, because opening either closes the other.
+  const [queue, setQueue] = React.useState(null); // "last24h" | "noReply" | null
 
   const hearings = upcomingHearings(data);
   const awaiting = awaitingNotices(data);
@@ -38,10 +48,13 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
   const activeMatters = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
   const weekAhead = hearings.filter(h => daysFromNow(h.date) <= 7);
   const next48h = hearings.filter(h => daysFromNow(h.date) <= 2);
-  const outstanding = totalOutstanding(data);
-  const overdue = overdueAmount(data);
-  const monthStart = todayISO().slice(0, 7);
-  const noticesThisMonth = data.notices.filter(n => (n.date || "").startsWith(monthStart));
+  /* The two queues the stat row now leads with. Memoised on `data.notices`
+     alone: both read only that collection, and depending on `data` would resort
+     the lists every time an unrelated invoice or hearing changed. */
+  const last24h = React.useMemo(() => noticesIssuedInLast24h(data.notices), [data.notices]);
+  const noReply = React.useMemo(() => noticesAwaitingReply(data.notices, { days: NO_REPLY_DAYS }), [data.notices]);
+  const issuedToday = countIssuedToday(last24h);
+  const pastDue = countPastDue(noReply);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -105,10 +118,17 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
           glow="rgba(108, 92, 231, 0.24)" goLabel="Matters" onClick={() => onNav("matters")}/>
         <Stat label="Hearings this week" value={weekAhead.length} delta={next48h.length ? `${next48h.length} in next 48h` : "None in next 48h"} deltaKind="neutral" icon="calendar" iconBg="var(--p-pink)" iconColor="#C13388"
           glow="rgba(255, 140, 200, 0.30)" goLabel="Hearings" onClick={() => onNav("hearings")}/>
-        <Stat label="Outstanding fees" value={fmtLakhs(outstanding)} delta={overdue ? `${fmtLakhs(overdue)} overdue` : "Nothing overdue"} deltaKind={overdue ? "down" : "up"} icon="wallet" iconBg="var(--p-amber)" iconColor="#B07512"
-          glow="rgba(255, 193, 84, 0.32)" goLabel="Invoices" onClick={() => onNav("invoices")}/>
-        <Stat label="Notices this month" value={noticesThisMonth.length} delta={awaiting.length ? `${awaiting.length} awaiting review` : "All reviewed"} deltaKind="neutral" icon="doc" iconBg="var(--p-mint)" iconColor="#1B8C5C"
-          glow="rgba(74, 222, 164, 0.30)"/>
+        {/* What has just landed, and what is still unanswered. Both open the
+            notices behind the number rather than a page that has to be
+            filtered down to them again. */}
+        <Stat label="Notices last 24h" value={last24h.length}
+          delta={last24h.length ? `${issuedToday} today · ${last24h.length - issuedToday} yesterday` : "Nothing new"}
+          deltaKind="neutral" icon="bell" iconBg="var(--p-amber)" iconColor="#B07512"
+          glow="rgba(255, 193, 84, 0.32)" goLabel="notices" onClick={() => setQueue("last24h")}/>
+        <Stat label="Awaiting reply" value={noReply.length}
+          delta={noReply.length ? (pastDue ? `${pastDue} past the due date` : `issued in the last ${NO_REPLY_DAYS} days`) : "Nothing open"}
+          deltaKind={pastDue ? "down" : "neutral"} icon="clock" iconBg="var(--p-mint)" iconColor="#1B8C5C"
+          glow="rgba(74, 222, 164, 0.30)" goLabel="notices" onClick={() => setQueue("noReply")}/>
       </div>
 
       <div className="grid-main">
@@ -200,6 +220,31 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
       <div style={{marginTop: 18}}>
         <KeepBoard onOpenAssessee={onSearch}/>
       </div>
+
+      {queue === "last24h" && (
+        <NoticeQueueModal
+          title="Notices · last 24 hours"
+          sub={`${last24h.length || "No"} notice${last24h.length === 1 ? "" : "s"} issued today or yesterday`}
+          note="The portal dates a notice to the day, not the hour — so this is today and yesterday."
+          rows={last24h}
+          empty="Nothing was issued yesterday or today. New notices appear here as soon as a sync brings them in."
+          onClose={() => setQueue(null)}
+          onOpenNotice={(n) => { setQueue(null); onOpenNotice(n); }}
+        />
+      )}
+
+      {queue === "noReply" && (
+        <NoticeQueueModal
+          title="Awaiting reply"
+          sub={`${noReply.length || "No"} notice${noReply.length === 1 ? "" : "s"} issued in the last ${NO_REPLY_DAYS} days with no reply recorded`}
+          note="Orders are not listed — the answer to one is an appeal, which has its own card. A reply filed outside ProHippo shows here until a sync picks it up."
+          rows={noReply}
+          empty={`Every notice issued in the last ${NO_REPLY_DAYS} days has a reply on record.`}
+          showDue
+          onClose={() => setQueue(null)}
+          onOpenNotice={(n) => { setQueue(null); onOpenNotice(n); }}
+        />
+      )}
 
       {showNotices && (
         <AwaitingNoticesModal
@@ -384,6 +429,96 @@ function Check({ checked, onChange }) {
 // the forms it exists in: the PDF the portal issued, opened for reading, and
 // the record it was filed as. A list that only offers "mark as read" is asking
 // someone to sign off on something they have not seen.
+/* The notices behind a stat card.
+ *
+ * A number on a dashboard that cannot be opened is a number nobody can act on:
+ * "3 notices in the last 24 hours" only helps once you know WHOSE. This is
+ * deliberately a reading list and not a second review queue — no bulk
+ * mark-as-read, no status edits. Those belong to the awaiting-review card,
+ * which is about clearing a backlog; this is about seeing what is there and
+ * opening the one that matters.
+ */
+function NoticeQueueModal({ title, sub, note, rows, empty, showDue, onClose, onOpenNotice }) {
+  const { notify } = useData();
+  const today = todayISO();
+
+  // The PDF the portal issued. Opened for reading, not saved — see
+  // openFromStorage in downloadFile.js for why this one goes the other way.
+  const viewPdf = async (n) => {
+    try {
+      await openFromStorage(n.storagePath);
+    } catch {
+      notify("That PDF could not be opened — try the notice record", "alert");
+    }
+  };
+
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{maxWidth: 700, padding: "22px 24px"}} onClick={(e) => e.stopPropagation()}>
+        <div className="between" style={{alignItems: "flex-start", gap: 12, marginBottom: 12}}>
+          <div>
+            <div style={{fontSize: 17, fontWeight: 800}}>{title}</div>
+            <div className="card-sub" style={{marginTop: 2}}>{sub}</div>
+          </div>
+          <button className="icon-btn" style={{width: 32, height: 32, borderRadius: 10, flexShrink: 0}} title="Close" onClick={onClose}><Icon name="x" size={15}/></button>
+        </div>
+
+        {/* What the list does and does not contain, said once at the top. A
+            practitioner who counts the rows and gets a different number from
+            the card needs the reason here, not in a support call. */}
+        {note && (
+          <div className="center" style={{gap: 9, alignItems: "flex-start", justifyContent: "flex-start", padding: "9px 11px", background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", borderRadius: 10, marginBottom: 12}}>
+            <Icon name="info" size={14}/>
+            <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5}}>{note}</div>
+          </div>
+        )}
+
+        {rows.length === 0 ? (
+          <div className="muted" style={{fontSize: 13, padding: "26px 10px", textAlign: "center", lineHeight: 1.6}}>{empty}</div>
+        ) : (
+          <div className="col" style={{gap: 8, maxHeight: "60vh", overflowY: "auto"}}>
+            {rows.map((n) => {
+              const due = noticeDeadline(n);
+              const overdue = Boolean(due) && due < today;
+              /* A notice is often a SET of files — a s.148 arrives with its
+                 approval, set note and search print. Counted here so nobody
+                 opens one file and assumes that was all of it. */
+              const docCount = noticeDocumentCount(n);
+              return (
+                <div key={n.id} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderRadius: 11, flexWrap: "wrap"}}>
+                  <div style={{flex: 1, minWidth: 190, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open the notice record">
+                    <div style={{fontSize: 14.5, fontWeight: 800, color: "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                      {n.assessee ? titleCase(n.assessee) : "—"}
+                    </div>
+                    <div className="center" style={{gap: 6, marginTop: 4, justifyContent: "flex-start", flexWrap: "wrap"}}>
+                      {n.isOrder && <span className="pill pill-pink">Order</span>}
+                      {n.section && <span className="pill pill-muted">u/s {n.section}</span>}
+                      {showDue && due && (
+                        <span className={`pill ${overdue ? "pill-danger" : "pill-primary"}`}>
+                          <Icon name="clock" size={10}/>{n.hearingDate ? "Hearing" : "Reply"} {fmtDate(due)}
+                        </span>
+                      )}
+                      <span className="muted" style={{fontSize: 11.5}}>
+                        {n.ay ? `AY ${n.ay} · ` : ""}issued {n.date ? fmtDate(n.date) : "—"}
+                        {docCount > 1 ? ` · ${docCount} files` : ""}
+                      </span>
+                    </div>
+                  </div>
+                  {n.storagePath && (
+                    <button className="btn btn-ghost btn-xs" title="Open the PDF" onClick={() => viewPdf(n)}><Icon name="pdf" size={12}/>PDF</button>
+                  )}
+                  <button className="btn btn-secondary btn-xs" onClick={() => onOpenNotice(n)}>Open <Icon name="arrow-right" size={12}/></button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function AwaitingNoticesModal({ awaiting, onClose, onOpenNotice }) {
   const { updateNotice, notify } = useData();
   const [selected, setSelected] = React.useState(() => new Set());

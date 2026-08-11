@@ -651,7 +651,25 @@ function build({ PRIMARY_REGION, db }) {
     applied.matterId = matterId;
 
     if (mail.kind === "hearing" && f.date) {
-      const hearingId = hearingIdFor(appealNo, f.date);
+      /* Every hearing already on file for this appeal, read once and used
+         twice: to decide where THIS notice goes, and which earlier date it
+         displaces. Queried by PAN, which is indexed, and compared on the
+         canonical appeal number so one typed as "ITA No. 2530/Ahd/2026" is
+         recognised as the same appeal. */
+      const canonical = canonicalAppealNo(appealNo);
+      const prior = await db.collection(`users/${uid}/hearings`).where("pan", "==", pan).get();
+      const sameAppeal = prior.docs.filter((d) => canonicalAppealNo((d.data() || {}).ita) === canonical);
+
+      /* Normally a document id derived from the appeal and the date, which is
+         what stops a re-sent email creating a second hearing. But a hearing for
+         this appeal on this date may already be here by another route — typed
+         in by hand, or opened when the matter was adjourned in court and the
+         Tribunal's notice followed a week later. The notice belongs ON that
+         record, filling in the bench and the venue it did not have. Written
+         beside it instead, the practitioner gets two rows for one hearing and
+         no way to tell which is real. */
+      const existing = sameAppeal.find((d) => (d.data() || {}).date === f.date);
+      const hearingId = existing ? existing.id : hearingIdFor(appealNo, f.date);
       writes.push(db.doc(`users/${uid}/hearings/${hearingId}`).set({
         assessee: assessee.name || "",
         pan,
@@ -675,17 +693,12 @@ function build({ PRIMARY_REGION, db }) {
       /* An adjournment is a new date for the same appeal, not an edit of the old
          one. The earlier hearing is marked Adjourned rather than deleted, so a
          matter that has been put off four times still reads as four dates —
-         which is the history a practitioner is asked about at the hearing.
-         Queried by PAN and compared on the CANONICAL appeal number, so a
-         hearing someone typed in as "ITA No. 2530/Ahd/2026" is recognised too. */
-      const canonical = canonicalAppealNo(appealNo);
-      const prior = await db.collection(`users/${uid}/hearings`).where("pan", "==", pan).get();
-      prior.docs.forEach((d) => {
+         which is the history a practitioner is asked about at the hearing. */
+      sameAppeal.forEach((d) => {
         const h = d.data();
         if (d.id === hearingId) return;
-        if (canonicalAppealNo(h.ita) !== canonical) return;
         if (h.status !== "Upcoming" || !h.date || h.date >= f.date) return;
-        writes.push(d.ref.set({ status: "Adjourned" }, { merge: true }));
+        writes.push(d.ref.set({ status: "Adjourned", adjournedTo: f.date }, { merge: true }));
       });
     }
 

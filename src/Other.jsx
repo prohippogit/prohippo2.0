@@ -1615,7 +1615,7 @@ function GoogleCalendarCard() {
           />
           <CalendarSwitch
             name="Hearings"
-            sub="ITAT, CIT(A), scrutiny and penalty hearings, at their listed time"
+            sub="ITAT, CIT(A), scrutiny and penalty hearings, as all-day events with the listed time in the details"
             checked={cfg?.syncHearings !== false}
             onChange={(v) => setOption({ syncHearings: v })}
           />

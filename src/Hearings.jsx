@@ -100,6 +100,95 @@ export function HearingModal({ initial, onClose }) {
   );
 }
 
+/* Adjourning a hearing is TWO records, not one edit.
+ *
+ * A matter put off four times has been heard on four dates, and that history is
+ * what a practitioner is asked about across the table — "when was it last
+ * listed, and why did it not proceed?". Moving the date on the existing record
+ * answers none of that: it leaves one hearing that appears never to have been
+ * adjourned at all. So the old date is closed as Adjourned and the new one is
+ * opened beside it, carrying everything except the things that must not travel:
+ * the document's own identity, and the Google Calendar event it is synced to.
+ *
+ * This is the same shape the Tribunal's own notices produce. When a fresh notice
+ * arrives for an appeal already on file, applyItatMail marks the earlier date
+ * Adjourned and writes the new one — a hearing adjourned in court and a hearing
+ * adjourned by notice end up indistinguishable, which is right, because they
+ * are the same event reaching us by two routes.
+ */
+const CARRIED_TO_NEW_DATE = [
+  "assessee", "pan", "ay", "authority", "bench", "section",
+  "mode", "staff", "ita", "venue", "caseType", "gcalSkip",
+];
+
+function AdjournModal({ hearing, onClose }) {
+  const { addHearing, updateHearing, notify } = useData();
+  const [date, setDate] = React.useState("");
+  const [time, setTime] = React.useState(hearing.time || "10:30");
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  // Forward only. An adjournment moves a matter later; a date before the one
+  // being adjourned is a typo every time, and it would sort the new hearing
+  // above the old one and read as the history running backwards.
+  const valid = Boolean(date) && date > hearing.date && !busy;
+
+  const save = async () => {
+    if (!valid) return;
+    setBusy(true);
+    /* Named fields rather than "everything except". A hearing grows fields over
+       time, and the ones that must NOT travel are exactly the ones nobody
+       remembers to exclude: `gcal` holds the Google Calendar event this record
+       is synced to, and carrying it would point two hearings at one event. An
+       allowlist cannot be wrong about a field invented next year. */
+    const carried = {};
+    for (const k of CARRIED_TO_NEW_DATE) if (hearing[k] !== undefined) carried[k] = hearing[k];
+
+    await updateHearing(hearing.id, { status: "Adjourned", adjournedTo: date });
+    await addHearing({
+      ...carried,
+      date,
+      time,
+      status: "Upcoming",
+      adjournedFrom: hearing.date,
+      ...(note.trim() ? { note: note.trim() } : {}),
+      source: "adjournment",
+    });
+    notify(`Adjourned to ${fmtDateLong(date)}`);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="Adjourn hearing"
+      sub={`${titleCase(hearing.assessee)} · ${hearing.authority}${hearing.ita ? ` · ${hearing.ita}` : ""}`}
+      onClose={onClose}
+      width={520}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" disabled={!valid} style={{ opacity: valid ? 1 : 0.5 }} onClick={save}>
+          <Icon name="check" size={14} />{busy ? "Saving…" : "Adjourn"}
+        </button>
+      </>}
+    >
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 14, lineHeight: 1.6 }}>
+        The hearing listed for <b>{fmtDateLong(hearing.date)}</b> will be marked Adjourned and kept,
+        and a new one opened on the date below with the same assessee, bench and appeal number.
+      </div>
+      <div className="form-grid">
+        <FormField label="Adjourned to" required><TextInput type="date" value={date} onChange={setDate} /></FormField>
+        <FormField label="Time"><TextInput type="time" value={time} onChange={setTime} /></FormField>
+        <FormField label="Note" full><TextInput value={note} onChange={setNote} placeholder="e.g. bench not sitting, adjournment sought" /></FormField>
+      </div>
+      {date && date <= hearing.date && (
+        <div style={{ fontSize: 12.5, color: "var(--p-danger)", marginTop: 10 }}>
+          The new date has to be after {fmtDateLong(hearing.date)}.
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function startOfWeek(d) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -286,7 +375,8 @@ function Legend({ color, label }) {
 }
 
 function ListView({ hearings, onEdit, onOpenHearing }) {
-  const { updateHearing, removeHearing, notify } = useData();
+  const { removeHearing, notify } = useData();
+  const [adjourning, setAdjourning] = React.useState(null);
   return (
     <div className="card" style={{padding: 0}}>
       <table className="tbl">
@@ -316,8 +406,11 @@ function ListView({ hearings, onEdit, onOpenHearing }) {
               <td>
                 <div className="row" style={{gap: 4}}>
                   <button className="btn btn-ghost btn-xs" title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(h); }}><Icon name="edit" size={12}/></button>
-                  {h.status !== "Adjourned" && h.date >= todayISO() && (
-                    <button className="btn btn-ghost btn-xs" title="Mark adjourned" onClick={(e) => { e.stopPropagation(); updateHearing(h.id, { status: "Adjourned" }); notify("Hearing marked adjourned"); }}><Icon name="clock" size={12}/></button>
+                  {/* Available on a hearing whose date has passed as well as one
+                      still ahead: an adjournment is usually recorded after the
+                      event, on the way out of court. */}
+                  {h.status !== "Adjourned" && (
+                    <button className="btn btn-ghost btn-xs" title="Adjourn to another date" onClick={(e) => { e.stopPropagation(); setAdjourning(h); }}><Icon name="clock" size={12}/></button>
                   )}
                   <button className="btn btn-ghost btn-xs" title="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this hearing?")) { removeHearing(h.id); notify("Hearing deleted"); } }}><Icon name="trash" size={12}/></button>
                 </div>
@@ -327,6 +420,7 @@ function ListView({ hearings, onEdit, onOpenHearing }) {
           {hearings.length === 0 && <tr><td colSpan="9" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings recorded.</td></tr>}
         </tbody>
       </table>
+      {adjourning && <AdjournModal hearing={adjourning} onClose={() => setAdjourning(null)} />}
     </div>
   );
 }

@@ -5,9 +5,6 @@ import { openFromStorage } from './downloadFile';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, invoiceOutstanding, toISO, todayISO } from './store';
 import { appealableOrders } from './appeals';
-import { intimationVariances, varianceSummary, needsVarianceBackfill, DEFAULT_WINDOW_MONTHS } from './intimations';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from './firebase';
 import { AskDocsButton } from './askForDocuments';
 import { noticeDocumentCount } from './noticeDocs';
 import { noticesIssuedInLast24h, noticesAwaitingReply, countIssuedToday, countPastDue } from './noticeQueues';
@@ -43,11 +40,6 @@ export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSea
   const hearings = upcomingHearings(data);
   const awaiting = awaitingNotices(data);
   const appeals = appealableOrders(data);
-  // Passed as { returns } rather than the whole store: the selector reads only
-  // that collection, and depending on `data` would rebuild the list every time
-  // an unrelated invoice or hearing changed.
-  const variances = React.useMemo(() => intimationVariances({ returns: data.returns }), [data.returns]);
-  useVarianceBackfill(data.returns);
   const activeMatters = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
   const weekAhead = hearings.filter(h => daysFromNow(h.date) <= 7);
   const next48h = hearings.filter(h => daysFromNow(h.date) <= 2);
@@ -137,8 +129,6 @@ export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSea
       <div className="grid-main">
         <div className="col" style={{gap: 18}}>
           <AppealsReminderCard appeals={appeals} onNav={onNav} onAddTask={addTaskFromAppeal}/>
-
-          <IntimationVarianceCard rows={variances} onOpen={() => onNav("intimations")}/>
 
           {awaiting.length > 0 && (
             <div
@@ -306,99 +296,6 @@ function AppealsReminderCard({ appeals, onNav, onAddTask }) {
           </button>
           <span className="btn" style={{background: "white", color: "var(--p-primary-2)"}}>
             Prepare appeals <Icon name="arrow-right" size={14}/>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- intimations u/s 143(1) and orders u/s 154 ---------------- */
-
-/* Bring the whole history through the variance engine, once per page load.
- *
- * Every intimation a practice has ever synced already carries CPC's demand and
- * refund figures, and every filed return's JSON is already in Storage — so the
- * back history can be flagged without anybody re-syncing. It has to be a
- * deliberate trigger rather than a side effect of the next sync, because the
- * connector SKIPS an assessment year with no new order (portalReturns.js): a
- * quiet year would otherwise never pass through the ingest again and would stay
- * blank for ever.
- *
- * Module-level flag, not state: one attempt per page load whichever screen
- * mounts first, and no retry loop if the call fails. Silent either way — the
- * card fills in on its own when the write lands, and a practitioner who never
- * knew a backfill was due does not need to be told one failed. */
-let varianceBackfillTried = false;
-function useVarianceBackfill(returns) {
-  React.useEffect(() => {
-    if (varianceBackfillTried || !(returns || []).length) return;
-    if (!needsVarianceBackfill({ returns })) return;
-    varianceBackfillTried = true;
-    httpsCallable(functions, "refreshReturnVariances")({}).catch((e) => {
-      console.warn("variance backfill failed", e?.message || e);
-    });
-  }, [returns]);
-}
-
-
-/* What CPC did to the assessee's position, across the practice, over the last
- * six months.
- *
- * DELIBERATELY NOT A RED CARD. Six months of intimations will normally contain
- * movement in both directions, and a card that turns red whenever any client
- * gets a demand is a card that is red every week — which is a card nobody reads.
- * The surface stays one colour and the ROWS carry the red and the green, so the
- * colour still means something when it appears.
- *
- * The headline leads with additional demand when there is any, because that is
- * the one with a clock on it: a s.154 rectification and an appeal against an
- * intimation both run to a deadline, and an extra refund does not.
- */
-function IntimationVarianceCard({ rows, onOpen }) {
-  if (!rows || rows.length === 0) return null;
-  const s = varianceSummary(rows);
-
-  /* Nothing but agreement is not worth a card. Six months where CPC accepted
-     every return is the normal, quiet case — saying so every day would train
-     the practitioner to skip past the card on the days it matters. */
-  if (!s.red && !s.green && !s.unknown) return null;
-
-  const lead = s.red
-    ? <>{fmtINR(s.additionalDemand)} more payable than the returns claimed{s.assessees > 1 ? `, across ${s.assessees} assessees` : ""}.</>
-    : s.green
-      ? <>{fmtINR(s.extraRefund)} more refund than claimed.</>
-      : <>{s.unknown} could not be compared automatically.</>;
-
-  return (
-    <div
-      className="card"
-      style={{padding: 0, overflow: "hidden", border: "none", background: "linear-gradient(120deg, #10303E 0%, #175C66 55%, #2FA79C 100%)", color: "white", position: "relative", cursor: "pointer"}}
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
-      title="Review the intimations and rectification orders CPC has issued"
-    >
-      <div style={{position: "absolute", right: -40, top: -40, width: 200, height: 200, borderRadius: "50%", background: "rgba(140,255,235,0.22)", filter: "blur(20px)"}}/>
-      <div style={{padding: "24px 26px", position: "relative"}}>
-        <div className="center" style={{gap: 8, justifyContent: "flex-start"}}>
-          <Icon name="chart" size={16}/>
-          <span style={{fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.85}}>
-            Intimations · Tax variance
-          </span>
-        </div>
-        <div style={{fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 8, lineHeight: 1.25}}>
-          {rows.length} order{rows.length !== 1 ? "s" : ""} in the last {DEFAULT_WINDOW_MONTHS} months.<br/>
-          <span style={{opacity: 0.9}}>{lead}</span>
-        </div>
-        <div className="row" style={{marginTop: 14, gap: 8, alignItems: "center", flexWrap: "wrap"}}>
-          {s.red > 0 && <span className="pill" style={{background: "rgba(255,120,120,0.32)", color: "white"}}>{s.red} raising demand</span>}
-          {s.green > 0 && <span className="pill" style={{background: "rgba(120,255,190,0.28)", color: "white"}}>{s.green} in the assessee's favour</span>}
-          {s.adjusted > 0 && <span className="pill" style={{background: "rgba(255,255,255,0.2)", color: "white"}} title="CPC set the refund off against an earlier demand u/s 245">{s.adjusted} refund adjusted u/s 245</span>}
-          {s.unknown > 0 && <span className="pill" style={{background: "rgba(255,255,255,0.2)", color: "white"}}>{s.unknown} not compared</span>}
-          <span className="btn" style={{background: "white", color: "#12525C", marginLeft: "auto"}}>
-            Review variances <Icon name="arrow-right" size={14}/>
           </span>
         </div>
       </div>

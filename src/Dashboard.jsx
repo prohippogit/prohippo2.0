@@ -19,7 +19,7 @@ import { KeepBoard } from './Tasks';
    either answered, extended, or already a problem the appeals card is tracking. */
 const NO_REPLY_DAYS = 15;
 
-export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
+export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSearch }) {
   const { data, loadSampleData, addTodo, notify } = useData();
 
   // Turn a hearing or an appeal deadline into a task card on the board.
@@ -36,6 +36,9 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
   // Which of the two notice queues is open as a list, or null. One piece of
   // state, because opening either closes the other.
   const [queue, setQueue] = React.useState(null); // "last24h" | "noReply" | null
+  // A row opens the proceeding the notice sits in. Falls back to the notice
+  // itself if a caller doesn't supply the navigation, so a row is never dead.
+  const openProceeding = onOpenProceeding || onOpenNotice;
 
   const hearings = upcomingHearings(data);
   const awaiting = awaitingNotices(data);
@@ -229,7 +232,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
           rows={last24h}
           empty="Nothing was issued yesterday or today. New notices appear here as soon as a sync brings them in."
           onClose={() => setQueue(null)}
-          onOpenNotice={(n) => { setQueue(null); onOpenNotice(n); }}
+          onOpen={(n) => { setQueue(null); openProceeding(n); }}
         />
       )}
 
@@ -242,7 +245,7 @@ export default function Dashboard({ onNav, onOpenNotice, onSearch }) {
           empty={`Every notice issued in the last ${NO_REPLY_DAYS} days has a reply on record.`}
           showDue
           onClose={() => setQueue(null)}
-          onOpenNotice={(n) => { setQueue(null); onOpenNotice(n); }}
+          onOpen={(n) => { setQueue(null); openProceeding(n); }}
         />
       )}
 
@@ -437,8 +440,14 @@ function Check({ checked, onChange }) {
  * mark-as-read, no status edits. Those belong to the awaiting-review card,
  * which is about clearing a backlog; this is about seeing what is there and
  * opening the one that matters.
+ *
+ * A row opens the PROCEEDING the notice sits in (Assessee → Matters → its
+ * card), not the notice on its own. Somebody who clicks "u/s 142(1), reply due
+ * the 7th" wants the file: what else has been issued in that proceeding, what
+ * was replied, when the hearing is. App.jsx does the navigation, and falls back
+ * to the review screen for a notice that has no proceeding behind it.
  */
-function NoticeQueueModal({ title, sub, note, rows, empty, showDue, onClose, onOpenNotice }) {
+function NoticeQueueModal({ title, sub, note, rows, empty, showDue, onClose, onOpen }) {
   const { notify } = useData();
   const today = todayISO();
 
@@ -486,7 +495,7 @@ function NoticeQueueModal({ title, sub, note, rows, empty, showDue, onClose, onO
               const docCount = noticeDocumentCount(n);
               return (
                 <div key={n.id} className="center" style={{gap: 12, padding: "10px 12px", border: "1px solid var(--p-line-2)", borderRadius: 11, flexWrap: "wrap"}}>
-                  <div style={{flex: 1, minWidth: 190, cursor: "pointer"}} onClick={() => onOpenNotice(n)} title="Open the notice record">
+                  <div style={{flex: 1, minWidth: 190, cursor: "pointer"}} onClick={() => onOpen(n)} title="Open this proceeding on the assessee's Matters tab">
                     <div style={{fontSize: 14.5, fontWeight: 800, color: "var(--p-primary-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
                       {n.assessee ? titleCase(n.assessee) : "—"}
                     </div>
@@ -507,7 +516,7 @@ function NoticeQueueModal({ title, sub, note, rows, empty, showDue, onClose, onO
                   {n.storagePath && (
                     <button className="btn btn-ghost btn-xs" title="Open the PDF" onClick={() => viewPdf(n)}><Icon name="pdf" size={12}/>PDF</button>
                   )}
-                  <button className="btn btn-secondary btn-xs" onClick={() => onOpenNotice(n)}>Open <Icon name="arrow-right" size={12}/></button>
+                  <button className="btn btn-secondary btn-xs" title="Open this proceeding on the assessee's Matters tab" onClick={() => onOpen(n)}>Open <Icon name="arrow-right" size={12}/></button>
                 </div>
               );
             })}

@@ -4,7 +4,7 @@ import Dashboard from './Dashboard';
 import { Assessees, AssesseeProfile } from './Assessees';
 import Hearings from './Hearings';
 import Appeals from './Appeals';
-import Notices, { NoticeReview } from './Notices';
+import { NoticeReview } from './Notices';
 import Intimations from './Intimations';
 import { Matters, Invoices, Communications, Reports, SettingsPage } from './Other';
 import { Icon } from './shared';
@@ -184,7 +184,6 @@ function Shell() {
       case "appeals": content = <Appeals onOpenNotice={openReview}/>; break;
       case "invoices": content = <Invoices/>; break;
       case "communications": content = <Communications/>; break;
-      case "notices": content = <Notices onOpenNotice={openReview}/>; break;
       case "intimations": content = <Intimations/>; break;
       case "reports": content = <Reports/>; break;
       case "connector": content = <ConnectorDownload/>; break;

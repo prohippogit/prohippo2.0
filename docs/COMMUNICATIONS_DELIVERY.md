@@ -244,8 +244,9 @@ gets you to a composer:
 | Has a PDF but no list | Reads the PDF (`extractNoticeDocuments`), then composer |
 | Neither | Composer with the section's presets ready to click |
 
-It appears on notice tiles in proceedings, the Assessee → Notices tab, the
-Notices page, and the Dashboard's awaiting-review list. Orders are excluded —
+It appears on notice tiles in proceedings, the Assessee → Notices tab, and the
+Dashboard's awaiting-review list. (There was a practice-wide Notices page too,
+until it was removed as a fourth way to read the same records.) Orders are excluded —
 an order is decided, there is nothing left to ask the client for.
 
 The button turns **primary** and grows a deadline chip ("Due tomorrow",

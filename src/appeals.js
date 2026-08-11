@@ -101,6 +101,31 @@ export const DOC_TYPE_LABEL = {
   other: "Notice",
 };
 
+/* ---------------- appeal numbers ----------------
+ *
+ * "ITA No. 1762/Ahd/2026", "ITA 1762/AHD/2026" and "ITA 01762/AHD/2026" are one
+ * appeal, and all three turn up: the Tribunal writes one form, a practitioner
+ * types another, and a matter opened from the Tribunal's email carries a third.
+ * Comparing the raw strings finds nothing, which is how a proceeding ends up
+ * reporting no hearings while two of them sit on the assessee's own page.
+ *
+ * Deliberately the same reduction as canonicalAppealNo in
+ * functions/itatEmailParse.js, which decides whether an incoming notice belongs
+ * to an appeal already on file. The two have to agree, or a hearing the server
+ * merged would appear unlinked to the client that displays it.
+ */
+export const appealKey = (v) => String(v || "")
+  .toUpperCase()
+  .replace(/\bNOS?\b\.?/g, " ")
+  .replace(/[^A-Z0-9]+/g, "")
+  // Leading zeros on the serial only — "ITA 01762" is "ITA 1762", but the 2026
+  // in the year must survive intact.
+  .replace(/([A-Z])0+(\d)/, "$1$2");
+
+// Empty matches nothing. A matter with no reference and a hearing with no
+// appeal number are not "the same appeal", they are two blanks.
+export const sameAppeal = (a, b) => Boolean(appealKey(a)) && appealKey(a) === appealKey(b);
+
 export const ayStartYear = (ay) => { const m = /^(\d{4})/.exec(String(ay || "")); return m ? +m[1] : null; };
 
 const ACT_1961 = { act: "Act 1961", newAct: false, citForm: "Form 35", itatForm: "Form 36" };

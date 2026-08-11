@@ -9,6 +9,7 @@ import { MatterModal } from './Other';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
 import { AskDocsButton } from './askForDocuments';
 import { AssesseeModal } from './AssesseeModal';
+import { AdjournModal } from './Hearings';
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { functions, storage } from './firebase';
@@ -19,7 +20,7 @@ import { noticeFilename, returnOrderFilename, returnDocFilename } from './downlo
 // The table only — the generator itself stays behind a dynamic import so it does
 // not ride in the main bundle.
 import { computationAvailability } from './computation/supported';
-import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL } from './appeals';
+import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL, sameAppeal } from './appeals';
 import NoticeDocuments from './NoticeDocuments';
 import { noticeDocumentCount, hasDocumentList } from './noticeDocs';
 import { describeVariance, BASELINE_LABEL } from './intimations';
@@ -897,6 +898,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
   const [closedProceedings, setClosedProceedings] = React.useState([]); // popup after a sync
   const [focusReqId, setFocusReqId] = React.useState(null); // proceeding to expand in Matters
   const [compose, setCompose] = React.useState(null); // { request } | { seed } for the doc-request composer
+  const [adjourning, setAdjourning] = React.useState(null); // hearing being moved to a new date
   const a = assessee;
   const s = assesseeStats(data, a);
   const hearings = upcomingHearings(data).filter(h => h.pan === a.pan);
@@ -1205,7 +1207,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
       {tab === "Hearings" && (
         <div className="card" style={{padding: 0}}>
           <Table>
-            <thead><tr><th>Date / Time</th><th>Authority</th><th>Bench</th><th>AY</th><th>Mode</th><th>Status</th></tr></thead>
+            <thead><tr><th>Date / Time</th><th>Authority</th><th>Bench</th><th>AY</th><th>Mode</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {allHearings.map(h => (
                 <tr key={h.id}>
@@ -1215,9 +1217,18 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
                   <td>{h.ay}</td>
                   <td>{h.mode}</td>
                   <td><StatusPill status={h.date < todayISO() ? "Completed" : h.status}/></td>
+                  {/* Where a practitioner already is when the news reaches them:
+                      the client's own file, open on the date that just moved. */}
+                  <td>
+                    {h.status !== "Adjourned" && (
+                      <button className="btn btn-ghost btn-xs" title="Adjourn to another date" onClick={() => setAdjourning(h)}>
+                        <Icon name="clock" size={12}/>
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
-              {allHearings.length === 0 && <tr><td colSpan="6" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings for {titleCase(a.name)} yet.</td></tr>}
+              {allHearings.length === 0 && <tr><td colSpan="7" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings for {titleCase(a.name)} yet.</td></tr>}
             </tbody>
           </Table>
         </div>
@@ -1349,6 +1360,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
 
       {showEdit && <AssesseeModal initial={a} onClose={() => setShowEdit(false)}/>}
       {showMatter && <MatterModal initial={{ assessee: a.name, pan: a.pan, staff: a.staff }} onClose={() => setShowMatter(false)}/>}
+      {adjourning && <AdjournModal hearing={adjourning} onClose={() => setAdjourning(null)}/>}
       {compose && (
         <DocumentRequestComposer
           key={compose.request?.id || "new"}
@@ -1997,7 +2009,14 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
 
   const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));
-  const hearingsFor = (m) => byDateDesc(hearings.filter((h) => m.proceedingReqId && h.proceedingReqId === m.proceedingReqId));
+  /* Linked by the portal's proceeding id where there is one, and otherwise by
+     the appeal number. A matter opened from the Tribunal's own email has no
+     proceeding id — it never came through the portal sync — so on that test
+     alone its own hearings were invisible, and an ITAT card read "0 hearings"
+     with two of them sitting on the assessee's Hearings tab. */
+  const hearingsFor = (m) => byDateDesc(hearings.filter((h) => (
+    (m.proceedingReqId && h.proceedingReqId === m.proceedingReqId) || sameAppeal(m.ref, h.ita)
+  )));
 
   // When asked to focus a proceeding — from the "closed" popup (by reqId) or a
   // click on the global Matters / Hearings page (by matter id) — open its card.
@@ -2106,6 +2125,7 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
 /* Full, scrollable pop-up card for a single proceeding — its hearings and every
    notice / order / appeal filed against it, with the assessee's responses. */
 function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onParse, onClose }) {
+  const [adjourning, setAdjourning] = React.useState(null);
   const accent = accentFor(m.type);
   const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
   const docCount = ns.length;
@@ -2142,11 +2162,21 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Hearings</div>
             <div className="col" style={{gap: 8}}>
               {hs.map((h) => (
-                <div key={h.id} className="center" style={{gap: 10, fontSize: 12.5, justifyContent: "flex-start", padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
-                  <Icon name="calendar" size={13} className="muted"/>
-                  <span className="strong">{fmtDateLong(h.date)}</span>
-                  <span className="muted">{h.time} · {h.mode}</span>
-                  <StatusPill status={h.date < todayISO() ? "Completed" : h.status}/>
+                <div key={h.id} className="between" style={{gap: 10, fontSize: 12.5, padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
+                  <div className="center" style={{gap: 10, justifyContent: "flex-start", flexWrap: "wrap"}}>
+                    <Icon name="calendar" size={13} className="muted"/>
+                    <span className="strong">{fmtDateLong(h.date)}</span>
+                    <span className="muted">{h.time} · {h.mode}</span>
+                    <StatusPill status={h.date < todayISO() ? "Completed" : h.status}/>
+                  </div>
+                  {/* The proceeding is what a practitioner has open when they are
+                      reading up on a matter, so the date can be moved from here
+                      without hunting for the same hearing on another screen. */}
+                  {h.status !== "Adjourned" && (
+                    <button className="btn btn-ghost btn-xs" title="Adjourn to another date" onClick={() => setAdjourning(h)}>
+                      <Icon name="clock" size={12}/>
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -2268,6 +2298,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             )}
         </div>
       </div>
+      {adjourning && <AdjournModal hearing={adjourning} onClose={() => setAdjourning(null)}/>}
     </Modal>
   );
 }

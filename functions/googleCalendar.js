@@ -63,10 +63,9 @@ const CALENDAR_SUMMARY = "ProHippo — Hearings";
 const CALENDAR_DESCRIPTION =
   "Hearings and statutory deadlines pushed from ProHippo. Changes made here are not sent back to ProHippo.";
 
-// India has no daylight saving, so a fixed offset is always correct and needs no
-// zone database at event-build time.
+// India has no daylight saving, so the zone is a constant and needs no zone
+// database at event-build time.
 const TZ = "Asia/Kolkata";
-const TZ_OFFSET = "+05:30";
 
 /* The practice's own address, used for the "Open in ProHippo" link inside every
    event. Firebase's default domains stay live alongside it, which is why the
@@ -90,8 +89,6 @@ const safeOrigin = (value) => (ALLOWED_ORIGINS.has(clean(value)) ? clean(value) 
 
 // A consent link the user never used is a loose end, not a state to keep.
 const AUTH_STATE_TTL_MS = 15 * 60 * 1000;
-
-const DEFAULT_HEARING_MINUTES = 60;
 
 /* Google's event colour palette (calendar/v3 colors.event), picked to match the
    authority colours the app already uses on the week and month views. */
@@ -181,16 +178,34 @@ function hearingEvent(hearing, { detailed }) {
   if (clean(hearing.mode)) lines.push(`Mode: ${hearing.mode}`);
   lines.push(`Open in ProHippo: ${deepLink("hearings")}`);
 
-  const finish = endOf(hearing.date, hearing.time, DEFAULT_HEARING_MINUTES);
+  /* All-day, not an appointment.
+   *
+   * The listed time is when the bench rises, not when the practitioner is free
+   * again: a matter listed at 10.30 can be called at noon, and the day is spent
+   * at the Tribunal either way. Booking it as a one-hour slot leaves the rest of
+   * the day looking available, which is how a second commitment gets made for
+   * an afternoon that was never going to be free.
+   *
+   * The time is not lost — it leads the description, because it is the thing
+   * that decides when to leave. An all-day event's `end` is exclusive, so a
+   * one-day hearing ends the morning after; get that wrong and every hearing
+   * reads as two days long. */
+  if (clean(hearing.time)) lines.unshift(`Listed at ${hearing.time}`);
+  const next = new Date(`${hearing.date}T00:00:00`);
+  next.setDate(next.getDate() + 1);
 
   return {
     summary: adjourned ? `[Adjourned] ${summary}` : summary,
     location: detailed ? clean(hearing.bench) : "",
     description: lines.join("\n"),
-    start: { dateTime: `${hearing.date}T${hearing.time}:00${TZ_OFFSET}`, timeZone: TZ },
-    end: { dateTime: `${finish.date}T${finish.time}:00${TZ_OFFSET}`, timeZone: TZ },
+    start: { date: hearing.date },
+    end: { date: isoDate(next) },
     colorId: AUTHORITY_COLOR[authority] || "10",
-    reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 24 * 60 }, { method: "popup", minutes: 120 }] },
+    /* Measured from midnight on the day, because that is where an all-day event
+       starts — so these land at 6 pm two evenings before and 6 pm the evening
+       before, which is when a hearing is actually prepared for. Google will not
+       take a reminder AFTER the start, so there is no morning-of option here. */
+    reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 30 * 60 }, { method: "popup", minutes: 6 * 60 }] },
   };
 }
 
@@ -879,13 +894,14 @@ module.exports.build = function build(ctx) {
       const h = doc.data() || {};
       if (h.gcalSkip || !ISO_DATE.test(h.date || "") || !HHMM.test(h.time || "") || h.date < from) return;
       const ev = hearingEvent(h, { detailed });
-      const finish = endOf(h.date, h.time, DEFAULT_HEARING_MINUTES);
       lines.push(
         "BEGIN:VEVENT",
         `UID:${eventIdFor("hearing", doc.id)}@prohippo`,
         `DTSTAMP:${stamp}`,
-        `DTSTART;TZID=${TZ}:${icsDateTime(h.date, h.time)}`,
-        `DTEND;TZID=${TZ}:${icsDateTime(finish.date, finish.time)}`,
+        // All-day here too, or a practice subscribing by link would see a
+        // different diary from one connected to Google.
+        `DTSTART;VALUE=DATE:${icsDate(ev.start.date)}`,
+        `DTEND;VALUE=DATE:${icsDate(ev.end.date)}`,
         fold(`SUMMARY:${icsEscape(ev.summary)}`),
         fold(`DESCRIPTION:${icsEscape(ev.description)}`),
         ...(ev.location ? [fold(`LOCATION:${icsEscape(ev.location)}`)] : []),

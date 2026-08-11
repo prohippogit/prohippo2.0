@@ -433,6 +433,16 @@ function build({ PRIMARY_REGION, db }) {
       return "dropped";
     }
 
+    /* The Tribunal's routine mail — acknowledgements, verifications, one-time
+       passwords. Counted so the numbers still add up, and not filed: a review
+       queue holding a dozen of these is one a practitioner learns to skip past,
+       and the queue only works if everything in it is worth a decision. */
+    if (result.kind === "routine") {
+      await noteUnfiled(uid, "routine");
+      console.log("itatInboundEmail: routine — Tribunal mail that is not a registration or a hearing");
+      return "routine";
+    }
+
     const id = messageKey(msg);
     const ref = db.doc(`users/${uid}/itatMail/${id}`);
     if ((await ref.get()).exists) {

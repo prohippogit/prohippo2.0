@@ -485,6 +485,39 @@ test("a Tribunal email in an unknown shape is recorded, not guessed at", () => {
   assert.equal(out.reason, "no-template-match");
 });
 
+test("the Tribunal's routine mail is recognised and passed over, not queued", () => {
+  /* Every subject here came off a real import that filled the review queue
+     with things nobody can act on. They are genuinely from itat.nic.in, so the
+     sender allowlist passes them; the queue only works if everything in it is
+     worth a decision, and a queue of acknowledgements teaches a practitioner
+     to skip past the one notice that mattered. */
+  for (const subject of [
+    "E-Filing Acknowledgement - 1800105577 - Assessment Year: 2017-18",
+    "E-Filing Acknowledgment - 1800106074 - Assessment Year: 2015-16",
+    "Email Verification",
+    "Your OTP for ITAT e-Filing portal",
+    "One Time Password for login",
+    "Password has been reset successfully",
+  ]) {
+    const out = parseItatEmail({ from: ITAT, subject, text: "Dear Assessee,", html: "" });
+    assert.equal(out.kind, "routine", `"${subject}" is routine, not something to decide about`);
+    assert.deepEqual(out.fields, {}, "nothing is read out of mail we are not acting on");
+  }
+});
+
+test("a hearing is still a hearing even if the subject also reads routine", () => {
+  // Checked last on purpose: the day an acknowledgement starts carrying a
+  // hearing date, the date wins.
+  assert.equal(
+    classify({ subject: "E-Filing Acknowledgement - Notice of Hearing in ITA 1/AHD/2026", body: "" }),
+    "hearing"
+  );
+  assert.equal(
+    classify({ subject: "Email Verification", body: "the above appeal has been fixed for hearing at" }),
+    "hearing"
+  );
+});
+
 test("classification survives a forward that mangles the subject line", () => {
   assert.equal(classify({ subject: "Fwd: (no subject)", body: "has been registered as ITA 1/AHD/2026" }), "registration");
   assert.equal(classify({ subject: "Fwd:", body: "the above appeal has been fixed for hearing at" }), "hearing");

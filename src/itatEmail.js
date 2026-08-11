@@ -106,6 +106,7 @@ const UNFILED_FRESH_MS = 24 * 60 * 60 * 1000;
 export const UNFILED_REASON = {
   duplicate: "it was a copy of one already on this list",
   dropped: "it was not from the Tribunal, so it was discarded unread",
+  routine: "it was routine Tribunal mail — an acknowledgement, a verification or a one-time password",
 };
 
 export function useUnfiledArrival() {
@@ -129,7 +130,8 @@ export function mailTally(cfg) {
   const filed = n(cfg?.receivedCount);
   const duplicate = n(cfg?.duplicateCount);
   const dropped = n(cfg?.droppedCount);
-  return { filed, duplicate, dropped, total: filed + duplicate + dropped };
+  const routine = n(cfg?.routineCount);
+  return { filed, duplicate, dropped, routine, total: filed + duplicate + dropped + routine };
 }
 
 /* ---------------- the review queue ---------------- */

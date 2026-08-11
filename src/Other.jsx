@@ -11,6 +11,7 @@ import { downloadInvoicePDF, computeInvoiceTotals, invoicePDFDataUri, fmtRupee }
 import { downloadLedgerPDF, ledgerPDFDataUri, downloadReceiptPDF, receiptPDFDataUri } from './ledgerPdf';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
 import VoiceHelpLineCard from './voiceAssistant';
+import { sortMatters, nextSort, MATTER_SORT_COLUMNS, MATTER_SORT_HINT } from './matterSort';
 import ItatEmailCard from './ItatEmailCard';
 
 const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
@@ -992,11 +993,39 @@ export function MatterModal({ initial, onClose }) {
   );
 }
 
+/* A sortable column header. Clicking it sorts by that column; clicking the
+   sorted one flips the direction. The title says what the NEXT click will do,
+   because an arrow on its own tells you the state and not the action. */
+function SortHead({ sortKey, sort, onSort, children }) {
+  const on = sort.key === sortKey;
+  const [asc, desc] = MATTER_SORT_HINT[sortKey] || ["ascending", "descending"];
+  return (
+    <th aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        className={`th-sort${on ? " on" : ""}`}
+        onClick={() => onSort((cur) => nextSort(cur, sortKey))}
+        title={`Sort by ${MATTER_SORT_COLUMNS[sortKey]} — ${on && sort.dir === "asc" ? desc : asc}`}
+      >
+        {children}
+        {/* An SVG, not an arrow character: Table reads its mobile row labels off
+            each header's text, and a caret typed as text ends up in them. */}
+        <Icon name={on && sort.dir === "desc" ? "chevron-down" : "arrow-up"} size={11} className="th-caret"/>
+      </button>
+    </th>
+  );
+}
+
 export function Matters({ onOpenMatter }) {
   const { data, removeMatter, notify } = useData();
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState("");
   const [modal, setModal] = React.useState(null);
+  /* Opens on the next hearing, soonest first. The table used to render in
+     whatever order Firestore returned, which is no order at all — and of the
+     eight things this page can be sorted by, "whose hearing is next" is the one
+     a practitioner opens it to find out. */
+  const [sort, setSort] = React.useState({ key: "hearing", dir: "asc" });
 
   const typeColor = (t) => {
     if (t === "ITAT") return "primary";
@@ -1015,8 +1044,25 @@ export function Matters({ onOpenMatter }) {
     return true;
   });
 
-  const nextHearingFor = (m) =>
-    upcomingHearings(data).find(h => h.pan === m.pan && (h.ay === m.ay || h.authority === m.type));
+  /* The next hearing for every matter, resolved once and read from a map.
+     This used to call upcomingHearings(data) — which filters and sorts the
+     whole hearings collection — once per ROW. Sorting by that column would have
+     made it once per comparison, on a list of hundreds. */
+  const nextHearingByMatter = React.useMemo(() => {
+    const hearings = upcomingHearings(data);
+    const map = new Map();
+    for (const m of data.matters) {
+      map.set(m.id, hearings.find(h => h.pan === m.pan && (h.ay === m.ay || h.authority === m.type)));
+    }
+    return map;
+  }, [data]);
+  const nextHearingFor = (m) => nextHearingByMatter.get(m.id);
+
+  const sorted = React.useMemo(
+    () => sortMatters(filtered, sort.key, sort.dir, { hearingDate: (m) => nextHearingByMatter.get(m.id)?.date || "" }),
+    [filtered, sort, nextHearingByMatter]
+  );
+
 
   return (
     <div className="animate-in">
@@ -1026,7 +1072,7 @@ export function Matters({ onOpenMatter }) {
           <div className="page-sub">{active.length ? `${active.length} active proceeding${active.length > 1 ? "s" : ""}` : "Track each proceeding from notice to disposal"}</div>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-secondary" onClick={() => downloadCSV("matters.csv", ["Type", "Assessee", "PAN", "AY", "Section", "Reference", "Bench", "Status", "Staff"], filtered.map(m => [m.type, m.assessee, m.pan, m.ay, m.section, m.ref, m.bench, m.status, m.staff]))}><Icon name="download" size={14}/>Export CSV</button>
+          <button className="btn btn-secondary" onClick={() => downloadCSV("matters.csv", ["Type", "Assessee", "PAN", "AY", "Section", "Reference", "Bench", "Status", "Staff"], sorted.map(m => [m.type, m.assessee, m.pan, m.ay, m.section, m.ref, m.bench, m.status, m.staff]))}><Icon name="download" size={14}/>Export CSV</button>
           <button className="btn btn-primary" onClick={() => setModal({})}><Icon name="plus" size={14}/>New matter</button>
         </div>
       </div>
@@ -1053,9 +1099,19 @@ export function Matters({ onOpenMatter }) {
           />
         ) : (
           <Table>
-            <thead><tr><th>Matter</th><th>Assessee</th><th>AY</th><th>Section</th><th>Bench / Officer</th><th>Status</th><th>Next hearing</th><th>Staff</th><th></th></tr></thead>
+            <thead><tr>
+              <SortHead sortKey="matter" sort={sort} onSort={setSort}>Matter</SortHead>
+              <SortHead sortKey="assessee" sort={sort} onSort={setSort}>Assessee</SortHead>
+              <SortHead sortKey="ay" sort={sort} onSort={setSort}>AY</SortHead>
+              <SortHead sortKey="section" sort={sort} onSort={setSort}>Section</SortHead>
+              <SortHead sortKey="bench" sort={sort} onSort={setSort}>Bench / Officer</SortHead>
+              <SortHead sortKey="status" sort={sort} onSort={setSort}>Status</SortHead>
+              <SortHead sortKey="hearing" sort={sort} onSort={setSort}>Next hearing</SortHead>
+              <SortHead sortKey="staff" sort={sort} onSort={setSort}>Staff</SortHead>
+              <th></th>
+            </tr></thead>
             <tbody>
-              {filtered.map(m => {
+              {sorted.map(m => {
                 const nh = nextHearingFor(m);
                 const days = nh ? daysFromNow(nh.date) : null;
                 return (

@@ -49,7 +49,8 @@ import { openFromStorage } from "./downloadFile";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "./firebase";
 import {
-  allIntimations, groupByAssessee, groupByCause, groupByStaff, practiceSummary, matchesFilter,
+  allIntimations, needsVarianceBackfill,
+  groupByAssessee, groupByCause, groupByStaff, practiceSummary, matchesFilter,
   clocksFor, refundPosition, describeVariance, staleRefunds, staffRoster,
   positionLadder, finalPosition, statedDirection,
   DECISIONS, DECISION_LABEL, CAUSES, CAUSE_LABEL, FILTERS, MORE_FILTERS, REFUND_STALE_DAYS, SOURCE_LABEL,
@@ -113,6 +114,37 @@ function moneyHeading(row) {
   return stated === "refund" ? "Refundable" : stated === "demand" ? "Payable" : "CPC determined";
 }
 
+/* Bring the whole history through the variance engine, once per page load.
+ *
+ * Every intimation a practice has ever synced already carries CPC's demand and
+ * refund figures, and every filed return's JSON is already in Storage — so the
+ * back history can be flagged without anybody re-syncing. It has to be a
+ * deliberate trigger rather than a side effect of the next sync, because the
+ * connector SKIPS an assessment year with no new order (portalReturns.js): a
+ * quiet year would otherwise never pass through the ingest again and would stay
+ * blank for ever.
+ *
+ * It ran on the dashboard until the variance card was taken off it. This is
+ * where it belongs anyway — the page whose figures it fills in — and here it
+ * fires when somebody actually opens the intimations, rather than on every
+ * visit to the app's front page.
+ *
+ * Module-level flag, not state: one attempt per page load, and no retry loop if
+ * the call fails. Silent either way — the rows fill in on their own when the
+ * write lands, and a practitioner who never knew a backfill was due does not
+ * need to be told one failed. */
+let varianceBackfillTried = false;
+function useVarianceBackfill(returns) {
+  React.useEffect(() => {
+    if (varianceBackfillTried || !(returns || []).length) return;
+    if (!needsVarianceBackfill({ returns })) return;
+    varianceBackfillTried = true;
+    httpsCallable(functions, "refreshReturnVariances")({}).catch((e) => {
+      console.warn("variance backfill failed", e?.message || e);
+    });
+  }, [returns]);
+}
+
 export default function Intimations() {
   const { data, updateReturn, notify } = useData();
   const [filter, setFilter] = React.useState("All");
@@ -128,6 +160,7 @@ export default function Intimations() {
   const showMoreFilters = moreFilters || MORE_FILTERS.includes(filter);
 
   const rows = React.useMemo(() => allIntimations({ returns: data.returns }), [data.returns]);
+  useVarianceBackfill(data.returns);
   const filtered = React.useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
   const summary = React.useMemo(() => practiceSummary(rows), [rows]);
   const clients = React.useMemo(() => groupByAssessee(filtered), [filtered]);

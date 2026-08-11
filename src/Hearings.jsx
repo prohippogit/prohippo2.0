@@ -121,7 +121,7 @@ const CARRIED_TO_NEW_DATE = [
   "mode", "staff", "ita", "venue", "caseType", "gcalSkip",
 ];
 
-function AdjournModal({ hearing, onClose }) {
+export function AdjournModal({ hearing, onClose }) {
   const { addHearing, updateHearing, notify } = useData();
   const [date, setDate] = React.useState("");
   const [time, setTime] = React.useState(hearing.time || "10:30");

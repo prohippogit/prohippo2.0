@@ -86,6 +86,11 @@ export default function ConnectorDownload() {
           own computer — much faster than one at a time, and safe for your IP. Install it once, sign in
           with this same ProHippo account, and the data flows into your Matters automatically.
         </p>
+        <p className="muted" style={{fontSize: 13.5, marginTop: 8, maxWidth: "62ch"}}>
+          It also <b>adds assessees</b>: enter a PAN and its e-filing password, and it signs in, pulls the
+          name, address and Assessing Officer, and creates the record with its login stored. No Chrome
+          extension needed for any of it — a good way to get your first PANs in.
+        </p>
       </div>
 
       <div style={{display: "flex", flexDirection: "column", gap: 11, margin: "18px 0"}}>

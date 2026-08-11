@@ -189,3 +189,58 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary);cursor:p
 .donelist .dl .nm2 b{display:block;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .donelist .dl .nm2 span{color:var(--muted-2);font-size:11.5px;line-height:1.45;display:block;margin-top:2px}
 .doneactions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+
+/* ---- add assessee -------------------------------------------------------
+   A form, not a status card, so it gets its own box rather than reusing
+   .donecard: it scrolls (a portal profile fills nine fields), it is left-
+   aligned, and it must not be dismissable by a stray click on the backdrop
+   while someone is halfway through typing a password. */
+.formcard{
+  width:100%;max-width:620px;max-height:calc(100vh - 48px);overflow-y:auto;
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
+  padding:22px 24px 20px;box-shadow:0 30px 80px -30px rgba(0,0,0,.85);
+}
+.formhead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.formhead h3{margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em}
+.formsub{margin:6px 0 16px;font-size:12.5px;max-width:62ch}
+.fetchbox{
+  background:rgba(108,92,231,.10);border:1px solid rgba(108,92,231,.30);
+  border-radius:14px;padding:14px 15px;margin-bottom:18px;
+}
+.frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.frow:last-child{margin-bottom:0}
+.fld{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:6px}
+.fld.wide{flex-basis:100%}
+.fld>span{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-2)}
+.fld .req{color:var(--err)}
+.fld input,.fld select{width:100%;font-family:inherit;font-size:13.5px;padding:10px 12px}
+#aPan{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}
+/* The authorisation gate sits ABOVE the button it governs — a consent box
+   below the action it permits is a box nobody reads. */
+.consent{display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--muted);line-height:1.5;cursor:pointer;margin-bottom:12px}
+.consent input{margin-top:2px;flex:none}
+.frow-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.fetchmsg{font-size:12px;color:var(--muted);flex:1;min-width:140px}
+.fetchmsg.ok{color:#5fe0a3}
+.fetchmsg.warn{color:#f0c25f}
+.fetchmsg.bad{color:#ff8f92}
+/* "From portal ✓" — which fields the user did not type, so they know what to
+   check rather than re-reading all nine. */
+.fld.from-portal>span::after{content:" · from portal ✓";color:var(--ok);font-weight:700;letter-spacing:0;text-transform:none}
+.jbox{
+  background:var(--card-2);border:1px solid var(--line);border-radius:11px;
+  padding:10px 12px;font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:4px;
+}
+.jbox b{color:var(--text);font-weight:700}
+.formactions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+#aErr{text-align:left}
+
+/* ---- toast ---- */
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;
+  max-width:min(560px,calc(100vw - 40px));padding:12px 18px;border-radius:12px;
+  background:var(--card-2);border:1px solid var(--line);color:var(--text);
+  font-size:13px;line-height:1.5;box-shadow:0 18px 50px -20px rgba(0,0,0,.9);
+}
+.toast.ok{border-color:rgba(32,185,120,.45)}
+.toast.warn{border-color:rgba(232,163,23,.45)}

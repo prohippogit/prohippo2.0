@@ -25,6 +25,8 @@ const { runPanSync } = require("./portalWorker");
 const STEALTH_ARGS = ["--disable-blink-features=AutomationControlled"];
 const IGNORE_DEFAULT_ARGS = ["--enable-automation"];
 
+// Both the sync pool and the one-off "add assessee" login go through these two
+// helpers, so a WAF workaround only ever has to be fixed in one place.
 async function launchHardenedBrowser(headless) {
   const opts = { headless, args: STEALTH_ARGS, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
   try {
@@ -33,12 +35,28 @@ async function launchHardenedBrowser(headless) {
     try {
       return await chromium.launch(opts); // bundled Chromium (present in dev only)
     } catch {
+      // Reached from a sync AND from adding an assessee, so the sentence
+      // names the portal rather than either one of them.
       throw new Error(
-        "Google Chrome is required to run the sync. Please install it from " +
-        "google.com/chrome, then try again."
+        "Google Chrome is required to reach the income-tax portal. Please " +
+        "install it from google.com/chrome, then try again."
       );
     }
   }
+}
+
+// One isolated session: its own cookie jar, and the automation signal the WAF
+// checks masked before any page script runs.
+async function newStealthContext(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 860 },
+    // A stable, ordinary desktop UA. Do NOT randomise the UA per-run — a
+    // rotating fingerprint is MORE suspicious than a consistent one.
+  });
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
+  return context;
 }
 
 // job = { assesseeId, pan, label, scope, knowns }
@@ -66,15 +84,7 @@ async function runPool(jobs, onEvent, opts = {}) {
       if (launched > 0) await jsleep(POOL.startStagger.min, POOL.startStagger.max);
       launched++;
 
-      const context = await browser.newContext({
-        viewport: { width: 1280, height: 860 },
-        // A stable, ordinary desktop UA. Do NOT randomise the UA per-run — a
-        // rotating fingerprint is MORE suspicious than a consistent one.
-      });
-      // Mask the automation signal the WAF checks. Runs before any page script.
-      await context.addInitScript(() => {
-        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-      });
+      const context = await newStealthContext(browser);
 
       const emit = (phase, message, level = "info", pct) =>
         onEvent && onEvent({ assesseeId: job.assesseeId, pan: job.pan, phase, message, level, pct });
@@ -135,4 +145,4 @@ async function runPool(jobs, onEvent, opts = {}) {
   return results;
 }
 
-module.exports = { runPool };
+module.exports = { runPool, launchHardenedBrowser, newStealthContext };

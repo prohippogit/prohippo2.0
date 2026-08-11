@@ -94,6 +94,7 @@
           </select>
         </label>
         <label class="chk"><input type="checkbox" id="headless" checked /> Run hidden</label>
+        <button id="addBtn" class="ghost">+ Add assessee</button>
         <button id="reloadBtn" class="ghost">Reload</button>
         <button id="runBtn" class="primary" disabled>Sync selected</button>
       </div>
@@ -130,6 +131,74 @@
     </div>
   </section>
 
+  <!-- Add an assessee straight from here: sign in to the portal as that PAN,
+       read its master data, review, save. No Chrome extension involved — this
+       is the path for someone who has just installed the connector and has an
+       empty list. -->
+  <div id="addOverlay" class="overlay hidden">
+    <div class="formcard">
+      <div class="formhead">
+        <h3>Add assessee</h3>
+        <button id="addCloseBtn" class="linkbtn">Close</button>
+      </div>
+      <p class="muted formsub">Enter the PAN and its e-filing password, fetch the details from the portal, then save. The password is encrypted and stored so future syncs run on their own.</p>
+
+      <div class="fetchbox">
+        <div class="frow">
+          <label class="fld"><span>PAN <b class="req">*</b></span>
+            <input id="aPan" type="text" placeholder="ABCPS1234F" autocomplete="off" spellcheck="false" maxlength="10" />
+          </label>
+          <label class="fld"><span>E-filing password</span>
+            <input id="aPassword" type="password" placeholder="••••••••" autocomplete="off" />
+          </label>
+        </div>
+        <label class="consent">
+          <input id="aConsent" type="checkbox" />
+          <span>I confirm the assessee has authorised ProHippo to sign in to their income-tax portal account for compliance work, and to store the login encrypted for future syncs.</span>
+        </label>
+        <div class="frow-actions">
+          <button id="aFetchBtn" class="primary" disabled>Fetch from portal</button>
+          <span id="aFetchMsg" class="fetchmsg"></span>
+        </div>
+      </div>
+
+      <div class="frow">
+        <label class="fld wide"><span>Name <b class="req">*</b></span>
+          <input id="aName" type="text" placeholder="Assessee name" />
+        </label>
+      </div>
+      <div class="frow">
+        <label class="fld"><span>Status</span>
+          <select id="aStatus">
+            <option>Individual</option><option>Company</option><option>Firm</option>
+            <option>LLP</option><option>HUF</option><option>Trust</option><option>AOP/BOI</option>
+          </select>
+        </label>
+        <label class="fld"><span id="aDobLabel">Date of birth</span>
+          <input id="aDob" type="date" />
+        </label>
+      </div>
+      <div class="frow">
+        <label class="fld"><span>Group</span><input id="aGroup" type="text" placeholder="e.g. Shah Group" /></label>
+        <label class="fld"><span>Assigned staff</span><input id="aStaff" type="text" placeholder="Staff name" /></label>
+      </div>
+      <div class="frow">
+        <label class="fld"><span>Mobile</span><input id="aMobile" type="text" placeholder="+91 …" /></label>
+        <label class="fld"><span>Email</span><input id="aEmail" type="email" placeholder="name@example.com" /></label>
+      </div>
+      <div class="frow">
+        <label class="fld wide"><span>Address</span><input id="aAddress" type="text" placeholder="Address" /></label>
+      </div>
+      <div id="aJurisdiction" class="jbox hidden"></div>
+
+      <div id="aErr" class="err"></div>
+      <div class="formactions">
+        <button id="aCancelBtn" class="ghost">Cancel</button>
+        <button id="aSaveBtn" class="primary" disabled>Add assessee</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Shown when a sync run finishes, so a run left in the background doesn't
        end silently and get mistaken for still-running. -->
   <div id="doneOverlay" class="overlay hidden">
@@ -145,6 +214,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Short confirmations that don't deserve a dialog (an assessee added, a
+       list reloaded). Auto-hides. -->
+  <div id="toast" class="toast hidden"></div>
 
   <script src="renderer.js"></script>
 </body>

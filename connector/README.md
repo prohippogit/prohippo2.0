@@ -28,6 +28,7 @@ built so the fetch source can later move to ERI/AR by changing only
 | Concern                | Source of truth (unchanged contract)                     |
 |------------------------|----------------------------------------------------------|
 | Login + Dual Login     | ported → `portalLogin.js` (from `portal-login.js`)       |
+| PAN master data        | ported → `portalMaster.js` (from `syncMaster()`)         |
 | Portal JSON API        | ported → `portalApi.js` (from `portal-net.js`)           |
 | Scoped/incremental diff | ported → `portalFetch.js` (scope + knowns model)        |
 | Credential decryption  | `getPortalCredential` Cloud Function (in-memory only)    |
@@ -53,6 +54,8 @@ connector/
     pacing.js        rand / jsleep / PACE / POLL (ported timings)
     pool.js          worker pool: cap 5, randomised staggered launch
     portalWorker.js  ONE PAN in one isolated context (scaffold + porting plan)
+    portalMaster.js  one PAN's profile / jurisdiction / contact, mapped
+    assessees.js     add an assessee: fetch from the portal, then create it
     ingest.js        pushes results to the Cloud Functions
   src/renderer/      thin UI (index.html / styles.css / renderer.js)
   electron-builder.yml  packaging + signing + auto-update config
@@ -90,10 +93,48 @@ for your firm.
 The Google token is accepted by Firebase as the *same account* your web-app
 Google sign-in uses — same uid, same data.
 
+## Adding an assessee
+
+**+ Add assessee**, next to Reload. This exists because the web app can only
+create an assessee through the Chrome extension: it hands the PAN and password
+to the extension, which signs in and reads the master data. Somebody who has
+just installed the connector and has no extension therefore had an empty list
+and no way to fill it — the one thing a new user needs to do first was the one
+thing they could not do here.
+
+The connector already drives a real portal login for the sync, so the form
+borrows it for a single PAN:
+
+1. Enter the **PAN** and its **e-filing password**, and tick the authorisation
+   box. Consent gates the *fetch*, not just the storage — fetching signs in to
+   the client's portal account, which is the act needing authorisation.
+2. **Fetch from portal** logs in (respecting Dual Login and the session-expiry
+   bounce, same as a sync) and reads three services: `myPanDetailsService`,
+   `jurisdictionDetailsService` and `userProfileService`. Name, date of birth /
+   incorporation, address, mobile, email and the Assessing Officer come back and
+   fill the form; each fetched field is tagged **from portal ✓**. Nothing is
+   saved at this point, so a wrong password costs a failed login and nothing
+   else. Un-tick **Run hidden** first if you want to watch it happen.
+3. Review — every field stays editable, and a PAN the portal says nothing about
+   still leaves a form you can complete by hand.
+4. **Add assessee** writes the record, then stores the login against it
+   (`savePortalCredential`, encrypted server-side). It appears in the list
+   already selected, ready to sync.
+
+A PAN can only appear once in a practice — every notice, matter and invoice
+hangs off it — so a PAN already on the list is refused, naming the assessee it
+clashes with. If the record is created but the login cannot be stored, the form
+says so and stays open: this list only shows assessees *with* a stored login, so
+"added" followed by an unchanged list would look like a bug rather than a
+half-finished save.
+
+The password is in memory for the length of the login and is never written to
+disk here — the same rule the sync follows.
+
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.8.0` — with a **Check for updates** link beside it. Press it and the bar
+`v1.9.0` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.
@@ -179,6 +220,9 @@ reaches it.
 - PAN pick-list — `assessees:list` reads `users/{uid}/assessees` (where
   `portalCredSet == true`) directly from Firestore under the existing security
   rules, so the board shows real PANs.
+- **Add assessee** — `portalMaster.js` + `assessees.js` sign in as one PAN, read
+  its master data, and create the assessee with its portal login. No Chrome
+  extension anywhere in that path (see "Adding an assessee" above).
 - **Login (pass 1)** — `portalLogin.js` drives a real Playwright login through
   User ID → [secure-access confirm] → Password → Dashboard, handling the
   Dual Login and session-expiry dialogs, on a randomised poll cadence.

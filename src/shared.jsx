@@ -219,6 +219,26 @@ export function Modal({ title, sub, onClose, children, footer, width = 560, clas
   );
 }
 
+/* A line the user has to type somewhere else — a Terminal command, a
+   chrome:// address — shown as code with a Copy button. Retyping either by hand
+   is where the install instructions were being lost, and chrome:// URLs cannot
+   be made clickable at all: Chrome ignores a link to them. */
+export function CopyField({ text }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600); }
+    catch { /* clipboard blocked — user can select manually */ }
+  };
+  return (
+    <div style={{display: "flex", alignItems: "stretch", gap: 8, marginTop: 8}}>
+      <code style={{flex: 1, minWidth: 0, background: "#14122A", color: "#EDEAFB", border: "1px solid var(--p-line-2)", borderRadius: 9, padding: "10px 12px", fontSize: 12.5, fontFamily: "ui-monospace,Menlo,monospace", overflowX: "auto", whiteSpace: "nowrap"}}>{text}</code>
+      <button className="btn btn-secondary btn-sm" onClick={copy} style={{flexShrink: 0}}>
+        <Icon name={copied ? "check" : "doc"} size={13}/>{copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 export function FormField({ label, required, children, full }) {
   return (
     <div className="field" style={{gridColumn: full ? "1 / -1" : "auto"}}>

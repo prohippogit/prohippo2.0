@@ -37,6 +37,8 @@ const {
   query,
   where,
   getDocs,
+  getCountFromServer,
+  addDoc,
 } = require("firebase/firestore");
 const { getStorage, ref: storageRef, uploadString } = require("firebase/storage");
 const { firebaseConfig, FUNCTIONS_REGION } = require("./config");
@@ -230,6 +232,52 @@ async function listPortalAssessees() {
   });
 }
 
+/* One assessee with this exact PAN, or null.
+ *
+ * A PAN can only appear once in a practice: every notice, matter, hearing and
+ * invoice hangs off it, so two records for one PAN split a client's history in
+ * half silently. The web app checks this against the list it already holds in
+ * memory; here it is a single equality query, covered by Firestore's automatic
+ * index. Note it does NOT filter on portalCredSet — a duplicate of an assessee
+ * added by hand in the web app is exactly the case worth catching. */
+async function findAssesseeByPan(pan) {
+  init();
+  const user = currentUser();
+  if (!user) throw new Error("Sign in first.");
+  const p = String(pan || "").toUpperCase().trim();
+  if (!p) return null;
+  const col = collection(firestore, `users/${user.uid}/assessees`);
+  const snap = await getDocs(query(col, where("pan", "==", p)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  const a = d.data() || {};
+  return { id: d.id, name: a.name || "", pan: a.pan || p, group: a.group || "", portalCredSet: Boolean(a.portalCredSet) };
+}
+
+/* Create the assessee document, the same shape addAssessee() writes in the web
+   app (src/store.jsx) — including the avatar colour, which is picked from how
+   many assessees already exist so a practice's list stays evenly coloured.
+   Counted server-side rather than by reading every document: a practice with
+   800 assessees should not download 800 records to choose a colour. */
+const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
+
+async function createAssesseeDoc(rec) {
+  init();
+  const user = currentUser();
+  if (!user) throw new Error("Sign in first.");
+  const col = collection(firestore, `users/${user.uid}/assessees`);
+  let color = AVATAR_COLORS[0];
+  try {
+    const count = (await getCountFromServer(col)).data().count;
+    color = AVATAR_COLORS[count % AVATAR_COLORS.length];
+  } catch {
+    // A colour is a nicety; failing to count one must never block the record.
+  }
+  const payload = { createdAt: new Date().toISOString(), color, ...rec };
+  const ref = await addDoc(col, payload);
+  return { id: ref.id, ...payload };
+}
+
 // Build the incremental-sync hints for ONE PAN — the connector's port of
 // buildSyncKnowns() in src/Assessees.jsx. Without these the sync has no idea
 // what it already holds, so it re-downloads every notice PDF, every filed reply
@@ -374,5 +422,7 @@ module.exports = {
   uploadBase64,
   callable,
   listPortalAssessees,
+  findAssesseeByPan,
+  createAssesseeDoc,
   getSyncKnowns,
 };

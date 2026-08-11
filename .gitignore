@@ -35,3 +35,8 @@ prohippo-app-guide.md
 # list. Every row carries a signed token that grants read access to that
 # account over the phone line — this is a credential file, not a build artifact.
 known-callers*.csv
+
+# Built by scripts/build-extension-zip.mjs on every dev/build run, from the
+# extension/ folder that is committed. A build artefact, like dist/ — committing
+# it would create a second copy of the extension to keep in step.
+public/prohippo-sync-extension.zip

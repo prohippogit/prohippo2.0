@@ -290,7 +290,7 @@ function renderRows() {
   if (JOBS.length === 0) {
     rows.innerHTML =
       `<div class="empty">No assessees with a saved portal login yet.<br>` +
-      `Add portal credentials for an assessee in the ProHippo web app, then click Reload.</div>`;
+      `Press <b>+ Add assessee</b> above to create one from the portal, or add portal credentials in the ProHippo web app and click Reload.</div>`;
     $("selAll").disabled = true;
     updateFilterUI(0);
     return;
@@ -419,6 +419,10 @@ $("runBtn").addEventListener("click", async () => {
 function setControlsDisabled(on) {
   $("runBtn").disabled = on || selected.size === 0;
   $("reloadBtn").disabled = on;
+  // The add form opens its own portal session. Starting one during a sync would
+  // put a sixth session on the residential IP, past the cap the whole app is
+  // paced around — so the two are mutually exclusive, in both directions.
+  $("addBtn").disabled = on;
   $("selAll").disabled = on;
   $("scope").disabled = on;
   document.querySelectorAll('#rows input[type="checkbox"]').forEach((cb) => (cb.disabled = on));
@@ -533,6 +537,244 @@ $("doneRetryBtn").addEventListener("click", () => {
   renderRows();
   syncSelectionUI();
 });
+
+// --- Add assessee ----------------------------------------------------------
+//
+// The whole point of this form: a new practitioner installs the connector, has
+// no Chrome extension, and their list is empty. The web app can only create an
+// assessee through the extension, so without this there is nothing they can do
+// here but sign out. We already drive a real portal login for the sync — this
+// borrows it for one PAN, reads the profile, and lets them review it before it
+// becomes a record.
+//
+// The password lives in the form field and in the two invoke() calls. It is
+// never written to STATE, never logged, and the field is cleared when the form
+// closes.
+
+const ADD_PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const ADD_FIELDS = ["aPan", "aPassword", "aName", "aStatus", "aDob", "aGroup", "aStaff", "aMobile", "aEmail", "aAddress"];
+let addBusy = false;      // a portal fetch or a save is in flight
+let addCreated = false;   // the record exists; the form is now only reporting
+/* The fetched jurisdiction / Assessing Officer block. Held in a variable rather
+   than an input because it is the one fetched value with no field of its own —
+   it is shown read-only and saved as it came. */
+let currentJurisdiction = null;
+
+const addPan = () => $("aPan").value.trim().toUpperCase();
+
+function setFetchMsg(text, kind) {
+  const el = $("aFetchMsg");
+  el.textContent = text || "";
+  el.className = "fetchmsg" + (kind ? " " + kind : "");
+}
+
+function syncAddUI() {
+  const panOk = ADD_PAN_RE.test(addPan());
+  const hasPwd = Boolean($("aPassword").value.trim());
+  const consent = $("aConsent").checked;
+  $("aFetchBtn").disabled = addBusy || addCreated || !panOk || !hasPwd || !consent;
+  $("aFetchBtn").title = addBusy ? "Working…"
+    : !panOk ? "Enter a valid PAN first"
+      : !hasPwd ? "Enter the e-filing password to fetch"
+        : !consent ? "Tick the authorisation box above before signing in to the portal"
+          : "Sign in to the portal and read this PAN's details";
+  $("aSaveBtn").disabled = addBusy || addCreated || !panOk || !$("aName").value.trim();
+  // The label follows the entity type, exactly as the web app's form does — a
+  // company has no date of birth.
+  $("aDobLabel").textContent = $("aStatus").value === "Individual" ? "Date of birth" : "Date of incorporation";
+}
+
+function openAdd() {
+  addCreated = false;
+  currentJurisdiction = null;
+  ADD_FIELDS.forEach((id) => { $(id).value = ""; });
+  $("aStatus").value = "Individual";
+  $("aConsent").checked = false;
+  $("aErr").textContent = "";
+  $("aCancelBtn").textContent = "Cancel";
+  $("aJurisdiction").classList.add("hidden");
+  $("aJurisdiction").textContent = "";
+  document.querySelectorAll(".fld.from-portal").forEach((el) => el.classList.remove("from-portal"));
+  setFetchMsg("");
+  $("addOverlay").classList.remove("hidden");
+  syncAddUI();
+  $("aPan").focus();
+}
+
+function closeAdd() {
+  if (addBusy) return; // a portal session is open — closing would orphan it
+  $("aPassword").value = "";
+  $("addOverlay").classList.add("hidden");
+}
+
+function setAddBusy(on, label) {
+  addBusy = on;
+  $("aFetchBtn").textContent = on && label === "fetch" ? "Fetching…" : "Fetch from portal";
+  $("aSaveBtn").textContent = on && label === "save" ? "Saving…" : "Add assessee";
+  ADD_FIELDS.forEach((id) => { $(id).disabled = on; });
+  $("aConsent").disabled = on;
+  $("aCancelBtn").disabled = on;
+  $("addCloseBtn").disabled = on;
+  // ...and the other direction: no sync may start while this form holds a
+  // portal session of its own.
+  setControlsDisabled(on);
+  syncAddUI();
+}
+
+// Fill the form from a fetched profile. Everything stays editable — the portal
+// is the starting point, not the last word.
+function applyMaster(record, filled) {
+  const map = { name: "aName", dob: "aDob", address: "aAddress", email: "aEmail", mobile: "aMobile", status: "aStatus" };
+  for (const [key, id] of Object.entries(map)) {
+    const v = record[key];
+    if (!v) continue;
+    $(id).value = v;
+    // `status` is derived from the PAN's 4th character rather than fetched, so
+    // it never gets the "from portal" tag.
+    if (filled.includes(key)) $(id).closest(".fld").classList.add("from-portal");
+  }
+
+  const j = record.jurisdiction;
+  currentJurisdiction = j && (j.ward || j.aoEmail) ? j : null;
+  const box = $("aJurisdiction");
+  if (j && (j.ward || j.aoEmail)) {
+    const line = [j.ward, j.building, j.area].filter(Boolean).join(" · ");
+    box.innerHTML =
+      `<b>Jurisdiction / Assessing Officer</b><br>${escapeHtml(line || "—")}` +
+      (j.aoEmail ? `<br>AO email: ${escapeHtml(j.aoEmail)}` : "");
+    box.classList.remove("hidden");
+  } else {
+    box.classList.add("hidden");
+    box.textContent = "";
+  }
+  syncAddUI();
+}
+
+$("addBtn").addEventListener("click", openAdd);
+$("addCloseBtn").addEventListener("click", closeAdd);
+$("aCancelBtn").addEventListener("click", closeAdd);
+["aPan", "aPassword", "aName"].forEach((id) => $(id).addEventListener("input", syncAddUI));
+$("aConsent").addEventListener("change", syncAddUI);
+$("aStatus").addEventListener("change", syncAddUI);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("addOverlay").classList.contains("hidden")) closeAdd();
+});
+
+// Live progress from the login state machine, so a fetch that takes fifteen
+// seconds says which step it is on rather than sitting on "Fetching…".
+window.connector.onAssesseeEvent((evt) => {
+  if (!addBusy) return;
+  setFetchMsg(evt.message, evt.level === "error" ? "bad" : evt.level === "warn" ? "warn" : "");
+});
+
+$("aFetchBtn").addEventListener("click", async () => {
+  const pan = addPan();
+  $("aPan").value = pan;
+  $("aErr").textContent = "";
+  setAddBusy(true, "fetch");
+  setFetchMsg("Starting Chrome…");
+  try {
+    const { record, filled } = await window.connector.fetchAssesseeMaster({
+      pan,
+      portalUserId: pan,
+      portalPassword: $("aPassword").value,
+      // Same choice the sync toolbar offers: someone debugging a login wants to
+      // watch it happen.
+      headless: $("headless").checked,
+    });
+    applyMaster(record, filled || []);
+    setFetchMsg(
+      filled && filled.length
+        ? `Filled ${filled.length} field${filled.length === 1 ? "" : "s"} from the portal — review and save.`
+        : "Signed in, but the portal returned no profile for this PAN — fill the details in by hand.",
+      filled && filled.length ? "ok" : "warn"
+    );
+  } catch (err) {
+    setFetchMsg(friendly(err), "bad");
+  } finally {
+    setAddBusy(false);
+  }
+});
+
+$("aSaveBtn").addEventListener("click", async () => {
+  const pan = addPan();
+  $("aErr").textContent = "";
+  setAddBusy(true, "save");
+  try {
+    const res = await window.connector.createAssessee({
+      form: {
+        pan,
+        portalUserId: pan,
+        name: $("aName").value,
+        status: $("aStatus").value,
+        dob: $("aDob").value,
+        group: $("aGroup").value,
+        staff: $("aStaff").value,
+        mobile: $("aMobile").value,
+        email: $("aEmail").value,
+        address: $("aAddress").value,
+        jurisdiction: currentJurisdiction,
+      },
+      portalPassword: $("aPassword").value,
+      // No password typed, or consent not given, means no stored login. Saving
+      // one either way would store a credential nobody authorised.
+      saveLogin: $("aConsent").checked && Boolean($("aPassword").value.trim()),
+    });
+
+    /* The record is saved by this point, so a list refresh that fails must not
+       be reported as a failed save — it is reported as itself, and Reload fixes
+       it. */
+    let listed = true;
+    try { await loadAssessees(); }
+    catch { listed = false; }
+
+    if (!res.credSaved) {
+      /* The record exists but has no login, so it is NOT in the list this
+         window shows (that list is "assessees with a stored portal login").
+         Saying "added" and showing nothing would look like a bug, so the form
+         stays open and says exactly what happened and what is left to do. */
+      addCreated = true;
+      setAddBusy(false);
+      $("aCancelBtn").textContent = "Close";
+      $("aErr").textContent = $("aPassword").value.trim()
+        ? `"${res.name}" was created, but its portal login could not be stored (${res.credError || "unknown error"}). It will not appear in this list until a login is saved — add it from the ProHippo web app.`
+        : `"${res.name}" was created without a portal login, so it will not appear in this list. Add the login here or in the web app to sync it.`;
+      return;
+    }
+
+    // Released before closing: closeAdd() refuses to shut a form with a portal
+    // session still attributed to it.
+    setAddBusy(false);
+    // Pre-select it: someone who just added an assessee almost always wants to
+    // sync it, and finding it again in a list of hundreds is its own chore.
+    if (listed) {
+      selected.add(res.id);
+      renderRows();
+      syncSelectionUI();
+    }
+    closeAdd();
+    toast(
+      listed
+        ? `${res.name} added — its login is stored, so it can be synced now.`
+        : `${res.name} added, but the list couldn't be refreshed just now. Press Reload.`,
+      listed ? "ok" : "warn"
+    );
+  } catch (err) {
+    $("aErr").textContent = friendly(err);
+  } finally {
+    if (!addCreated) setAddBusy(false);
+  }
+});
+
+// --- Toast -----------------------------------------------------------------
+let toastTimer = null;
+function toast(message, kind) {
+  const el = $("toast");
+  el.textContent = message;
+  el.className = "toast" + (kind ? " " + kind : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add("hidden"), 6000);
+}
 
 // --- Version + update notice --------------------------------------------------
 // Driven by the main process (see updater.js). Windows downloads in the

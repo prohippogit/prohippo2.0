@@ -15,6 +15,19 @@ contextBridge.exposeInMainWorld("connector", {
   signOut: () => ipcRenderer.invoke("auth:signOut"),
   currentUser: () => ipcRenderer.invoke("auth:current"),
   listAssessees: () => ipcRenderer.invoke("assessees:list"),
+
+  // --- add an assessee (no Chrome extension involved) ---
+  // Signs in to the portal as this PAN and returns { record, filled } for
+  // review. Saves nothing.
+  fetchAssesseeMaster: (input) => ipcRenderer.invoke("assessee:fetchMaster", input),
+  // Writes the reviewed record, then stores the portal login against it.
+  createAssessee: (input) => ipcRenderer.invoke("assessee:create", input),
+  // Progress while the fetch above logs in — same shape as a sync event.
+  onAssesseeEvent: (cb) => {
+    const handler = (_e, evt) => cb(evt);
+    ipcRenderer.on("assessee:event", handler);
+    return () => ipcRenderer.removeListener("assessee:event", handler);
+  },
   runSync: (jobs, scope, headless) => ipcRenderer.invoke("sync:run", { jobs, scope, headless }),
   // subscribe to per-PAN progress events
   onSyncEvent: (cb) => {

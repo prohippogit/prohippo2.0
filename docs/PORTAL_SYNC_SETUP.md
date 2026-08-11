@@ -41,13 +41,29 @@ The web app auto-deploys from GitHub, so no hosting step is needed.
 
 ## Step 3 — Load the ProHippo Sync extension (desktop Chrome)
 
+Users no longer need the repository for this. The app serves the extension
+itself: on an assessee's **Overview**, the **Income-tax portal** card has a
+**Get Chrome extension** / **Download extension** button beside **Add portal
+login**, which downloads `prohippo-sync-extension.zip` and shows the five
+install steps. The zip is built from this repo's `extension/` folder on every
+deploy (`scripts/build-extension-zip.mjs`, run by `npm run build`), so it is
+always the version the deployed app expects — there is no release to publish.
+
+By hand, from a clone:
+
 1. Chrome → `chrome://extensions` → turn on **Developer mode**.
 2. Click **Load unpacked** and select the `extension/` folder from the repo.
-   (In Cloud Shell you can't load it; do this on your own computer — either
-   clone the repo locally, or download the `extension/` folder.)
+   (In Cloud Shell you can't load it; do this on your own computer.)
 3. **ProHippo Sync** appears in the list.
 
-See `extension/README.md` for details.
+Chrome never auto-updates an unpacked extension: after pulling a new version,
+press the refresh arrow on its card and check the version matches
+`extension/manifest.json`. See `extension/README.md` for details.
+
+**No Chrome, or don't want the extension at all?** The **Sync Connector**
+desktop app does the same work without it, and since v1.9.0 it can also **add an
+assessee** — fetch the master data from the portal and create the record — so a
+new user can get going before any extension is installed.
 
 ---
 

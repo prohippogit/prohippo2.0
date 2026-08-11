@@ -3,7 +3,7 @@
    stable GitHub Release the build workflow publishes. OS-aware: shows the right
    first-run steps (Mac quarantine command / Windows "Run anyway"). */
 import React from 'react';
-import { Icon } from './shared';
+import { Icon, CopyField } from './shared';
 
 const REL = "https://github.com/prohippogit/prohippo2.0/releases/download/connector-latest";
 const MAC_URL = `${REL}/ProHippo-Connector-mac.dmg`;
@@ -15,22 +15,6 @@ function detectOS() {
   if (/mac/.test(p)) return "mac";
   if (/win/.test(p)) return "win";
   return "mac";
-}
-
-function CopyField({ text }) {
-  const [copied, setCopied] = React.useState(false);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600); }
-    catch { /* clipboard blocked — user can select manually */ }
-  };
-  return (
-    <div style={{display: "flex", alignItems: "stretch", gap: 8, marginTop: 8}}>
-      <code style={{flex: 1, minWidth: 0, background: "#14122A", color: "#EDEAFB", border: "1px solid var(--p-line-2)", borderRadius: 9, padding: "10px 12px", fontSize: 12.5, fontFamily: "ui-monospace,Menlo,monospace", overflowX: "auto", whiteSpace: "nowrap"}}>{text}</code>
-      <button className="btn btn-secondary btn-sm" onClick={copy} style={{flexShrink: 0}}>
-        <Icon name={copied ? "check" : "doc"} size={13}/>{copied ? "Copied" : "Copy"}
-      </button>
-    </div>
-  );
 }
 
 function DownloadCard({ os, href, title, sub, primary }) {
@@ -101,6 +85,11 @@ export default function ConnectorDownload() {
           The Sync Connector syncs many PANs from the income-tax portal <b>in parallel</b>, straight from your
           own computer — much faster than one at a time, and safe for your IP. Install it once, sign in
           with this same ProHippo account, and the data flows into your Matters automatically.
+        </p>
+        <p className="muted" style={{fontSize: 13.5, marginTop: 8, maxWidth: "62ch"}}>
+          It also <b>adds assessees</b>: enter a PAN and its e-filing password, and it signs in, pulls the
+          name, address and Assessing Officer, and creates the record with its login stored. No Chrome
+          extension needed for any of it — a good way to get your first PANs in.
         </p>
       </div>
 

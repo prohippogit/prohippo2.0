@@ -10,6 +10,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const fb = require("./firebaseClient");
 const googleAuth = require("./googleAuth");
 const { runPool } = require("./pool");
+const { fetchMasterForPan, createAssessee } = require("./assessees");
 const { initUpdater } = require("./updater");
 
 const isDev = process.argv.includes("--dev");
@@ -80,6 +81,28 @@ ipcMain.handle("sync:run", async (_e, { jobs, scope, headless }) => {
 ipcMain.handle("assessees:list", async () => {
   if (!fb.currentUser()) throw new Error("Sign in first.");
   return fb.listPortalAssessees();
+});
+
+/* Add an assessee from here, without the Chrome extension.
+ *
+ * Two steps on purpose, with the user in between: fetch reads the portal but
+ * saves nothing, and create writes what they have reviewed. The password is
+ * passed in per call and held only for the length of it — the renderer keeps it
+ * in the open form's field, and neither side writes it anywhere. */
+ipcMain.handle("assessee:fetchMaster", async (_e, { pan, portalUserId, portalPassword, headless }) => {
+  if (!fb.currentUser()) throw new Error("Sign in first.");
+  return fetchMasterForPan({
+    pan,
+    portalUserId,
+    portalPassword,
+    headless: headless !== false,
+    emit: (phase, message, level) => send("assessee:event", { phase, message, level: level || "info" }),
+  });
+});
+
+ipcMain.handle("assessee:create", async (_e, { form, portalPassword, saveLogin }) => {
+  if (!fb.currentUser()) throw new Error("Sign in first.");
+  return createAssessee({ form, portalPassword, saveLogin });
 });
 
 app.whenReady().then(() => {

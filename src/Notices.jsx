@@ -1,14 +1,19 @@
-/* ProHippo — Notices list + review/entry form */
+/* ProHippo — reviewing ONE notice: the record, the documents that came with
+   it, and what to raise off it (a hearing, a matter, a document request).
+
+   There is no practice-wide Notices page any more. It was a fourth place to
+   read the same records: the dashboard's two queues say what needs attention
+   today, and an assessee's own Notices tab is where a client's history is read
+   — in the context that makes it mean anything. This screen opens over
+   whichever of those you came from. */
 import React from 'react';
 import { downloadFromStorage } from './downloadFile';
 import { noticeFilename } from './downloadNames';
-import { Icon, StatusPill, EmptyState, titleCase, fmtDateLong, daysFromNow } from './shared';
-import { useData, awaitingNotices, todayISO, itemsFromNoticeDocuments, docRequestsOf } from './store';
+import { Icon, titleCase, fmtDateLong } from './shared';
+import { useData, todayISO, itemsFromNoticeDocuments, docRequestsOf } from './store';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
 import DocumentRequestComposer from './DocumentRequest';
-import { AskDocsButton } from './askForDocuments';
 import NoticeDocuments from './NoticeDocuments';
-import { hasDocumentList } from './noticeDocs';
 import { renderDocRequest, defaultTitle } from './messageTemplates';
 
 // Save a notice's PDF to the user's computer, named after the notice rather
@@ -20,141 +25,6 @@ async function downloadNotice(notice) {
   } catch (e) {
     console.error("download notice pdf", e);
   }
-}
-
-function NoticeStat({ label, value, color, icon }) {
-  const map = {
-    pink: { bg: "var(--p-pink)", fg: "#C13388" },
-    info: { bg: "#E1EEFF", fg: "#2766C7" },
-    success: { bg: "var(--p-mint)", fg: "#1B8C5C" },
-    warning: { bg: "var(--p-amber)", fg: "#B07512" },
-  }[color];
-  return (
-    <div className="card" style={{padding: "16px 18px"}}>
-      <div className="between">
-        <div>
-          <div className="stat-label">{label}</div>
-          <div className="stat-value" style={{fontSize: 26}}>{value}</div>
-        </div>
-        <div style={{width: 38, height: 38, borderRadius: 12, background: map.bg, color: map.fg, display: "grid", placeItems: "center"}}>
-          <Icon name={icon} size={18}/>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const FILTERS = ["All notices", "Awaiting review", "Scrutiny", "CIT(A)", "ITAT", "Penalty"];
-
-export default function Notices({ onOpenNotice }) {
-  const { data, removeNotice, notify } = useData();
-  const [filter, setFilter] = React.useState("All notices");
-
-  const awaiting = awaitingNotices(data);
-  const monthPrefix = todayISO().slice(0, 7);
-  const drafted = data.notices.filter(n => n.status === "Reply drafted");
-  const submittedThisMonth = data.notices.filter(n => n.status === "Submitted" && (n.date || "").startsWith(monthPrefix));
-  const dueSoon = data.notices.filter(n => n.hearingDate && n.hearingDate >= todayISO() && daysFromNow(n.hearingDate) <= 3);
-
-  const filtered = data.notices.filter(n => {
-    if (filter === "All notices") return true;
-    if (filter === "Awaiting review") return n.status === "Awaiting review";
-    return n.authority === filter;
-  }).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-
-  return (
-    <div className="animate-in">
-      <div className="topbar">
-        <div>
-          <div className="page-title">Notices</div>
-          <div className="page-sub">
-            {data.notices.length
-              ? `${data.notices.filter(n => (n.date || "").startsWith(monthPrefix)).length} received this month · ${awaiting.length} awaiting review`
-              : "Record incoming notices to track replies and hearings"}
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={() => onOpenNotice(null)}><Icon name="upload" size={14}/>Add notice</button>
-        </div>
-      </div>
-
-      <div className="grid-stats" style={{gap: 14, marginBottom: 18}}>
-        <NoticeStat label="Awaiting review" value={awaiting.length} color="pink" icon="sparkle"/>
-        <NoticeStat label="Reply drafted" value={drafted.length} color="info" icon="edit"/>
-        <NoticeStat label="Submitted this month" value={submittedThisMonth.length} color="success" icon="check"/>
-        <NoticeStat label="Hearing in 3 days" value={dueSoon.length} color="warning" icon="alert"/>
-      </div>
-
-      <div className="card" style={{padding: 0, overflow: "hidden"}}>
-        <div className="row" style={{padding: "14px 18px", justifyContent: "space-between", borderBottom: "1px solid var(--p-line-2)", alignItems: "center"}}>
-          <div className="row" style={{gap: 6}}>
-            {FILTERS.map(f => (
-              <span key={f} className={`fchip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f}</span>
-            ))}
-          </div>
-        </div>
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon="doc"
-            title={data.notices.length === 0 ? "No notices recorded" : "No notices match this filter"}
-            sub={data.notices.length === 0 ? "Add a notice to track its reply, hearing date and documents called for." : undefined}
-            action={data.notices.length === 0 ? <button className="btn btn-primary" onClick={() => onOpenNotice(null)}><Icon name="upload" size={14}/>Add notice</button> : undefined}
-          />
-        ) : (
-          <table className="tbl">
-            <thead>
-              <tr><th>Notice</th><th>Assessee / PAN</th><th>AY</th><th>Section</th><th>Authority</th><th>Notice date</th><th>Status</th><th></th></tr>
-            </thead>
-            <tbody>
-              {filtered.map(n => (
-                <tr key={n.id} onClick={() => onOpenNotice(n)} style={{cursor: "pointer"}}>
-                  <td>
-                    <div className="center" style={{gap: 10}}>
-                      <div style={{width: 36, height: 44, borderRadius: 6, background: "var(--p-pink)", display: "grid", placeItems: "center", color: "#C13388", fontSize: 9, fontWeight: 800, position: "relative"}}>
-                        PDF
-                        <div style={{position: "absolute", top: 0, right: 0, width: 10, height: 10, background: "white", clipPath: "polygon(0 0, 100% 100%, 100% 0)"}}/>
-                      </div>
-                      <div>
-                        <div className="strong">{n.din ? `DIN ending ${n.din.slice(-6)}` : (n.subject || "Notice")}</div>
-                        <div className="muted" style={{fontSize: 11.5, fontFamily: "ui-monospace, monospace"}}>{n.din || n.fileName || "—"}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="strong">{titleCase(n.assessee)}</div>
-                    <div className="muted" style={{fontFamily: "ui-monospace, monospace", fontSize: 11.5}}>{n.pan}</div>
-                  </td>
-                  <td>{n.ay}</td>
-                  <td>{n.section ? <span className="pill pill-muted">u/s {n.section}</span> : <span className="muted">—</span>}</td>
-                  <td>{n.authority}</td>
-                  <td className="muted">{n.date ? fmtDateLong(n.date) : "—"}</td>
-                  <td><StatusPill status={n.status}/></td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <div className="center" style={{gap: 4, justifyContent: "flex-end"}}>
-                      {!n.isOrder && <AskDocsButton notice={n}/>}
-                      {/* One button where the notice is one PDF. Where the
-                          portal served a SET — a s.148 notice arrives with its
-                          approval, set note and search print — every file gets
-                          its own, so none of them can be missed from here. */}
-                      {n.storagePath && !hasDocumentList(n) && (
-                        <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={() => downloadNotice(n)}>
-                          <Icon name="doc" size={12}/>PDF
-                        </button>
-                      )}
-                      <NoticeDocuments notice={n} assesseeName={n.assessee} compact/>
-                      <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm("Delete this notice?")) { removeNotice(n.id); notify("Notice deleted"); } }}>
-                        <Icon name="trash" size={12}/>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
 }
 
 /* Full-screen notice entry / review */

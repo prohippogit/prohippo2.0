@@ -13,7 +13,9 @@ const NAV_ITEMS = [
   { id: "appeals", label: "Appeals", icon: "gavel" },
   { id: "invoices", label: "Invoices", icon: "invoice" },
   { id: "communications", label: "Communications", icon: "chat" },
-  { id: "notices", label: "Notices", icon: "doc" },
+  /* No practice-wide Notices link. It listed the same records the dashboard's
+     two notice queues surface and an assessee's own Notices tab holds in
+     context; a fourth way in was one more place to keep in step. */
   { id: "intimations", label: "Intimations", icon: "chart" },
   { id: "reports", label: "Reports", icon: "list" },
 ];

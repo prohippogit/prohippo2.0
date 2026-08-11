@@ -4,9 +4,9 @@
  * Pure string work, deliberately kept apart from the download itself
  * (downloadFile.js) so these rules can be tested without pulling in Firebase or
  * a DOM. They are shared by every screen, because the same order downloaded
- * from the Notices page and from an assessee's Matters tab must arrive under
- * the same name — otherwise a practitioner ends up with two copies of one
- * document and no way to tell which is which.
+ * from the Appeals page, from a notice's review screen and from an assessee's
+ * Matters tab must arrive under the same name — otherwise a practitioner ends
+ * up with two copies of one document and no way to tell which is which.
  */
 
 /* Characters that are illegal in a filename on Windows or macOS, plus the

@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/build-extension-zip.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/build-extension-zip.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

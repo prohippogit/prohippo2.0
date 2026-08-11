@@ -3,7 +3,7 @@
    stable GitHub Release the build workflow publishes. OS-aware: shows the right
    first-run steps (Mac quarantine command / Windows "Run anyway"). */
 import React from 'react';
-import { Icon } from './shared';
+import { Icon, CopyField } from './shared';
 
 const REL = "https://github.com/prohippogit/prohippo2.0/releases/download/connector-latest";
 const MAC_URL = `${REL}/ProHippo-Connector-mac.dmg`;
@@ -15,22 +15,6 @@ function detectOS() {
   if (/mac/.test(p)) return "mac";
   if (/win/.test(p)) return "win";
   return "mac";
-}
-
-function CopyField({ text }) {
-  const [copied, setCopied] = React.useState(false);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600); }
-    catch { /* clipboard blocked — user can select manually */ }
-  };
-  return (
-    <div style={{display: "flex", alignItems: "stretch", gap: 8, marginTop: 8}}>
-      <code style={{flex: 1, minWidth: 0, background: "#14122A", color: "#EDEAFB", border: "1px solid var(--p-line-2)", borderRadius: 9, padding: "10px 12px", fontSize: 12.5, fontFamily: "ui-monospace,Menlo,monospace", overflowX: "auto", whiteSpace: "nowrap"}}>{text}</code>
-      <button className="btn btn-secondary btn-sm" onClick={copy} style={{flexShrink: 0}}>
-        <Icon name={copied ? "check" : "doc"} size={13}/>{copied ? "Copied" : "Copy"}
-      </button>
-    </div>
-  );
 }
 
 function DownloadCard({ os, href, title, sub, primary }) {

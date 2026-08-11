@@ -14,6 +14,7 @@ import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { functions, storage } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
+import { ExtensionDownloadButton } from './ExtensionDownload';
 import { ingestPortalSyncMessage } from './portalIngest';
 import { downloadFromStorage } from './downloadFile';
 import { noticeFilename, returnOrderFilename, returnDocFilename } from './downloadNames';
@@ -1664,7 +1665,14 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
       {!a.portalCredSet ? (
         <div className="col" style={{gap: 10}}>
           <div className="muted" style={{fontSize: 12.5}}>Add this assessee's e-filing login to open the portal in one click.</div>
-          <button className="btn btn-secondary btn-sm" style={{alignSelf: "flex-start"}} onClick={onAddLogin}><Icon name="plus" size={13}/>Add portal login</button>
+          {/* The extension sits beside the login, not behind it: without it the
+              login saves fine and then every button on this card does nothing.
+              Someone setting this assessee up for the first time needs both, so
+              both are offered in the same breath. */}
+          <div className="row" style={{gap: 8, flexWrap: "wrap", alignItems: "center"}}>
+            <button className="btn btn-secondary btn-sm" onClick={onAddLogin}><Icon name="plus" size={13}/>Add portal login</button>
+            {hasExt !== true && <ExtensionDownloadButton className="btn btn-ghost btn-sm" onRecheck={check}/>}
+          </div>
         </div>
       ) : hasExt === false ? (
         <div className="col" style={{gap: 8}}>
@@ -1672,7 +1680,10 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
             <Icon name="info" size={13}/>
             <span>Install the <b>ProHippo Sync</b> Chrome extension to open the portal automatically.</span>
           </div>
-          <button className="btn btn-ghost btn-sm" style={{alignSelf: "flex-start"}} onClick={check}><Icon name="arrow-right" size={12}/>I've installed it — recheck</button>
+          <div className="row" style={{gap: 8, flexWrap: "wrap", alignItems: "center"}}>
+            <ExtensionDownloadButton className="btn btn-primary btn-sm" label="Download extension" onRecheck={check}/>
+            <button className="btn btn-ghost btn-sm" onClick={check}><Icon name="arrow-right" size={12}/>I've installed it — recheck</button>
+          </div>
         </div>
       ) : (
         <div className="col" style={{gap: 10}}>

@@ -18,6 +18,16 @@ app. (Phase 2 will add reading e-Proceedings and pulling notice PDFs.)
 - The credential and portal-ingest Cloud Functions deployed, and the assessee
   must have a portal login saved in ProHippo (Assessee → **Add portal login**).
 
+## How users get it
+
+The ProHippo web app serves this folder as a zip. On an assessee's **Overview**
+tab, the **Income-tax portal** card offers **Get Chrome extension**: it
+downloads `prohippo-sync-extension.zip` and shows the install steps. The zip is
+built from this folder by `scripts/build-extension-zip.mjs` on every `npm run
+dev` / `npm run build`, so a user always gets the version the running app
+expects. Nothing here needs publishing separately — commit the change and the
+deploy carries it.
+
 ## Load it for testing (no developer account needed)
 
 1. Open Chrome → address bar → `chrome://extensions`

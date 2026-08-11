@@ -8,6 +8,7 @@ import { useData, nextColor, groupsOf } from './store';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { detectExtension, openPortalLogin, onSyncData } from './portalSync';
+import { ExtensionDownloadButton } from './ExtensionDownload';
 
 const STATUS_OPTIONS = ["Individual", "Company", "Firm", "LLP", "HUF", "Trust", "AOP/BOI"];
 
@@ -76,6 +77,10 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
   // Auto-fill from the portal.
   const [statusTouched, setStatusTouched] = React.useState(false);
   const [fetching, setFetching] = React.useState(false);
+  /* Set when a fetch found no extension. "Install the extension" as a toast is
+     an instruction with nowhere to go — the download button appears in the box
+     instead, right under the button that just failed. */
+  const [extMissing, setExtMissing] = React.useState(false);
   const [fromPortal, setFromPortal] = React.useState({}); // { field: true } for the "from portal" tag
   const clientRef = React.useRef(null);   // correlates the fetch to this (unsaved) form
   const savingRef = React.useRef(false);  // hard guard against a double-tap creating two docs
@@ -137,7 +142,13 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
     setFetching(true);
     try {
       const ok = await detectExtension();
-      if (!ok) { notify("Install / enable the ProHippo Sync extension to fetch.", "alert"); setFetching(false); return; }
+      if (!ok) {
+        setExtMissing(true);
+        notify("Install the ProHippo Sync extension to fetch — download it below.", "alert");
+        setFetching(false);
+        return;
+      }
+      setExtMissing(false);
       await openPortalLogin({ portalUserId: (portalUserId.trim() || pan), portalPassword: portalPassword.trim(), assesseeId: null, mode: "master", clientRef: ref });
       notify("Fetching master data — watch the portal tab…");
     } catch (e) {
@@ -275,6 +286,20 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
             </span>
           )}
         </div>
+        {extMissing && (
+          <div style={{marginTop: 10, padding: "10px 12px", background: "var(--p-amber)", borderRadius: 11}}>
+            <div className="center" style={{gap: 8, alignItems: "flex-start", justifyContent: "flex-start"}}>
+              <Icon name="info" size={14}/>
+              <div style={{flex: 1, fontSize: 12, lineHeight: 1.5}}>
+                Fetching needs the <b>ProHippo Sync</b> Chrome extension, which isn't installed in this browser. Download it, load it once, then press Fetch again.
+                {" "}(No Chrome? The <b>Sync Connector</b> desktop app can add an assessee from the portal without any extension.)
+              </div>
+            </div>
+            <div style={{marginTop: 9}}>
+              <ExtensionDownloadButton className="btn btn-primary btn-sm" label="Download extension" onRecheck={() => setExtMissing(false)}/>
+            </div>
+          </div>
+        )}
         <div className="muted" style={{fontSize: 11, marginTop: 8}}>
           Fetches name, date of birth, address, mobile, email and jurisdiction / Assessing Officer. Anything the portal doesn't return, just fill in manually.
         </div>

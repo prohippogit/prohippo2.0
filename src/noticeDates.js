@@ -32,6 +32,14 @@
  * the calendar are where a live deadline belongs; this card is the file.
  */
 
+/* The date a notice is actually working towards. A hearing beats a compliance
+   deadline when both are set — that's the one that can't be moved.
+
+   Lives here rather than in store.jsx, where it used to, because it is a rule
+   about a notice's dates and nothing about it needs React or Firestore. store
+   re-exports it, so every existing call site reads the same one. */
+export const noticeDeadline = (n) => n?.hearingDate || n?.responseDueDate || "";
+
 /* ---------------- what became of the reply ---------------- */
 
 /* Field names the portal might use for "Response viewed by AO on".

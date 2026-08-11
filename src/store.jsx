@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { useAuth } from "./auth";
+import { noticeDeadline } from "./noticeDates.js";
 
 /* ---------------- date / money helpers (pure) ---------------- */
 
@@ -707,9 +708,9 @@ export const openDocRequests = (data) =>
 export const draftDocRequests = (data) =>
   (data.docRequests || []).filter((r) => (r.status || "draft") === "draft");
 
-/* The date a notice is actually working towards. A hearing beats a compliance
-   deadline when both are set — that's the one that can't be moved. */
-export const noticeDeadline = (n) => n?.hearingDate || n?.responseDueDate || "";
+// The rule itself lives in noticeDates.js (pure .js, so `node --test` can read
+// it); re-exported because a hundred call sites import it from here.
+export { noticeDeadline } from "./noticeDates.js";
 
 /* A notice is "live" while its deadline is still ahead. Used to decide whether
    to shout about asking the client for documents. */

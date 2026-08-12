@@ -574,6 +574,13 @@ export const groupsOf = (data) => {
     color: g.doc?.color || null,
     notes: g.doc?.notes || "",
     contact: g.doc?.contact || "",
+    /* The person client messages actually address, and whether they have agreed
+       to receive them. Carried through here rather than read off the raw doc so
+       every caller sees the same shape whether the group is a first-class doc
+       or only implied by an assessee's `group` string — an implied group has
+       neither, which is exactly what "no head set" should look like. */
+    head: g.doc?.head || null,
+    headWhatsappOptIn: g.doc?.headWhatsappOptIn || null,
     members: g.members,
     outstanding: groupLedger(data, g.name).closing,
   })).sort((a, b) => a.name.localeCompare(b.name));

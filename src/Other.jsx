@@ -2,6 +2,7 @@
 import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, Table, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { hapticsAvailable } from './haptics';
+import { WHATSAPP_MESSAGES, resolveWhatsAppSettings, userReachability, clientReachability, displayMobile } from './whatsappSettings';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO,
   assesseeLedger, groupLedger, groupsOf, assesseeOutstanding, allocatePayment, docRequestProgress, derivedRequestStatus } from './store';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
@@ -1820,6 +1821,91 @@ function AutoReadCard() {
   );
 }
 
+/* ---- WhatsApp ----
+   Two audiences behind one switch, and the card says so rather than leaving the
+   practitioner to work out which rows reach their clients. The client rows need
+   a second permission this card cannot give — the group head's own consent,
+   recorded on the group — so it points at where that lives instead of implying
+   a tick here is enough. */
+function WhatsAppCard() {
+  const { data, profile, setProfile, notify } = useData();
+  const s = resolveWhatsAppSettings(profile);
+  const reach = userReachability(profile);
+
+  const setKey = (key, value) => setProfile({ whatsapp: { ...(profile?.whatsapp || {}), [key]: value } });
+
+  // How many groups could actually receive a client message today. A practice
+  // that switches the client rows on and has done none of the groundwork should
+  // find that out here, not from three clients who never got their invoice.
+  const groups = groupsOf(data);
+  const ready = groups.filter((g) => clientReachability(g).ok).length;
+
+  const rows = WHATSAPP_MESSAGES.filter((m) => m.audience === "user");
+  const clientRows = WHATSAPP_MESSAGES.filter((m) => m.audience === "client");
+
+  return (
+    <div className="card">
+      <div className="between" style={{gap: 12, flexWrap: "wrap"}}>
+        <div className="center" style={{gap: 12}}>
+          <div style={{width: 42, height: 42, borderRadius: 12, background: "var(--p-card-tint)", color: "var(--p-primary)", display: "grid", placeItems: "center"}}>
+            <Icon name="whatsapp" size={18}/>
+          </div>
+          <div>
+            <div style={{fontWeight: 700, fontSize: 14}}>WhatsApp updates</div>
+            <div className="muted" style={{fontSize: 12}}>
+              Sent from ProHippo’s WhatsApp number{reach.ok ? ` to ${displayMobile(reach.mobile)}` : ""}
+            </div>
+          </div>
+        </div>
+        {s.enabled
+          ? <span className="pill" style={{background: "var(--p-mint)", color: "#1B8C5C"}}>On</span>
+          : <span className="pill pill-muted">Off</span>}
+      </div>
+
+      {!reach.ok && (
+        <div style={{marginTop: 12, background: "var(--p-amber)", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.55}}>
+          {reach.message} Messages to you are sent to the number you verified for sign-in, never to one typed into a form.
+        </div>
+      )}
+
+      <CalendarSwitch
+        name="Send WhatsApp updates"
+        sub={s.enabled ? "On — the messages ticked below are sent." : "Off — nothing goes out on WhatsApp."}
+        checked={s.enabled}
+        disabled={!reach.ok}
+        onChange={() => { setKey("enabled", !s.enabled); notify(s.enabled ? "WhatsApp updates off" : "WhatsApp updates on"); }}
+      />
+
+      {s.enabled && (
+        <>
+          <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", marginTop: 14}}>To you</div>
+          {rows.map((m) => (
+            <CalendarSwitch key={m.key} name={m.name} sub={m.sub} checked={s[m.key]} onChange={() => setKey(m.key, !s[m.key])}/>
+          ))}
+
+          <div className="muted" style={{fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", marginTop: 14}}>To your clients</div>
+          {clientRows.map((m) => (
+            <CalendarSwitch key={m.key} name={m.name} sub={m.sub} checked={s[m.key]} onChange={() => setKey(m.key, !s[m.key])}/>
+          ))}
+
+          <div style={{marginTop: 12, background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", borderRadius: 10, padding: "10px 12px", fontSize: 12, lineHeight: 1.6}}>
+            <b>Clients have to agree separately.</b> WhatsApp requires the recipient’s consent, and a switch here cannot
+            give it on their behalf. Set a group head and tick the consent box on each group — Assessees → Groups.
+            {" "}
+            {groups.length === 0
+              ? "You have no groups yet."
+              : <>Right now <b>{ready}</b> of {groups.length} group{groups.length === 1 ? "" : "s"} can receive client messages.</>}
+          </div>
+        </>
+      )}
+
+      <div className="muted" style={{fontSize: 11.5, marginTop: 10, lineHeight: 1.5}}>
+        Anyone can reply <b>STOP</b> to stop receiving these. That is honoured immediately and shows on the group.
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { data, profile, setProfile, loadSampleData, clearAllData, notify } = useData();
   const { user, signOutUser } = useAuth();
@@ -1852,9 +1938,9 @@ export function SettingsPage() {
     notify("Backup downloaded");
   };
 
+  // WhatsApp has left this list — it is a real card below now, not a promise.
   const integrations = [
     { t: "Income-tax portal fetch", d: "Auto-fetch notices from the ITD portal", icon: "link" },
-    { t: "WhatsApp Business Cloud", d: "Send notices and reminders in-app", icon: "whatsapp" },
     { t: "Transactional email", d: "Send emails from your own domain", icon: "mail" },
     { t: "Tally / Zoho Books", d: "Push invoices to accounting", icon: "invoice" },
   ];
@@ -1910,6 +1996,7 @@ export function SettingsPage() {
       {/* Next to the calendar on purpose: a hearing this brings in reaches
           Google through that sync, so the two are read as one arrangement. */}
       <div style={{marginBottom: 16}}><ItatEmailCard/></div>
+      <div style={{marginBottom: 16}}><WhatsAppCard/></div>
       <div style={{marginBottom: 16}}><AutoReadCard/></div>
       <div style={{marginBottom: 16}}><HapticsCard/></div>
       <div className="grid-split" style={{gap: 16}}>

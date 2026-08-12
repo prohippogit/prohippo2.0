@@ -2847,6 +2847,23 @@ Object.assign(
   })
 );
 
+/* ---------- WhatsApp delivery (WATI) ----------
+   Its own module for the same reason as the calendar: a self-contained feature
+   with its own vendor, its own secrets and its own webhook, in a file that is
+   long enough already.
+
+   This phase ships the pipe and nothing that uses it — address resolution,
+   consent, quota, the WATI call, the delivery log and the status webhook. The
+   six messages arrive in later phases.
+   Setup: docs/WHATSAPP_SETUP.md */
+const whatsapp = require("./whatsapp").build({
+  REGIONS,
+  PRIMARY_REGION,
+  db,
+  recordSpend,
+});
+exports.watiWebhook = whatsapp.watiWebhook;
+
 /* ---------- ITAT email ingest ----------
    One inbound address per practice; the Tribunal's registration and hearing
    emails, forwarded to it, become matters and hearings. Its own module for the

@@ -54,10 +54,12 @@ async function launchHardenedBrowser(headless) {
   const args = headless ? [...STEALTH_ARGS, ...HIDDEN_ARGS] : [...STEALTH_ARGS];
   const opts = { headless, args, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
   let browser;
+  let via = "chrome";
   try {
     browser = await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
   } catch {
     try {
+      via = "bundled";
       browser = await chromium.launch(opts); // bundled Chromium (present in dev only)
     } catch {
       // Reached from a sync AND from adding an assessee, so the sentence
@@ -68,12 +70,20 @@ async function launchHardenedBrowser(headless) {
       );
     }
   }
-  /* Which browser actually started, and whether we asked it to hide. If windows
-     are ever seen again with the box ticked, this line in the log is the
-     difference between diagnosing it and guessing at it — which is what the
-     first report cost. */
+  /* WHAT STARTED, AND WHAT WE ASKED OF IT.
+   *
+   * Windows appearing with "Run hidden" ticked was reported on both Windows and
+   * macOS, and could not be reproduced: a current Chromium honours even the bare
+   * flag Playwright adds. So the next report has to arrive with evidence rather
+   * than with a symptom — which browser (the user's Chrome, or the bundled
+   * build), which version, what was asked, and the exact flags handed over. All
+   * four are needed to tell "the flag was ignored" from "the flag never got
+   * there". None of it is sensitive. */
   try {
-    console.info(`[browser] ${browser.version()} · hidden: ${Boolean(headless)}`);
+    console.info(
+      `[browser] ${via} · ${browser.version()} · hidden requested: ${Boolean(headless)} · ` +
+      `args: ${args.join(" ")}`
+    );
   } catch { /* a version we cannot read is not worth failing a sync over */ }
   return browser;
 }

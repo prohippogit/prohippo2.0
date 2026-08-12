@@ -312,9 +312,29 @@ inheriting whatever the bare flag happens to mean. An off-screen
 has no window for it to apply to, and if some future Chrome ignores the flag
 again its windows open where nobody has to watch them.
 
-Every launch logs the Chrome version and whether hiding was asked for. If
-windows are ever seen again with the box ticked, that line is the difference
-between diagnosing it and guessing — which is what the first report cost.
+**It could not be reproduced**, on either platform: a current Chromium honours
+even the bare flag. The explicit mode removes one class of cause; it is not a
+confirmed diagnosis, and saying otherwise would be guessing dressed up as a fix.
+
+So every launch logs what it started and what it asked for — which browser (the
+user's Chrome, or the bundled build), which version, whether hiding was
+requested, and the exact flags handed over. Those four together tell "the flag
+was ignored" from "the flag never got there", which is the question the first
+report could not answer. On macOS the log is visible by launching the app from a
+terminal:
+
+```
+/Applications/ProHippo\ Connector.app/Contents/MacOS/ProHippo\ Connector
+```
+
+On Windows, run the installed `ProHippo Connector.exe` from a Command Prompt.
+
+A note on the off-screen fallback: it is reliable on Windows, and less so on
+macOS, where the window server can clamp a window back towards the visible
+desktop. If hiding ever fails there, the certain fix is to launch Playwright's
+bundled headless shell instead of the user's Chrome — at the cost of the genuine
+Chrome fingerprint this app prefers for the portal's WAF. That trade is worth
+making only against evidence, which is what the log line is for.
 
 Unattended runs (the schedule, and the sync at launch) are **always** hidden,
 whatever the box says: a browser taking the screen on a machine somebody else is
@@ -323,7 +343,7 @@ using is not acceptable.
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.11.1` — with a **Check for updates** link beside it. Press it and the bar
+`v1.11.2` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

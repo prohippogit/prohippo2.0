@@ -1,0 +1,29 @@
+/*
+ * ITR-1 → ComputationDocument. Delegates by assessment year (§9).
+ *
+ * No "nearest year" fallback, for the same reason as every other form: a mapper
+ * run against a year it was not written for produces a document that looks right
+ * and is wrong. An unsupported year raises instead.
+ */
+import { UnsupportedFormError } from "../../detect.js";
+import { mapItr1Ay2022 } from "./ay2022-23.js";
+import { mapItr1Ay2023 } from "./ay2023-24.js";
+import { mapItr1Ay2024 } from "./ay2024-25.js";
+import { mapItr1Ay2025 } from "./ay2025-26.js";
+import { mapItr1Ay2026 } from "./ay2026-27.js";
+
+const BY_YEAR = {
+  "2026-27": mapItr1Ay2026,
+  "2025-26": mapItr1Ay2025,
+  "2024-25": mapItr1Ay2024,
+  "2023-24": mapItr1Ay2023,
+  "2022-23": mapItr1Ay2022,
+};
+
+export function mapItr1(body, ctx) {
+  const fn = BY_YEAR[ctx.ay];
+  if (!fn) throw new UnsupportedFormError("ITR1", ctx.ay);
+  return fn(body, ctx);
+}
+
+export const SUPPORTED_YEARS = Object.keys(BY_YEAR);

@@ -99,6 +99,37 @@ test("contact details and free text are scrubbed", () => {
   assert.match(clean.ITR.ITR3.ScheduleHP.PropertyDetails[0].TenantDetails[0].NameofTenant, /^SAMPLE NAME/);
 });
 
+test("a second contact is scrubbed too, whoever it belongs to", () => {
+  // A.Y. 2026-27's ITR-1 carries `MobileNoSec` and `EmailAddressSec`, and on the
+  // return that brought them to light the second contact was somebody other than
+  // the assessee. A field holding a person's contact details is personal data
+  // whether or not it is the filer's own.
+  const withSecond = JSON.parse(JSON.stringify(RETURN));
+  withSecond.ITR.ITR3.PartA_GEN1.PersonalInfo.Address.MobileNoSec = 9812345678;
+  withSecond.ITR.ITR3.PartA_GEN1.PersonalInfo.Address.EmailAddressSec = "someone.else@gmail.com";
+  const { clean, values } = anonymise(withSecond);
+  const addr = clean.ITR.ITR3.PartA_GEN1.PersonalInfo.Address;
+  assert.equal(addr.EmailAddressSec, "sample@example.com");
+  assert.notEqual(addr.MobileNoSec, 9812345678);
+  assert.match(String(addr.MobileNoSec), /^9+$/);
+  assert.ok(!values.join("\n").includes("someone.else@gmail.com"));
+});
+
+test("ITR-1's nature-of-income line is scrubbed, because the mapper prints it as a label", () => {
+  // `OthSrcOthNatOfInc` is the assessee's own words for a receipt, and those
+  // words routinely name the payer. It is the same case as ITR-2's OthNatOfInc
+  // under a third spelling.
+  const withNature = JSON.parse(JSON.stringify(RETURN));
+  withNature.ITR.ITR3.ITR1_IncomeDeductions = {
+    OthersInc: { OthersIncDtlsOthSrc: [{ OthSrcNatureDesc: "OTH", OthSrcOthNatOfInc: "Interest from Realco Pvt Ltd", OthSrcOthAmount: 198410 }] },
+  };
+  const { clean, values } = anonymise(withNature);
+  const item = clean.ITR.ITR3.ITR1_IncomeDeductions.OthersInc.OthersIncDtlsOthSrc[0];
+  assert.match(item.OthSrcOthNatOfInc, /^SAMPLE NAME/);
+  assert.equal(item.OthSrcOthAmount, 198410, "the figure is untouched");
+  assert.ok(!values.join("\n").includes("Realco"));
+});
+
 test("figures are untouched — the fixture must still represent the case", () => {
   const { clean } = anonymise(RETURN);
   assert.equal(clean.ITR.ITR3.ScheduleHP.PropertyDetails[0].Rentdetails.IncomeOfHP, -50000);

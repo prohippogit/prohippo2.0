@@ -1,0 +1,201 @@
+{
+ "ITR": {
+  "ITR1": {
+   "CreationInfo": {
+    "IntermediaryCity": "SAMPLE PLACE 1",
+    "Digest": "XXXXXXXXXXXXXX/XX0XX/XXXXXXXXX0XXXXXXXXXXXX=",
+    "SWVersionNo": "R1",
+    "SWCreatedBy": "XX00000000",
+    "JSONCreatedBy": "XX00000000",
+    "JSONCreationDate": "2026-07-14"
+   },
+   "TaxPaid": {
+    "TaxesPaid": {
+     "TCS": 0,
+     "AdvanceTax": 0,
+     "SelfAssessmentTax": 0,
+     "TDS": 0,
+     "TotalTaxesPaid": 0
+    },
+    "BalTaxPayable": 0
+   },
+   "Refund": {
+    "RefundDue": 0,
+    "BankAccountDtls": {
+     "AddtnlBankDetails": [
+      {
+       "IFSCCode": "XXXX0000000",
+       "BankName": "SAMPLE NAME 1",
+       "BankAccountNo": "00000000000",
+       "AccountType": "SB",
+       "UseForRefund": "true"
+      }
+     ]
+    }
+   },
+   "Form_ITR1": {
+    "FormName": "ITR-1",
+    "Description": "For Indls having Income from Salary, Pension, family pension and Interest",
+    "AssessmentYear": "2026",
+    "SchemaVer": "Ver1.0",
+    "FormVer": "Ver1.0"
+   },
+   "PersonalInfo": {
+    "AssesseeName": {
+     "FirstName": "SAMPLE NAME 2",
+     "MiddleName": "SAMPLE NAME 3",
+     "SurNameOrOrgName": "SAMPLE NAME 4"
+    },
+    "PAN": "AAAPZ1000A",
+    "DOB": "1995-09-17",
+    "AadhaarCardNo": "000000000000",
+    "Address": {
+     "CountryCodeMobile": 91,
+     "MobileNo": 9800000001,
+     "CountryCodeMobileNoSec": 91,
+     "MobileNoSec": 9999999999,
+     "EmailAddress": "sample@example.com",
+     "EmailAddressSec": "sample@example.com",
+     "ResidenceNo": "23-271,",
+     "ResidenceName": "SAMPLE PLACE 2",
+     "RoadOrStreet": "SAMPLE PLACE 3",
+     "LocalityOrArea": "SAMPLE PLACE 4",
+     "CityOrTownOrDistrict": "SAMPLE PLACE 5",
+     "StateCode": "11",
+     "CountryCode": "91",
+     "PinCode": 382481
+    },
+    "SecondaryAdd": "Y",
+    "AlternateAddress": {
+     "ResidenceNo": "23-271,",
+     "ResidenceName": "SAMPLE PLACE 2",
+     "RoadOrStreet": "SAMPLE PLACE 3",
+     "LocalityOrArea": "SAMPLE PLACE 4",
+     "CityOrTownOrDistrict": "SAMPLE PLACE 5",
+     "StateCode": "11",
+     "CountryCode": "91",
+     "PinCode": 382481
+    },
+    "EmployerCategory": "OTH"
+   },
+   "FilingStatus": {
+    "ReturnFileSec": 11,
+    "ItrFilingDueDate": "2026-07-31",
+    "OptOutNewTaxRegime": "N",
+    "SeventhProvisio139": "N",
+    "AsseseeRepFlg": "N"
+   },
+   "Verification": {
+    "Declaration": {
+     "AssesseeVerName": "SAMPLE NAME 5",
+     "FatherName": "SAMPLE NAME 6",
+     "AssesseeVerPAN": "AAAPZ1000A"
+    },
+    "Capacity": "S",
+    "Place": "SAMPLE PLACE 5"
+   },
+   "ITR1_IncomeDeductions": {
+    "GrossSalary": 593181,
+    "Salary": 593181,
+    "AllwncExemptUs10": {
+     "TotalAllwncExemptUs10": 0
+    },
+    "NetSalary": 593181,
+    "DeductionUs16": 75000,
+    "DeductionUs16ia": 75000,
+    "EntertainmentAlw16ii": 0,
+    "ProfessionalTaxUs16iii": 0,
+    "IncomeFromSal": 518181,
+    "TotalIncomeChargeableUnHP": 0,
+    "OthersInc": {
+     "OthersIncDtlsOthSrc": [
+      {
+       "OthSrcNatureDesc": "SAV",
+       "OthSrcOthAmount": 786
+      }
+     ]
+    },
+    "IncomeOthSrc": 786,
+    "GrossTotIncome": 518967,
+    "GrossTotIncomeIncLTCG112A": 518967,
+    "UsrDeductUndChapVIA": {
+     "Section80C": 0,
+     "Section80CCC": 0,
+     "Section80CCDEmployeeOrSE": 0,
+     "Section80CCD1B": 0,
+     "Section80CCDEmployer": 0,
+     "Section80D": 0,
+     "Section80DD": 0,
+     "Section80DDB": 0,
+     "Section80E": 0,
+     "Section80EE": 0,
+     "Section80EEA": 0,
+     "Section80EEB": 0,
+     "Section80G": 0,
+     "Section80GG": 0,
+     "Section80GGA": 0,
+     "Section80GGC": 0,
+     "Section80TTA": 0,
+     "Section80TTB": 0,
+     "Section80U": 0,
+     "AnyOthSec80CCH": 0,
+     "TotalChapVIADeductions": 0
+    },
+    "DeductUndChapVIA": {
+     "Section80C": 0,
+     "Section80CCC": 0,
+     "Section80CCDEmployeeOrSE": 0,
+     "Section80CCD1B": 0,
+     "Section80CCDEmployer": 0,
+     "Section80D": 0,
+     "Section80DD": 0,
+     "Section80DDB": 0,
+     "Section80E": 0,
+     "Section80EE": 0,
+     "Section80EEA": 0,
+     "Section80EEB": 0,
+     "Section80G": 0,
+     "Section80GG": 0,
+     "Section80GGA": 0,
+     "Section80GGC": 0,
+     "Section80TTA": 0,
+     "Section80TTB": 0,
+     "Section80U": 0,
+     "AnyOthSec80CCH": 0,
+     "TotalChapVIADeductions": 0
+    },
+    "TotalIncome": 518970
+   },
+   "TDSonOthThanSals": {
+    "TotalTDSonOthThanSals": 0
+   },
+   "ScheduleTDS3Dtls": {
+    "TotalTDS3Details": 0
+   },
+   "ScheduleTCS": {
+    "TotalSchTCS": 0
+   },
+   "TaxPayments": {
+    "TotalTaxPayments": 0
+   },
+   "ITR1_TaxComputation": {
+    "TotalTaxPayable": 5949,
+    "Rebate87A": 5949,
+    "TaxPayableOnRebate": 0,
+    "EducationCess": 0,
+    "GrossTaxLiability": 0,
+    "Section89": 0,
+    "NetTaxLiability": 0,
+    "IntrstPay": {
+     "IntrstPayUs234A": 0,
+     "IntrstPayUs234B": 0,
+     "IntrstPayUs234C": 0,
+     "LateFilingFee234F": 0,
+     "FeeFurnish234I": 0
+    },
+    "TotalIntrstPay": 0,
+    "TotTaxPlusIntrstPay": 0
+   }
+  }
+ }
+}

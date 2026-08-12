@@ -27,7 +27,10 @@ const PERSON_KEYS = new Set([
   // A property sale names the buyer, and a free-text "nature of income" line
   // routinely names the payer ("Interest from <company> Pvt Ltd"). Both are
   // third parties who never agreed to appear in a public repository.
-  "NameOfBuyer", "OthNatOfInc", "SalOthNatOfInc", "OthersIncNature",
+  //
+  // ITR-1 spells the other-sources one `OthSrcOthNatOfInc`, and the mapper
+  // prints it as the row's label, so it is the same case under a third name.
+  "NameOfBuyer", "OthNatOfInc", "SalOthNatOfInc", "OthersIncNature", "OthSrcOthNatOfInc",
   // The TDS schedules name the same employer again under their own key.
   "EmployerOrDeductorOrCollecterName", "DeductorName", "CollecterName",
   "InsurerName",
@@ -58,6 +61,11 @@ const PLACE_KEYS = new Set([
 const OPAQUE_KEYS = new Set([
   "Digest", "UDIN", "BankAccountNo", "IFSCCode", "AadhaarCardNo", "SWCreatedBy", "JSONCreatedBy",
   "LoanAccNoOfBankOrInstnRefNo", "EmailAddress", "AudFrmRegNo", "AuditorMemNo", "AudFrmAadhaar",
+  // A.Y. 2026-27's ITR-1 carries a SECOND contact — `EmailAddressSec` and
+  // `MobileNoSec` — and on the return that brought this to light it belonged to
+  // someone other than the assessee. A field that holds a person's contact
+  // details is personal data whether or not it is the filer's own.
+  "EmailAddressSec",
   "AccountNumber", "DematAccountNo", "PassportNo", "TAN", "TANOfEmployer",
   // Account, policy and security identifiers — an NPS PRAN, an insurance
   // policy number and an ISIN each point at a specific holding of a specific
@@ -74,7 +82,7 @@ const OPAQUE_KEYS = new Set([
 // NOT here on purpose: GSTINNo. A GSTIN embeds the PAN, so masking the whole
 // string destroys a shape the mapper displays; replacing the PAN inside it
 // leaves a structurally valid GSTIN belonging to the dummy assessee.
-const NUMERIC_ID_KEYS = new Set(["MobileNo", "AckNum44AB", "PhoneNo", "STDcode", "SrlNoOfChaln"]);
+const NUMERIC_ID_KEYS = new Set(["MobileNo", "MobileNoSec", "AckNum44AB", "PhoneNo", "STDcode", "SrlNoOfChaln"]);
 
 // A PAN's fourth character carries the assessee's status, and the mapper reads
 // it — so a replacement must keep it or the fixture stops representing the case.
@@ -123,7 +131,7 @@ export function anonymise(json) {
       if (PERSON_KEYS.has(key) && isProse(node)) return name(node);
       if (PLACE_KEYS.has(key) && isProse(node)) return where(node);
       if (SCOPED_PLACE_KEYS.has(`${parentKey}.${key}`) && isProse(node)) return where(node);
-      if (OPAQUE_KEYS.has(key) && node.trim()) return key === "EmailAddress" ? "sample@example.com" : mask(node);
+      if (OPAQUE_KEYS.has(key) && node.trim()) return /^EmailAddress/.test(key) ? "sample@example.com" : mask(node);
       let s = node;
       for (const [from, to] of Object.entries(ids)) if (s.includes(from)) s = s.split(from).join(to);
       return s;

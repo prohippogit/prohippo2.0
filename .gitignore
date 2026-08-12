@@ -40,3 +40,9 @@ known-callers*.csv
 # extension/ folder that is committed. A build artefact, like dist/ — committing
 # it would create a second copy of the extension to keep in step.
 public/prohippo-sync-extension.zip
+
+# Copied from src/ by scripts/build-functions-shared.mjs so the scheduled cause
+# list can render the same PDF the browser renders. A build artefact of src/,
+# like dist/ — committing it would create exactly the second copy the copy step
+# exists to avoid. Rebuilt on every deploy (firebase.json predeploy).
+functions/shared/

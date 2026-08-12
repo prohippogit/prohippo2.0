@@ -212,6 +212,60 @@ test("a hearing with nothing but a date still produces a usable reminder", () =>
   }
 });
 
+/* ---------------- the weekly cause list ---------------- */
+
+test("Saturday's sweep sends the week that has not started yet", () => {
+  // Saturday 15 Aug 2026 → Monday 17th to Sunday 23rd.
+  assert.deepEqual(core.nextWeekRange("2026-08-15"), { from: "2026-08-17", to: "2026-08-23" });
+});
+
+test("every day of a week points at the same next week", () => {
+  /* The sweep only runs on Saturdays, but the rule should not depend on that —
+     a manual re-run on Monday morning must not produce a different sheet from
+     the one already sent. Sunday is the trap: it is day 0, and the naive
+     (dow + 6) % 7 that works everywhere else puts it in the week ahead. */
+  const week = { from: "2026-08-17", to: "2026-08-23" };
+  for (const day of ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-16"]) {
+    assert.deepEqual(core.nextWeekRange(day), week, `${day} pointed at the wrong week`);
+  }
+});
+
+test("the week label says only as much as it needs to", () => {
+  assert.equal(core.weekLabel("2026-08-17", "2026-08-23"), "17–23 August 2026");
+  assert.equal(core.weekLabel("2026-08-31", "2026-09-06"), "31 August – 6 September 2026");
+  assert.equal(core.weekLabel("2025-12-29", "2026-01-04"), "29 December 2025 – 4 January 2026");
+});
+
+test("the breakdown names the forums and always reads the same way", () => {
+  const hearings = [
+    { authority: "ITAT" }, { authority: "Scrutiny" }, { authority: "ITAT" },
+    { authority: "CIT(A)" }, { authority: "Scrutiny" }, { authority: "Scrutiny" },
+  ];
+  assert.equal(core.causeListBreakdown(hearings), "3 Scrutiny, 2 ITAT, 1 CIT(A)");
+  // Firestore hands documents back in its own order; the same week must not
+  // read differently from one Saturday to the next.
+  const shuffled = [...hearings].reverse();
+  assert.equal(core.causeListBreakdown(shuffled), core.causeListBreakdown(hearings));
+});
+
+test("a hearing with no authority is still counted", () => {
+  assert.equal(core.causeListBreakdown([{ authority: "" }, { authority: "ITAT" }]), "1 ITAT, 1 Other");
+});
+
+test("the cause list carries three parameters and not one of them is empty", () => {
+  const p = core.causeListParams([{ authority: "ITAT" }], { from: "2026-08-17", to: "2026-08-23" });
+  assert.deepEqual(p, ["17–23 August 2026", "1", "1 ITAT"]);
+  for (const v of p) assert.ok(String(v).trim().length > 0);
+});
+
+test("the attachment is named something a phone can save", () => {
+  const name = core.causeListFileName({ from: "2026-08-17", to: "2026-08-23" });
+  assert.equal(name, "Cause list 17to23 August 2026.pdf");
+  // No en dash, no double spaces — both travel badly as filenames.
+  assert.ok(!name.includes("–"));
+  assert.ok(!name.includes("  "));
+});
+
 /* ---------------- the burst guard ---------------- */
 
 test("five alerts go out, the sixth says it has stopped, the rest are silent", () => {

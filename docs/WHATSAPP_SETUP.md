@@ -3,9 +3,9 @@
 How a hearing, a notice or an invoice reaches somebody on WhatsApp, and how
 ProHippo knows whether it arrived.
 
-**Status: phases 0 and 1 are implemented** — the pipe, plus the two messages
-that reach the practitioner themselves. The four client-facing messages are
-phases 2–4 and are the plan, not code.
+**Status: phases 0, 1 and 2 are implemented** — the pipe, plus the three
+messages that reach the practitioner themselves. The three client-facing
+messages are phases 3–4 and are the plan, not code.
 
 ---
 
@@ -268,6 +268,74 @@ the voice roster does would cost a document read per practice per day for an
 answer that is almost always no. One practice's failure is caught and logged so
 it cannot end the sweep for everybody else.
 
+### Weekly cause list
+
+`whatsappWeeklyCauseList`, `onSchedule("30 7 * * 6", "Asia/Kolkata")` — day-of-week
+6 is Saturday.
+
+**The week it sends is the one that has not started yet.** On a Saturday the
+current week is spent: five of its seven days are behind the practitioner, and a
+sheet of those is a record, not a plan. `nextWeekRange()` returns the Monday
+after the one containing today. Sunday is the trap in that arithmetic — it is
+day 0, and belongs to the week *before* it, exactly as `startOfWeek()` in
+`causeList.js` already reckons it.
+
+**An empty week is not sent.** A weekly message that usually says "nothing
+listed" is the one people mute, and muting it costs them the weeks that did have
+something.
+
+Saturday 07:30 lands the file before the weekend while there is still a working
+day left to fix a clash. Sunday evening would be too late to ring a bench clerk.
+
+#### The renderer had to move to the server
+
+Nobody has a browser open at half past seven on a Saturday, so unlike the
+invoice — which a practitioner generates by pressing a button — this PDF cannot
+be made by the client and uploaded.
+
+The renderer already exists in `src/`, is pure ESM with no DOM, and runs under
+Node unchanged. The only thing wrong with it is its address: Firebase uploads
+the `functions/` directory and nothing outside it.
+
+So `scripts/build-functions-shared.mjs` copies the transitive closure of
+`causeListPdf.js` into `functions/shared/` at deploy time:
+
+```
+causeListPdf.js → pdfTheme.js  → invoicePdf.js → fonts/invoiceFonts.js
+                → causeList.js
+```
+
+| Decision | Why |
+|---|---|
+| Copy, not a second renderer | The alternative was a cause list written against the Chromium already in `computation.js` — a second design of the same document to keep in step. `pdfTheme.js` exists precisely because "a second copy of a brand drifts from the first the week after it is written". A copy made by a build step cannot drift |
+| Git-ignored | A build artefact of `src/`, like `dist/`. Committing it creates exactly the second copy this avoids |
+| A `package.json` beside it | `functions/` is CommonJS, so a bare `.js` there is parsed as CommonJS and every `import` is a syntax error. The nearest `package.json` wins, so `{"type":"module"}` marks only this directory |
+| `await import()` from CommonJS | Node 22 bridges the two. It also means a practice with no hearings never loads 166 KB of fonts |
+
+**The build fails if the copy set is incomplete.** Add
+`import { fmtDate } from './formatters.js'` to `pdfTheme.js` without adding it to
+`FILES`, and the app keeps working while the Saturday job starts throwing
+`MODULE_NOT_FOUND` where nobody is watching. `verify()` checks that every
+relative import of every copied file is itself copied, and
+`test/functionsShared.test.mjs` runs the same check plus a real render under
+Node — so a browser API entering the renderer fails a test rather than a
+Saturday.
+
+Wired to `firebase.json`'s `predeploy` hook and to `npm run build`, the way
+`build-extension-zip.mjs` is wired to `prebuild`.
+
+#### The signed URL
+
+`users/{uid}/causeLists/{from}.pdf`, then a **v4 signed URL with seven days'
+expiry**. Not a Firebase download token: that kind never expires without being
+rotated, and this sheet carries a practice's clients, their PANs and where they
+are due to appear. Seven days is long enough for WhatsApp to fetch it and for
+the practitioner to open it again on Wednesday.
+
+This is the step that needs `roles/iam.serviceAccountTokenCreator` (step 6
+below). If the grant is missing the raw error mentions neither signing nor the
+role that fixes it, so it is caught and re-thrown saying both.
+
 ### The clock
 
 `istDate()` applies the +5:30 offset explicitly rather than relying on
@@ -393,8 +461,9 @@ of them — never Marketing, which is dearer and blockable by the recipient.
 Each needs a **sample value for every variable** or Meta rejects the submission
 unread. Three need a **Document** header; upload any small PDF as the sample.
 
-**Phase 1 needs exactly three of them**, all English, none with a media header —
-so these are the ones to submit now:
+**Phases 1 and 2 need four of them**, all English. Three have no media header
+and can be submitted and tested immediately; the fourth carries a PDF and is the
+first that depends on `MEDIA_MODE` being right for your tenant.
 
 <details>
 <summary><code>ph_notice_alert_user_v1</code> — 7 variables</summary>
@@ -452,8 +521,27 @@ Open ProHippo — the dashboard lists everything issued in the last 24 hours.
 ```
 </details>
 
-Getting these three approved also teaches you what the reviewer wants before the
-nine client-facing variants go in.
+<details>
+<summary><code>ph_cause_list_weekly_v1</code> — 3 variables, <b>Document header</b></summary>
+
+```
+Your cause list for the week of {{1}} is attached.
+
+{{2}} hearings listed · {{3}}
+
+Times and benches are as recorded in ProHippo this morning. Check the portal for
+anything notified after that.
+```
+
+Samples: `17–23 August 2026` · `6` · `2 ITAT, 1 CIT(A), 3 Scrutiny`
+
+Upload any small PDF as the header sample. This is the one to test
+`MEDIA_MODE` against — if it sends and the PDF arrives, the invoice and the
+document request will work too.
+</details>
+
+Getting these approved also teaches you what the reviewer wants before the nine
+client-facing variants go in.
 
 Meta's validator rejects, in roughly this order of frequency: a body that ends on
 a variable, two variables with nothing between them, a variable containing a
@@ -494,7 +582,29 @@ gcloud projects add-iam-policy-binding prohippo2 \
   --role="roles/iam.serviceAccountTokenCreator"
 ```
 
-Not needed until phase 2.
+Then deploy the two scheduled jobs and the trigger. The predeploy hook copies
+the renderer in on the way:
+
+```bash
+firebase deploy --only functions:onNoticeCreatedWhatsApp,functions:whatsappHearingReminders,functions:whatsappWeeklyCauseList --project prohippo2
+```
+
+Cloud Scheduler jobs are created on first deploy. Confirm both appear:
+
+```bash
+gcloud scheduler jobs list --project prohippo2 --location asia-south1
+```
+
+To test the cause list without waiting for Saturday, run the job by hand — it
+sends the week ahead exactly as it would on the day:
+
+```bash
+gcloud scheduler jobs run firebase-schedule-whatsappWeeklyCauseList-asia-south1 \
+  --project prohippo2 --location asia-south1
+```
+
+The claim in `users/{uid}/waSent/causelist_{monday}` means a second run that
+week is a no-op. Delete that document to send it again.
 
 ### Step 7 — Watch the quality rating
 
@@ -519,3 +629,6 @@ the client-facing three are the ones to suspect — which is why they ship last 
 | Notice alerts stopped mid-sync | The burst cap tripped; expected on a first sync | One `ph_notice_burst_user_v1` was sent. Resumes after the hour |
 | Hearing reminder never arrives | Hearing marked Adjourned, or already claimed | `users/{uid}/waSent/hearing_{id}_1` — delete it to let the sweep resend |
 | Reminders arrive for the wrong day | Only possible if `istDate()` was bypassed | The sweep must never read `new Date().toISOString()` directly |
+| Cause list fails, "PDF renderer is missing" | Deployed without the predeploy hook | `node scripts/build-functions-shared.mjs`, then deploy again |
+| Cause list fails, "Could not sign the URL" | The IAM grant in step 6 was skipped | Run it, then re-run the scheduler job |
+| No cause list on a quiet week | Deliberate — empty weeks are not sent | The log line reports how many practices had an empty week |

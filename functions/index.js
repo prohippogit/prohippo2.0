@@ -2853,8 +2853,8 @@ Object.assign(
    long enough already.
 
    The pipe — address resolution, consent, quota, the WATI call, the delivery
-   log and the status webhook — plus the two messages that reach the
-   practitioner themselves. The four client-facing ones follow.
+   log and the status webhook — plus the three messages that reach the
+   practitioner themselves. The three client-facing ones follow.
    Setup: docs/WHATSAPP_SETUP.md */
 const whatsapp = require("./whatsapp").build({
   REGIONS,
@@ -2862,10 +2862,12 @@ const whatsapp = require("./whatsapp").build({
   TRIGGER_REGION,
   db,
   recordSpend,
+  STORAGE_BUCKET,
 });
 exports.watiWebhook = whatsapp.watiWebhook;
 exports.onNoticeCreatedWhatsApp = whatsapp.onNoticeCreatedWhatsApp;
 exports.whatsappHearingReminders = whatsapp.whatsappHearingReminders;
+exports.whatsappWeeklyCauseList = whatsapp.whatsappWeeklyCauseList;
 
 /* ---------- ITAT email ingest ----------
    One inbound address per practice; the Tribunal's registration and hearing

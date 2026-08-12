@@ -198,6 +198,80 @@ function hearingReminderParams(hearing, { when = "tomorrow" } = {}) {
   ];
 }
 
+/* ---------------- the weekly cause list ---------------- */
+
+/*
+ * The Monday-to-Sunday AFTER the one containing `todayIso`.
+ *
+ * The sweep runs on a Saturday morning, when the current week is spent — five
+ * of its seven days are already behind the practitioner, and a sheet of them is
+ * a record, not a plan. What they are about to need is the week starting Monday.
+ *
+ * Arithmetic in UTC over a bare date string, deliberately: `new Date(iso)` with
+ * no zone is parsed as UTC anyway, India has no daylight saving, and the caller
+ * has already resolved the Indian date with istDate(). Reaching for local time
+ * here would reintroduce exactly the UTC/IST confusion istDate() exists to end.
+ */
+function nextWeekRange(todayIso) {
+  const d = new Date(`${todayIso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return { from: "", to: "" };
+  const backToMonday = (d.getUTCDay() + 6) % 7; // Sunday is 0, and belongs to the week before
+  const monday = new Date(d.getTime() + (7 - backToMonday) * 86400000);
+  const from = monday.toISOString().slice(0, 10);
+  const to = new Date(monday.getTime() + 6 * 86400000).toISOString().slice(0, 10);
+  return { from, to };
+}
+
+/* "17–23 August 2026", and the two cases where that is not enough: a week that
+   crosses a month, and one that crosses a year. Said the way a person would say
+   it rather than printing both dates in full every time. */
+function weekLabel(from, to) {
+  const a = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(from || ""));
+  const b = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(to || ""));
+  if (!a || !b) return `${from || ""}`.trim();
+  const [, ay, am, ad] = a;
+  const [, by, bm, bd] = b;
+  const mon = (m) => MONTHS[Number(m) - 1];
+  if (ay !== by) return `${Number(ad)} ${mon(am)} ${ay} – ${Number(bd)} ${mon(bm)} ${by}`;
+  if (am !== bm) return `${Number(ad)} ${mon(am)} – ${Number(bd)} ${mon(bm)} ${by}`;
+  return `${Number(ad)}–${Number(bd)} ${mon(am)} ${ay}`;
+}
+
+/* "2 ITAT, 1 CIT(A), 3 Scrutiny" — what the week is made of, in one line.
+ *
+ * causeListSummary() in causeList.js counts distinct authorities; this names
+ * them. Ordered by count and then alphabetically, so the same week always reads
+ * the same way rather than shuffling with Firestore's document order. */
+function causeListBreakdown(hearings) {
+  const counts = new Map();
+  for (const h of hearings || []) {
+    const key = (h && h.authority) || "Other";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+    .map(([name, n]) => `${n} ${name}`)
+    .join(", ");
+}
+
+/* The three variables of ph_cause_list_weekly_v1, in order. */
+function causeListParams(hearings, { from, to } = {}) {
+  const n = (hearings || []).length;
+  return [
+    weekLabel(from, to),
+    String(n),
+    causeListBreakdown(hearings) || "no forums listed",
+  ];
+}
+
+/* What the attachment is called on the recipient's phone. Spaces and the en
+   dash are avoided: this becomes a filename on somebody's device, and the
+   ones that travel badly are not worth the typography. */
+function causeListFileName({ from, to } = {}) {
+  const label = weekLabel(from, to).replace(/–/g, "to").replace(/\s+/g, " ").trim();
+  return `Cause list ${label}.pdf`.replace(/\s{2,}/g, " ");
+}
+
 /* ---------------- the burst guard ---------------- */
 
 /*
@@ -252,6 +326,11 @@ module.exports = {
   noticeAlertParams,
   isHearingLive,
   hearingReminderParams,
+  nextWeekRange,
+  weekLabel,
+  causeListBreakdown,
+  causeListParams,
+  causeListFileName,
   BURST_WINDOW_MS,
   BURST_MAX,
   burstDecision,

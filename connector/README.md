@@ -297,31 +297,53 @@ same correction.
 
 ## "Run hidden" means hidden
 
-Playwright's `headless: true` only ever adds a **bare `--headless`** — still true
-in the current release — and what that means is then up to the browser it lands
-on. For Playwright's own bundled build it is the dedicated headless shell and
-unambiguous. For the user's **real Google Chrome**, which this app deliberately
-prefers for its fingerprint, it depends on the Chrome version: old headless was
-removed in Chrome 132. A practitioner on Windows saw five browser windows open
-with the box ticked.
+A practitioner reported browser windows opening with the box ticked, on Windows
+and then on macOS. It was ours, and it was in the wiring rather than in Chrome.
 
-So `pool.js` states the mode itself — `--headless=new`, understood by every
-Chrome since 112, appended after Playwright's defaults so it wins — rather than
-inheriting whatever the bare flag happens to mean. An off-screen
-`--window-position` rides along as a belt-and-braces: a truly headless browser
-has no window for it to apply to, and if some future Chrome ignores the flag
-again its windows open where nobody has to watch them.
+**"Sync everything now" goes through the scheduler**, which calls
+`runSync({ scope, trigger })` — with no `headless` key at all. The old line read:
 
-**It could not be reproduced**, on either platform: a current Chromium honours
-even the bare flag. The explicit mode removes one class of cause; it is not a
-confirmed diagnosis, and saying otherwise would be guessing dressed up as a fix.
+```js
+headless: trigger === "manual" ? headless : true   // wrong
+```
 
-So every launch logs what it started and what it asked for — which browser (the
-user's Chrome, or the bundled build), which version, whether hiding was
-requested, and the exact flags handed over. Those four together tell "the flag
-was ignored" from "the flag never got there", which is the question the first
-report could not answer. On macOS the log is visible by launching the app from a
-terminal:
+and that button passes `trigger: "manual"`. So `headless` was `undefined`,
+`opts.headless === true` in the pool was `false`, and every PAN opened a visible
+window. The schedule and the launch sync were fine; the one button most likely
+to be pressed while testing the feature was not.
+
+The rule is stated the other way round now, so an absent flag can never mean
+"show it":
+
+```js
+headless: !(trigger === "manual" && headless === false)   // hidden unless asked
+```
+
+...and the pool defaults the same way (`opts.headless !== false`), so a caller
+that forgets the flag gets a hidden browser rather than five visible windows.
+The smoke test drives each button's real path and asserts what reached the
+launcher: Sync everything now, the schedule, Sync selected ticked and unticked,
+and a call with the flag missing entirely. Against the old code it fails with
+`launched with headless=false`.
+
+### Two things kept from chasing this the wrong way first
+
+The headless MODE is still stated explicitly — `--headless=new` rather than the
+bare `--headless` Playwright adds — with an off-screen `--window-position`
+behind it. Neither was the bug. Both are cheap, and a browser that is told
+exactly what to be is worth having when the alternative is inheriting whatever a
+bare flag means to whichever Chrome the practitioner happens to run.
+
+Every launch logs what started and what was asked of it:
+
+```
+[browser] chrome · 141.0.7390.37 · hidden requested: true · args: … --headless=new …
+```
+
+Reading that line — rather than reasoning about Playwright's source, which is
+where this went wrong for an afternoon — would have shown `hidden requested:
+false` and ended it in a minute. On macOS the log is visible by launching the
+app from a terminal:
 
 ```
 /Applications/ProHippo\ Connector.app/Contents/MacOS/ProHippo\ Connector
@@ -329,21 +351,10 @@ terminal:
 
 On Windows, run the installed `ProHippo Connector.exe` from a Command Prompt.
 
-A note on the off-screen fallback: it is reliable on Windows, and less so on
-macOS, where the window server can clamp a window back towards the visible
-desktop. If hiding ever fails there, the certain fix is to launch Playwright's
-bundled headless shell instead of the user's Chrome — at the cost of the genuine
-Chrome fingerprint this app prefers for the portal's WAF. That trade is worth
-making only against evidence, which is what the log line is for.
-
-Unattended runs (the schedule, and the sync at launch) are **always** hidden,
-whatever the box says: a browser taking the screen on a machine somebody else is
-using is not acceptable.
-
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.11.2` — with a **Check for updates** link beside it. Press it and the bar
+`v1.11.3` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

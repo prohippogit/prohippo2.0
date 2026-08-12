@@ -112,7 +112,11 @@ async function runPool(jobs, onEvent, opts = {}) {
   const scope = opts.scope || "all";
 
   // One shared browser process; each job opens its own isolated context.
-  const browser = await launchHardenedBrowser(opts.headless === true);
+  /* `!== false`, not `=== true`: a caller that forgets to pass the flag gets a
+     HIDDEN browser rather than five visible windows. That exact strictness is
+     what turned one missing key upstream into a practitioner watching browsers
+     open across their screen. */
+  const browser = await launchHardenedBrowser(opts.headless !== false);
 
   const queue = [...jobs];
   const results = [];

@@ -136,11 +136,22 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
       list = shuffle(list);
     }
     if (!list.length) return [];
-    // Unattended runs are always hidden: a browser window taking the screen on
-    // a machine somebody else is using is not acceptable.
+    /* HIDDEN UNLESS SOMEBODY ASKED TO WATCH.
+     *
+     * This used to read `trigger === "manual" ? headless : true`, which looks
+     * right and was the bug behind "it opened numbers of browsers": the
+     * scheduler calls runSync({ scope, trigger }) with NO headless key, and
+     * "Sync everything now" goes through the scheduler with trigger "manual".
+     * So `headless` was undefined, `undefined === true` was false, and every
+     * PAN opened a visible window — on macOS and on Windows alike.
+     *
+     * Stated the other way round now: a window appears only when the window's
+     * own Sync-selected explicitly says so by unticking the box. Every other
+     * path — the schedule, the launch sync, Sync everything now — is hidden,
+     * and an absent flag can no longer mean "show it". */
     return await runPool(list, (evt) => send("sync:event", evt), {
       scope,
-      headless: trigger === "manual" ? headless : true,
+      headless: !(trigger === "manual" && headless === false),
     });
   } finally {
     syncInFlight = false;

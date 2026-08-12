@@ -42,7 +42,7 @@ async function fetchMasterForPan({ pan, portalUserId, portalPassword, headless =
   if (!clean(portalPassword)) throw new Error("Enter the e-filing password for this PAN.");
 
   emit("start", "Starting Chrome…");
-  const browser = await launchHardenedBrowser(headless === true);
+  const browser = await launchHardenedBrowser(headless !== false); // hidden unless told otherwise
   let context = null;
   try {
     context = await newStealthContext(browser);

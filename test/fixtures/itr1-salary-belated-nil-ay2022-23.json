@@ -1,0 +1,200 @@
+{
+ "ITR": {
+  "ITR1": {
+   "CreationInfo": {
+    "SWVersionNo": "8.84.54",
+    "SWCreatedBy": "XX00000000",
+    "JSONCreatedBy": "XX00000000",
+    "JSONCreationDate": "2022-09-14",
+    "IntermediaryCity": "SAMPLE PLACE 1",
+    "Digest": "XXXXXXXXXXXX/0XXXX0X0XXXXXXXXXXXXXXXX00XXX0="
+   },
+   "Form_ITR1": {
+    "FormName": "ITR-1",
+    "Description": "For Indls having Income from Salary, Pension, family pension and Interest",
+    "AssessmentYear": "2022",
+    "SchemaVer": "Ver1.0",
+    "FormVer": "Ver1.0"
+   },
+   "PersonalInfo": {
+    "AssesseeName": {
+     "FirstName": "SAMPLE NAME 1",
+     "MiddleName": "K",
+     "SurNameOrOrgName": "SAMPLE NAME 2"
+    },
+    "PAN": "AAAPZ1000A",
+    "Address": {
+     "ResidenceNo": "SAMPLE PLACE 2",
+     "RoadOrStreet": "SAMPLE PLACE 3",
+     "LocalityOrArea": "SAMPLE PLACE 4",
+     "CityOrTownOrDistrict": "SAMPLE PLACE 5",
+     "StateCode": "11",
+     "CountryCode": "91",
+     "PinCode": 382481,
+     "CountryCodeMobile": 91,
+     "MobileNo": 9800000001,
+     "EmailAddress": "sample@example.com"
+    },
+    "EmployerCategory": "OTH",
+    "AadhaarCardNo": "000000000000",
+    "DOB": "1995-09-17"
+   },
+   "FilingStatus": {
+    "ReturnFileSec": 12,
+    "SeventhProvisio139": "N",
+    "NewTaxRegime": "N"
+   },
+   "ITR1_IncomeDeductions": {
+    "GrossSalary": 289500,
+    "Salary": 289500,
+    "PerquisitesValue": 0,
+    "ProfitsInSalary": 0,
+    "IncomeNotified89A": 0,
+    "IncomeNotifiedOther89A": 0,
+    "AllwncExemptUs10": {
+     "TotalAllwncExemptUs10": 0
+    },
+    "Increliefus89A": 0,
+    "NetSalary": 289500,
+    "DeductionUs16": 50000,
+    "DeductionUs16ia": 50000,
+    "EntertainmentAlw16ii": 0,
+    "ProfessionalTaxUs16iii": 0,
+    "IncomeFromSal": 239500,
+    "TotalIncomeOfHP": 0,
+    "IncomeOthSrc": 0,
+    "GrossTotIncome": 239500,
+    "UsrDeductUndChapVIA": {
+     "Section80C": 0,
+     "Section80CCC": 0,
+     "Section80CCDEmployeeOrSE": 0,
+     "Section80CCD1B": 0,
+     "Section80CCDEmployer": 0,
+     "Section80D": 0,
+     "Section80DD": 0,
+     "Section80DDB": 0,
+     "Section80E": 0,
+     "Section80EE": 0,
+     "Section80EEA": 0,
+     "Section80EEB": 0,
+     "Section80G": 0,
+     "Section80GG": 0,
+     "Section80GGA": 0,
+     "Section80GGC": 0,
+     "Section80U": 0,
+     "Section80TTA": 0,
+     "Section80TTB": 0,
+     "TotalChapVIADeductions": 0
+    },
+    "DeductUndChapVIA": {
+     "Section80C": 0,
+     "Section80CCC": 0,
+     "Section80CCDEmployeeOrSE": 0,
+     "Section80CCD1B": 0,
+     "Section80CCDEmployer": 0,
+     "Section80D": 0,
+     "Section80DD": 0,
+     "Section80DDB": 0,
+     "Section80E": 0,
+     "Section80EE": 0,
+     "Section80EEA": 0,
+     "Section80EEB": 0,
+     "Section80G": 0,
+     "Section80GG": 0,
+     "Section80GGA": 0,
+     "Section80GGC": 0,
+     "Section80U": 0,
+     "Section80TTA": 0,
+     "Section80TTB": 0,
+     "TotalChapVIADeductions": 0
+    },
+    "ExemptIncAgriOthUs10": {
+     "ExemptIncAgriOthUs10Total": 0
+    },
+    "TotalIncome": 239500
+   },
+   "ITR1_TaxComputation": {
+    "TotalTaxPayable": 0,
+    "Rebate87A": 0,
+    "TaxPayableOnRebate": 0,
+    "EducationCess": 0,
+    "GrossTaxLiability": 0,
+    "Section89": 0,
+    "NetTaxLiability": 0,
+    "TotalIntrstPay": 0,
+    "IntrstPay": {
+     "IntrstPayUs234A": 0,
+     "IntrstPayUs234B": 0,
+     "IntrstPayUs234C": 0,
+     "LateFilingFee234F": 0
+    },
+    "TotTaxPlusIntrstPay": 0
+   },
+   "TaxPaid": {
+    "TaxesPaid": {
+     "AdvanceTax": 0,
+     "TDS": 0,
+     "TCS": 0,
+     "SelfAssessmentTax": 0,
+     "TotalTaxesPaid": 0
+    },
+    "BalTaxPayable": 0
+   },
+   "Refund": {
+    "RefundDue": 0,
+    "BankAccountDtls": {
+     "AddtnlBankDetails": [
+      {
+       "IFSCCode": "XXXX0000000",
+       "BankName": "SAMPLE NAME 3",
+       "BankAccountNo": "00000000000",
+       "UseForRefund": "true"
+      }
+     ]
+    }
+   },
+   "Schedule80D": {
+    "Sec80DSelfFamSrCtznHealth": {
+     "SeniorCitizenFlag": "S",
+     "SelfAndFamily": 0,
+     "HealthInsPremSlfFam": 0,
+     "PrevHlthChckUpSlfFam": 0,
+     "SelfAndFamilySeniorCitizen": 0,
+     "HlthInsPremSlfFamSrCtzn": 0,
+     "PrevHlthChckUpSlfFamSrCtzn": 0,
+     "MedicalExpSlfFamSrCtzn": 0,
+     "ParentsSeniorCitizenFlag": "P",
+     "Parents": 0,
+     "HlthInsPremParents": 0,
+     "PrevHlthChckUpParents": 0,
+     "ParentsSeniorCitizen": 0,
+     "HlthInsPremParentsSrCtzn": 0,
+     "PrevHlthChckUpParentsSrCtzn": 0,
+     "MedicalExpParentsSrCtzn": 0,
+     "EligibleAmountOfDedn": 0
+    }
+   },
+   "TDSonSalaries": {
+    "TotalTDSonSalaries": 0
+   },
+   "TDSonOthThanSals": {
+    "TotalTDSonOthThanSals": 0
+   },
+   "ScheduleTDS3Dtls": {
+    "TotalTDS3Details": 0
+   },
+   "ScheduleTCS": {
+    "TotalSchTCS": 0
+   },
+   "Verification": {
+    "Declaration": {
+     "AssesseeVerName": "SAMPLE NAME 4",
+     "FatherName": "SAMPLE NAME 5",
+     "AssesseeVerPAN": "AAAPZ1000A"
+    },
+    "Capacity": "S",
+    "Place": "SAMPLE PLACE 5"
+   }
+  }
+ }
+}

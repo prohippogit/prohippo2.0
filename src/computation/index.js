@@ -12,12 +12,14 @@
  */
 import { detect, UnsupportedFormError } from "./detect.js";
 import { validate, ValidationError } from "./validate.js";
+import { mapItr1, SUPPORTED_YEARS as itr1Years } from "./mappers/itr1/index.js";
 import { mapItr2, SUPPORTED_YEARS as itr2Years } from "./mappers/itr2/index.js";
 import { mapItr3, SUPPORTED_YEARS as itr3Years } from "./mappers/itr3/index.js";
 import { mapItr5, SUPPORTED_YEARS as itr5Years } from "./mappers/itr5/index.js";
 import { renderHtml } from "./render/template.js";
 
 const MAPPERS = {
+  ITR1: mapItr1,
   ITR2: mapItr2,
   ITR3: mapItr3,
   ITR5: mapItr5,
@@ -60,4 +62,4 @@ export { detect, validate, UnsupportedFormError, ValidationError };
    themselves report it. The Returns tab does NOT read this — importing it would
    pull every mapper into the main bundle — it reads ./supported.js, which a test
    asserts against these. */
-export const SUPPORTED = { ITR2: itr2Years, ITR3: itr3Years, ITR5: itr5Years };
+export const SUPPORTED = { ITR1: itr1Years, ITR2: itr2Years, ITR3: itr3Years, ITR5: itr5Years };

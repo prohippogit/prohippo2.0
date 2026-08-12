@@ -287,8 +287,11 @@ HTML→PDF step is a server call (`renderComputationPdf`, headless Chromium), an
 it renders finished markup without seeing the return.
 
 **`docs/computation-spec.md` is authoritative.** Read it before touching anything
-in `src/computation/`. Supported today: **ITR-5, A.Y. 2025-26**. Other forms and
-years show a plain "not yet supported" message rather than a wrong document.
+in `src/computation/`. Supported today: **ITR-1, ITR-2 and ITR-3 for A.Y. 2022-23
+to 2026-27, and ITR-5 for A.Y. 2025-26** — `src/computation/supported.js` is the
+single table the Returns tab reads, and a test holds it to the mappers that
+actually exist. Other forms and years show a plain "not yet supported" message
+rather than a wrong document.
 
 ```
 npm test                        # golden model, validate(), unmapped

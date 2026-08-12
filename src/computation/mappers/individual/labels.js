@@ -1,11 +1,19 @@
 /*
- * Label tables for the individual/HUF family of returns — ITR-2 and ITR-3.
+ * Label tables for the individual/HUF family of returns — ITR-1, ITR-2, ITR-3.
  * docs/computation-spec.md §9; anything year-specific belongs in ayNNNN-NN.js.
  *
  * ITR-2 and ITR-3 are the same return with one difference: ITR-3 carries a
  * business head. Their Schedule S, HP, CG, OS, VIA, SI, TDS and Part B-TTI
  * blocks are the same schema, field for field, so the captions live here once
  * rather than being copied into each form's directory and drifting apart.
+ *
+ * ITR-1 shares the CAPTIONS and not the workings (§2). It is an individual's
+ * return stating the same statutory lines — s.16, the regime, Chapter VI-A, the
+ * s.234 interest — and a practitioner filing an ITR-1 one year and an ITR-2 the
+ * next should not find the same line worded two ways. What it cannot share is
+ * heads.js: ITR-1 has no schedules at all, so every path differs. Two entries
+ * below carry the spelling ITR-1 uses beside the one the other forms use; the
+ * capacity table is NOT shared, by the rule at the foot of §10.
  *
  * ITR-5 is deliberately NOT served from here. A firm's return has no salary,
  * no regime choice, no s.16 deductions and a differently-sensed regime field;
@@ -261,8 +269,14 @@ const VIA_SECTIONS = {
   Section80C: "u/s 80C — life insurance, provident fund, tuition fees etc.",
   Section80CCC: "u/s 80CCC — contribution to a pension fund",
   Section80CCDEmployee: "u/s 80CCD(1) — employee's contribution to NPS",
+  // ITR-1's spelling of the same deduction. The form is filed by the salaried
+  // and by the small self-employed alike, so its caption names both.
+  Section80CCDEmployeeOrSE: "u/s 80CCD(1) — employee's or self-employed's contribution to NPS",
   Section80CCD1B: "u/s 80CCD(1B) — additional contribution to NPS",
   Section80CCDEmployer: "u/s 80CCD(2) — employer's contribution to NPS",
+  // Named `AnyOthSec80CCH` in the return, which is a field name and not a
+  // section. It sits here in Part B order rather than at the end of the block.
+  AnyOthSec80CCH: "u/s 80CCH — contribution to the Agnipath Scheme",
   Section80D: "u/s 80D — health insurance premium",
   Section80DD: "u/s 80DD — maintenance of a dependant with disability",
   Section80DDB: "u/s 80DDB — medical treatment of specified diseases",
@@ -288,8 +302,11 @@ export function viaLabel(key) {
    them leaves "80CCDEmployer" printed where "80CCD(2)" belongs. */
 const VIA_REF = {
   Section80CCDEmployee: "80CCD(1)",
+  Section80CCDEmployeeOrSE: "80CCD(1)",
   Section80CCD1B: "80CCD(1B)",
   Section80CCDEmployer: "80CCD(2)",
+  // Not "AnyOthSec80CCH", which is what stripping the prefix would leave.
+  AnyOthSec80CCH: "80CCH",
 };
 
 export const viaRef = (key) => VIA_REF[key] || String(key).replace(/^Section/, "");

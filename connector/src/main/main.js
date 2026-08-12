@@ -16,6 +16,7 @@ const settings = require("./settings");
 const autoStart = require("./autoStart");
 const scheduler = require("./scheduler");
 const { shuffle } = require("./schedulePlan");
+const syncLock = require("./syncLock");
 
 const isDev = process.argv.includes("--dev");
 let win = null;
@@ -53,12 +54,16 @@ ipcMain.handle("auth:requestOtp", async (_e, { channel, target }) => {
 });
 
 ipcMain.handle("auth:verifyOtp", async (_e, { channel, target, code }) => {
-  return fb.verifyOtp(channel || "email", target, code);
+  const user = await fb.verifyOtp(channel || "email", target, code);
+  watchPractice();
+  return user;
 });
 
 ipcMain.handle("auth:google", async () => {
   const idToken = await googleAuth.getGoogleIdToken();
-  return fb.signInWithGoogleIdToken(idToken);
+  const user = await fb.signInWithGoogleIdToken(idToken);
+  watchPractice();
+  return user;
 });
 
 /* Restore a remembered session, so a returning user isn't asked for a code.
@@ -69,11 +74,18 @@ ipcMain.handle("auth:google", async () => {
    key is still being redeemed over a network that may not be up yet. */
 ipcMain.handle("auth:silent", async () => {
   const user = await fb.signInSilently();
-  if (user) scheduler.syncOnLaunchIfWanted().catch((err) => console.warn("[launch sync]", (err && err.message) || err));
+  if (user) {
+    watchPractice();
+    scheduler.syncOnLaunchIfWanted().catch((err) => console.warn("[launch sync]", (err && err.message) || err));
+  }
   return user;
 });
 
 ipcMain.handle("auth:signOut", async () => {
+  // Drop the subscriptions BEFORE the sign-out: a listener scoped to a uid that
+  // no longer has a token spends the rest of the session logging permission
+  // errors into the console.
+  stopWatching();
   await fb.signOutUser();
   return { ok: true };
 });
@@ -92,6 +104,17 @@ const isBusy = () => syncInFlight;
 async function runSync({ jobs, scope, headless, trigger = "manual" }) {
   if (!fb.currentUser()) throw new Error("Sign in first.");
   if (syncInFlight) throw new Error("A sync is already running.");
+
+  /* ...and not on another of the practice's computers either. A firm runs this
+     on a laptop and on the server; both signed in, both scheduled. Two machines
+     syncing the same PANs at once doubles the portal sessions the practice is
+     accountable for, and two sessions logging into the SAME assessee is what
+     Dual Login reacts to. The lock lives in Firestore because that is the only
+     place both machines can see. */
+  const lock = await syncLock.acquire(fb);
+  if (!lock.ok) throw new Error(lock.message || "A sync is already running on another computer.");
+  const stopHeartbeat = syncLock.startHeartbeat(fb);
+
   syncInFlight = true;
   send("sync:busy", { running: true, trigger });
   try {
@@ -121,6 +144,7 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
     });
   } finally {
     syncInFlight = false;
+    await stopHeartbeat();
     send("sync:busy", { running: false, trigger });
   }
 }
@@ -145,7 +169,7 @@ ipcMain.handle("auto:get", async () => autoPayload());
 
 ipcMain.handle("auto:set", async (_e, patch = {}) => {
   const next = {};
-  for (const k of ["syncOnLaunch", "autoSyncEnabled", "intervalHours", "autoScope", "quietEnabled", "quietFrom", "quietTo"]) {
+  for (const k of ["syncOnLaunch", "autoSyncEnabled", "intervalHours", "autoScope"]) {
     if (k in patch) next[k] = patch[k];
   }
   if (Object.keys(next).length) settings.write(next);
@@ -193,6 +217,31 @@ ipcMain.handle("assessee:create", async (_e, { form, portalPassword, saveLogin }
   if (!fb.currentUser()) throw new Error("Sign in first.");
   return createAssessee({ form, portalPassword, saveLogin });
 });
+
+/* Watching the practice's OTHER machines. Both subscriptions are set up after
+   sign-in and torn down on sign-out, because both are scoped to a uid. */
+let unwatch = [];
+
+function watchPractice() {
+  stopWatching();
+  const uid = fb.uid();
+  if (!uid) return;
+  try {
+    unwatch.push(fb.watchDoc(syncLock.PATH(uid), (lock) => {
+      send("sync:elsewhere", syncLock.foreignHolder(lock));
+    }));
+    // A sync finishing on the server shows on the partner's laptop without
+    // anybody pressing Reload.
+    unwatch.push(fb.watchPortalAssessees((rows) => send("assessees:synced", rows)));
+  } catch (err) {
+    console.warn("[watch] couldn't subscribe:", (err && err.message) || err);
+  }
+}
+
+function stopWatching() {
+  for (const off of unwatch) { try { off(); } catch { /* already gone */ } }
+  unwatch = [];
+}
 
 app.whenReady().then(() => {
   fb.init();

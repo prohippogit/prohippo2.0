@@ -115,7 +115,7 @@
       <div class="auto-switches">
         <label class="chk" id="autoLaunchWrap"><input type="checkbox" id="autoLaunch"/> Start when I sign in to this computer</label>
         <label class="chk"><input type="checkbox" id="autoOnLaunch"/> Sync as soon as it starts</label>
-        <label class="chk"><input type="checkbox" id="autoEvery"/> Keep syncing about every</label>
+        <label class="chk"><input type="checkbox" id="autoEvery"/> Keep syncing every</label>
         <select id="autoInterval" class="fsel" title="Hours between unattended syncs">
           <option value="3">3 hours</option>
           <option value="6">6 hours</option>
@@ -123,13 +123,11 @@
           <option value="24">24 hours</option>
         </select>
       </div>
-      <div class="auto-switches">
-        <label class="chk"><input type="checkbox" id="quietOn"/> Pause overnight, between</label>
-        <select id="quietFrom" class="fsel" title="Quiet hours start"></select>
-        <span class="muted" style="font-size:12px">and</span>
-        <select id="quietTo" class="fsel" title="Quiet hours end"></select>
-      </div>
+
     </div>
+
+    <!-- Another of the practice's computers is syncing. Hidden unless it is. -->
+    <div id="elsewhere" class="elsewhere hidden"></div>
 
     <!-- Find one assessee among hundreds without scrolling. -->
     <div class="filters">

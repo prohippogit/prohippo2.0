@@ -44,6 +44,20 @@ contextBridge.exposeInMainWorld("connector", {
   /* A sync started or finished — including one this window did not ask for.
      Without it an unattended run would paint progress into a UI whose buttons
      still looked idle. */
+  /* Another of the practice's computers is syncing. null when nobody is.
+     Without this, two machines in one firm quietly fight over the same PANs. */
+  onSyncElsewhere: (cb) => {
+    const handler = (_e, evt) => cb(evt);
+    ipcRenderer.on("sync:elsewhere", handler);
+    return () => ipcRenderer.removeListener("sync:elsewhere", handler);
+  },
+  /* Last-sync times, live from Firestore — so a run finishing on the server
+     shows on this machine without pressing Reload. */
+  onAssesseesSynced: (cb) => {
+    const handler = (_e, rows) => cb(rows);
+    ipcRenderer.on("assessees:synced", handler);
+    return () => ipcRenderer.removeListener("assessees:synced", handler);
+  },
   onSyncBusy: (cb) => {
     const handler = (_e, evt) => cb(evt);
     ipcRenderer.on("sync:busy", handler);

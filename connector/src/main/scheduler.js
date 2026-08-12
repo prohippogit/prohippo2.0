@@ -57,9 +57,7 @@ function nextRunAt(cfg = settings.read()) {
     lastRunAt: cfg.lastAutoRunAt,
     intervalHours: cfg.intervalHours,
     jitterPct: cfg.jitterPct,
-    quietEnabled: cfg.quietEnabled,
-    quietFrom: cfg.quietFrom,
-    quietTo: cfg.quietTo,
+    ...plan.QUIET,
   });
   // A target that had to be re-drawn (nothing stored, or a nonsense clock) is
   // written back, so the next tick agrees with this one.
@@ -82,11 +80,10 @@ function state() {
     lastResult,
     // Set only while the launch sync is waiting out its randomised delay.
     launchStartsAt: launchStartsAt ? new Date(launchStartsAt).toISOString() : "",
-    jitterPct: cfg.jitterPct,
-    quietEnabled: cfg.quietEnabled,
-    quietFrom: cfg.quietFrom,
-    quietTo: cfg.quietTo,
-    inQuietHours: plan.inQuietHours(Date.now(), cfg),
+    // The overnight pause is policy rather than preference, so the UI is told
+    // only whether it is in force right now — not offered a switch for it.
+    inQuietHours: plan.inQuietHours(Date.now(), plan.QUIET),
+    quietTo: plan.QUIET_TO,
   };
 }
 
@@ -148,7 +145,7 @@ async function runNow(trigger) {
       lastAutoRunAt: nowISO(),
       // Drawn now, for the next cycle — a fresh draw every time, so two
       // consecutive gaps are never the same length.
-      nextAutoRunAt: new Date(plan.planNextRun(cfg2)).toISOString(),
+      nextAutoRunAt: new Date(plan.planNextRun({ ...cfg2, ...plan.QUIET })).toISOString(),
     });
     publish();
   }
@@ -196,8 +193,8 @@ async function syncOnLaunchIfWanted() {
      the same window as the schedule — and because it defers rather than skips,
      the machine still catches up as soon as the window lifts. */
   const cfg3 = settings.read();
-  if (plan.inQuietHours(Date.now(), cfg3)) {
-    const release = plan.afterQuietHours(Date.now(), cfg3);
+  if (plan.inQuietHours(Date.now(), plan.QUIET)) {
+    const release = plan.afterQuietHours(Date.now(), plan.QUIET);
     settings.write({ nextAutoRunAt: new Date(release).toISOString() });
     if (cfg3.autoSyncEnabled) arm(plan.armDelay(release));
     publish();

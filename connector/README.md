@@ -54,6 +54,8 @@ connector/
     pacing.js        rand / jsleep / PACE / POLL (ported timings)
     pool.js          worker pool: cap 5, randomised staggered launch
     settings.js      the switches, remembered between launches
+    syncLock.js      one sync at a time ACROSS the practice's computers
+    lockRules.js     when a held lock counts as dead (pure, tested)
     autoStart.js     "start when I sign in" — the OS's own login item
     scheduler.js     unattended syncing: once at launch, then every N hours
     schedulePlan.js  when the next run is due (pure, tested)
@@ -146,7 +148,7 @@ once, is not something to assume anybody wants.
 |--------|--------------|
 | **Start when I sign in to this computer** | Registers the OS's own login item — a Launch Agent on macOS, a Run key on Windows. Nothing is hand-written into either. The switch reads its state back FROM the OS, so removing the app from Login Items or Task Manager's Startup tab is reflected here rather than contradicted. |
 | **Sync as soon as it starts** | One sync after the session is restored. Hung off the silent sign-in and not off launch: with nobody signed in there is nothing to sync, and on a machine that has just booted the device key is still being redeemed over a network that may not be up. |
-| **Keep syncing about every N hours** | 3, 6, 12 or 24; six by default, and *about* is meant literally — see "Why it does not look robotic" below. For the machine nobody restarts — the firm's server in the corner, where "sync at launch" would fire once in June and never again. |
+| **Keep syncing every N hours** | 3, 6, 12 or 24; six by default. For the machine nobody restarts — the firm's server in the corner, where "sync at launch" would fire once in June and never again. |
 
 An unattended run takes **every PAN with a stored portal login** and is always
 hidden, whatever "Run hidden" is set to: a browser window taking the screen on a
@@ -158,6 +160,18 @@ sessions on one residential IP — the single thing the pacing everywhere else
 exists to prevent — and both runs would fetch the same PANs over each other.
 While the schedule is running, the window's own controls disable themselves and
 say so.
+
+### None of this is on screen
+
+The panel says whether automatic syncing is on, when it last ran and when it
+runs next. It does **not** say how the schedule is built — no interval spread,
+no "randomised", no mention of the shuffle or the start-up delay.
+
+That is deliberate. This is the part of the app that took the most thought to
+get right, it appears in every screenshot a practitioner ever shares, and a
+competitor reading "about every 6 hours ± 15%, randomised" has been handed the
+design for free. The user is told what they need to act on; the method stays in
+here.
 
 ### Why it does not look robotic
 
@@ -176,7 +190,7 @@ So the schedule is deliberately imprecise, in four places:
 | **Drawn once, then stored** | `nextAutoRunAt` is persisted. Re-drawing on every timer tick would be a target that never arrives and a countdown that jumps about. |
 | **The launch sync waits first** | 1–7 minutes, randomised. A machine switched on at 09:00 every weekday would otherwise reach the portal at 09:00 every weekday — the same fingerprint by another route. |
 | **The PANs are shuffled** | An unattended run deals them in a different order each time. The same list worked top to bottom is a pattern in itself: one PAN always first, one always last, every day. A manual run keeps the order you chose. |
-| **Nothing runs overnight** | A pause from **midnight to 6am** by default, both ends configurable. Randomised timing makes the rhythm human; it cannot make 03:41 a plausible hour for the practitioner whose account it is to be signing in. A firm works days. |
+| **Nothing runs overnight** | A fixed pause from **midnight to 6am**, not a setting. Randomised timing makes the rhythm human; it cannot make 03:41 a plausible hour for the practitioner whose account it is to be signing in. A firm works days — and a switch labelled "sync at 3am anyway" is one somebody would eventually tick. |
 
 The overnight pause **defers, it does not skip** — a run that came due at 3am
 happens as soon as the window lifts, so a machine left on overnight still starts
@@ -226,6 +240,42 @@ the income-tax portal.
 - **The stamp is written whether the run succeeded or failed.** A portal that is
   down at 6am must not become a retry every minute for the rest of the day.
 
+### More than one computer in the practice
+
+A firm installs this on the partner's laptop *and* on the server in the corner.
+Both are signed in to the same practice, both have automatic syncing on, and
+neither can see the other's process. Two machines syncing the same PANs at once
+doubles the portal sessions the practice is accountable for — and two sessions
+logging into the *same* assessee is exactly what the portal's Dual Login rule
+reacts to.
+
+So the machines coordinate through the one place both can see: a single
+document, `users/{uid}/appState/syncLock`.
+
+- **Taken in a transaction.** Two laptops switched on together read it in the
+  same instant, and a read-then-write would let both conclude they may go.
+- **Held by heartbeat, not by a promise to release it.** The holder beats every
+  45 seconds. A machine that crashes, sleeps or drops off the network cannot
+  release anything, and a lock nobody can release is a practice that never syncs
+  again — so three minutes of silence hands it to the next machine that asks.
+- **Released only by its owner.** A laptop that lost the lock while asleep must
+  not delete the server's when it finishes its own run late.
+- **A network failure does not block the sync.** If Firestore cannot be reached
+  the run proceeds: this is coordination between a firm's own machines, and
+  letting a blip stop the only machine in the practice would be a worse bug than
+  the one it prevents.
+
+The second machine says so plainly — *"Syncing on office-server (Windows PC),
+4 min ago — this computer will wait, and its own schedule will catch up
+afterwards"* — and its buttons disable while that is true. Its own schedule is
+not lost: the next tick simply finds the work already done, and the one after
+that runs normally.
+
+**Last-sync times are shared too.** They live on the assessee document in
+Firestore, not on the machine that did the work, and every copy of the connector
+subscribes to them — so a run finishing on the server updates the partner's
+laptop within seconds, with nobody pressing Reload.
+
 ### Keep the window open
 
 On Windows and Linux the window IS the app: closing it quits, and a quit app
@@ -248,7 +298,7 @@ same correction.
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.10.0` — with a **Check for updates** link beside it. Press it and the bar
+`v1.11.0` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

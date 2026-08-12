@@ -41,6 +41,9 @@ const {
   addDoc,
   doc: docRef,
   setDoc,
+  getDoc,
+  onSnapshot,
+  runTransaction,
 } = require("firebase/firestore");
 const { getStorage, ref: storageRef, uploadString } = require("firebase/storage");
 const { firebaseConfig, FUNCTIONS_REGION } = require("./config");
@@ -308,6 +311,61 @@ async function markSynced(assesseeId, at = new Date().toISOString()) {
   }
 }
 
+/* ---- documents the practice's OTHER machines also read ------------------
+   The connector is installed on more than one computer in a firm, and those
+   copies have to agree about who is syncing and what has been synced. These
+   three are the whole of that conversation: a transactional read-modify-write
+   for the lock, a plain read, and a live subscription. */
+
+// Read-modify-write in one transaction. `decide(current)` returns the document
+// to write, or null to leave it alone; the return value says which happened.
+async function transactLock(path, decide) {
+  init();
+  return runTransaction(firestore, async (tx) => {
+    const ref = docRef(firestore, path);
+    const snap = await tx.get(ref);
+    const next = decide(snap.exists() ? snap.data() : null);
+    if (!next) return false;
+    tx.set(ref, next);
+    return true;
+  });
+}
+
+async function readDoc(path) {
+  init();
+  const snap = await getDoc(docRef(firestore, path));
+  return snap.exists() ? snap.data() : null;
+}
+
+async function mergeDoc(path, patch) {
+  init();
+  await setDoc(docRef(firestore, path), patch, { merge: true });
+}
+
+/* Watch one document — the sync lock. Returns an unsubscribe. */
+function watchDoc(path, onChange) {
+  init();
+  return onSnapshot(docRef(firestore, path), (snap) => onChange(snap.exists() ? snap.data() : null),
+    (err) => console.warn("[watch]", path, (err && err.message) || err));
+}
+
+/* Watch this practice's assessees, so a sync finishing on the SERVER shows up
+   on the partner's laptop without anybody pressing Reload. Only the fields the
+   list actually paints are forwarded — a snapshot of every assessee document,
+   several times an hour, is not something to push through IPC. */
+function watchPortalAssessees(onChange) {
+  init();
+  const user = currentUser();
+  if (!user) return () => {};
+  const col = collection(firestore, `users/${user.uid}/assessees`);
+  return onSnapshot(query(col, where("portalCredSet", "==", true)), (snap) => {
+    onChange(snap.docs.map((d) => {
+      const a = d.data() || {};
+      return { id: d.id, lastSyncedAt: a.portalLastSyncedAt || "" };
+    }));
+  }, (err) => console.warn("[watch] assessees:", (err && err.message) || err));
+}
+
 // Build the incremental-sync hints for ONE PAN — the connector's port of
 // buildSyncKnowns() in src/Assessees.jsx. Without these the sync has no idea
 // what it already holds, so it re-downloads every notice PDF, every filed reply
@@ -455,5 +513,10 @@ module.exports = {
   findAssesseeByPan,
   createAssesseeDoc,
   markSynced,
+  transactLock,
+  readDoc,
+  mergeDoc,
+  watchDoc,
+  watchPortalAssessees,
   getSyncKnowns,
 };

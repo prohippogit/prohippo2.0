@@ -836,16 +836,6 @@ function untilText(iso) {
   return m ? `in ${h}h ${m}m` : `in ${h}h`;
 }
 
-// 00:00 … 23:00, once, for the two quiet-hour pickers.
-(function fillHourPickers() {
-  const options = Array.from({ length: 24 }, (_, h) => {
-    const label = new Date(2026, 0, 1, h).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-    return `<option value="${h}">${label}</option>`;
-  }).join("");
-  $("quietFrom").innerHTML = options;
-  $("quietTo").innerHTML = options;
-})();
-
 const hourLabel = (h) => new Date(2026, 0, 1, Number(h) || 0).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
 function paintAuto(st) {
@@ -855,11 +845,6 @@ function paintAuto(st) {
   $("autoEvery").checked = Boolean(autoState.enabled);
   $("autoInterval").value = String(autoState.intervalHours || 6);
   $("autoInterval").disabled = !autoState.enabled;
-  $("quietOn").checked = Boolean(autoState.quietEnabled);
-  $("quietFrom").value = String(autoState.quietFrom ?? 0);
-  $("quietTo").value = String(autoState.quietTo ?? 6);
-  $("quietFrom").disabled = !autoState.quietEnabled;
-  $("quietTo").disabled = !autoState.quietEnabled;
   // Linux has no supported login-item API, so the switch is hidden rather than
   // shown doing nothing.
   $("autoLaunchWrap").classList.toggle("hidden", autoState.autoLaunchSupported === false);
@@ -871,31 +856,34 @@ function paintAuto(st) {
     ? (r.error ? ` · last run failed: ${r.error}` : r.failed ? ` · ${r.ok} synced, ${r.failed} failed` : ` · ${r.ok} synced`)
     : "";
 
+  /* WHAT THIS LINE DOES NOT SAY.
+   *
+   * How the schedule is built — the randomised interval, its spread, the
+   * shuffled order, the delay before the first run — is deliberately absent.
+   * It is the part of this app that took the most thought to get right, it is
+   * on screen in every screenshot a practitioner ever shares, and a competitor
+   * reading "about every 6 hours ± 15%, randomised" has been handed the design
+   * for free. The user is told what they need: whether it is on, when it last
+   * ran, when it will run again.
+   */
   if (autoState.running) {
     sub.className = "auto-sub run";
-    sub.textContent = "Syncing now — every assessee with a saved portal login, in a shuffled order.";
+    sub.textContent = "Syncing now — every assessee with a saved portal login.";
   } else if (autoState.launchStartsAt) {
-    // The launch sync is waiting out its randomised delay, so the panel says so
-    // rather than looking like nothing happened.
+    // The first run is waiting out its start-up delay; saying so beats looking
+    // like nothing happened.
     sub.className = "auto-sub on";
-    sub.textContent = `Starting the first sync ${untilText(autoState.launchStartsAt)} — the delay is randomised, so it never lands on the same minute as yesterday.`;
+    sub.textContent = `Starting the first sync ${untilText(autoState.launchStartsAt)}.`;
   } else if (autoState.enabled) {
     sub.className = "auto-sub on";
     /* The window IS the app on Windows and Linux: closing it quits, and a quit
        app keeps no schedule. Said here rather than left to be discovered by a
        practice that finds nothing synced for a week. */
     const keepOpen = autoState.platform === "darwin" ? "" : " · leave this window open, or the schedule stops with it";
-    /* "About every" is the honest word: the gap is drawn fresh each cycle from
-       a range around the interval, so the portal never sees the same schedule
-       two days running. Saying "every 6 hours" would describe something this
-       deliberately is not. */
-    const spread = autoState.jitterPct ? ` ± ${Math.round(autoState.jitterPct * 100)}%` : "";
-    /* When the pause is in force, say THAT first: "next in 2h 40m" during the
-       small hours otherwise reads as a schedule that ignored the setting. */
-    const paused = autoState.inQuietHours
-      ? ` · paused until about ${hourLabel(autoState.quietTo)}`
-      : (autoState.quietEnabled ? ` · pauses ${hourLabel(autoState.quietFrom)}–${hourLabel(autoState.quietTo)}` : "");
-    sub.textContent = `About every ${autoState.intervalHours} hours${spread}, randomised · next ${untilText(autoState.nextRunAt)}`
+    /* The overnight pause is mentioned only while it is actually in force —
+       otherwise "next in 2h 40m" at 3am reads as a schedule ignoring itself. */
+    const paused = autoState.inQuietHours ? ` · paused overnight, resuming after ${hourLabel(autoState.quietTo)}` : "";
+    sub.textContent = `On · next ${untilText(autoState.nextRunAt)}`
       + paused + (last ? ` · last ran ${last}` : " · not run yet") + outcome + keepOpen;
   } else if (autoState.syncOnLaunch || autoState.autoLaunch) {
     sub.className = "auto-sub";
@@ -922,9 +910,6 @@ $("autoLaunch").addEventListener("change", () => pushAuto({ autoLaunch: $("autoL
 $("autoOnLaunch").addEventListener("change", () => pushAuto({ syncOnLaunch: $("autoOnLaunch").checked }));
 $("autoEvery").addEventListener("change", () => pushAuto({ autoSyncEnabled: $("autoEvery").checked }));
 $("autoInterval").addEventListener("change", () => pushAuto({ intervalHours: Number($("autoInterval").value) }));
-$("quietOn").addEventListener("change", () => pushAuto({ quietEnabled: $("quietOn").checked }));
-$("quietFrom").addEventListener("change", () => pushAuto({ quietFrom: Number($("quietFrom").value) }));
-$("quietTo").addEventListener("change", () => pushAuto({ quietTo: Number($("quietTo").value) }));
 
 $("autoRunNow").addEventListener("click", async () => {
   $("autoRunNow").disabled = true;
@@ -935,12 +920,55 @@ $("autoRunNow").addEventListener("click", async () => {
 
 window.connector.onAutoState(paintAuto);
 
+/* --- the practice's OTHER computers -------------------------------------
+ *
+ * A firm runs this on a laptop and on the server in the corner. Both signed in,
+ * both scheduled. When one is syncing, the other must not start — the lock that
+ * enforces that lives in Firestore (syncLock.js); this is how the person in
+ * front of the second machine finds out why the buttons are asleep. */
+let elsewhere = null;
+
+window.connector.onSyncElsewhere((holder) => {
+  elsewhere = holder;
+  const bar = $("elsewhere");
+  if (!holder) {
+    bar.classList.add("hidden");
+    setControlsDisabled(false);
+    // Whatever the other machine just finished, this list should now show.
+    refreshRowsAfterRun();
+    return;
+  }
+  bar.textContent = `${holder.text} — this computer will wait, and its own schedule will catch up afterwards.`;
+  bar.classList.remove("hidden");
+  setControlsDisabled(true);
+});
+
+/* Last-sync times, live from Firestore. A run finishing on the server updates
+   the partner's laptop without anybody pressing Reload — which is the whole
+   point of the times being stored per assessee rather than per machine. */
+window.connector.onAssesseesSynced((rows) => {
+  let changed = false;
+  for (const r of rows || []) {
+    const job = JOBS.find((j) => j.assesseeId === r.id);
+    if (!job || job.lastSyncedAt === r.lastSyncedAt) continue;
+    job.lastSyncedAt = r.lastSyncedAt;
+    changed = true;
+    const el = $("row-" + r.id);
+    if (el) paintLastSync(el, r.lastSyncedAt);
+  }
+  // A row can be hidden by the "never synced" filter and stop belonging there
+  // the moment another machine syncs it.
+  if (changed && $("fState").value) { renderRows(); syncSelectionUI(); }
+});
+
 /* A sync the WINDOW did not start — the scheduler's — still owns the browser
    and the portal sessions, so the controls have to reflect it. Without this the
    buttons sat enabled through an unattended run and a press produced only "A
    sync is already running." */
 window.connector.onSyncBusy((evt) => {
-  setControlsDisabled(Boolean(evt.running));
+  // ...but never re-enable them while another of the practice's computers is
+  // still syncing.
+  setControlsDisabled(Boolean(evt.running) || Boolean(elsewhere));
   if (!evt.running) refreshRowsAfterRun();
 });
 

@@ -52,6 +52,13 @@ const LAUNCH_DELAY_MAX_MS = 7 * MINUTE;
  */
 const QUIET_RELEASE_SPREAD_MS = 45 * MINUTE;
 
+/* The window itself is fixed, not a setting. It is a safety rule about how this
+   practice's traffic looks to the portal, and a switch labelled "sync at 3am
+   anyway" is one somebody would eventually tick. Midnight to six, everywhere. */
+const QUIET_FROM = 0;
+const QUIET_TO = 6;
+const QUIET = { quietEnabled: true, quietFrom: QUIET_FROM, quietTo: QUIET_TO };
+
 // Hours are LOCAL to the machine — the practitioner's own working day is the
 // thing being modelled, not UTC.
 const hourOf = (ms) => {
@@ -110,7 +117,7 @@ function planNextRun(cfg = {}, now = Date.now(), rand = Math.random) {
   // Never sooner than a quarter of the interval, whatever the draw: a sync that
   // could follow the last one by minutes is the opposite of what this is for.
   const target = now + Math.max(base + offset, base / 4);
-  return afterQuietHours(target, cfg, rand);
+  return afterQuietHours(target, { ...QUIET, ...cfg }, rand);
 }
 
 /* When the next run is due, using the plan already drawn if there is a usable
@@ -128,15 +135,15 @@ function dueAt(cfg = {}, now = Date.now(), rand = Math.random) {
      window — EXCEPT when it now falls inside one, which happens when somebody
      turns quiet hours on while a run is already scheduled for 3am. */
   if (Number.isFinite(planned) && planned <= now + 2 * base && planned >= now - base) {
-    return afterQuietHours(Math.max(planned, now), cfg, rand);
+    return afterQuietHours(Math.max(planned, now), { ...QUIET, ...cfg }, rand);
   }
 
   const last = Date.parse(cfg.lastRunAt || "");
   // Never run, or the stored plan is unusable: due now if enough time has
   // passed since the last run, otherwise a fresh draw from that run.
-  if (!Number.isFinite(last) || last > now) return afterQuietHours(now, cfg, rand);
+  if (!Number.isFinite(last) || last > now) return afterQuietHours(now, { ...QUIET, ...cfg }, rand);
   const fresh = planNextRun(cfg, last, rand);
-  return fresh <= now ? afterQuietHours(now, cfg, rand) : fresh;
+  return fresh <= now ? afterQuietHours(now, { ...QUIET, ...cfg }, rand) : fresh;
 }
 
 const isDue = (cfg, now = Date.now(), rand = Math.random) => dueAt(cfg, now, rand) <= now;
@@ -177,7 +184,7 @@ function shuffle(list, rand = Math.random) {
 
 module.exports = {
   planNextRun, dueAt, isDue, armDelay, launchDelayMs, shuffle,
-  inQuietHours, afterQuietHours, QUIET_RELEASE_SPREAD_MS,
+  inQuietHours, afterQuietHours, QUIET_RELEASE_SPREAD_MS, QUIET, QUIET_FROM, QUIET_TO,
   HOUR, MIN_WAIT_MS, MAX_WAIT_MS, DEFAULT_JITTER, MAX_JITTER,
   LAUNCH_DELAY_MIN_MS, LAUNCH_DELAY_MAX_MS,
 };

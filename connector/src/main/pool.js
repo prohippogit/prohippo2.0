@@ -26,15 +26,39 @@ const { runPanSync } = require("./portalWorker");
 const STEALTH_ARGS = ["--disable-blink-features=AutomationControlled"];
 const IGNORE_DEFAULT_ARGS = ["--enable-automation"];
 
+/* "Run hidden" means hidden, and we say so ourselves.
+ *
+ * Playwright's own `headless: true` only ever adds a BARE `--headless` — that
+ * is still true in the current release, not just the version pinned here — and
+ * what a bare flag means is then up to the browser it lands on. For Playwright's
+ * bundled build that is the dedicated headless shell and it is unambiguous. For
+ * the user's REAL Google Chrome, which this app deliberately prefers for its
+ * fingerprint, it depends on the Chrome version: the old headless mode was
+ * removed in Chrome 132, and a practitioner on Windows reported five browser
+ * windows opening with the box ticked.
+ *
+ * So the mode is stated explicitly rather than inherited. `--headless=new` is
+ * the mode every Chrome since 112 understands, and it wins over Playwright's
+ * bare flag because our arguments are appended after its defaults.
+ *
+ * The off-screen position is a belt-and-braces, not a diagnosis: if some future
+ * Chrome ignores the flag again, its windows open where nobody has to watch
+ * them rather than in front of whoever is using the machine. A truly headless
+ * browser has no window for it to apply to, so it costs nothing.
+ */
+const HIDDEN_ARGS = ["--headless=new", "--window-position=-32000,-32000"];
+
 // Both the sync pool and the one-off "add assessee" login go through these two
 // helpers, so a WAF workaround only ever has to be fixed in one place.
 async function launchHardenedBrowser(headless) {
-  const opts = { headless, args: STEALTH_ARGS, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
+  const args = headless ? [...STEALTH_ARGS, ...HIDDEN_ARGS] : [...STEALTH_ARGS];
+  const opts = { headless, args, ignoreDefaultArgs: IGNORE_DEFAULT_ARGS };
+  let browser;
   try {
-    return await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
+    browser = await chromium.launch({ ...opts, channel: "chrome" }); // real Google Chrome
   } catch {
     try {
-      return await chromium.launch(opts); // bundled Chromium (present in dev only)
+      browser = await chromium.launch(opts); // bundled Chromium (present in dev only)
     } catch {
       // Reached from a sync AND from adding an assessee, so the sentence
       // names the portal rather than either one of them.
@@ -44,6 +68,14 @@ async function launchHardenedBrowser(headless) {
       );
     }
   }
+  /* Which browser actually started, and whether we asked it to hide. If windows
+     are ever seen again with the box ticked, this line in the log is the
+     difference between diagnosing it and guessing at it — which is what the
+     first report cost. */
+  try {
+    console.info(`[browser] ${browser.version()} · hidden: ${Boolean(headless)}`);
+  } catch { /* a version we cannot read is not worth failing a sync over */ }
+  return browser;
 }
 
 // One isolated session: its own cookie jar, and the automation signal the WAF

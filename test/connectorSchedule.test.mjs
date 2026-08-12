@@ -19,6 +19,7 @@ const {
   planNextRun, dueAt, isDue, armDelay, launchDelayMs, shuffle,
   HOUR, MIN_WAIT_MS, MAX_WAIT_MS, DEFAULT_JITTER, MAX_JITTER,
   LAUNCH_DELAY_MIN_MS, LAUNCH_DELAY_MAX_MS,
+  inQuietHours, afterQuietHours,
 } = require("../connector/src/main/schedulePlan.js");
 
 const NOW = Date.parse("2026-08-12T09:00:00.000Z");
@@ -165,4 +166,96 @@ test("the interval is honoured across the range the UI offers", () => {
   for (const bad of [0, -3, NaN, undefined, "soon"]) {
     assert.equal(planNextRun({ intervalHours: bad }, NOW, MID), NOW + 6 * HOUR, `interval ${bad}`);
   }
+});
+
+/* ---------------- quiet hours ---------------- */
+
+// Local hours throughout: the window models the practitioner's own working day,
+// not UTC. Built with local constructors so the tests hold in any timezone.
+const QUIET = { quietEnabled: true, quietFrom: 0, quietTo: 6, intervalHours: 6 };
+const local = (h, m = 0, day = 12) => new Date(2026, 7, day, h, m).getTime();
+
+test("the window covers midnight to six, and nothing either side of it", () => {
+  assert.equal(inQuietHours(local(0, 1), QUIET), true);
+  assert.equal(inQuietHours(local(3, 30), QUIET), true);
+  assert.equal(inQuietHours(local(5, 59), QUIET), true);
+  assert.equal(inQuietHours(local(6, 0), QUIET), false, "the end of the window is open");
+  assert.equal(inQuietHours(local(23, 59), QUIET), false);
+  assert.equal(inQuietHours(local(3), { ...QUIET, quietEnabled: false }), false, "off means off");
+});
+
+test("a window that wraps midnight works in both halves of the night", () => {
+  const late = { quietEnabled: true, quietFrom: 22, quietTo: 6 };
+  assert.equal(inQuietHours(local(23, 15), late), true);
+  assert.equal(inQuietHours(local(2), late), true);
+  assert.equal(inQuietHours(local(21, 59), late), false);
+  assert.equal(inQuietHours(local(6, 30), late), false);
+});
+
+test("a window with equal ends is ignored rather than silencing the schedule", () => {
+  // Read literally it is either zero hours or twenty-four; one of those means
+  // this machine never syncs again.
+  assert.equal(inQuietHours(local(3), { quietEnabled: true, quietFrom: 6, quietTo: 6 }), false);
+});
+
+test("a run due in the small hours is held until after the window", () => {
+  const held = afterQuietHours(local(3, 30), QUIET, MID);
+  const d = new Date(held);
+  assert.equal(d.getDate(), 12, "same morning, not the next day");
+  assert.ok(d.getHours() === 6, `released just after six, got ${d.getHours()}:${d.getMinutes()}`);
+  assert.equal(inQuietHours(held, QUIET), false);
+});
+
+test("a wrapping window releases on the FOLLOWING morning when held before midnight", () => {
+  const late = { quietEnabled: true, quietFrom: 22, quietTo: 6 };
+  const held = afterQuietHours(local(23, 30), late, MID);
+  const d = new Date(held);
+  assert.equal(d.getDate(), 13, "held overnight into the next day");
+  assert.equal(d.getHours(), 6);
+});
+
+test("held runs are released across a spread, not all at six o'clock sharp", () => {
+  /* The point of the whole exercise. Releasing everything the moment the window
+     lifts would put a burst at exactly 06:00 every morning — the fingerprint
+     this was meant to remove, moved six hours down the clock. */
+  assert.equal(new Date(afterQuietHours(local(2), QUIET, LOW)).getMinutes(), 0);
+  const latest = new Date(afterQuietHours(local(2), QUIET, HIGH));
+  assert.ok(latest.getMinutes() >= 44, `should spread across most of an hour, got :${latest.getMinutes()}`);
+
+  let seed = 3;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const minutes = new Set();
+  for (let i = 0; i < 200; i++) minutes.add(new Date(afterQuietHours(local(2), QUIET, rand)).getMinutes());
+  assert.ok(minutes.size > 30, `release minute should vary widely, saw ${minutes.size} distinct`);
+});
+
+test("a moment outside the window is returned untouched", () => {
+  // Idempotent, so it can be applied on every path without compounding.
+  const noon = local(12);
+  assert.equal(afterQuietHours(noon, QUIET, MID), noon);
+  assert.equal(afterQuietHours(noon, { ...QUIET, quietEnabled: false }, MID), noon);
+});
+
+test("a planned run that lands in the window is moved out of it", () => {
+  // 22:00 + 6h = 04:00, inside the pause.
+  const due = planNextRun(QUIET, local(22), MID);
+  assert.equal(inQuietHours(due, QUIET), false);
+  assert.equal(new Date(due).getHours(), 6);
+});
+
+test("turning the pause on moves a run already scheduled for 3am", () => {
+  // The stored target was drawn before the setting changed, so honouring it
+  // as-is would sync at 3am once more.
+  const planned = new Date(local(3)).toISOString();
+  const due = dueAt({ ...QUIET, nextAutoRunAt: planned }, local(1), MID);
+  assert.equal(inQuietHours(due, QUIET), false);
+  assert.equal(new Date(due).getHours(), 6);
+});
+
+test("a machine that boots at 3am waits rather than syncing at 3am", () => {
+  // "Due now" during the pause still defers — and defers rather than skips, so
+  // the catch-up happens as soon as the window lifts.
+  const due = dueAt({ ...QUIET, lastRunAt: new Date(local(21, 0, 11)).toISOString() }, local(3), MID);
+  assert.ok(due > local(3), "should not be due during the pause");
+  assert.equal(inQuietHours(due, QUIET), false);
 });

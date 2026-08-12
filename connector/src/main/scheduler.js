@@ -57,6 +57,9 @@ function nextRunAt(cfg = settings.read()) {
     lastRunAt: cfg.lastAutoRunAt,
     intervalHours: cfg.intervalHours,
     jitterPct: cfg.jitterPct,
+    quietEnabled: cfg.quietEnabled,
+    quietFrom: cfg.quietFrom,
+    quietTo: cfg.quietTo,
   });
   // A target that had to be re-drawn (nothing stored, or a nonsense clock) is
   // written back, so the next tick agrees with this one.
@@ -80,6 +83,10 @@ function state() {
     // Set only while the launch sync is waiting out its randomised delay.
     launchStartsAt: launchStartsAt ? new Date(launchStartsAt).toISOString() : "",
     jitterPct: cfg.jitterPct,
+    quietEnabled: cfg.quietEnabled,
+    quietFrom: cfg.quietFrom,
+    quietTo: cfg.quietTo,
+    inQuietHours: plan.inQuietHours(Date.now(), cfg),
   };
 }
 
@@ -141,7 +148,7 @@ async function runNow(trigger) {
       lastAutoRunAt: nowISO(),
       // Drawn now, for the next cycle — a fresh draw every time, so two
       // consecutive gaps are never the same length.
-      nextAutoRunAt: new Date(plan.planNextRun({ intervalHours: cfg2.intervalHours, jitterPct: cfg2.jitterPct })).toISOString(),
+      nextAutoRunAt: new Date(plan.planNextRun(cfg2)).toISOString(),
     });
     publish();
   }
@@ -184,6 +191,18 @@ async function syncOnLaunchIfWanted() {
   // Conditions are re-checked on the other side of the wait: somebody may have
   // signed out, or pressed Sync selected, while it counted down.
   if (!deps.isSignedIn() || deps.isBusy()) { publish(); return false; }
+
+  /* A server restarted at 3am must not sync at 3am. The launch run defers to
+     the same window as the schedule — and because it defers rather than skips,
+     the machine still catches up as soon as the window lifts. */
+  const cfg3 = settings.read();
+  if (plan.inQuietHours(Date.now(), cfg3)) {
+    const release = plan.afterQuietHours(Date.now(), cfg3);
+    settings.write({ nextAutoRunAt: new Date(release).toISOString() });
+    if (cfg3.autoSyncEnabled) arm(plan.armDelay(release));
+    publish();
+    return false;
+  }
   await runNow("launch");
   if (settings.read().autoSyncEnabled) arm(plan.armDelay(nextRunAt()));
   return true;

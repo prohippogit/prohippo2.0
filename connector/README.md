@@ -176,6 +176,25 @@ So the schedule is deliberately imprecise, in four places:
 | **Drawn once, then stored** | `nextAutoRunAt` is persisted. Re-drawing on every timer tick would be a target that never arrives and a countdown that jumps about. |
 | **The launch sync waits first** | 1–7 minutes, randomised. A machine switched on at 09:00 every weekday would otherwise reach the portal at 09:00 every weekday — the same fingerprint by another route. |
 | **The PANs are shuffled** | An unattended run deals them in a different order each time. The same list worked top to bottom is a pattern in itself: one PAN always first, one always last, every day. A manual run keeps the order you chose. |
+| **Nothing runs overnight** | A pause from **midnight to 6am** by default, both ends configurable. Randomised timing makes the rhythm human; it cannot make 03:41 a plausible hour for the practitioner whose account it is to be signing in. A firm works days. |
+
+The overnight pause **defers, it does not skip** — a run that came due at 3am
+happens as soon as the window lifts, so a machine left on overnight still starts
+the day up to date. And the release is itself randomised across the first
+three-quarters of an hour: letting everything go the moment the window ends
+would put a burst at exactly 06:00 every morning, which is the fingerprint this
+was meant to remove, moved six hours down the clock.
+
+A month of a six-hour schedule with the pause on, printed as clock times:
+
+```
+Wed, 12 Aug   06:00   12:33   18:55
+Thu, 13 Aug   06:31   12:29   19:21
+Fri, 14 Aug   06:32   13:24   20:07
+Sat, 15 Aug   06:18   12:52   18:06
+Sun, 16 Aug   06:22   11:42   16:58   23:34
+Mon, 17 Aug   06:22   12:25   18:13   23:19
+```
 
 None of this changes what the portal sees *within* a run, which was already
 safe: at most five sessions at once, each in its own browser context, launched

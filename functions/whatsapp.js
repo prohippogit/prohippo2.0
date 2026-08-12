@@ -29,9 +29,15 @@ const crypto = require("node:crypto");
 
 const admin = require("firebase-admin");
 
+const { renderHtmlToPdf } = require("./htmlPdf");
+const { FONT_FACE_CSS } = require("./fonts/montserrat.js");
+const { PROHIPPO_LOGO_DATA_URI } = require("./assets/prohippoLogo.js");
+
 const {
   whatsAppEnabledFor, userReachability, istDate,
   shouldAlertNotice, noticeAlertParams,
+  clientReachability, noticeAlertClientParams, docRequestParams,
+  hasUnprintableScript, printableLetter,
   isHearingLive, hearingReminderParams,
   nextWeekRange, causeListParams, causeListFileName, weekLabel,
   burstDecision, BURST_MAX,
@@ -607,46 +613,79 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
       if (!verdict.alert) return;
 
       const profile = (await db.doc(`users/${uid}`).get().catch(() => null))?.data() || {};
-      if (!whatsAppEnabledFor(profile, "noticeAlertUser")) return;
+      const toUser = whatsAppEnabledFor(profile, "noticeAlertUser");
+      const toClient = whatsAppEnabledFor(profile, "noticeAlertClient");
+      if (!toUser && !toClient) return;
       const reach = userReachability(profile);
-      if (!reach.ok) return;
 
       /* Keyed on the DIN, not the document id. The same notice can reach us
          twice under two ids — once from the portal sync and once from a PDF a
          practitioner uploaded and had parsed — and the person reading the alert
          does not care which route it took. */
       const identity = n.din || n.docKey || event.params.noticeId;
-      const key = "notice_" + crypto.createHash("sha1").update(identity).digest("hex").slice(0, 20);
-      if (!(await claimOnce(uid, key, { kind: "noticeAlertUser", noticeId: event.params.noticeId }))) return;
+      const digest = crypto.createHash("sha1").update(identity).digest("hex").slice(0, 20);
 
-      const action = await claimBurstSlot(uid);
-      if (action === "suppress") {
-        console.log("WhatsApp notice alert suppressed (burst) for", uid.slice(0, 8));
-        return;
+      /* The two recipients are claimed SEPARATELY. They are switched on
+         independently, and a practice that turns the client alert on next month
+         must not find every notice already marked as told. */
+      if (toUser && reach.ok && await claimOnce(uid, `notice_${digest}`, { kind: "noticeAlertUser", noticeId: event.params.noticeId })) {
+        const action = await claimBurstSlot(uid);
+        if (action === "burst-notice") {
+          await deliver({
+            uid,
+            to: reach.mobile,
+            template: "ph_notice_burst_user_v1",
+            params: [],
+            recipientRole: "user",
+            subject: "More notices than can be sent one by one",
+          });
+        } else if (action === "suppress") {
+          console.log("WhatsApp notice alert suppressed (burst) for", uid.slice(0, 8));
+        } else {
+          await deliver({
+            uid,
+            to: reach.mobile,
+            template: "ph_notice_alert_user_v1",
+            params: noticeAlertParams(n),
+            assessee: n.assessee || "",
+            recipientRole: "user",
+            subject: `New notice — ${n.assessee || "assessee"} ${n.section ? `u/s ${n.section}` : ""}`.trim(),
+            body: verdict.deadline,
+          });
+        }
       }
-      if (action === "burst-notice") {
+
+      /* The client's copy.
+       *
+       * NOT SUBJECT TO THE BURST CAP, deliberately. That cap protects one
+       * practitioner's phone from thirty messages about thirty different
+       * clients. A client only ever hears about their own notices, so the flood
+       * it guards against cannot reach them — and suppressing a client's single
+       * message because somebody else's practice is busy would be the wrong
+       * kind of quiet. */
+      if (!toClient) return;
+      try {
+        const group = await groupForPan(uid, n.pan);
+        const client = clientReachability(group);
+        if (!client.ok) return;
+        if (!(await claimOnce(uid, `noticeclient_${digest}`, { kind: "noticeAlertClient", noticeId: event.params.noticeId }))) return;
+
         await deliver({
           uid,
-          to: reach.mobile,
-          template: "ph_notice_burst_user_v1",
-          params: [],
-          recipientRole: "user",
-          subject: "More notices than can be sent one by one",
+          to: client.mobile,
+          template: "ph_notice_alert_client_v1",
+          params: noticeAlertClientParams(n, { headName: client.name, firmName: profile.firmName }),
+          assessee: n.assessee || "",
+          recipientRole: "groupHead",
+          recipientName: client.name,
+          subject: `Notice received — ${n.assessee || "assessee"}`,
+          body: verdict.deadline,
         });
-        return;
+      } catch (e) {
+        // The practitioner's own alert has already gone. One failed client
+        // message must not make this look like a notice we never saw.
+        console.error("client notice alert failed for", uid.slice(0, 8), e.message || e);
       }
-
-      await deliver({
-        uid,
-        to: reach.mobile,
-        template: "ph_notice_alert_user_v1",
-        params: noticeAlertParams(n),
-        assesseeId: n.assesseeId || "",
-        assessee: n.assessee || "",
-        recipientRole: "user",
-        subject: `New notice — ${n.assessee || "assessee"} ${n.section ? `u/s ${n.section}` : ""}`.trim(),
-        body: verdict.deadline,
-      });
     }
   );
 
@@ -759,14 +798,15 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
     return Buffer.from(doc.output("arraybuffer"));
   }
 
-  /* Somewhere WhatsApp can fetch the file from, for a week.
+  /* Somewhere WhatsApp can fetch a file from, for a week.
    *
    * A v4 signed URL rather than a Firebase download token: the token kind never
-   * expires without being rotated, and this sheet carries a practice's clients,
-   * their PANs and where they are due to appear. Seven days is long enough for
-   * WhatsApp to fetch it and for the practitioner to open it again on Wednesday. */
-  async function publishCauseList(uid, from, buffer) {
-    const file = admin.storage().bucket(STORAGE_BUCKET).file(`users/${uid}/causeLists/${from}.pdf`);
+   * expires without being rotated, and these documents carry a practice's
+   * clients, their PANs and what the department has asked them for. Seven days
+   * is long enough for WhatsApp to fetch it and for the practitioner or the
+   * client to open it again on Wednesday. */
+  async function publishPdf(uid, storagePath, buffer) {
+    const file = admin.storage().bucket(STORAGE_BUCKET).file(storagePath);
     await file.save(buffer, {
       contentType: "application/pdf",
       contentDisposition: "attachment",
@@ -784,7 +824,7 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
          error mentions neither signing nor the role that fixes it, and this runs
          where nobody is watching. */
       throw new Error(
-        `Could not sign the cause list URL (${e.message || e}). The functions service ` +
+        `Could not sign the document URL (${e.message || e}). The functions service ` +
         `account needs roles/iam.serviceAccountTokenCreator — see docs/WHATSAPP_SETUP.md step 6.`,
         { cause: e }
       );
@@ -832,7 +872,7 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
           if (!(await claimOnce(uid, `causelist_${from}`, { kind: "causeList", from, to }))) continue;
 
           const pdf = await renderCauseList({ hearings, from, to, profile });
-          const url = await publishCauseList(uid, from, pdf);
+          const url = await publishPdf(uid, `users/${uid}/causeLists/${from}.pdf`, pdf);
 
           await deliver({
             uid,
@@ -855,11 +895,146 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
     }
   );
 
+  /* ---------------- 4. the document request ----------------
+   *
+   * THE ATTACHMENT IS THE LETTER, NOT A SECOND DESIGN OF IT.
+   *
+   * A template variable cannot contain a newline, so a six-item checklist
+   * cannot go in the message body — that is the whole reason this message has
+   * an attachment at all. But `renderDocRequest()` has already built the letter,
+   * and `sendClientMessage` has already stored it on the request as
+   * `message.emailHtml`. Printing that same stored HTML means the PDF a client
+   * receives on WhatsApp is the letter they would have received by email, item
+   * for item, in whatever language it was drafted in. Nothing here decides what
+   * the document says.
+   */
+
+  async function renderDocRequestPdf(emailHtml, { language = "en" } = {}) {
+    /* Montserrat covers Latin. A letter translated into Gujarati or Hindi would
+       print as empty boxes, which is worse than sending it in English — so it
+       is refused rather than attached, and the caller falls back. Lifting this
+       needs an Indic face added beside Montserrat; until then the language
+       variants of this template should not be approved in WATI. */
+    if (hasUnprintableScript(emailHtml)) {
+      throw new Error(
+        `The attached letter is in a script the PDF renderer has no font for (language: ${language}). ` +
+        `Add an Indic font beside Montserrat in functions/fonts before approving non-English variants ` +
+        `of ph_doc_request_v1 — see docs/WHATSAPP_SETUP.md.`
+      );
+    }
+    // Tight margins: the letter brings its own 32px padding, and adding a
+    // second frame around it would print a card inside a card.
+    return renderHtmlToPdf(printableLetter(emailHtml, { fontFaceCss: FONT_FACE_CSS, logoDataUri: PROHIPPO_LOGO_DATA_URI }), {
+      margin: { top: "6mm", right: "6mm", bottom: "6mm", left: "6mm" },
+    });
+  }
+
+  /*
+   * Send one already-saved document request over WhatsApp.
+   *
+   * Called by sendClientMessage in index.js, which owns the email path and the
+   * request's own lifecycle. NEVER THROWS — the composer needs to tell the
+   * practitioner what happened, and "no consent recorded" is an answer, not an
+   * error.
+   */
+  async function sendDocRequest({ uid, requestId }) {
+    const reqRef = db.doc(`users/${uid}/docRequests/${requestId}`);
+    const reqSnap = await reqRef.get();
+    if (!reqSnap.exists) return { ok: false, reason: "not-found", message: "That document request no longer exists." };
+    const req = reqSnap.data() || {};
+
+    const msg = req.message || {};
+    if (!msg.emailHtml) {
+      return { ok: false, reason: "not-rendered", message: "This request has no rendered message — open it and save it again." };
+    }
+    if (!req.assesseeId) {
+      return { ok: false, reason: "unlinked", message: "This request isn't linked to an assessee." };
+    }
+
+    const profile = (await db.doc(`users/${uid}`).get()).data() || {};
+    if (!whatsAppEnabledFor(profile, "docRequest")) {
+      return { ok: false, reason: "disabled", message: "WhatsApp document requests are switched off in Settings." };
+    }
+
+    // The recipient is resolved from the practice's own records, never from the
+    // caller — the same rule the email path follows, and what stops a stolen
+    // session using this as a relay to arbitrary numbers.
+    const aSnap = await db.doc(`users/${uid}/assessees/${req.assesseeId}`).get();
+    if (!aSnap.exists) return { ok: false, reason: "unlinked", message: "The assessee for this request no longer exists." };
+    const assessee = aSnap.data() || {};
+
+    const group = await groupOf(uid, assessee.group);
+    const reach = clientReachability(group);
+    if (!reach.ok) return { ok: false, reason: reach.reason, message: reach.message };
+
+    let url;
+    try {
+      const pdf = await renderDocRequestPdf(msg.emailHtml, { language: msg.language || req.messageLanguage || "en" });
+      url = await publishPdf(uid, `users/${uid}/docRequests/${requestId}.pdf`, pdf);
+    } catch (e) {
+      const message = String(e?.message || e).slice(0, 300);
+      console.error("doc request PDF failed:", message);
+      return { ok: false, reason: "render-failed", message };
+    }
+
+    const result = await deliver({
+      uid,
+      to: reach.mobile,
+      template: "ph_doc_request_v1",
+      language: msg.language || "en",
+      params: docRequestParams(req, { headName: reach.name, firmName: profile.firmName }),
+      media: { url, fileName: `Documents required - ${req.assessee || "request"}.pdf` },
+      assesseeId: req.assesseeId,
+      assessee: req.assessee || assessee.name || "",
+      requestId,
+      recipientRole: "groupHead",
+      recipientName: reach.name,
+      subject: msg.subject || req.title || "Documents required",
+      body: msg.whatsappText || "",
+    });
+
+    if (result.ok) {
+      const now = new Date().toISOString();
+      await reqRef.set({
+        status: "sent",
+        sentAt: req.sentAt || now,
+        lastSentAt: now,
+        lastWhatsAppId: result.messageId || "",
+        lastError: "",
+      }, { merge: true });
+    }
+    return result;
+  }
+
+  /* The group an assessee belongs to, by the name stored on their record.
+   *
+   * Groups are joined by NAME rather than id — that is how the app has always
+   * worked, and renameGroup() rewrites every member when one changes. Returns
+   * null for an assessee with no group, which clientReachability then reports
+   * as "no group head set" rather than crashing. */
+  async function groupOf(uid, groupName) {
+    const name = String(groupName || "").trim();
+    if (!name) return null;
+    const q = await db.collection(`users/${uid}/groups`).where("name", "==", name).limit(1).get();
+    return q.empty ? null : q.docs[0].data();
+  }
+
+  /* The same lookup starting from a notice, which carries a PAN and a name but
+     no assesseeId — ingestPortalNotice never stored one. */
+  async function groupForPan(uid, pan) {
+    const clean = String(pan || "").toUpperCase().trim();
+    if (!clean) return null;
+    const q = await db.collection(`users/${uid}/assessees`).where("pan", "==", clean).limit(1).get();
+    if (q.empty) return null;
+    return groupOf(uid, q.docs[0].data().group);
+  }
+
   return {
     watiWebhook,
     onNoticeCreatedWhatsApp,
     whatsappHearingReminders,
     whatsappWeeklyCauseList,
+    sendDocRequest,
     // Used by the message senders in later phases, and by the tests.
     _whatsapp: {
       deliver,

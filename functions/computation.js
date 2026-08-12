@@ -55,32 +55,11 @@ function escapeHtml(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// One browser per warm instance. Launching Chromium costs 1-2 seconds, and a
-// practitioner working through a client's years generates several computations
-// in a row — paying that once per instance rather than once per document is the
-// difference between "instant" and "why is this slow".
-let browserPromise = null;
-async function getBrowser() {
-  if (!browserPromise) {
-    browserPromise = (async () => {
-      const chromium = require("@sparticuz/chromium");
-      const puppeteer = require("puppeteer-core");
-      // No WebGL, no canvas acceleration. This document is text, rules and
-      // gradients; the graphics stack it would otherwise start costs memory we
-      // would rather give to the page.
-      chromium.setGraphicsMode = false;
-      return puppeteer.launch({
-        args: chromium.args,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-      });
-    })().catch((err) => { browserPromise = null; throw err; });
-  }
-  const browser = await browserPromise;
-  // A browser that died between invocations must not poison every later call.
-  if (!browser.connected) { browserPromise = null; return getBrowser(); }
-  return browser;
-}
+/* The browser and the page render live in htmlPdf.js — the WhatsApp document
+   request needs exactly the same thing, and two Chromium launches would be two
+   sets of flags and two memory footprints for one job. What this file keeps is
+   everything specific to a computation: its footer, its fonts, its margins. */
+const { renderHtmlToPdf, classifyRenderError } = require("./htmlPdf");
 
 /* Turn any failure into an HttpsError.
  *
@@ -93,17 +72,17 @@ async function getBrowser() {
  * full error still goes to the function log for the cases we cannot summarise.
  */
 function renderFailure(err, stage) {
-  const detail = String((err && err.message) || err);
+  const { kind, detail } = classifyRenderError(err);
   console.error(`renderComputationPdf failed at ${stage}:`, err);
 
-  if (/executablePath|ENOENT|spawn|Failed to launch|Target closed|Protocol error/i.test(detail)) {
+  if (kind === "launch") {
     return new HttpsError(
       "internal",
       `The PDF renderer could not start (${stage}). This is a deployment problem, not a problem with the return — ` +
       `redeploy the functions and try again. Detail: ${detail.slice(0, 200)}`
     );
   }
-  if (/timeout|Navigation timeout/i.test(detail)) {
+  if (kind === "timeout") {
     return new HttpsError("deadline-exceeded", `Rendering the computation took too long (${stage}). Please try again.`);
   }
   return new HttpsError("internal", `Couldn't render the computation (${stage}): ${detail.slice(0, 200)}`);
@@ -130,41 +109,18 @@ function register({ region, storageBucket, db }) {
       const name = a.name || "";
       const pan = (a.pan || "").toUpperCase();
 
-      let browser;
-      try {
-        browser = await getBrowser();
-      } catch (err) {
-        throw renderFailure(err, "launching the renderer");
-      }
-
-      const page = await browser.newPage();
+      /* The page is cut off from the network inside renderHtmlToPdf. The
+         template is self-contained by construction (§13); that makes it a
+         guarantee rather than a convention, so a stray URL fails loudly in
+         review instead of quietly fetching from a user's document. */
       let pdf;
       try {
-        // Cut the page off from the network before it loads. The template is
-        // self-contained by construction (§13); this makes that a guarantee
-        // rather than a convention, so a stray URL fails loudly in review
-        // instead of quietly fetching from a user's document.
-        await page.setRequestInterception(true);
-        page.on("request", (req) => {
-          if (req.url().startsWith("data:") || req.url() === "about:blank") req.continue();
-          else req.abort();
-        });
-
-        await page.setContent(html.replace(FONT_SLOT, FONT_FACE_CSS), { waitUntil: "load", timeout: 30000 });
-        await page.evaluateHandle("document.fonts.ready");
-
-        pdf = await page.pdf({
-          format: "A4",
-          printBackground: true, // without this every gradient and card renders white
-          displayHeaderFooter: true,
-          headerTemplate: "<div></div>",
-          footerTemplate: FOOTER(name, ay),
+        pdf = await renderHtmlToPdf(html.replace(FONT_SLOT, FONT_FACE_CSS), {
+          footer: FOOTER(name, ay),
           margin: { top: "12mm", right: "11mm", bottom: "16mm", left: "11mm" },
         });
       } catch (err) {
         throw renderFailure(err, "rendering the page");
-      } finally {
-        await page.close().catch(() => {});
       }
 
       const storagePath = `users/${uid}/assessees/${assesseeId}/returns/${String(ay).replace(/[^A-Za-z0-9_-]/g, "")}/computation.pdf`;

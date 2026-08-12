@@ -3,9 +3,9 @@
 How a hearing, a notice or an invoice reaches somebody on WhatsApp, and how
 ProHippo knows whether it arrived.
 
-**Status: phases 0, 1 and 2 are implemented** — the pipe, plus the three
-messages that reach the practitioner themselves. The three client-facing
-messages are phases 3–4 and are the plan, not code.
+**Status: phases 0–3 are implemented** — the pipe, the three messages that reach
+the practitioner, and the two that reach a client. The invoice is phase 4 and is
+the plan, not code.
 
 ---
 
@@ -336,6 +336,102 @@ This is the step that needs `roles/iam.serviceAccountTokenCreator` (step 6
 below). If the grant is missing the raw error mentions neither signing nor the
 role that fixes it, so it is caught and re-thrown saying both.
 
+---
+
+## The two client messages
+
+Both need what no practitioner message needs: a **group head with a number and a
+recorded consent**. `clientReachability()` is the one function that asks, and it
+returns the reason rather than a bare false, because every caller has to say
+something useful about a refusal.
+
+### Notice received — the client's copy
+
+Sent from the same trigger as the practitioner's alert, in the same invocation.
+Two details are deliberate:
+
+**The two recipients are claimed separately** (`notice_{din}` and
+`noticeclient_{din}`). They are switched on independently, and a practice that
+turns the client alert on next month must not find every notice already marked
+as told.
+
+**The client's copy is not subject to the burst cap.** That cap protects one
+practitioner's phone from thirty messages about thirty different clients. A
+client only ever hears about their own notices, so the flood it guards against
+cannot reach them — and silencing a client's single message because somebody
+else's practice is busy would be the wrong kind of quiet.
+
+The notice carries a PAN and a name but no `assesseeId` — `ingestPortalNotice`
+never stored one — so the group is found by PAN, then by group name. Groups are
+joined by name throughout the app; `renameGroup()` rewrites every member when
+one changes.
+
+`ph_notice_alert_client_v1` addresses the head and names the assessee
+*separately*: Rajesh Shah is told about a notice issued to Shah Textiles Pvt.
+Ltd., and collapsing the two would greet a private limited company by name.
+
+### Document request
+
+`sendClientMessage({ channel: "whatsapp" })` — the same callable the email path
+uses, so the composer still has one way to send a request.
+
+**The attachment is the letter, not a second design of it.** A template variable
+cannot contain a newline, which is the whole reason this message has an
+attachment. But `renderDocRequest()` has already built the letter and the
+composer has already stored it as `message.emailHtml`, so the PDF a client
+receives is the letter they would have received by email — same numbered list,
+same due-date panel, same "How to send them" box, item for item.
+
+Exactly two things change on the way to the printer:
+
+| Change | Why |
+|---|---|
+| The logo becomes a data URI | The print page has **no network at all** (every non-`data:` request is aborted before it leaves). Without this the letter arrives with a broken image where the brand was |
+| A font is attached | The letter is built for an email client, where the font stack resolves against whatever the reader has installed. A Cloud Functions Chromium has **no fonts installed**, so that stack resolves to nothing |
+
+Anything rewritten beyond those two is a second design creeping in, and a test
+pins that.
+
+**The count in the message is what is still outstanding**, not what was ever
+asked for — the same `askableItems()` rule the letter prints by, so the number
+in the message and the list in the attachment cannot disagree.
+
+#### One limitation, stated rather than discovered
+
+Montserrat covers Latin. **A letter translated into Gujarati, Hindi or any other
+Indic script would print as empty boxes**, so it is refused rather than attached
+and the composer falls back to the `wa.me` hand-off.
+
+That means the language variants of `ph_doc_request_v1` **should not be approved
+in WATI yet**. Lifting it needs an Indic face added beside
+`functions/fonts/montserrat.js`; `hasUnprintableScript()` and its test are what
+change when it is.
+
+#### The hand-off did not go away
+
+The `wa.me` hand-off remains for every client who has not opted in. The button
+still works — it just says which of the two it is about to do, and its tooltip
+names the reason:
+
+| State | Button | What happens |
+|---|---|---|
+| Enabled + consent | **Send WhatsApp** | Real send, PDF attached, tracked to Read |
+| Anything missing | **Open in WhatsApp** | Opens `wa.me`, logged as "Opened in WhatsApp" |
+
+A control that sometimes sends and sometimes opens a tab, without saying which,
+teaches people to distrust the delivery log — which is the one thing this log
+cannot afford, since it is what gets shown to a client who says they never
+received the list.
+
+### One Chromium, not two
+
+`renderComputationPdf` already ran a headless Chromium. Rather than launch a
+second one, the browser and the page render moved to `functions/htmlPdf.js` and
+both features share it: one set of flags, one memory footprint, one place for a
+Chromium upgrade to break. The launch is the expensive part, so sharing it is
+also the faster arrangement. What stayed behind in each caller is everything
+specific to its document — footer, fonts, margins.
+
 ### The clock
 
 `istDate()` applies the +5:30 offset explicitly rather than relying on
@@ -540,8 +636,57 @@ Upload any small PDF as the header sample. This is the one to test
 document request will work too.
 </details>
 
-Getting these approved also teaches you what the reviewer wants before the nine
-client-facing variants go in.
+<details>
+<summary><code>ph_notice_alert_client_v1</code> — 7 variables</summary>
+
+```
+Namaste {{1}},
+
+A notice under section {{2}} has been issued for *{{3}} (PAN {{4}})* for *AY {{5}}*, dated {{6}}.
+
+It has already been received and is being reviewed. You may reply here to ask which documents will be required, or our team will contact you shortly with the list.
+
+Sent by {{7}}.
+Reply here if you have a question.
+```
+
+Samples: `Rajesh M. Shah` · `142(1)` · `Shah Textiles Pvt. Ltd.` · `AABCS9821K` ·
+`2017-18` · `12 August 2026` · `Mehta & Co.`
+
+The `*asterisks*` are WhatsApp's bold markup and survive review — paste them
+literally.
+</details>
+
+<details>
+<summary><code>ph_doc_request_v1</code> — 5 variables, <b>Document header</b></summary>
+
+```
+Namaste {{1}},
+
+We have received a notice in your {{2}} matter.
+
+To prepare the reply we need {{3}} documents from you. The full list is attached to this message.
+
+Please send each document as a PDF file, under 5 MB. The Income-tax portal accepts PDFs only, so photos can't be filed as they are — if you only have photos, your phone can turn them into a PDF (the Scan option in Files, Notes or Google Drive).
+
+You can reply to this message with the PDFs attached.
+
+Please send these by {{4}}.
+
+Sent by {{5}}.
+Reply here if anything is unclear.
+```
+
+Samples: `Rajesh M. Shah` · `ITAT · AY 2017-18` · `6` · `20 August 2026` ·
+`Mehta & Co.`
+
+Sentences lifted from `PHRASES` unchanged, so the WhatsApp copy and the email
+copy stay the same words. **English only for now** — see the Indic font
+limitation above.
+</details>
+
+Getting these approved also teaches you what the reviewer wants before the
+client-facing language variants go in.
 
 Meta's validator rejects, in roughly this order of frequency: a body that ends on
 a variable, two variables with nothing between them, a variable containing a
@@ -632,3 +777,6 @@ the client-facing three are the ones to suspect — which is why they ship last 
 | Cause list fails, "PDF renderer is missing" | Deployed without the predeploy hook | `node scripts/build-functions-shared.mjs`, then deploy again |
 | Cause list fails, "Could not sign the URL" | The IAM grant in step 6 was skipped | Run it, then re-run the scheduler job |
 | No cause list on a quiet week | Deliberate — empty weeks are not sent | The log line reports how many practices had an empty week |
+| Composer says "Open in WhatsApp", not "Send" | No consent, no group head mobile, or the Settings row is off | The button's tooltip names which one |
+| Doc request refused, "a script the PDF renderer has no font for" | The letter was translated; Montserrat covers Latin only | Send it by email, or add an Indic font — see above |
+| Client never gets the notice alert | `noticeAlertClient` defaults **off** per practice | Settings → WhatsApp updates → "Tell clients when a notice arrives" |

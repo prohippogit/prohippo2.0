@@ -2401,6 +2401,28 @@ exports.revokeDeviceKey = onCall(DEVICE_OPTS, async (request) => {
  */
 const CLIENT_EMAIL_FROM = "ProHippo <notices@prohippo.in>";
 
+/* ---------- WhatsApp delivery (WATI) ----------
+   Its own module for the same reason as the calendar: a self-contained feature
+   with its own vendor, its own secrets and its own webhook, in a file that is
+   long enough already.
+
+   The pipe — address resolution, consent, quota, the WATI call, the delivery
+   log and the status webhook — plus the notice alerts, the hearing reminder,
+   the weekly cause list and the document request. The invoice follows.
+
+   Built HERE rather than at the foot of the file with the calendar, because
+   sendClientMessage below calls into it and a binding used above its
+   declaration is a trap waiting for whoever reorders this file next.
+   Setup: docs/WHATSAPP_SETUP.md */
+const whatsapp = require("./whatsapp").build({
+  REGIONS,
+  PRIMARY_REGION,
+  TRIGGER_REGION,
+  db,
+  recordSpend,
+  STORAGE_BUCKET,
+});
+
 // Per-user send caps. A practising firm sends a handful of these a day; these
 // bounds are far above normal use and exist purely so a bug or a stolen session
 // can't turn the account into a mail cannon.
@@ -2636,9 +2658,28 @@ exports.sendClientMessage = onCall(
     const requestId = String(request.data?.requestId || "");
     const channel = String(request.data?.channel || "email");
     if (!requestId) throw new HttpsError("invalid-argument", "requestId is required.");
-    // WhatsApp is delivered from the browser as a wa.me hand-off for now; only
-    // email has a server-side sender. See docs/COMMUNICATIONS_DELIVERY.md.
-    if (channel !== "email") throw new HttpsError("invalid-argument", "Only the email channel is sent server-side.");
+
+    /* WhatsApp is now a real send rather than the wa.me hand-off it used to be.
+       It lives in functions/whatsapp.js because it needs the group head, the
+       consent record and the WATI client, none of which the email path knows
+       about — but it comes through the same callable, so the composer still has
+       one way to send a request. */
+    if (channel === "whatsapp") {
+      const result = await whatsapp.sendDocRequest({ uid, requestId });
+      /* sendDocRequest never throws: "no consent recorded" is an answer, not an
+         error. The callable does though, because the composer's catch is what
+         puts the reason in front of the practitioner. */
+      if (!result.ok) {
+        const code = result.reason === "not-found" ? "not-found"
+          : ["no-head", "no-mobile", "no-consent", "opted-out", "disabled", "unlinked", "not-rendered"].includes(result.reason)
+            ? "failed-precondition"
+            : "unavailable";
+        throw new HttpsError(code, result.message || "Couldn't send that on WhatsApp.");
+      }
+      return { ok: true, to: result.to, providerId: result.messageId, communicationId: result.communicationId };
+    }
+
+    if (channel !== "email") throw new HttpsError("invalid-argument", `Unknown channel "${channel}".`);
 
     const reqRef = db.doc(`users/${uid}/docRequests/${requestId}`);
     const reqSnap = await reqRef.get();
@@ -2847,23 +2888,6 @@ Object.assign(
   })
 );
 
-/* ---------- WhatsApp delivery (WATI) ----------
-   Its own module for the same reason as the calendar: a self-contained feature
-   with its own vendor, its own secrets and its own webhook, in a file that is
-   long enough already.
-
-   The pipe — address resolution, consent, quota, the WATI call, the delivery
-   log and the status webhook — plus the three messages that reach the
-   practitioner themselves. The three client-facing ones follow.
-   Setup: docs/WHATSAPP_SETUP.md */
-const whatsapp = require("./whatsapp").build({
-  REGIONS,
-  PRIMARY_REGION,
-  TRIGGER_REGION,
-  db,
-  recordSpend,
-  STORAGE_BUCKET,
-});
 exports.watiWebhook = whatsapp.watiWebhook;
 exports.onNoticeCreatedWhatsApp = whatsapp.onNoticeCreatedWhatsApp;
 exports.whatsappHearingReminders = whatsapp.whatsappHearingReminders;

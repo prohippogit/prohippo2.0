@@ -82,6 +82,38 @@ test("the deadline rule matches the one the screens use", () => {
   }
 });
 
+test("both copies agree on whether a client may be messaged", () => {
+  const groups = [
+    null, {}, { name: "Patel Family" },
+    { head: { name: "Rajesh M. Shah", mobile: "+919825011234" } },
+    { head: { name: "Rajesh M. Shah", mobile: "" }, headWhatsappOptIn: { optedIn: true } },
+    { head: { name: "Rajesh M. Shah", mobile: "9825011234" }, headWhatsappOptIn: { optedIn: true } },
+    { head: { name: "Rajesh M. Shah", mobile: "9825011234" }, headWhatsappOptIn: { optedIn: true, revokedAt: "2026-08-09T00:00:00Z" } },
+    { head: { name: "", mobile: "" } },
+  ];
+  for (const g of groups) {
+    const a = core.clientReachability(g);
+    const b = browser.clientReachability(g);
+    assert.equal(a.ok, b.ok, `drift on ok for ${JSON.stringify(g)}`);
+    assert.equal(a.reason, b.reason, `drift on reason for ${JSON.stringify(g)}`);
+    assert.equal(a.mobile, b.mobile, `drift on mobile for ${JSON.stringify(g)}`);
+  }
+});
+
+test("the proceeding line matches the one on the letter", async () => {
+  const { proceedingLine } = await import("../src/messageTemplates.js");
+  const reqs = [
+    { authority: "Scrutiny", section: "143(2)", ay: "2021-22" },
+    { authority: "ITAT", section: "", ay: "2017-18" },
+    { authority: "", section: "142(1)", ay: "" },
+    { authority: "", section: "", ay: "2020-21" },
+    {},
+  ];
+  for (const r of reqs) {
+    assert.equal(core.proceedingLine(r), proceedingLine(r), `drift on ${JSON.stringify(r)}`);
+  }
+});
+
 /* ---------------- which notices deserve an alert ---------------- */
 
 const TODAY = "2026-08-12";
@@ -170,6 +202,127 @@ test("dates are spelt out the way they are read aloud", () => {
   assert.equal(core.fmtDateLong("2026-08-13"), "13 August 2026");
   assert.equal(core.fmtDateLong("2026-01-01"), "1 January 2026");
   assert.equal(core.fmtDateLong(""), "");
+});
+
+/* ---------------- the client's copy of a notice ---------------- */
+
+test("the client alert addresses the head and names the assessee separately", () => {
+  /* Rajesh Shah is told about a notice issued to Shah Textiles Pvt. Ltd.
+     Collapsing the two would greet a private limited company by name. */
+  const p = core.noticeAlertClientParams(
+    notice({ assessee: "Shah Textiles Pvt. Ltd.", pan: "AABCS9821K" }),
+    { headName: "Rajesh M. Shah", firmName: "Mehta & Co." }
+  );
+  assert.equal(p.length, 7);
+  assert.equal(p[0], "Rajesh M. Shah");
+  assert.equal(p[2], "Shah Textiles Pvt. Ltd.");
+  assert.equal(p[6], "Mehta & Co.");
+  for (const v of p) assert.ok(String(v).trim().length > 0);
+});
+
+test("a client alert with almost nothing on file still sends", () => {
+  for (const v of core.noticeAlertClientParams({}, {})) {
+    assert.ok(String(v).trim().length > 0);
+  }
+});
+
+/* ---------------- document requests ---------------- */
+
+const request = (over = {}) => ({
+  assessee: "Rajesh M. Shah", ay: "2017-18", authority: "ITAT", section: "",
+  dueDate: "2026-08-20",
+  items: [
+    { label: "Audited financials", status: "pending" },
+    { label: "Bank statements", status: "pending" },
+    { label: "Ledger copies", status: "received" },
+    { label: "Something waived", status: "waived" },
+  ],
+  ...over,
+});
+
+test("the count is what is still outstanding, not what was ever asked for", () => {
+  /* The message and the attached list have to agree. The letter prints only
+     askable items, so counting all four here would ask for two documents and
+     attach a list of four. */
+  const p = core.docRequestParams(request(), { headName: "Rajesh M. Shah", firmName: "Mehta & Co." });
+  assert.equal(p[2], "2");
+  assert.equal(core.askableItems(request()).length, 2);
+});
+
+test("the document request carries five parameters and not one of them is empty", () => {
+  const p = core.docRequestParams(request(), { headName: "Rajesh M. Shah", firmName: "Mehta & Co." });
+  assert.deepEqual(p, ["Rajesh M. Shah", "ITAT · AY 2017-18", "2", "20 August 2026", "Mehta & Co."]);
+});
+
+test("a request with no due date still makes a sentence", () => {
+  /* The template reads "Please send these by {{4}}." — an empty parameter is
+     rejected by Meta outright, and "by ." is not a sentence either way. */
+  const p = core.docRequestParams(request({ dueDate: "" }), { headName: "Rajesh M. Shah" });
+  assert.equal(p[3], "the earliest date you can");
+  for (const v of p) assert.ok(String(v).trim().length > 0);
+});
+
+test("a bare request still produces five usable parameters", () => {
+  for (const v of core.docRequestParams({}, {})) assert.ok(String(v).trim().length > 0);
+});
+
+/* ---------------- printing the letter ---------------- */
+
+test("everything an English letter contains is printable", () => {
+  const real = [
+    "Bank statements of all accounts for FY 2016-17",
+    "Amount: ₹1,32,000 — due 11 September 2026",
+    "Rajesh M. Shah · Scrutiny u/s 142(1) · AY 2020-21",
+    "photos can't be filed as they are — if you only have photos…",
+    "Zoë Müller & Co.",   // Latin Extended, and a real client name shape
+    "“Namaste”",          // curly quotes from the renderer
+  ];
+  for (const s of real) assert.equal(core.hasUnprintableScript(s), false, `flagged: ${s}`);
+});
+
+test("a translated letter is caught rather than printed as empty boxes", () => {
+  /* The print font covers Latin. A Gujarati letter would render as tofu, which
+     is worse than not sending — so it is refused and the caller falls back.
+     When an Indic face is added beside Montserrat, this test is what changes. */
+  assert.equal(core.hasUnprintableScript("બેંક સ્ટેટમેન્ટ"), true);
+  assert.equal(core.hasUnprintableScript("बैंक स्टेटमेंट"), true);
+  assert.equal(core.hasUnprintableScript("வங்கி அறிக்கை"), true);
+});
+
+test("the logo becomes a data URI, because the print page has no network", () => {
+  const html = `<body><img src="https://prohippo.in/prohippo-logo.png" width="73"></body>`;
+  const out = core.printableLetter(html, { logoDataUri: "data:image/png;base64,AAAA" });
+  assert.ok(out.includes('src="data:image/png;base64,AAAA"'));
+  assert.ok(!out.includes("https://prohippo.in/prohippo-logo.png"));
+});
+
+test("the older hosting URL for the logo is replaced too", () => {
+  // LOGO_URL used to point at prohippo2.web.app; letters drafted then are still
+  // in the database and still get sent.
+  const html = `<body><img src="https://prohippo2.web.app/prohippo-logo.png"></body>`;
+  const out = core.printableLetter(html, { logoDataUri: "data:image/png;base64,BBBB" });
+  assert.ok(out.includes("data:image/png;base64,BBBB"));
+  assert.ok(!out.includes("web.app"));
+});
+
+test("the font is attached wherever the letter's markup allows", () => {
+  const face = "@font-face{font-family:'Montserrat';src:url(data:font/woff2;base64,XX)}";
+  // The renderer emits <html><body> with no <head>.
+  const noHead = core.printableLetter(`<!doctype html><html><body style="margin:0">hi</body></html>`, { fontFaceCss: face });
+  assert.ok(noHead.includes(face));
+  assert.ok(noHead.indexOf(face) > noHead.indexOf("<body"), "style must land inside body");
+  // And it still works if a <head> ever appears.
+  const withHead = core.printableLetter(`<html><head><title>x</title></head><body>hi</body></html>`, { fontFaceCss: face });
+  assert.ok(withHead.includes(face));
+  assert.ok(withHead.indexOf(face) < withHead.indexOf("</head>"));
+});
+
+test("printing changes nothing else about the letter", () => {
+  /* The promise is that the attachment IS the email. Anything this function
+     rewrites beyond the logo and the font is a second design creeping in. */
+  const html = `<body><table><tr><td>1.</td><td>Audited financials</td></tr></table></body>`;
+  const out = core.printableLetter(html, {});
+  assert.ok(out.includes("<td>1.</td><td>Audited financials</td>"));
 });
 
 /* ---------------- hearings ---------------- */

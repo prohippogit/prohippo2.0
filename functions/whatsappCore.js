@@ -61,6 +61,50 @@ function userReachability(profile) {
   return { ok: true, mobile, reason: "" };
 }
 
+/* ---------------- the group head ---------------- */
+
+/* Mirrors groupHead / headConsent / clientReachability in
+   src/whatsappSettings.js. See that file for why consent records who attested
+   it, and why a STOP reply outranks the tick. */
+function groupHead(group) {
+  const h = (group && group.head) || null;
+  if (!h) return null;
+  const mobile = normaliseMobile(h.mobile);
+  const name = String(h.name || "").trim();
+  if (!name && !mobile) return null;
+  return { name, mobile, assesseeId: h.assesseeId || "" };
+}
+
+function headConsent(group) {
+  const c = (group && group.headWhatsappOptIn) || null;
+  if (!c) return { optedIn: false, revokedAt: "" };
+  return { optedIn: c.optedIn === true && !c.revokedAt, revokedAt: c.revokedAt || "" };
+}
+
+/* May a client message go to this group, and if not, why?
+ *
+ * The reason travels rather than a bare false, because every caller has to say
+ * something useful — the composer wants a tooltip, the invoice wants to fall
+ * back to the practitioner, the log wants a reason. */
+function clientReachability(group) {
+  const head = groupHead(group);
+  if (!head) return { ok: false, mobile: "", name: "", reason: "no-head", message: "No group head set for this group." };
+  if (!head.mobile) {
+    return { ok: false, mobile: "", name: head.name, reason: "no-mobile", message: `No WhatsApp number on file for ${head.name || "the group head"}.` };
+  }
+  const consent = headConsent(group);
+  if (!consent.optedIn) {
+    return {
+      ok: false, mobile: head.mobile, name: head.name,
+      reason: consent.revokedAt ? "opted-out" : "no-consent",
+      message: consent.revokedAt
+        ? `${head.name || "The group head"} asked to stop receiving WhatsApp messages.`
+        : `${head.name || "The group head"} hasn't agreed to WhatsApp updates yet — tick the box on the group.`,
+    };
+  }
+  return { ok: true, mobile: head.mobile, name: head.name, reason: "", message: "" };
+}
+
 /* ---------------- dates ---------------- */
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -156,6 +200,115 @@ function noticeAlertParams(notice) {
     n.din || n.docKey || "not stated",
     noticeDeadlineSentence(n),
   ];
+}
+
+/* The seven variables of ph_notice_alert_client_v1, in order.
+ *
+ * Note {{3}} and {{4}} are the assessee and PAN while {{1}} is the group head:
+ * Rajesh Shah is told about a notice issued to Shah Textiles Pvt. Ltd., and
+ * collapsing the two would address a company as a person. */
+function noticeAlertClientParams(notice, { headName, firmName } = {}) {
+  const n = notice || {};
+  return [
+    headName || n.assessee || "Sir/Madam",
+    n.section || n.authority || "the Income-tax Act",
+    n.assessee || "your file",
+    n.pan || "not stated",
+    n.ay || "not stated",
+    fmtDateLong(n.date) || "not stated",
+    firmName || "your tax practitioner",
+  ];
+}
+
+/* ---------------- document requests ---------------- */
+
+/* One line describing the proceeding a request arises from, e.g.
+   "Scrutiny u/s 143(2) · AY 2021-22". Mirror of proceedingLine in
+   src/messageTemplates.js — every part optional, nothing invented. */
+function proceedingLine(req) {
+  const r = req || {};
+  return [
+    r.authority ? `${r.authority}${r.section ? ` u/s ${r.section}` : ""}` : (r.section ? `u/s ${r.section}` : ""),
+    r.ay ? `AY ${r.ay}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+/* Only items still outstanding are worth asking for again — the same rule
+   askableItems() applies when the letter is rendered, so the count in the
+   message and the list in the attachment cannot disagree. */
+const askableItems = (req) =>
+  ((req && req.items) || []).filter((i) => i && i.status !== "received" && i.status !== "waived");
+
+/* The five variables of ph_doc_request_v1, in order.
+ *
+ * {{4}} has a fallback because a request without a due date is ordinary — the
+ * practitioner may not have one — and "Please send these by ." is not a
+ * sentence. "the earliest date you can" keeps the template's "by" working. */
+function docRequestParams(req, { headName, firmName } = {}) {
+  const r = req || {};
+  const count = askableItems(r).length;
+  const proc = proceedingLine(r);
+  return [
+    headName || r.assessee || "Sir/Madam",
+    proc || "income-tax",
+    String(count),
+    fmtDateLong(r.dueDate) || "the earliest date you can",
+    firmName || "your tax practitioner",
+  ];
+}
+
+/* ---------------- printing the letter ---------------- */
+
+/*
+ * THE ATTACHMENT IS THE LETTER, NOT A SECOND DESIGN OF IT.
+ *
+ * A template variable cannot contain a newline, so a six-item checklist cannot
+ * travel in the message body — which is the whole reason this message has an
+ * attachment. But renderDocRequest() has already built the letter and
+ * sendClientMessage has already stored it as `message.emailHtml`, so printing
+ * that same stored HTML means the PDF a client receives on WhatsApp is the
+ * letter they would have received by email, item for item, in whatever language
+ * it was drafted in. Nothing here decides what the document says; it only makes
+ * an email-shaped document printable.
+ */
+
+/* Anything the print font cannot draw: outside Latin (including Extended-A and
+   -B, so a European name survives), General Punctuation (the en dash and curly
+   quotes the letter uses) and Currency Symbols (U+20B9 is the rupee).
+   Written with escapes rather than literals — the literal form puts control
+   characters and irregular whitespace into the source. */
+const UNPRINTABLE = /[^\u0020-\u024F\u2000-\u206F\u20A0-\u20BF\s]/;
+
+const hasUnprintableScript = (text) => UNPRINTABLE.test(String(text || ""));
+
+/* The logo travels over the network in an email; the print page has none. */
+const LOGO_IN_HTML = /https?:\/\/[^"'\s]*prohippo-logo\.png/g;
+
+/*
+ * Two changes to the stored letter and nothing else.
+ *
+ *   1. The mark becomes a data URI. The print page has no network at all, so
+ *      without this the client's letter arrives with a broken image where the
+ *      brand was.
+ *   2. A font is attached. The letter is built for an email client, where the
+ *      font stack in the markup resolves against whatever the reader has
+ *      installed. A Cloud Functions Chromium has NO fonts installed, so that
+ *      stack resolves to nothing and the page prints in a default face.
+ */
+function printableLetter(emailHtml, { fontFaceCss = "", logoDataUri = "" } = {}) {
+  const head = `<style>
+${fontFaceCss}
+body, table, td, div, span, b, i, a { font-family: 'Montserrat', system-ui, sans-serif !important; }
+</style>`;
+
+  let html = String(emailHtml || "");
+  if (logoDataUri) html = html.replace(LOGO_IN_HTML, logoDataUri);
+
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${head}</head>`);
+  // The stored letter has no <head> — the renderer writes <html><body> — so the
+  // style goes just inside <body> instead, where it applies just the same.
+  if (/<body[^>]*>/i.test(html)) return html.replace(/<body([^>]*)>/i, `<body$1>${head}`);
+  return head + html;
 }
 
 /* ---------------- hearings ---------------- */
@@ -324,6 +477,15 @@ module.exports = {
   shouldAlertNotice,
   noticeDeadlineSentence,
   noticeAlertParams,
+  hasUnprintableScript,
+  printableLetter,
+  groupHead,
+  headConsent,
+  clientReachability,
+  noticeAlertClientParams,
+  proceedingLine,
+  askableItems,
+  docRequestParams,
   isHearingLive,
   hearingReminderParams,
   nextWeekRange,

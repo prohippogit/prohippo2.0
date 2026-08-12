@@ -295,10 +295,35 @@ record, which is most of them, synced every six hours and still read "never
 synced". The web app's own "Last synced" line reads the same field and gets the
 same correction.
 
+## "Run hidden" means hidden
+
+Playwright's `headless: true` only ever adds a **bare `--headless`** — still true
+in the current release — and what that means is then up to the browser it lands
+on. For Playwright's own bundled build it is the dedicated headless shell and
+unambiguous. For the user's **real Google Chrome**, which this app deliberately
+prefers for its fingerprint, it depends on the Chrome version: old headless was
+removed in Chrome 132. A practitioner on Windows saw five browser windows open
+with the box ticked.
+
+So `pool.js` states the mode itself — `--headless=new`, understood by every
+Chrome since 112, appended after Playwright's defaults so it wins — rather than
+inheriting whatever the bare flag happens to mean. An off-screen
+`--window-position` rides along as a belt-and-braces: a truly headless browser
+has no window for it to apply to, and if some future Chrome ignores the flag
+again its windows open where nobody has to watch them.
+
+Every launch logs the Chrome version and whether hiding was asked for. If
+windows are ever seen again with the box ticked, that line is the difference
+between diagnosing it and guessing — which is what the first report cost.
+
+Unattended runs (the schedule, and the sync at launch) are **always** hidden,
+whatever the box says: a browser taking the screen on a machine somebody else is
+using is not acceptable.
+
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.11.0` — with a **Check for updates** link beside it. Press it and the bar
+`v1.11.1` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

@@ -101,6 +101,30 @@
     </div>
     <p class="muted note">Up to 5 PANs sync at once, each in its own isolated browser session, started a few seconds apart. Every step is randomly paced to stay within safe, human-like limits on your home connection.</p>
 
+    <!-- Unattended syncing. Off until switched on: an app that signs in to
+         clients' portals on its own, because it was installed once, is not
+         something to assume anybody wants. -->
+    <div class="autobar">
+      <div class="auto-head">
+        <div>
+          <div class="auto-title">Automatic sync</div>
+          <div id="autoStatus" class="auto-sub">Off — syncing runs only when you press Sync selected.</div>
+        </div>
+        <button id="autoRunNow" class="ghost sm">Sync everything now</button>
+      </div>
+      <div class="auto-switches">
+        <label class="chk" id="autoLaunchWrap"><input type="checkbox" id="autoLaunch"/> Start when I sign in to this computer</label>
+        <label class="chk"><input type="checkbox" id="autoOnLaunch"/> Sync as soon as it starts</label>
+        <label class="chk"><input type="checkbox" id="autoEvery"/> Keep syncing every</label>
+        <select id="autoInterval" class="fsel" title="Hours between unattended syncs">
+          <option value="3">3 hours</option>
+          <option value="6">6 hours</option>
+          <option value="12">12 hours</option>
+          <option value="24">24 hours</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Find one assessee among hundreds without scrolling. -->
     <div class="filters">
       <div class="srch">

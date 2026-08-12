@@ -39,6 +39,8 @@ const {
   getDocs,
   getCountFromServer,
   addDoc,
+  doc: docRef,
+  setDoc,
 } = require("firebase/firestore");
 const { getStorage, ref: storageRef, uploadString } = require("firebase/storage");
 const { firebaseConfig, FUNCTIONS_REGION } = require("./config");
@@ -227,7 +229,12 @@ async function listPortalAssessees() {
       status: a.status || "",
       // Needed by the returns pass to unlock CPC order PDFs (pdfUnlock.js).
       dob: a.dob || "",
-      lastSyncedAt: a.portalNoticeSyncedAt || "",
+      /* When this PAN was last synced — not when it last produced something.
+         This used to read portalNoticeSyncedAt, which only moves when a NEW
+         notice is stored, so a PAN synced hourly with a clean record showed a
+         months-old date or none at all. markSynced() below stamps
+         portalLastSyncedAt on every successful run. */
+      lastSyncedAt: a.portalLastSyncedAt || "",
     };
   });
 }
@@ -276,6 +283,29 @@ async function createAssesseeDoc(rec) {
   const payload = { createdAt: new Date().toISOString(), color, ...rec };
   const ref = await addDoc(col, payload);
   return { id: ref.id, ...payload };
+}
+
+/* Record that this PAN synced successfully, just now.
+ *
+ * ingestPortalProceedings already stamps this field — but only when there ARE
+ * proceedings to ingest, and a clean compliance record is the normal state for
+ * most assessees. Those PANs synced every six hours and still read "never
+ * synced", which is the opposite of what an unattended sync needs to show.
+ *
+ * Best-effort by design: the sync itself succeeded, and failing to write a
+ * timestamp about it must not turn a good run into a failed one. */
+async function markSynced(assesseeId, at = new Date().toISOString()) {
+  if (!assesseeId) return "";
+  try {
+    init();
+    const user = currentUser();
+    if (!user) return "";
+    await setDoc(docRef(firestore, `users/${user.uid}/assessees/${assesseeId}`), { portalLastSyncedAt: at }, { merge: true });
+    return at;
+  } catch (err) {
+    console.warn("[sync] couldn't stamp the sync time:", (err && err.message) || err);
+    return "";
+  }
 }
 
 // Build the incremental-sync hints for ONE PAN — the connector's port of
@@ -424,5 +454,6 @@ module.exports = {
   listPortalAssessees,
   findAssesseeByPan,
   createAssesseeDoc,
+  markSynced,
   getSyncKnowns,
 };

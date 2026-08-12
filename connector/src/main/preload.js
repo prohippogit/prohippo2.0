@@ -29,6 +29,26 @@ contextBridge.exposeInMainWorld("connector", {
     return () => ipcRenderer.removeListener("assessee:event", handler);
   },
   runSync: (jobs, scope, headless) => ipcRenderer.invoke("sync:run", { jobs, scope, headless }),
+
+  // --- automatic syncing (start with the computer, then every N hours) ---
+  getAutoSync: () => ipcRenderer.invoke("auto:get"),
+  setAutoSync: (patch) => ipcRenderer.invoke("auto:set", patch),
+  // Sync every PAN now, from the automatic panel rather than the selection.
+  runAllNow: () => ipcRenderer.invoke("auto:runNow"),
+  // { enabled, intervalHours, scope, lastRunAt, nextRunAt, running, lastResult }
+  onAutoState: (cb) => {
+    const handler = (_e, evt) => cb(evt);
+    ipcRenderer.on("auto:state", handler);
+    return () => ipcRenderer.removeListener("auto:state", handler);
+  },
+  /* A sync started or finished — including one this window did not ask for.
+     Without it an unattended run would paint progress into a UI whose buttons
+     still looked idle. */
+  onSyncBusy: (cb) => {
+    const handler = (_e, evt) => cb(evt);
+    ipcRenderer.on("sync:busy", handler);
+    return () => ipcRenderer.removeListener("sync:busy", handler);
+  },
   // subscribe to per-PAN progress events
   onSyncEvent: (cb) => {
     const handler = (_e, evt) => cb(evt);

@@ -12,6 +12,8 @@ async function afterSignIn(user) {
   $("signinCard").classList.add("hidden");
   $("signOutBtn").classList.remove("hidden");
   $("syncCard").classList.remove("hidden");
+  try { paintAuto(await window.connector.getAutoSync()); }
+  catch (err) { console.info("[auto] state unavailable:", err); }
   await loadAssessees();
 }
 
@@ -309,12 +311,13 @@ function renderRows() {
     el.id = "row-" + j.assesseeId;
     el.innerHTML =
       `<label class="cbx"><input type="checkbox" data-id="${escapeAttr(j.assesseeId)}"></label>` +
-      `<div class="nm"><div class="name"></div><div class="pan"></div></div>` +
+      `<div class="nm"><div class="name"></div><div class="pan"></div><div class="last"></div></div>` +
       `<div class="prog"><div class="bar-out"><div class="bar-in"></div></div>` +
         `<div class="msg"><span class="pct">—</span> · <span class="txt">idle</span></div></div>` +
       `<span class="pill idle">idle</span>`;
     el.querySelector(".name").textContent = j.label;
     el.querySelector(".pan").textContent = [j.pan, j.group].filter(Boolean).join(" · ");
+    paintLastSync(el, j.lastSyncedAt);
     const cb = el.querySelector('input[type="checkbox"]');
     cb.checked = selected.has(j.assesseeId);
     el.classList.toggle("sel", cb.checked);
@@ -334,6 +337,34 @@ function renderRows() {
     });
   });
   updateFilterUI(list.length);
+}
+
+/* "Last sync" on a row, in the words somebody would use.
+ *
+ * The day is named, not just the date: on a list that syncs by itself, "Tue,
+ * 12 Aug, 4:30 pm" answers "did it run overnight?" at a glance, where
+ * "12/08/2026 16:30" makes you work it out. Today and yesterday are said
+ * outright, because those are the two answers that matter most. */
+function lastSyncText(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return { text: "Never synced", never: true };
+  const d = new Date(t);
+  const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  const dayMs = 86400000;
+  if (t >= midnight.getTime()) return { text: `Last sync: today, ${time}` };
+  if (t >= midnight.getTime() - dayMs) return { text: `Last sync: yesterday, ${time}` };
+  const day = d.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" });
+  const year = d.getFullYear() === new Date().getFullYear() ? "" : ` ${d.getFullYear()}`;
+  return { text: `Last sync: ${day}${year}, ${time}` };
+}
+
+function paintLastSync(el, iso) {
+  const node = el.querySelector(".last");
+  if (!node) return;
+  const { text, never } = lastSyncText(iso);
+  node.textContent = text;
+  node.classList.toggle("never", Boolean(never));
 }
 
 function updateFilterUI(shown) {
@@ -430,6 +461,16 @@ function setControlsDisabled(on) {
 
 // Live per-PAN events from the pool.
 window.connector.onSyncEvent((evt) => {
+  /* The pool stamps the sync time server-side and tells us what it wrote, so
+     the row can say "today, 4:30 pm" the moment it finishes rather than after
+     the next Reload. */
+  if (evt.phase === "synced") {
+    const job = JOBS.find((j) => j.assesseeId === evt.assesseeId);
+    if (job) job.lastSyncedAt = evt.message;
+    const row = $("row-" + evt.assesseeId);
+    if (row) paintLastSync(row, evt.message);
+    return;
+  }
   // The per-phase timing breakdown isn't a status line — it would be overwritten
   // by "Done" a moment later. Park it on the row as a tooltip and log it, so a
   // slow sync can be diagnosed from a screenshot or the console.
@@ -775,6 +816,115 @@ function toast(message, kind) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.add("hidden"), 6000);
 }
+
+// --- Automatic sync --------------------------------------------------------
+//
+// Three switches and a status line. The main process owns the schedule
+// (scheduler.js); this only shows what it says and sends changes back.
+
+let autoState = {};
+
+// "in 4h 12m" — a duration reads better than a clock time here, because the
+// question is "how long until it looks again", not "at what o'clock".
+function untilText(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return "";
+  const mins = Math.max(0, Math.round((t - Date.now()) / 60000));
+  if (mins < 1) return "any moment";
+  if (mins < 60) return `in ${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `in ${h}h ${m}m` : `in ${h}h`;
+}
+
+function paintAuto(st) {
+  autoState = st || {};
+  $("autoLaunch").checked = Boolean(autoState.autoLaunch);
+  $("autoOnLaunch").checked = Boolean(autoState.syncOnLaunch);
+  $("autoEvery").checked = Boolean(autoState.enabled);
+  $("autoInterval").value = String(autoState.intervalHours || 6);
+  $("autoInterval").disabled = !autoState.enabled;
+  // Linux has no supported login-item API, so the switch is hidden rather than
+  // shown doing nothing.
+  $("autoLaunchWrap").classList.toggle("hidden", autoState.autoLaunchSupported === false);
+
+  const sub = $("autoStatus");
+  const last = autoState.lastRunAt ? lastSyncText(autoState.lastRunAt).text.replace("Last sync: ", "") : "";
+  const r = autoState.lastResult;
+  const outcome = r
+    ? (r.error ? ` · last run failed: ${r.error}` : r.failed ? ` · ${r.ok} synced, ${r.failed} failed` : ` · ${r.ok} synced`)
+    : "";
+
+  if (autoState.running) {
+    sub.className = "auto-sub run";
+    sub.textContent = "Syncing now — every assessee with a saved portal login.";
+  } else if (autoState.enabled) {
+    sub.className = "auto-sub on";
+    /* The window IS the app on Windows and Linux: closing it quits, and a quit
+       app keeps no schedule. Said here rather than left to be discovered by a
+       practice that finds nothing synced for a week. */
+    const keepOpen = autoState.platform === "darwin" ? "" : " · leave this window open, or the schedule stops with it";
+    sub.textContent = `Every ${autoState.intervalHours} hours · next ${untilText(autoState.nextRunAt)}`
+      + (last ? ` · last ran ${last}` : " · not run yet") + outcome + keepOpen;
+  } else if (autoState.syncOnLaunch || autoState.autoLaunch) {
+    sub.className = "auto-sub";
+    sub.textContent = (autoState.autoLaunch ? "Starts with this computer. " : "")
+      + (autoState.syncOnLaunch ? "Syncs once when it starts." : "Syncing runs only when you press Sync selected.")
+      + (last ? ` Last ran ${last}.` : "");
+  } else {
+    sub.className = "auto-sub";
+    sub.textContent = "Off — syncing runs only when you press Sync selected.";
+  }
+}
+
+async function pushAuto(patch) {
+  try {
+    paintAuto(await window.connector.setAutoSync(patch));
+  } catch (err) {
+    alert(friendly(err));
+    // Put the switches back to what is actually true.
+    try { paintAuto(await window.connector.getAutoSync()); } catch { /* nothing more to try */ }
+  }
+}
+
+$("autoLaunch").addEventListener("change", () => pushAuto({ autoLaunch: $("autoLaunch").checked }));
+$("autoOnLaunch").addEventListener("change", () => pushAuto({ syncOnLaunch: $("autoOnLaunch").checked }));
+$("autoEvery").addEventListener("change", () => pushAuto({ autoSyncEnabled: $("autoEvery").checked }));
+$("autoInterval").addEventListener("change", () => pushAuto({ intervalHours: Number($("autoInterval").value) }));
+
+$("autoRunNow").addEventListener("click", async () => {
+  $("autoRunNow").disabled = true;
+  try { await window.connector.runAllNow(); }
+  catch (err) { alert(friendly(err)); }
+  finally { $("autoRunNow").disabled = false; }
+});
+
+window.connector.onAutoState(paintAuto);
+
+/* A sync the WINDOW did not start — the scheduler's — still owns the browser
+   and the portal sessions, so the controls have to reflect it. Without this the
+   buttons sat enabled through an unattended run and a press produced only "A
+   sync is already running." */
+window.connector.onSyncBusy((evt) => {
+  setControlsDisabled(Boolean(evt.running));
+  if (!evt.running) refreshRowsAfterRun();
+});
+
+/* An unattended run finished: bring the list's own "last sync" values back from
+   Firestore. Selection is preserved — someone may have been part-way through
+   picking rows for a manual run when the schedule fired. */
+async function refreshRowsAfterRun() {
+  const keep = new Set(selected);
+  try {
+    await loadAssessees();
+    keep.forEach((id) => { if (JOBS.some((j) => j.assesseeId === id)) selected.add(id); });
+    renderRows();
+    syncSelectionUI();
+  } catch { /* the list is still readable; Reload will fix it */ }
+}
+
+// The status line counts down, so a panel left open does not sit on a stale
+// "in 6h" for the rest of the afternoon.
+setInterval(() => { if (autoState.enabled && !autoState.running) paintAuto(autoState); }, 60000);
 
 // --- Version + update notice --------------------------------------------------
 // Driven by the main process (see updater.js). Windows downloads in the

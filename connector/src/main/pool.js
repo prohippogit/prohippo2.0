@@ -11,6 +11,7 @@
 "use strict";
 
 const { chromium } = require("playwright");
+const fb = require("./firebaseClient");
 const { POOL } = require("./config");
 const { jsleep } = require("./pacing");
 const { runPanSync } = require("./portalWorker");
@@ -92,7 +93,12 @@ async function runPool(jobs, onEvent, opts = {}) {
       try {
         emit("start", `Sync started (${scope})`, "info", 3);
         const r = await runPanSync({ context, job, scope, emit });
-        results.push({ assesseeId: job.assesseeId, ok: true, ...r });
+        /* Stamped here rather than inside the fetch, because "synced" means the
+           whole PAN came back clean — and because a PAN with nothing new to
+           fetch reaches this line without any ingest having run. */
+        const syncedAt = await fb.markSynced(job.assesseeId);
+        results.push({ assesseeId: job.assesseeId, ok: true, syncedAt, ...r });
+        if (syncedAt) emit("synced", syncedAt, "info");
         const parts = [];
         if (r.proceedings) parts.push(`${r.proceedings} proceedings`);
         if (r.notices) parts.push(`${r.notices} docs`);

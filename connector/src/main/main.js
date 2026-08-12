@@ -12,6 +12,9 @@ const googleAuth = require("./googleAuth");
 const { runPool } = require("./pool");
 const { fetchMasterForPan, createAssessee } = require("./assessees");
 const { initUpdater } = require("./updater");
+const settings = require("./settings");
+const autoStart = require("./autoStart");
+const scheduler = require("./scheduler");
 
 const isDev = process.argv.includes("--dev");
 let win = null;
@@ -57,9 +60,17 @@ ipcMain.handle("auth:google", async () => {
   return fb.signInWithGoogleIdToken(idToken);
 });
 
-// Restore a remembered session, so a returning user isn't asked for a code.
-// Returns null when there's nothing to restore — the UI then shows sign-in.
-ipcMain.handle("auth:silent", async () => fb.signInSilently());
+/* Restore a remembered session, so a returning user isn't asked for a code.
+   Returns null when there's nothing to restore — the UI then shows sign-in.
+
+   The launch sync hangs off THIS, not off app-ready: with nobody signed in
+   there is nothing to sync, and on a machine that has just booted the device
+   key is still being redeemed over a network that may not be up yet. */
+ipcMain.handle("auth:silent", async () => {
+  const user = await fb.signInSilently();
+  if (user) scheduler.syncOnLaunchIfWanted().catch((err) => console.warn("[launch sync]", (err && err.message) || err));
+  return user;
+});
 
 ipcMain.handle("auth:signOut", async () => {
   await fb.signOutUser();
@@ -68,12 +79,80 @@ ipcMain.handle("auth:signOut", async () => {
 
 ipcMain.handle("auth:current", async () => fb.currentUser());
 
-// jobs: [{ assesseeId, pan, label, scope, knowns }]
-ipcMain.handle("sync:run", async (_e, { jobs, scope, headless }) => {
+/* ONE sync at a time, whoever asked for it.
+ *
+ * The button and the scheduler go through here together. Two pools at once
+ * would put twice the capped number of portal sessions on one residential IP —
+ * the single thing the pacing everywhere else exists to prevent — and the two
+ * runs would fetch the same PANs over each other. */
+let syncInFlight = false;
+const isBusy = () => syncInFlight;
+
+async function runSync({ jobs, scope, headless, trigger = "manual" }) {
   if (!fb.currentUser()) throw new Error("Sign in first.");
-  const onEvent = (evt) => send("sync:event", evt);
-  const results = await runPool(jobs, onEvent, { scope, headless });
-  return results;
+  if (syncInFlight) throw new Error("A sync is already running.");
+  syncInFlight = true;
+  send("sync:busy", { running: true, trigger });
+  try {
+    // An unattended run has no selection to work from: it takes every PAN that
+    // has a stored portal login, which is exactly what the list shows.
+    const list = jobs || (await fb.listPortalAssessees()).map((a) => ({
+      assesseeId: a.id,
+      pan: a.pan || a.portalUserId,
+      label: a.name || a.pan,
+      dob: a.dob || "",
+    }));
+    if (!list.length) return [];
+    // Unattended runs are always hidden: a browser window taking the screen on
+    // a machine somebody else is using is not acceptable.
+    return await runPool(list, (evt) => send("sync:event", evt), {
+      scope,
+      headless: trigger === "manual" ? headless : true,
+    });
+  } finally {
+    syncInFlight = false;
+    send("sync:busy", { running: false, trigger });
+  }
+}
+
+// jobs: [{ assesseeId, pan, label, scope, knowns }]
+ipcMain.handle("sync:run", async (_e, { jobs, scope, headless }) => runSync({ jobs, scope, headless, trigger: "manual" }));
+
+/* ---- automatic syncing ---------------------------------------------------
+   Settings live in settings.json; the timer and the launch run live in
+   scheduler.js. This process only wires them to the window. */
+const autoPayload = () => ({
+  ...settings.read(),
+  autoLaunch: autoStart.isEnabled(),          // what the OS says, not what we stored
+  autoLaunchSupported: autoStart.supported(),
+  // The window is the app everywhere except macOS, so the UI can say whether
+  // closing it would stop the schedule.
+  platform: process.platform,
+  ...scheduler.state(),
+});
+
+ipcMain.handle("auto:get", async () => autoPayload());
+
+ipcMain.handle("auto:set", async (_e, patch = {}) => {
+  const next = {};
+  for (const k of ["syncOnLaunch", "autoSyncEnabled", "intervalHours", "autoScope"]) {
+    if (k in patch) next[k] = patch[k];
+  }
+  if (Object.keys(next).length) settings.write(next);
+  // The login item is the OS's, not ours: set it, then report what it says.
+  if ("autoLaunch" in patch) {
+    const on = autoStart.setEnabled(patch.autoLaunch);
+    settings.write({ autoLaunch: on });
+  }
+  scheduler.refresh();
+  return autoPayload();
+});
+
+// "Sync everything now", from the automatic panel rather than the selection.
+ipcMain.handle("auto:runNow", async () => {
+  if (!fb.currentUser()) throw new Error("Sign in first.");
+  await scheduler.runNow("manual");
+  return scheduler.state();
 });
 
 // List assessees that have a stored portal credential, for the UI pick-list.
@@ -108,6 +187,12 @@ ipcMain.handle("assessee:create", async (_e, { form, portalPassword, saveLogin }
 app.whenReady().then(() => {
   fb.init();
   createWindow();
+  scheduler.start({
+    isSignedIn: () => Boolean(fb.currentUser()),
+    isBusy,
+    runSync: ({ scope, trigger }) => runSync({ scope, trigger }),
+    onState: (st) => send("auto:state", { ...st, platform: process.platform, autoLaunch: autoStart.isEnabled(), autoLaunchSupported: autoStart.supported(), syncOnLaunch: settings.read().syncOnLaunch }),
+  });
   // Check for a new build shortly after launch. Windows installs it on quit;
   // macOS can't self-update unsigned, so it offers a download link instead.
   initUpdater(win);
@@ -119,3 +204,5 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("before-quit", () => scheduler.stop());

@@ -244,3 +244,25 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary);cursor:p
 }
 .toast.ok{border-color:rgba(32,185,120,.45)}
 .toast.warn{border-color:rgba(232,163,23,.45)}
+
+/* ---- automatic sync ------------------------------------------------------
+   Sits between the toolbar and the list: it governs the whole list, not any
+   row in it, and it has to be visible without being the loudest thing on the
+   screen — most of the time it is simply reporting that nothing is due. */
+.autobar{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:13px 15px;margin:0 0 14px;
+}
+.auto-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.auto-title{font-size:13px;font-weight:800;letter-spacing:-.01em}
+.auto-sub{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.5;max-width:70ch}
+.auto-sub.on{color:#b7acff}
+.auto-sub.run{color:#5fe0a3}
+.auto-switches{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:11px}
+.auto-switches .chk{font-size:12px}
+.auto-switches .fsel{padding:6px 8px;font-size:12px}
+/* When this PAN last came back clean. Its own line under the PAN, because it
+   answers a different question from the progress bar beside it: that one is
+   about this run, this one is about whether the row was ever up to date. */
+.nm .last{font-size:10.5px;color:var(--muted-2);margin-top:3px}
+.nm .last.never{color:var(--warn)}

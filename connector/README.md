@@ -53,6 +53,10 @@ connector/
     timing.js        per-phase stopwatch reported per PAN
     pacing.js        rand / jsleep / PACE / POLL (ported timings)
     pool.js          worker pool: cap 5, randomised staggered launch
+    settings.js      the switches, remembered between launches
+    autoStart.js     "start when I sign in" — the OS's own login item
+    scheduler.js     unattended syncing: once at launch, then every N hours
+    schedulePlan.js  when the next run is due (pure, tested)
     portalWorker.js  ONE PAN in one isolated context (scaffold + porting plan)
     portalMaster.js  one PAN's profile / jurisdiction / contact, mapped
     assessees.js     add an assessee: fetch from the portal, then create it
@@ -131,10 +135,76 @@ half-finished save.
 The password is in memory for the length of the login and is never written to
 disk here — the same rule the sync follows.
 
+## Syncing without being asked
+
+Everything below is **off until it is switched on**, in the *Automatic sync*
+panel above the list. An app that installs itself into startup and begins
+signing in to clients' income-tax portals unattended, because it was installed
+once, is not something to assume anybody wants.
+
+| Switch | What it does |
+|--------|--------------|
+| **Start when I sign in to this computer** | Registers the OS's own login item — a Launch Agent on macOS, a Run key on Windows. Nothing is hand-written into either. The switch reads its state back FROM the OS, so removing the app from Login Items or Task Manager's Startup tab is reflected here rather than contradicted. |
+| **Sync as soon as it starts** | One sync after the session is restored. Hung off the silent sign-in and not off launch: with nobody signed in there is nothing to sync, and on a machine that has just booted the device key is still being redeemed over a network that may not be up. |
+| **Keep syncing every N hours** | 3, 6, 12 or 24; six by default. For the machine nobody restarts — the firm's server in the corner, where "sync at launch" would fire once in June and never again. |
+
+An unattended run takes **every PAN with a stored portal login** and is always
+hidden, whatever "Run hidden" is set to: a browser window taking the screen on a
+machine somebody else is using is not acceptable.
+
+**One sync at a time, whoever asked for it.** The button and the scheduler share
+a single lock. Two pools at once would put twice the capped number of portal
+sessions on one residential IP — the single thing the pacing everywhere else
+exists to prevent — and both runs would fetch the same PANs over each other.
+While the schedule is running, the window's own controls disable themselves and
+say so.
+
+### How the timing behaves
+
+`schedulePlan.js` owns the arithmetic and is the one part of this with tests,
+because both failure modes are silent: a schedule that never fires looks exactly
+like one with nothing to do, and one that fires constantly is noticed only by
+the income-tax portal.
+
+- **Counted from the last run, not from launch.** A server rebooted hourly still
+  syncs every six hours.
+- **Never run → due now.** Switching it on at 9am on a machine that was off all
+  week syncs at 9am, not at 3pm.
+- **Asleep through four intervals → one run, not four.** The next moment is
+  computed from the wall clock on every wake-up, rather than counted off a
+  ticking interval.
+- **A last-run stamp in the future is ignored.** A server whose clock is wrong at
+  boot and corrects a minute later would otherwise park the schedule days out and
+  never run again.
+- **The timer never waits more than half an hour** before re-reading the clock.
+  That ceiling is what lets a clock correction, a VM restore or a timezone change
+  recover on their own.
+- **The stamp is written whether the run succeeded or failed.** A portal that is
+  down at 6am must not become a retry every minute for the rest of the day.
+
+### Keep the window open
+
+On Windows and Linux the window IS the app: closing it quits, and a quit app
+keeps no schedule. The panel says so while the interval switch is on. macOS
+keeps running with the window closed, as it always has.
+
+### Last sync, per assessee
+
+Every row says when that PAN last came back clean — "today, 04:30 am", "Sun, 10
+Aug, 10:15 pm", or **Never synced** in amber. The day is named because on a list
+that syncs by itself the question is usually "did it run overnight?".
+
+This is stamped by the connector on every successful run (`markSynced`), not
+inferred from what arrived. The list previously read `portalNoticeSyncedAt`,
+which only moves when a NEW notice is stored — so a PAN with a clean compliance
+record, which is most of them, synced every six hours and still read "never
+synced". The web app's own "Last synced" line reads the same field and gets the
+same correction.
+
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.9.0` — with a **Check for updates** link beside it. Press it and the bar
+`v1.10.0` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.
@@ -217,6 +287,8 @@ reaches it.
 **Working now:**
 
 - Practitioner sign-in.
+- **Automatic syncing** — start with the computer, sync on launch, and keep
+  syncing every N hours (see "Syncing without being asked" above).
 - PAN pick-list — `assessees:list` reads `users/{uid}/assessees` (where
   `portalCredSet == true`) directly from Firestore under the existing security
   rules, so the board shows real PANs.

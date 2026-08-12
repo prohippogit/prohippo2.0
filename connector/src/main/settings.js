@@ -34,6 +34,12 @@ const DEFAULTS = {
      schedulePlan.js. Configurable so it can be widened, not so it can be
      switched off — 0 is accepted but is a choice somebody has to make. */
   jitterPct: 0.15,
+  /* Overnight pause. On by default and midnight to six: randomised timing makes
+     the rhythm human, but it cannot make 03:41 a plausible hour for the
+     practitioner whose account it is to be signing in. */
+  quietEnabled: true,
+  quietFrom: 0,
+  quietTo: 6,
 };
 
 // Hours between unattended runs. The floor is deliberate: this traffic goes to
@@ -48,6 +54,14 @@ const clampJitter = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) return DEFAULTS.jitterPct;
   return Math.min(n, MAX_JITTER);
+};
+
+// An hour of the day, 0–23. A window whose ends are equal is ignored by
+// schedulePlan (it would read as either no pause or a permanent one).
+const clampHour = (v, fallback) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(23, Math.max(0, Math.round(n)));
 };
 
 const clampInterval = (v) => {
@@ -74,6 +88,9 @@ function read() {
     intervalHours: clampInterval(stored.intervalHours),
     autoScope: SCOPES.includes(stored.autoScope) ? stored.autoScope : DEFAULTS.autoScope,
     jitterPct: clampJitter(stored.jitterPct),
+    quietEnabled: stored.quietEnabled === undefined ? DEFAULTS.quietEnabled : Boolean(stored.quietEnabled),
+    quietFrom: clampHour(stored.quietFrom, DEFAULTS.quietFrom),
+    quietTo: clampHour(stored.quietTo, DEFAULTS.quietTo),
     // Not preferences — the two timestamps that make the schedule survive a
     // restart. `lastAutoRunAt` stops a rebooted machine syncing on every boot;
     // `nextAutoRunAt` is the randomised target, drawn once per cycle so it does
@@ -88,6 +105,8 @@ function write(patch) {
   const next = { ...read(), ...patch };
   next.intervalHours = clampInterval(next.intervalHours);
   next.jitterPct = clampJitter(next.jitterPct);
+  next.quietFrom = clampHour(next.quietFrom, DEFAULTS.quietFrom);
+  next.quietTo = clampHour(next.quietTo, DEFAULTS.quietTo);
   if (!SCOPES.includes(next.autoScope)) next.autoScope = DEFAULTS.autoScope;
   cache = next;
   try {

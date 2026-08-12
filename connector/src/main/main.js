@@ -145,7 +145,7 @@ ipcMain.handle("auto:get", async () => autoPayload());
 
 ipcMain.handle("auto:set", async (_e, patch = {}) => {
   const next = {};
-  for (const k of ["syncOnLaunch", "autoSyncEnabled", "intervalHours", "autoScope"]) {
+  for (const k of ["syncOnLaunch", "autoSyncEnabled", "intervalHours", "autoScope", "quietEnabled", "quietFrom", "quietTo"]) {
     if (k in patch) next[k] = patch[k];
   }
   if (Object.keys(next).length) settings.write(next);

@@ -836,6 +836,18 @@ function untilText(iso) {
   return m ? `in ${h}h ${m}m` : `in ${h}h`;
 }
 
+// 00:00 … 23:00, once, for the two quiet-hour pickers.
+(function fillHourPickers() {
+  const options = Array.from({ length: 24 }, (_, h) => {
+    const label = new Date(2026, 0, 1, h).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    return `<option value="${h}">${label}</option>`;
+  }).join("");
+  $("quietFrom").innerHTML = options;
+  $("quietTo").innerHTML = options;
+})();
+
+const hourLabel = (h) => new Date(2026, 0, 1, Number(h) || 0).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
 function paintAuto(st) {
   autoState = st || {};
   $("autoLaunch").checked = Boolean(autoState.autoLaunch);
@@ -843,6 +855,11 @@ function paintAuto(st) {
   $("autoEvery").checked = Boolean(autoState.enabled);
   $("autoInterval").value = String(autoState.intervalHours || 6);
   $("autoInterval").disabled = !autoState.enabled;
+  $("quietOn").checked = Boolean(autoState.quietEnabled);
+  $("quietFrom").value = String(autoState.quietFrom ?? 0);
+  $("quietTo").value = String(autoState.quietTo ?? 6);
+  $("quietFrom").disabled = !autoState.quietEnabled;
+  $("quietTo").disabled = !autoState.quietEnabled;
   // Linux has no supported login-item API, so the switch is hidden rather than
   // shown doing nothing.
   $("autoLaunchWrap").classList.toggle("hidden", autoState.autoLaunchSupported === false);
@@ -873,8 +890,13 @@ function paintAuto(st) {
        two days running. Saying "every 6 hours" would describe something this
        deliberately is not. */
     const spread = autoState.jitterPct ? ` ± ${Math.round(autoState.jitterPct * 100)}%` : "";
+    /* When the pause is in force, say THAT first: "next in 2h 40m" during the
+       small hours otherwise reads as a schedule that ignored the setting. */
+    const paused = autoState.inQuietHours
+      ? ` · paused until about ${hourLabel(autoState.quietTo)}`
+      : (autoState.quietEnabled ? ` · pauses ${hourLabel(autoState.quietFrom)}–${hourLabel(autoState.quietTo)}` : "");
     sub.textContent = `About every ${autoState.intervalHours} hours${spread}, randomised · next ${untilText(autoState.nextRunAt)}`
-      + (last ? ` · last ran ${last}` : " · not run yet") + outcome + keepOpen;
+      + paused + (last ? ` · last ran ${last}` : " · not run yet") + outcome + keepOpen;
   } else if (autoState.syncOnLaunch || autoState.autoLaunch) {
     sub.className = "auto-sub";
     sub.textContent = (autoState.autoLaunch ? "Starts with this computer. " : "")
@@ -900,6 +922,9 @@ $("autoLaunch").addEventListener("change", () => pushAuto({ autoLaunch: $("autoL
 $("autoOnLaunch").addEventListener("change", () => pushAuto({ syncOnLaunch: $("autoOnLaunch").checked }));
 $("autoEvery").addEventListener("change", () => pushAuto({ autoSyncEnabled: $("autoEvery").checked }));
 $("autoInterval").addEventListener("change", () => pushAuto({ intervalHours: Number($("autoInterval").value) }));
+$("quietOn").addEventListener("change", () => pushAuto({ quietEnabled: $("quietOn").checked }));
+$("quietFrom").addEventListener("change", () => pushAuto({ quietFrom: Number($("quietFrom").value) }));
+$("quietTo").addEventListener("change", () => pushAuto({ quietTo: Number($("quietTo").value) }));
 
 $("autoRunNow").addEventListener("click", async () => {
   $("autoRunNow").disabled = true;

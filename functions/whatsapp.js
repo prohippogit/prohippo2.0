@@ -22,8 +22,17 @@
 "use strict";
 
 const { onRequest } = require("firebase-functions/v2/https");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const crypto = require("node:crypto");
+
+const {
+  whatsAppEnabledFor, userReachability, istDate,
+  shouldAlertNotice, noticeAlertParams,
+  isHearingLive, hearingReminderParams,
+  burstDecision, BURST_MAX,
+} = require("./whatsappCore");
 
 /* Tenant-specific base, e.g. https://live-mt-server.wati.io/123456 — it is not
    a shared host, so it is configuration rather than a constant. The token is a
@@ -72,6 +81,9 @@ const MEDIA_MODE = "body"; // "body" — top-level media object | "header-param"
 const TEMPLATES = {
   ph_doc_request_v1: { languages: ["en"], media: "document", feature: "docRequest" },
   ph_notice_alert_user_v1: { languages: ["en"], media: null, feature: "noticeAlertUser" },
+  // No variables at all — see burstDecision() in whatsappCore.js for why it
+  // carries no count.
+  ph_notice_burst_user_v1: { languages: ["en"], media: null, feature: "noticeAlertUser" },
   ph_notice_alert_client_v1: { languages: ["en"], media: null, feature: "noticeAlertClient" },
   ph_hearing_reminder_user_v1: { languages: ["en"], media: null, feature: "hearingReminder" },
   ph_cause_list_weekly_v1: { languages: ["en"], media: "document", feature: "causeList" },
@@ -138,7 +150,7 @@ const START_WORDS = new Set(["start", "unstop", "resume", "subscribe", "shuru ka
 const E164_RE = /^\+91[6-9]\d{9}$/;
 const digitsOf = (e164) => String(e164 || "").replace(/\D/g, "");
 
-exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend }) {
+exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, recordSpend }) {
   /* ---------------- opt-out, kept globally ----------------
    *
    * Keyed on the number rather than on (practice, number), because a person who
@@ -237,9 +249,20 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend }) {
       const body = {
         template_name: template,
         broadcast_name: `${template}_${new Date().toISOString().slice(0, 10)}`,
-        // WATI takes positional variables as name/value pairs, where the name is
-        // the number inside the braces: {{1}} is {name:"1"}.
-        parameters: (params || []).map((value, i) => ({ name: String(i + 1), value: String(value ?? "") })),
+        /* WATI takes positional variables as name/value pairs, where the name is
+           the number inside the braces: {{1}} is {name:"1"}.
+
+           EMPTY IS NOT ALLOWED. Meta rejects a send whose parameter is an empty
+           string, so one missing bench would fail an otherwise perfect hearing
+           reminder. Each message builder already substitutes something true —
+           "not stated", the authority instead of the bench — and this is the
+           backstop under them, logged so a gap surfaces rather than becoming an
+           em-dash nobody questions. */
+        parameters: (params || []).map((value, i) => {
+          const v = String(value ?? "").trim();
+          if (!v) console.warn(`WhatsApp ${template}: parameter ${i + 1} was empty`);
+          return { name: String(i + 1), value: v || "—" };
+        }),
       };
       // Meta requires the language of an approved variant; a template approved
       // only in English must be asked for in English.
@@ -516,13 +539,196 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend }) {
     }
   }
 
+  /* ---------------- claiming a send, exactly once ----------------
+   *
+   * `users/{uid}/waSent/{key}` is created transactionally BEFORE the message
+   * goes out, and a key that already exists means somebody already sent it.
+   *
+   * CLAIMED FIRST, AND NOT RELEASED ON FAILURE. The instinct is to delete the
+   * claim when a send fails so it can be retried, and it is the wrong instinct
+   * here: Cloud Functions delivers a trigger more than once as a matter of
+   * course, and a hearing sweep that half-failed will run again tomorrow.
+   * Releasing turns "we tried and it failed, and the log says so" into "the
+   * client got the same message four times", and only one of those is a
+   * problem you can apologise for. The failure is recorded on the
+   * communications row either way, which is where a practitioner looks. */
+  async function claimOnce(uid, key, meta = {}) {
+    const ref = db.doc(`users/${uid}/waSent/${key}`);
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists) return false;
+      tx.set(ref, { at: new Date().toISOString(), ...meta });
+      return true;
+    });
+  }
+
+  /* The burst counter lives beside the claims, under a key no hash can collide
+     with — every other document here is a hex digest. */
+  const BURST_KEY = "_noticeBurst";
+
+  async function claimBurstSlot(uid) {
+    const ref = db.doc(`users/${uid}/waSent/${BURST_KEY}`);
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const decision = burstDecision(snap.exists ? snap.data() : null, Date.now());
+      tx.set(ref, decision.next, { merge: true });
+      return decision.action;
+    });
+  }
+
+  /* ---------------- 1. a notice arrives on the portal ----------------
+   *
+   * onDocumentCreated, not onDocumentWritten. A re-sync merges into an existing
+   * notice and an order summary writes `aiSummary` back onto it — both are
+   * updates, and neither is news. Creation is the only event that means "this
+   * is new", which is also what removes any need to reason about the other
+   * trigger on this same path re-firing this one.
+   *
+   * Firestore triggers must live in the database's region, so this is pinned to
+   * TRIGGER_REGION rather than taking the REGIONS array.
+   */
+  const onNoticeCreatedWhatsApp = onDocumentCreated(
+    {
+      document: "users/{uid}/notices/{noticeId}",
+      region: TRIGGER_REGION,
+      secrets: WATI_SECRETS,
+      maxInstances: 10,
+    },
+    async (event) => {
+      const snap = event.data;
+      if (!snap || !snap.exists) return;
+      const uid = event.params.uid;
+      const n = snap.data() || {};
+
+      const verdict = shouldAlertNotice(n, { today: istDate() });
+      if (!verdict.alert) return;
+
+      const profile = (await db.doc(`users/${uid}`).get().catch(() => null))?.data() || {};
+      if (!whatsAppEnabledFor(profile, "noticeAlertUser")) return;
+      const reach = userReachability(profile);
+      if (!reach.ok) return;
+
+      /* Keyed on the DIN, not the document id. The same notice can reach us
+         twice under two ids — once from the portal sync and once from a PDF a
+         practitioner uploaded and had parsed — and the person reading the alert
+         does not care which route it took. */
+      const identity = n.din || n.docKey || event.params.noticeId;
+      const key = "notice_" + crypto.createHash("sha1").update(identity).digest("hex").slice(0, 20);
+      if (!(await claimOnce(uid, key, { kind: "noticeAlertUser", noticeId: event.params.noticeId }))) return;
+
+      const action = await claimBurstSlot(uid);
+      if (action === "suppress") {
+        console.log("WhatsApp notice alert suppressed (burst) for", uid.slice(0, 8));
+        return;
+      }
+      if (action === "burst-notice") {
+        await deliver({
+          uid,
+          to: reach.mobile,
+          template: "ph_notice_burst_user_v1",
+          params: [],
+          recipientRole: "user",
+          subject: "More notices than can be sent one by one",
+        });
+        return;
+      }
+
+      await deliver({
+        uid,
+        to: reach.mobile,
+        template: "ph_notice_alert_user_v1",
+        params: noticeAlertParams(n),
+        assesseeId: n.assesseeId || "",
+        assessee: n.assessee || "",
+        recipientRole: "user",
+        subject: `New notice — ${n.assessee || "assessee"} ${n.section ? `u/s ${n.section}` : ""}`.trim(),
+        body: verdict.deadline,
+      });
+    }
+  );
+
+  /* ---------------- 2. tomorrow's hearings ----------------
+   *
+   * 11:30 IST, the day before. Not 7am: a reminder that lands before the office
+   * is open is read in bed and acted on by nobody, and by the time it matters it
+   * is above eleven other notifications. Late morning is when a practitioner
+   * can still ring a clerk, find the file, or send somebody.
+   *
+   * ONE MESSAGE PER HEARING, not a digest. Two hearings tomorrow sends two —
+   * a merged message hides the second under a "+1 more" that nobody taps.
+   */
+  const whatsappHearingReminders = onSchedule(
+    {
+      schedule: "30 11 * * *",
+      timeZone: "Asia/Kolkata",
+      region: PRIMARY_REGION,
+      secrets: WATI_SECRETS,
+      timeoutSeconds: 540,
+      maxInstances: 1,
+    },
+    async () => {
+      /* Only practices that switched WhatsApp on are read at all. The
+         alternative — listing every auth user and reading their profile, the way
+         the voice roster does — costs a document read per practice per day for
+         an answer that is almost always no. Firestore indexes map subfields
+         automatically, so `whatsapp.enabled` needs no composite index. */
+      const users = await db.collection("users").where("whatsapp.enabled", "==", true).get();
+      if (users.empty) return;
+
+      const tomorrow = istDate(new Date(), 1);
+      let sent = 0;
+
+      for (const userDoc of users.docs) {
+        const uid = userDoc.id;
+        const profile = userDoc.data() || {};
+        if (!whatsAppEnabledFor(profile, "hearingReminder")) continue;
+        const reach = userReachability(profile);
+        if (!reach.ok) continue;
+
+        try {
+          const hearings = await db.collection(`users/${uid}/hearings`).where("date", "==", tomorrow).get();
+          for (const h of hearings.docs) {
+            const hearing = h.data() || {};
+            if (!isHearingLive(hearing)) continue;
+
+            // Keyed with the offset so a T-3 sweep can be added later without
+            // colliding with the day-before one already sent for this hearing.
+            const key = `hearing_${h.id}_1`;
+            if (!(await claimOnce(uid, key, { kind: "hearingReminder", hearingId: h.id, date: tomorrow }))) continue;
+
+            await deliver({
+              uid,
+              to: reach.mobile,
+              template: "ph_hearing_reminder_user_v1",
+              params: hearingReminderParams(hearing, { when: "tomorrow" }),
+              assessee: hearing.assessee || "",
+              recipientRole: "user",
+              subject: `Hearing tomorrow — ${hearing.assessee || "assessee"}`,
+              body: `${hearing.date} ${hearing.time || ""}`.trim(),
+            });
+            sent += 1;
+          }
+        } catch (e) {
+          // One practice's bad day must not end the sweep for everybody else's.
+          console.error("hearing reminders failed for", uid.slice(0, 8), e.message || e);
+        }
+      }
+
+      console.log(`hearing reminders: ${sent} sent for ${tomorrow}`);
+    }
+  );
+
   return {
     watiWebhook,
+    onNoticeCreatedWhatsApp,
+    whatsappHearingReminders,
     // Used by the message senders in later phases, and by the tests.
     _whatsapp: {
       deliver,
       resolveLanguage,
       reserveQuota,
+      claimOnce,
+      claimBurstSlot,
       isOptedOut,
       setOptOut,
       clearOptOut,
@@ -531,6 +737,7 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, db, recordSpend }) {
       EVENT_STATUS,
       WATI_SECRETS,
       REGIONS,
+      BURST_MAX,
     },
   };
 };

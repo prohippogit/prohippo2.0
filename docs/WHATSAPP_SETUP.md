@@ -3,8 +3,9 @@
 How a hearing, a notice or an invoice reaches somebody on WhatsApp, and how
 ProHippo knows whether it arrived.
 
-**Status: phase 0 is implemented — the pipe, and nothing that uses it.** The six
-messages are phases 1–4 and are the plan, not code.
+**Status: phases 0 and 1 are implemented** — the pipe, plus the two messages
+that reach the practitioner themselves. The four client-facing messages are
+phases 2–4 and are the plan, not code.
 
 ---
 
@@ -189,6 +190,107 @@ To price it, read the per-message utility rate off the invoice, set
 
 ---
 
+## The two practitioner messages
+
+Both go to `profile.phone`, both are English-only, and neither needs a client's
+consent — which is why they shipped first. The pure rules behind them live in
+`functions/whatsappCore.js` so they can be tested without a Firebase project;
+`functions/whatsapp.js` is the wiring.
+
+### New notice on the portal
+
+`onNoticeCreatedWhatsApp`, a Firestore trigger on `users/{uid}/notices/{id}`.
+
+**`onDocumentCreated`, not `onDocumentWritten`.** A re-sync merges into an
+existing notice, and `onPortalOrderWritten` writes `aiSummary` back onto it —
+both are updates, and neither is news. Creation is the only event that means
+"this is new", which also removes any need to reason about the other trigger on
+this same path re-firing this one.
+
+Four guards, and the first is the one that matters:
+
+| Guard | Without it |
+|---|---|
+| `noticeDeadline(n) >= today` | Portal sync writes every historic notice it finds, so a practitioner is WhatsApped four years of back-history on the morning they sign up |
+| `source === "portal"` | They get told about the notice they just typed in |
+| DIN claim in `waSent/` | Cloud Functions delivers a trigger more than once as a matter of course; the same notice also reaches us twice when a PDF is uploaded and parsed alongside the sync |
+| Burst cap | See below |
+
+**Why a deadline and not an age cut-off.** "Issued in the last 7 days" was the
+first design, and it fails the case it most needs to handle: a 2022 matter
+re-listed for next week is exactly what a practitioner must hear about. The
+honest question is not *how old is this* but *is there anything still to do
+about it* — and a notice with no hearing coming and no reply due has nothing
+that needs saying at 11am.
+
+Orders are excluded. There is no reply to file against an assessment or penalty
+order; the answer to one is an appeal, which runs on its own clock and deserves
+its own message rather than being folded into this one.
+
+#### The burst cap
+
+`shouldAlertNotice` drops back-history, but it cannot see the case that spans
+documents: a two-hundred-client practice onboarding genuinely has twenty or
+thirty live notices, every one passing every guard, all arriving within minutes.
+
+So: **five an hour, then one message saying alerts are paused**, then silence
+until the hour is out.
+
+**The window is an hour, not a minute.** A minute was the first design and it
+guards nothing — a sync writes notices over several minutes, so the window
+resets mid-burst and lets five more through each time round.
+
+**The burst message carries no count.** The total is not knowable while notices
+are still arriving, and the dashboard's "last 24 hours" card has the real number
+anyway. A WhatsApp message that guesses at a figure the app can state exactly is
+worse than one that says "go and look".
+
+### Hearing reminder
+
+`whatsappHearingReminders`, `onSchedule("30 11 * * *", "Asia/Kolkata")`.
+
+**11:30, the day before.** Not 7am: a reminder that lands before the office is
+open is read in bed and acted on by nobody, and by the time it matters it sits
+under eleven other notifications. Late morning is when a practitioner can still
+ring a clerk, find the file, or send somebody.
+
+**One message per hearing, not a digest.** Two hearings tomorrow sends two — a
+merged message hides the second under a "+1 more" that nobody taps.
+
+Adjourned hearings are skipped: when one is adjourned the app writes a *new*
+hearing at the new date, so reminding about the old row would be reminding about
+a date that has moved.
+
+The sweep reads only practices that switched WhatsApp on
+(`where("whatsapp.enabled", "==", true)` — Firestore indexes map subfields
+automatically, so no composite index is needed). Listing every auth user the way
+the voice roster does would cost a document read per practice per day for an
+answer that is almost always no. One practice's failure is caught and logged so
+it cannot end the sweep for everybody else.
+
+### The clock
+
+`istDate()` applies the +5:30 offset explicitly rather than relying on
+`toISOString()`. The scheduler fires at the right IST moment, but the code
+inside runs on a UTC clock — at 19:00 UTC it is already tomorrow in India, and a
+sweep reading the UTC date would look up the wrong day's hearings and report,
+truthfully and uselessly, that there were none.
+
+### Sending exactly once
+
+`users/{uid}/waSent/{key}` is claimed transactionally *before* the message goes
+out. **The claim is not released when a send fails.** The instinct is to release
+so it can be retried, and it is the wrong instinct: triggers redeliver, and the
+hearing sweep runs again tomorrow. Releasing turns "we tried, it failed, and the
+log says so" into "the client got the same message four times", and only one of
+those is a problem you can apologise for. The failure is on the communications
+row either way, which is where a practitioner looks.
+
+Hearing keys carry the offset (`hearing_{id}_1`), so a T−3 sweep can be added
+later without colliding with the day-before reminder already sent.
+
+---
+
 ## Languages
 
 **A template is identified by (name, language).** Gujarati is a separate Meta
@@ -291,9 +393,67 @@ of them — never Marketing, which is dearer and blockable by the recipient.
 Each needs a **sample value for every variable** or Meta rejects the submission
 unread. Three need a **Document** header; upload any small PDF as the sample.
 
-Submit the four English-only practitioner templates first. They are what phase 1
-needs, and getting one approved teaches you what the reviewer wants before nine
-client-facing variants go in.
+**Phase 1 needs exactly three of them**, all English, none with a media header —
+so these are the ones to submit now:
+
+<details>
+<summary><code>ph_notice_alert_user_v1</code> — 7 variables</summary>
+
+```
+New notice on the portal.
+
+{{1}} ({{2}})
+Section {{3}} · AY {{4}}
+Issued {{5}}
+DIN {{6}}
+
+{{7}}
+
+Open ProHippo to review it and ask the client for documents.
+```
+
+Samples: `Rajesh M. Shah` · `ABCPS1234F` · `142(1)` · `2017-18` ·
+`12 August 2026` · `ITBA/AST/F/142(1)/2026-27/103412` ·
+`Hearing on 13 August 2026.`
+</details>
+
+<details>
+<summary><code>ph_hearing_reminder_user_v1</code> — 8 variables</summary>
+
+```
+Hearing reminder — {{1}}.
+
+{{2}} · AY {{3}}
+{{4}} at {{5}}
+Before {{6}}
+Mode: {{7}}
+{{8}}
+
+Open ProHippo for the papers and this week's cause list.
+```
+
+Samples: `tomorrow` · `Rajesh M. Shah` · `2017-18` · `13 August 2026` · `11:30` ·
+`ITAT, Ahmedabad A Bench` · `Physical` · `ITA No. 1244/Ahd/2024`
+
+`{{1}}` stays a variable although only ever "tomorrow" today — it costs nothing
+and means a T−3 sweep later needs no new approval.
+</details>
+
+<details>
+<summary><code>ph_notice_burst_user_v1</code> — no variables</summary>
+
+```
+More notices are arriving than can be sent one by one.
+
+Five have gone out in the last hour and others are still coming in, so further
+alerts are paused until the hour is out.
+
+Open ProHippo — the dashboard lists everything issued in the last 24 hours.
+```
+</details>
+
+Getting these three approved also teaches you what the reviewer wants before the
+nine client-facing variants go in.
 
 Meta's validator rejects, in roughly this order of frequency: a body that ends on
 a variable, two variables with nothing between them, a variable containing a
@@ -355,3 +515,7 @@ the client-facing three are the ones to suspect — which is why they ship last 
 | PDF messages fail, text ones work | `MEDIA_MODE` is the wrong shape for this tenant | Flip it; confirm with one live send |
 | A client is never reached | No consent recorded, or they replied STOP | Assessees → Groups shows both, with the STOP date |
 | Costs page shows "no rate" | Expected — WhatsApp is metered but unpriced | Set `WHATSAPP_INR_PER_UTILITY` after the first invoice |
+| No notice alerts at all | The notice is an order, hand-keyed, or has no future deadline — all deliberate | Function logs; `shouldAlertNotice` returns the reason |
+| Notice alerts stopped mid-sync | The burst cap tripped; expected on a first sync | One `ph_notice_burst_user_v1` was sent. Resumes after the hour |
+| Hearing reminder never arrives | Hearing marked Adjourned, or already claimed | `users/{uid}/waSent/hearing_{id}_1` — delete it to let the sweep resend |
+| Reminders arrive for the wrong day | Only possible if `istDate()` was bypassed | The sweep must never read `new Date().toISOString()` directly |

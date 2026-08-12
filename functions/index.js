@@ -2852,17 +2852,20 @@ Object.assign(
    with its own vendor, its own secrets and its own webhook, in a file that is
    long enough already.
 
-   This phase ships the pipe and nothing that uses it — address resolution,
-   consent, quota, the WATI call, the delivery log and the status webhook. The
-   six messages arrive in later phases.
+   The pipe — address resolution, consent, quota, the WATI call, the delivery
+   log and the status webhook — plus the two messages that reach the
+   practitioner themselves. The four client-facing ones follow.
    Setup: docs/WHATSAPP_SETUP.md */
 const whatsapp = require("./whatsapp").build({
   REGIONS,
   PRIMARY_REGION,
+  TRIGGER_REGION,
   db,
   recordSpend,
 });
 exports.watiWebhook = whatsapp.watiWebhook;
+exports.onNoticeCreatedWhatsApp = whatsapp.onNoticeCreatedWhatsApp;
+exports.whatsappHearingReminders = whatsapp.whatsappHearingReminders;
 
 /* ---------- ITAT email ingest ----------
    One inbound address per practice; the Tribunal's registration and hearing

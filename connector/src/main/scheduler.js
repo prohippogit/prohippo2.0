@@ -29,7 +29,6 @@ const settings = require("./settings");
 const plan = require("./schedulePlan");
 
 const MINUTE = 60 * 1000;
-const HOUR = 60 * MINUTE;
 
 // How soon to look again when a tick could not run. Signed out is the common
 // case at boot: the device key redeems over the network, which may not be up
@@ -41,16 +40,30 @@ let emit = () => {};
 let deps = null;      // { isSignedIn, isBusy, runSync }
 let running = false;  // an automatic run of ours is in flight
 let lastResult = null; // { at, ok, failed, total, error }
+let launchStartsAt = 0; // epoch ms while the launch sync is counting down
 
 const nowISO = () => new Date().toISOString();
 
-/* When the next unattended run is due. Based on the last one that actually
-   happened, so restarting the app does not restart the clock — a server
-   rebooted every hour would otherwise sync every hour. The arithmetic lives in
-   schedulePlan.js, where it is tested. */
+/* When the next unattended run is due.
+ *
+ * Not "the last run plus six hours": the target is DRAWN, once per cycle, from
+ * a range around the interval, and stored — so the portal never sees the same
+ * schedule two days running, and the countdown on screen does not jump about.
+ * The arithmetic lives in schedulePlan.js, where it is tested. */
 function nextRunAt(cfg = settings.read()) {
   if (!cfg.autoSyncEnabled) return null;
-  return plan.nextRunAt({ lastRunAt: cfg.lastAutoRunAt, intervalHours: cfg.intervalHours });
+  const due = plan.dueAt({
+    nextAutoRunAt: cfg.nextAutoRunAt,
+    lastRunAt: cfg.lastAutoRunAt,
+    intervalHours: cfg.intervalHours,
+    jitterPct: cfg.jitterPct,
+  });
+  // A target that had to be re-drawn (nothing stored, or a nonsense clock) is
+  // written back, so the next tick agrees with this one.
+  if (due > Date.now() && cfg.nextAutoRunAt !== new Date(due).toISOString()) {
+    settings.write({ nextAutoRunAt: new Date(due).toISOString() });
+  }
+  return due;
 }
 
 function state() {
@@ -64,6 +77,9 @@ function state() {
     nextRunAt: next ? new Date(Math.max(next, Date.now())).toISOString() : "",
     running,
     lastResult,
+    // Set only while the launch sync is waiting out its randomised delay.
+    launchStartsAt: launchStartsAt ? new Date(launchStartsAt).toISOString() : "",
+    jitterPct: cfg.jitterPct,
   };
 }
 
@@ -97,7 +113,7 @@ async function tick() {
   if (deps.isBusy()) { arm(RETRY_MS); publish(); return; }
 
   await runNow("schedule");
-  arm(settings.read().intervalHours * HOUR);
+  arm(plan.armDelay(nextRunAt()));
 }
 
 /* Run every PAN that has a stored portal login.
@@ -120,7 +136,13 @@ async function runNow(trigger) {
     console.warn(`[scheduler] ${trigger} sync failed:`, lastResult.error);
   } finally {
     running = false;
-    settings.write({ lastAutoRunAt: nowISO() });
+    const cfg2 = settings.read();
+    settings.write({
+      lastAutoRunAt: nowISO(),
+      // Drawn now, for the next cycle — a fresh draw every time, so two
+      // consecutive gaps are never the same length.
+      nextAutoRunAt: new Date(plan.planNextRun({ intervalHours: cfg2.intervalHours, jitterPct: cfg2.jitterPct })).toISOString(),
+    });
     publish();
   }
 }
@@ -141,12 +163,29 @@ function start({ isSignedIn, isBusy, runSync, onState }) {
  *
  * Called after sign-in is settled rather than at launch: with nobody signed in
  * there is nothing to sync, and the device key is redeemed over the network. */
+let launchTimer = null;
+
 async function syncOnLaunchIfWanted() {
   const cfg = settings.read();
   if (!cfg.syncOnLaunch) return false;
   if (!deps || !deps.isSignedIn() || deps.isBusy()) return false;
+
+  /* Not immediately. A machine switched on at 09:00 every weekday would
+     otherwise reach the portal at 09:00 every weekday — the same fingerprint
+     the interval jitter exists to avoid, by another route. A few minutes also
+     lets the network settle on a machine that has just booted. */
+  const wait = plan.launchDelayMs();
+  launchStartsAt = Date.now() + wait;
+  publish();
+  await new Promise((resolve) => { launchTimer = setTimeout(resolve, wait); });
+  launchTimer = null;
+  launchStartsAt = 0;
+
+  // Conditions are re-checked on the other side of the wait: somebody may have
+  // signed out, or pressed Sync selected, while it counted down.
+  if (!deps.isSignedIn() || deps.isBusy()) { publish(); return false; }
   await runNow("launch");
-  if (settings.read().autoSyncEnabled) arm(settings.read().intervalHours * HOUR);
+  if (settings.read().autoSyncEnabled) arm(plan.armDelay(nextRunAt()));
   return true;
 }
 
@@ -159,6 +198,9 @@ function refresh() {
   publish();
 }
 
-function stop() { disarm(); }
+function stop() {
+  disarm();
+  if (launchTimer) { clearTimeout(launchTimer); launchTimer = null; }
+}
 
 module.exports = { start, stop, refresh, state, runNow, syncOnLaunchIfWanted, nextRunAt };

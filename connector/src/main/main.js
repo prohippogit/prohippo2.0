@@ -15,6 +15,7 @@ const { initUpdater } = require("./updater");
 const settings = require("./settings");
 const autoStart = require("./autoStart");
 const scheduler = require("./scheduler");
+const { shuffle } = require("./schedulePlan");
 
 const isDev = process.argv.includes("--dev");
 let win = null;
@@ -96,12 +97,21 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
   try {
     // An unattended run has no selection to work from: it takes every PAN that
     // has a stored portal login, which is exactly what the list shows.
-    const list = jobs || (await fb.listPortalAssessees()).map((a) => ({
-      assesseeId: a.id,
-      pan: a.pan || a.portalUserId,
-      label: a.name || a.pan,
-      dob: a.dob || "",
-    }));
+    let list = jobs;
+    if (!list) {
+      list = (await fb.listPortalAssessees()).map((a) => ({
+        assesseeId: a.id,
+        pan: a.pan || a.portalUserId,
+        label: a.name || a.pan,
+        dob: a.dob || "",
+      }));
+      /* Dealt in a different order every run. The same list worked top to
+         bottom at roughly the same hour is a pattern in itself — one PAN always
+         first, one always last, every day — and the whole point of the
+         randomised schedule is that consecutive days do not look alike. A
+         manual run keeps the user's own order: they chose it. */
+      list = shuffle(list);
+    }
     if (!list.length) return [];
     // Unattended runs are always hidden: a browser window taking the screen on
     // a machine somebody else is using is not acceptable.

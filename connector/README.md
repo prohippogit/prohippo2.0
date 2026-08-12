@@ -146,7 +146,7 @@ once, is not something to assume anybody wants.
 |--------|--------------|
 | **Start when I sign in to this computer** | Registers the OS's own login item — a Launch Agent on macOS, a Run key on Windows. Nothing is hand-written into either. The switch reads its state back FROM the OS, so removing the app from Login Items or Task Manager's Startup tab is reflected here rather than contradicted. |
 | **Sync as soon as it starts** | One sync after the session is restored. Hung off the silent sign-in and not off launch: with nobody signed in there is nothing to sync, and on a machine that has just booted the device key is still being redeemed over a network that may not be up. |
-| **Keep syncing every N hours** | 3, 6, 12 or 24; six by default. For the machine nobody restarts — the firm's server in the corner, where "sync at launch" would fire once in June and never again. |
+| **Keep syncing about every N hours** | 3, 6, 12 or 24; six by default, and *about* is meant literally — see "Why it does not look robotic" below. For the machine nobody restarts — the firm's server in the corner, where "sync at launch" would fire once in June and never again. |
 
 An unattended run takes **every PAN with a stored portal login** and is always
 hidden, whatever "Run hidden" is set to: a browser window taking the screen on a
@@ -159,6 +159,31 @@ exists to prevent — and both runs would fetch the same PANs over each other.
 While the schedule is running, the window's own controls disable themselves and
 say so.
 
+### Why it does not look robotic
+
+A fixed schedule is a fingerprint. Everything *inside* a run has always been
+drawn from a range — `pacing.js` opens with "there are no fixed intervals
+anywhere in the sync path" — but the gap *between* runs was exact, and
+06:00:04 / 12:00:11 / 18:00:07 every day from one residential address is the
+easiest pattern in the world to read as automation. A human's own portal use is
+ragged, clustered in office hours, and never lands on the same second twice.
+
+So the schedule is deliberately imprecise, in four places:
+
+| | |
+|---|---|
+| **The interval is a range** | Drawn fresh every cycle: ±15% of the interval, or about a 1h48m window at six hours. Two consecutive gaps are never the same length. The floor is a quarter of the interval, so no draw can put two runs on top of each other, and the ceiling is 40% — configurable to widen, not to switch off. |
+| **Drawn once, then stored** | `nextAutoRunAt` is persisted. Re-drawing on every timer tick would be a target that never arrives and a countdown that jumps about. |
+| **The launch sync waits first** | 1–7 minutes, randomised. A machine switched on at 09:00 every weekday would otherwise reach the portal at 09:00 every weekday — the same fingerprint by another route. |
+| **The PANs are shuffled** | An unattended run deals them in a different order each time. The same list worked top to bottom is a pattern in itself: one PAN always first, one always last, every day. A manual run keeps the order you chose. |
+
+None of this changes what the portal sees *within* a run, which was already
+safe: at most five sessions at once, each in its own browser context, launched
+1.5–4.2s apart, with every request paced from a range.
+
+`connector-v1.10.0` is the first build with any of it — before that the connector
+only ever synced when somebody pressed a button.
+
 ### How the timing behaves
 
 `schedulePlan.js` owns the arithmetic and is the one part of this with tests,
@@ -167,7 +192,7 @@ like one with nothing to do, and one that fires constantly is noticed only by
 the income-tax portal.
 
 - **Counted from the last run, not from launch.** A server rebooted hourly still
-  syncs every six hours.
+  syncs about every six hours.
 - **Never run → due now.** Switching it on at 9am on a machine that was off all
   week syncs at 9am, not at 3pm.
 - **Asleep through four intervals → one run, not four.** The next moment is

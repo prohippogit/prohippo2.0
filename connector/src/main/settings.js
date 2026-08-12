@@ -29,6 +29,11 @@ const DEFAULTS = {
   autoSyncEnabled: false, // keep syncing on a timer while it runs
   intervalHours: 6,
   autoScope: "all",       // what an unattended run fetches
+  /* How far either side of the interval a run may land, as a fraction. The
+     point is that the portal never sees the same schedule twice; see
+     schedulePlan.js. Configurable so it can be widened, not so it can be
+     switched off — 0 is accepted but is a choice somebody has to make. */
+  jitterPct: 0.15,
 };
 
 // Hours between unattended runs. The floor is deliberate: this traffic goes to
@@ -37,6 +42,13 @@ const DEFAULTS = {
 const MIN_INTERVAL_HOURS = 1;
 const MAX_INTERVAL_HOURS = 24;
 const SCOPES = ["all", "eproc", "appeals"];
+
+const MAX_JITTER = 0.4;
+const clampJitter = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return DEFAULTS.jitterPct;
+  return Math.min(n, MAX_JITTER);
+};
 
 const clampInterval = (v) => {
   const n = Number(v);
@@ -61,9 +73,13 @@ function read() {
     autoSyncEnabled: Boolean(stored.autoSyncEnabled),
     intervalHours: clampInterval(stored.intervalHours),
     autoScope: SCOPES.includes(stored.autoScope) ? stored.autoScope : DEFAULTS.autoScope,
-    // Not a preference — when the last unattended run finished, so a restart
-    // does not reset the clock and start a run the moment the machine boots.
+    jitterPct: clampJitter(stored.jitterPct),
+    // Not preferences — the two timestamps that make the schedule survive a
+    // restart. `lastAutoRunAt` stops a rebooted machine syncing on every boot;
+    // `nextAutoRunAt` is the randomised target, drawn once per cycle so it does
+    // not move every time the timer looks at it.
     lastAutoRunAt: typeof stored.lastAutoRunAt === "string" ? stored.lastAutoRunAt : "",
+    nextAutoRunAt: typeof stored.nextAutoRunAt === "string" ? stored.nextAutoRunAt : "",
   };
   return cache;
 }
@@ -71,6 +87,7 @@ function read() {
 function write(patch) {
   const next = { ...read(), ...patch };
   next.intervalHours = clampInterval(next.intervalHours);
+  next.jitterPct = clampJitter(next.jitterPct);
   if (!SCOPES.includes(next.autoScope)) next.autoScope = DEFAULTS.autoScope;
   cache = next;
   try {
@@ -84,4 +101,4 @@ function write(patch) {
   return next;
 }
 
-module.exports = { read, write, DEFAULTS, MIN_INTERVAL_HOURS, MAX_INTERVAL_HOURS, SCOPES };
+module.exports = { read, write, DEFAULTS, MIN_INTERVAL_HOURS, MAX_INTERVAL_HOURS, MAX_JITTER, SCOPES };

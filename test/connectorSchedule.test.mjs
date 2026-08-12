@@ -1,72 +1,168 @@
-/* When the connector syncs by itself.
- *
- * These rules run on a machine nobody is watching — a firm's server left on in
- * the corner — so both failure modes are silent: a schedule that never fires
- * looks identical to one with nothing to do, and one that fires constantly is
- * only noticed by the income-tax portal. */
+/* When the connector syncs by itself, and why it never does so twice at the
+   same moment.
+
+   These rules run on a machine nobody is watching — a firm's server left on in
+   the corner — so every failure here is silent. A schedule that never fires
+   looks identical to one with nothing to do. One that fires constantly is
+   noticed only by the income-tax portal. And one that fires at exactly 06:00
+   every day, from one residential address, is the single easiest pattern for
+   that portal to read as automation.
+
+   Randomness is injected so each of those decisions can be pinned to a known
+   draw rather than observed and hoped about. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { nextRunAt, isDue, armDelay, HOUR, MIN_WAIT_MS, MAX_WAIT_MS } =
-  require("../connector/src/main/schedulePlan.js");
+const {
+  planNextRun, dueAt, isDue, armDelay, launchDelayMs, shuffle,
+  HOUR, MIN_WAIT_MS, MAX_WAIT_MS, DEFAULT_JITTER, MAX_JITTER,
+  LAUNCH_DELAY_MIN_MS, LAUNCH_DELAY_MAX_MS,
+} = require("../connector/src/main/schedulePlan.js");
 
 const NOW = Date.parse("2026-08-12T09:00:00.000Z");
 const at = (hoursAgo) => new Date(NOW - hoursAgo * HOUR).toISOString();
+// A draw of 0.5 is the middle of the range — i.e. no offset at all.
+const MID = () => 0.5;
+const LOW = () => 0;
+const HIGH = () => 0.999999;
+
+/* ---------------- the interval is a range, not a cadence ---------------- */
+
+test("the interval is drawn from a range, so no two gaps are alike", () => {
+  const six = 6 * HOUR;
+  // Middle of the draw is the nominal interval; the ends are ±15% of it.
+  assert.equal(planNextRun({ intervalHours: 6 }, NOW, MID), NOW + six);
+  assert.equal(planNextRun({ intervalHours: 6 }, NOW, LOW), NOW + six * (1 - DEFAULT_JITTER));
+  assert.ok(Math.abs(planNextRun({ intervalHours: 6 }, NOW, HIGH) - (NOW + six * (1 + DEFAULT_JITTER))) < 1000);
+});
+
+test("across many draws the spread is wide and always inside its bounds", () => {
+  // ~1h48m of spread at six hours: consecutive days share no pattern, and
+  // "every six hours" is still an honest description of the switch.
+  const six = 6 * HOUR;
+  let lo = Infinity, hi = -Infinity;
+  let seed = 1;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 2000; i++) {
+    const gap = planNextRun({ intervalHours: 6 }, NOW, rand) - NOW;
+    lo = Math.min(lo, gap); hi = Math.max(hi, gap);
+  }
+  assert.ok(lo >= six * (1 - DEFAULT_JITTER) - 1, "never earlier than the low bound");
+  assert.ok(hi <= six * (1 + DEFAULT_JITTER) + 1, "never later than the high bound");
+  assert.ok(hi - lo > 90 * 60 * 1000, `spread should be well over an hour, got ${(hi - lo) / 60000} min`);
+});
+
+test("no draw can put two runs on top of each other", () => {
+  // Even at the widest configurable jitter, the gap keeps a floor of a quarter
+  // of the interval — a sync minutes after the last one is the opposite of the
+  // point.
+  const gap = planNextRun({ intervalHours: 6, jitterPct: 5 }, NOW, LOW) - NOW;
+  assert.ok(gap >= (6 * HOUR) / 4, `floor not held: ${gap / 60000} min`);
+});
+
+test("the jitter fraction is clamped, and a nonsense one falls back", () => {
+  const six = 6 * HOUR;
+  // 400% would make the schedule meaningless; 40% is the ceiling.
+  assert.equal(planNextRun({ intervalHours: 6, jitterPct: 4 }, NOW, MID), NOW + six);
+  assert.equal(planNextRun({ intervalHours: 6, jitterPct: 4 }, NOW, HIGH) - NOW <= six * (1 + MAX_JITTER) + 1, true);
+  for (const bad of [NaN, -1, "soon", undefined]) {
+    assert.equal(planNextRun({ intervalHours: 6, jitterPct: bad }, NOW, LOW), NOW + six * (1 - DEFAULT_JITTER), `jitter ${bad}`);
+  }
+  // Zero is a deliberate choice and is honoured — an exact cadence, if somebody
+  // truly wants one.
+  assert.equal(planNextRun({ intervalHours: 6, jitterPct: 0 }, NOW, LOW), NOW + six);
+});
+
+/* ---------------- the target is drawn once, not per tick ---------------- */
+
+test("a stored target is honoured, so the countdown does not move under you", () => {
+  // Re-drawing on every timer tick would mean a target that never arrives and a
+  // countdown that jumps about.
+  const planned = new Date(NOW + 90 * 60 * 1000).toISOString();
+  assert.equal(dueAt({ nextAutoRunAt: planned, intervalHours: 6 }, NOW, LOW), Date.parse(planned));
+  assert.equal(isDue({ nextAutoRunAt: planned, intervalHours: 6 }, NOW), false);
+});
+
+test("a target that has arrived is due", () => {
+  const planned = new Date(NOW - 60 * 1000).toISOString();
+  assert.equal(isDue({ nextAutoRunAt: planned, lastRunAt: at(6), intervalHours: 6 }, NOW), true);
+});
+
+test("a target from a broken clock is re-drawn rather than obeyed", () => {
+  /* Two clock stories, not schedule stories: a machine that was off for days,
+     and one whose clock was wrong when the target was written. Honouring either
+     means never syncing again. */
+  const stale = new Date(NOW - 40 * HOUR).toISOString();
+  assert.equal(dueAt({ nextAutoRunAt: stale, lastRunAt: at(40), intervalHours: 6 }, NOW, MID), NOW, "long-past target → due now");
+
+  const wild = new Date(NOW + 40 * HOUR).toISOString();
+  const due = dueAt({ nextAutoRunAt: wild, lastRunAt: at(1), intervalHours: 6 }, NOW, MID);
+  assert.ok(due <= NOW + 6 * HOUR, "far-future target should be re-drawn, not honoured");
+});
 
 test("a schedule that has never run is due immediately", () => {
   // Switching it on at 9am on a machine that was off all week should sync now,
-  // not at 3pm.
-  assert.equal(nextRunAt({ intervalHours: 6 }, NOW), NOW);
-  assert.equal(nextRunAt({ lastRunAt: "", intervalHours: 6 }, NOW), NOW);
+  // not six hours from now.
+  assert.equal(dueAt({ intervalHours: 6 }, NOW, MID), NOW);
   assert.equal(isDue({ intervalHours: 6 }, NOW), true);
 });
 
-test("the next run is counted from the last one, not from launch", () => {
-  // A server rebooted every hour must still sync every six.
-  assert.equal(nextRunAt({ lastRunAt: at(2), intervalHours: 6 }, NOW), NOW + 4 * HOUR);
-  assert.equal(isDue({ lastRunAt: at(2), intervalHours: 6 }, NOW), false);
-  assert.equal(isDue({ lastRunAt: at(6), intervalHours: 6 }, NOW), true);
+test("with no stored target the gap is still counted from the last run", () => {
+  // A server rebooted every hour must not sync on every boot.
+  const due = dueAt({ lastRunAt: at(1), intervalHours: 6 }, NOW, MID);
+  assert.equal(due, Date.parse(at(1)) + 6 * HOUR);
+  assert.equal(isDue({ lastRunAt: at(1), intervalHours: 6 }, NOW, MID), false);
+  assert.equal(isDue({ lastRunAt: at(7), intervalHours: 6 }, NOW, MID), true);
 });
 
 test("a machine asleep through several intervals syncs once, not four times", () => {
-  // 30 hours later the run is overdue by a day; it is still one run.
-  const due = nextRunAt({ lastRunAt: at(30), intervalHours: 6 }, NOW);
-  assert.ok(due < NOW, "should be overdue");
-  assert.equal(isDue({ lastRunAt: at(30), intervalHours: 6 }, NOW), true);
-  // And the delay before that single run is the floor, not a negative sleep.
-  assert.equal(armDelay(due, NOW), MIN_WAIT_MS);
+  assert.equal(dueAt({ lastRunAt: at(30), intervalHours: 6 }, NOW, MID), NOW);
+  assert.equal(armDelay(dueAt({ lastRunAt: at(30), intervalHours: 6 }, NOW, MID), NOW), MIN_WAIT_MS);
 });
 
-test("a last-run stamp from the future does not park the schedule for ever", () => {
-  /* A server whose clock is wrong at boot and corrects a minute later writes a
-     timestamp days ahead. Trusting it would mean nothing ever runs again. */
-  const ahead = new Date(NOW + 48 * HOUR).toISOString();
-  assert.equal(nextRunAt({ lastRunAt: ahead, intervalHours: 6 }, NOW), NOW);
-  assert.equal(isDue({ lastRunAt: ahead, intervalHours: 6 }, NOW), true);
-});
-
-test("a nonsense interval falls back to six hours rather than to zero", () => {
-  // Zero or NaN would be a sync loop pointed at the income-tax portal.
-  for (const bad of [0, -3, NaN, undefined, "soon"]) {
-    assert.equal(nextRunAt({ lastRunAt: at(1), intervalHours: bad }, NOW), NOW + 5 * HOUR, `interval ${bad}`);
-  }
-});
+/* ---------------- waking up, starting up, and the order of work --------- */
 
 test("the wait never exceeds half an hour, however far away the run is", () => {
   /* The ceiling is what makes a clock correction, a VM restore or a timezone
      change recover on their own: the timer wakes, re-reads the wall clock and
-     re-arms, instead of sitting parked at a moment that no longer means
-     anything. */
+     re-arms. */
   assert.equal(armDelay(NOW + 6 * HOUR, NOW), MAX_WAIT_MS);
   assert.equal(armDelay(NOW + 10 * 60 * 1000, NOW), 10 * 60 * 1000);
   assert.equal(armDelay(NOW - HOUR, NOW), MIN_WAIT_MS, "an overdue run still waits a beat");
   assert.equal(armDelay(undefined, NOW), MAX_WAIT_MS, "a broken due time waits rather than spins");
 });
 
+test("the launch sync waits a randomised few minutes before starting", () => {
+  // A machine switched on at 09:00 every weekday would otherwise reach the
+  // portal at 09:00 every weekday.
+  assert.equal(launchDelayMs(LOW), LAUNCH_DELAY_MIN_MS);
+  assert.equal(launchDelayMs(HIGH), LAUNCH_DELAY_MAX_MS);
+  assert.ok(launchDelayMs(MID) > LAUNCH_DELAY_MIN_MS && launchDelayMs(MID) < LAUNCH_DELAY_MAX_MS);
+  assert.ok(LAUNCH_DELAY_MIN_MS >= 60 * 1000, "at least a minute, or it is not a delay");
+});
+
+test("the PANs are dealt in a different order each run, without losing any", () => {
+  // One PAN always first and one always last, every day, is a pattern too.
+  const list = Array.from({ length: 8 }, (_, i) => ({ id: i }));
+  let seed = 7;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const a = shuffle(list, rand).map((x) => x.id);
+  const b = shuffle(list, rand).map((x) => x.id);
+  assert.deepEqual([...a].sort((x, y) => x - y), [0, 1, 2, 3, 4, 5, 6, 7], "every PAN still there, exactly once");
+  assert.notDeepEqual(a, b, "two runs should not deal the same order");
+  assert.deepEqual(list.map((x) => x.id), [0, 1, 2, 3, 4, 5, 6, 7], "the caller's list is untouched");
+  assert.deepEqual(shuffle(undefined), []);
+});
+
 test("the interval is honoured across the range the UI offers", () => {
   for (const hours of [3, 6, 12, 24]) {
-    assert.equal(nextRunAt({ lastRunAt: at(0), intervalHours: hours }, NOW), NOW + hours * HOUR);
+    assert.equal(planNextRun({ intervalHours: hours }, NOW, MID), NOW + hours * HOUR);
+  }
+  // And a nonsense interval falls back to six hours rather than to zero, which
+  // would be a sync loop pointed at the portal.
+  for (const bad of [0, -3, NaN, undefined, "soon"]) {
+    assert.equal(planNextRun({ intervalHours: bad }, NOW, MID), NOW + 6 * HOUR, `interval ${bad}`);
   }
 });

@@ -856,14 +856,24 @@ function paintAuto(st) {
 
   if (autoState.running) {
     sub.className = "auto-sub run";
-    sub.textContent = "Syncing now — every assessee with a saved portal login.";
+    sub.textContent = "Syncing now — every assessee with a saved portal login, in a shuffled order.";
+  } else if (autoState.launchStartsAt) {
+    // The launch sync is waiting out its randomised delay, so the panel says so
+    // rather than looking like nothing happened.
+    sub.className = "auto-sub on";
+    sub.textContent = `Starting the first sync ${untilText(autoState.launchStartsAt)} — the delay is randomised, so it never lands on the same minute as yesterday.`;
   } else if (autoState.enabled) {
     sub.className = "auto-sub on";
     /* The window IS the app on Windows and Linux: closing it quits, and a quit
        app keeps no schedule. Said here rather than left to be discovered by a
        practice that finds nothing synced for a week. */
     const keepOpen = autoState.platform === "darwin" ? "" : " · leave this window open, or the schedule stops with it";
-    sub.textContent = `Every ${autoState.intervalHours} hours · next ${untilText(autoState.nextRunAt)}`
+    /* "About every" is the honest word: the gap is drawn fresh each cycle from
+       a range around the interval, so the portal never sees the same schedule
+       two days running. Saying "every 6 hours" would describe something this
+       deliberately is not. */
+    const spread = autoState.jitterPct ? ` ± ${Math.round(autoState.jitterPct * 100)}%` : "";
+    sub.textContent = `About every ${autoState.intervalHours} hours${spread}, randomised · next ${untilText(autoState.nextRunAt)}`
       + (last ? ` · last ran ${last}` : " · not run yet") + outcome + keepOpen;
   } else if (autoState.syncOnLaunch || autoState.autoLaunch) {
     sub.className = "auto-sub";

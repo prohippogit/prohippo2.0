@@ -2649,8 +2649,11 @@ exports.translateClientMessage = onCall(
   }
 );
 
+/* Memory and timeout are sized for the WhatsApp branch, not the email one: it
+   starts a headless Chromium to print the letter. Both secrets are mounted
+   because one callable now serves two vendors. */
 exports.sendClientMessage = onCall(
-  { region: REGIONS, secrets: [resendApiKey], maxInstances: 10 },
+  { region: REGIONS, secrets: [resendApiKey, ...whatsapp.secrets], maxInstances: 10, memory: "512MiB", timeoutSeconds: 120 },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
@@ -2886,6 +2889,40 @@ Object.assign(
     encryptSecret,
     decryptSecret,
   })
+);
+
+/* Send an invoice to the client's group head, or back to the practitioner when
+   there is no group head to send it to. The PDF is rendered server-side by the
+   same builder the Download PDF button uses — the caller supplies an invoice id
+   and nothing else, so a stolen session cannot post a document of its own for
+   ProHippo's number to deliver. */
+exports.sendInvoiceWhatsApp = onCall(
+  { region: REGIONS, secrets: whatsapp.secrets, maxInstances: 10, memory: "512MiB", timeoutSeconds: 120 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+    const invoiceId = String(request.data?.invoiceId || "");
+    if (!invoiceId) throw new HttpsError("invalid-argument", "invoiceId is required.");
+
+    const result = await whatsapp.sendInvoice({ uid, invoiceId });
+    if (!result.ok) {
+      const code = result.reason === "not-found" ? "not-found"
+        : ["no-head", "no-mobile", "no-consent", "opted-out", "disabled"].includes(result.reason)
+          ? "failed-precondition"
+          : "unavailable";
+      throw new HttpsError(code, result.message || "Couldn't send that invoice on WhatsApp.");
+    }
+    /* The caller is told WHICH of the two happened. A UI that says "sent" for
+       both would let a practitioner believe a client was invoiced when the
+       invoice actually came back to their own phone. */
+    return {
+      ok: true,
+      deliveredTo: result.deliveredTo,
+      recipientName: result.recipientName || "",
+      fallbackMessage: result.fallbackMessage || "",
+      communicationId: result.communicationId,
+    };
+  }
 );
 
 exports.watiWebhook = whatsapp.watiWebhook;

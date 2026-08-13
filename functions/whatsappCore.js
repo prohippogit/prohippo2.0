@@ -257,6 +257,54 @@ function docRequestParams(req, { headName, firmName } = {}) {
   ];
 }
 
+/* ---------------- invoices ---------------- */
+
+/* What the invoice is FOR, in one line: "Shah Textiles Pvt. Ltd. - Scrutiny
+   assessment, AY 2021-22". The assessee is named because an invoice goes to the
+   group head, who pays for several members and needs to know which one this is. */
+function invoiceLine(invoice) {
+  const i = invoice || {};
+  const who = String(i.assessee || "").trim();
+  const what = String(i.service || "").trim();
+  const ay = i.ay ? `AY ${i.ay}` : "";
+  const tail = [what, ay].filter(Boolean).join(", ");
+  return [who, tail].filter(Boolean).join(" \u2014 ") || "Professional fees";
+}
+
+/* The seven variables of ph_invoice_v1, in order.
+ *
+ * `amountLabel` arrives already formatted rather than being computed here.
+ * computeInvoiceTotals() in invoicePdf.js is the single implementation of what
+ * an invoice comes to - GST split, rounding and all - and a second one in this
+ * file would eventually disagree with the PDF attached to the same message. */
+function invoiceParams(invoice, { headName, firmName, amountLabel } = {}) {
+  const i = invoice || {};
+  return [
+    headName || i.assessee || "Sir/Madam",
+    i.number || "not numbered",
+    fmtDateLong(i.date) || "not stated",
+    invoiceLine(i),
+    amountLabel || "see the attached invoice",
+    fmtDateLong(i.due) || "on receipt",
+    firmName || "your tax practitioner",
+  ];
+}
+
+/* The four variables of ph_invoice_undeliverable_user_v1.
+ *
+ * A SILENT FALLBACK WOULD BE WORSE THAN NO FALLBACK. Sending the client's
+ * wording to the practitioner would leave them believing the client had been
+ * invoiced. This message says plainly that they were not, and what to fix. */
+function invoiceUndeliverableParams(invoice, { groupName } = {}) {
+  const i = invoice || {};
+  return [
+    i.number || "not numbered",
+    groupName || i.assessee || "this client",
+    i.assessee || "the assessee",
+    i.service || "professional fees",
+  ];
+}
+
 /* ---------------- printing the letter ---------------- */
 
 /*
@@ -486,6 +534,9 @@ module.exports = {
   proceedingLine,
   askableItems,
   docRequestParams,
+  invoiceLine,
+  invoiceParams,
+  invoiceUndeliverableParams,
   isHearingLive,
   hearingReminderParams,
   nextWeekRange,

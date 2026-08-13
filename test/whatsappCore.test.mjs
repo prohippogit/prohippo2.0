@@ -266,6 +266,48 @@ test("a bare request still produces five usable parameters", () => {
   for (const v of core.docRequestParams({}, {})) assert.ok(String(v).trim().length > 0);
 });
 
+/* ---------------- invoices ---------------- */
+
+const invoice = (over = {}) => ({
+  number: "PH/2026-27/0124", date: "2026-08-12", due: "2026-09-11",
+  assessee: "Shah Textiles Pvt. Ltd.", service: "Scrutiny assessment", ay: "2021-22",
+  ...over,
+});
+
+test("the invoice line names the assessee, because a group head pays for several", () => {
+  assert.equal(core.invoiceLine(invoice()), "Shah Textiles Pvt. Ltd. — Scrutiny assessment, AY 2021-22");
+  assert.equal(core.invoiceLine({ assessee: "Kavita R. Joshi", service: "ITR filing" }), "Kavita R. Joshi — ITR filing");
+  assert.equal(core.invoiceLine({}), "Professional fees");
+});
+
+test("the invoice carries seven parameters and not one of them is empty", () => {
+  const p = core.invoiceParams(invoice(), { headName: "Rajesh M. Shah", firmName: "Mehta & Co.", amountLabel: "₹1,32,000.00" });
+  assert.deepEqual(p, [
+    "Rajesh M. Shah", "PH/2026-27/0124", "12 August 2026",
+    "Shah Textiles Pvt. Ltd. — Scrutiny assessment, AY 2021-22",
+    "₹1,32,000.00", "11 September 2026", "Mehta & Co.",
+  ]);
+});
+
+test("an invoice with no due date still makes a sentence", () => {
+  // The template reads "Due by: {{6}}" — an empty parameter is rejected outright.
+  const p = core.invoiceParams(invoice({ due: "" }), { amountLabel: "₹500.00" });
+  assert.equal(p[5], "on receipt");
+  for (const v of p) assert.ok(String(v).trim().length > 0);
+});
+
+test("a bare invoice still produces seven usable parameters", () => {
+  for (const v of core.invoiceParams({}, {})) assert.ok(String(v).trim().length > 0);
+});
+
+test("the fallback tells the practitioner the client was NOT invoiced", () => {
+  /* A silent fallback would be worse than none: they would read the client's
+     own wording on their own phone and believe the invoice had gone out. */
+  const p = core.invoiceUndeliverableParams(invoice(), { groupName: "Shah Group" });
+  assert.deepEqual(p, ["PH/2026-27/0124", "Shah Group", "Shah Textiles Pvt. Ltd.", "Scrutiny assessment"]);
+  for (const v of core.invoiceUndeliverableParams({}, {})) assert.ok(String(v).trim().length > 0);
+});
+
 /* ---------------- printing the letter ---------------- */
 
 test("everything an English letter contains is printable", () => {

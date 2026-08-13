@@ -2,9 +2,11 @@
 import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, Table, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { hapticsAvailable } from './haptics';
-import { WHATSAPP_MESSAGES, resolveWhatsAppSettings, userReachability, clientReachability, displayMobile } from './whatsappSettings';
+import { WHATSAPP_MESSAGES, resolveWhatsAppSettings, userReachability, clientReachability, whatsAppEnabledFor, displayMobile } from './whatsappSettings';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './firebase';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO,
-  assesseeLedger, groupLedger, groupsOf, assesseeOutstanding, allocatePayment, docRequestProgress, derivedRequestStatus } from './store';
+  assesseeLedger, groupLedger, groupsOf, groupMeta, assesseeOutstanding, allocatePayment, docRequestProgress, derivedRequestStatus } from './store';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
 import { useAuth } from './auth';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
@@ -16,6 +18,70 @@ import { sortMatters, nextSort, MATTER_SORT_COLUMNS, MATTER_SORT_HINT } from './
 import ItatEmailCard from './ItatEmailCard';
 
 const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
+
+/* Sending an invoice on WhatsApp, from wherever an invoice is shown.
+ *
+ * The button says which of the two things it is about to do, because they are
+ * genuinely different outcomes: the client is invoiced, or the invoice comes
+ * back to the practitioner's own phone to forward. A control that said "Send"
+ * for both would let somebody believe a client had been billed when they had
+ * not — and unlike an email bounce, nothing else would ever tell them. */
+function useInvoiceWhatsApp(invoice, assessee) {
+  const { data, profile, notify } = useData();
+  const [busy, setBusy] = React.useState(false);
+
+  const group = groupMeta(data, assessee?.group);
+  const reach = clientReachability(group);
+  const enabled = whatsAppEnabledFor(profile, "invoice");
+  const toClient = reach.ok;
+
+  const send = async () => {
+    if (busy || !invoice?.id) return;
+    setBusy(true);
+    try {
+      const res = await httpsCallable(functions, "sendInvoiceWhatsApp")({ invoiceId: invoice.id });
+      const d = res?.data || {};
+      if (d.deliveredTo === "groupHead") {
+        notify(`Invoice sent to ${d.recipientName || "the group head"} on WhatsApp`);
+      } else {
+        // Deliberately not a success message. Nothing reached the client.
+        notify(`Sent to you, not the client — ${d.fallbackMessage || "no group head on file"}`, "alert");
+      }
+    } catch (e) {
+      console.error("sendInvoiceWhatsApp", e);
+      notify(e?.message || "Couldn't send that invoice on WhatsApp", "alert");
+    } finally { setBusy(false); }
+  };
+
+  return {
+    available: enabled,
+    busy,
+    toClient,
+    label: toClient ? "Send on WhatsApp" : "Send to me",
+    hint: toClient
+      ? `Sends the invoice to ${reach.name || "the group head"} from ProHippo's WhatsApp number`
+      : `${reach.message} It will come to your own phone instead, so you can forward it.`,
+    send,
+  };
+}
+
+/* The row-level version: an icon among the other row actions. Its tooltip
+   carries the same distinction the modal's label spells out. */
+function InvoiceWhatsAppButton({ invoice, assessee }) {
+  const wa = useInvoiceWhatsApp(invoice, assessee);
+  if (!wa.available) return null;
+  return (
+    <button
+      className="btn btn-ghost btn-xs"
+      disabled={wa.busy}
+      title={wa.toClient ? wa.hint : `Not sent to the client — ${wa.hint}`}
+      style={wa.toClient ? undefined : { color: "var(--p-warning)" }}
+      onClick={wa.send}
+    >
+      <Icon name="whatsapp" size={12}/>
+    </button>
+  );
+}
 
 /* ---- invoice appearance / defaults, persisted in profile.invoiceSettings ---- */
 export const ACCENT_PRESETS = [
@@ -580,6 +646,7 @@ function InvoiceView({ invoice, onClose, onEdit }) {
     () => invoicePDFDataUri({ invoice, assessee, profile }),
     [invoice, assessee, profile]
   );
+  const wa = useInvoiceWhatsApp(invoice, assessee);
   return (
     <Modal
       title={`Invoice ${invoice.number || "preview"}`}
@@ -589,6 +656,11 @@ function InvoiceView({ invoice, onClose, onEdit }) {
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Close</button>
         {onEdit && <button className="btn btn-secondary" onClick={onEdit}><Icon name="edit" size={14}/>Edit</button>}
+        {wa.available && (
+          <button className="btn btn-secondary" disabled={wa.busy} title={wa.hint} onClick={wa.send}>
+            <Icon name="whatsapp" size={14}/>{wa.busy ? "Sending…" : wa.label}
+          </button>
+        )}
         <button className="btn btn-primary" onClick={() => downloadInvoicePDF({ invoice, assessee, profile })}><Icon name="download" size={14}/>Download PDF</button>
       </>}
     >
@@ -893,6 +965,7 @@ export function Invoices() {
                         <button className="btn btn-ghost btn-xs" title="Record payment" onClick={() => setPayFor(inv)}><Icon name="wallet" size={12}/></button>
                       )}
                       <button className="btn btn-ghost btn-xs" title="Download PDF" onClick={() => downloadInvoicePDF({ invoice: inv, assessee: assesseeOf(inv), profile })}><Icon name="download" size={12}/></button>
+                      <InvoiceWhatsAppButton invoice={inv} assessee={assesseeOf(inv)}/>
                       <button className="btn btn-ghost btn-xs" title="Edit" onClick={() => setEditFor(inv)}><Icon name="edit" size={12}/></button>
                       <button className="btn btn-ghost btn-xs" title="Delete" onClick={() => { if (window.confirm(`Delete invoice ${inv.number}?`)) { removeInvoice(inv.id); notify("Invoice deleted"); } }}><Icon name="trash" size={12}/></button>
                     </div>

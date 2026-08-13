@@ -37,6 +37,7 @@ const {
   whatsAppEnabledFor, userReachability, istDate,
   shouldAlertNotice, noticeAlertParams,
   clientReachability, noticeAlertClientParams, docRequestParams,
+  invoiceParams, invoiceUndeliverableParams,
   hasUnprintableScript, printableLetter,
   isHearingLive, hearingReminderParams,
   nextWeekRange, causeListParams, causeListFileName, weekLabel,
@@ -1006,6 +1007,116 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
     return result;
   }
 
+  /* ---------------- 5. the invoice ----------------
+   *
+   * Rendered by the SAME builder the Download PDF button uses, called the same
+   * way — `{ invoice, assessee, profile }` and no `settings`, exactly as
+   * InvoiceView and the invoice row call it. That is what makes the attachment
+   * and the download byte-identical rather than merely similar: there is no
+   * second set of defaults here to drift from the screen's.
+   *
+   * No vendoring was needed for this one. invoicePdf.js is already in
+   * functions/shared as pdfTheme.js's own dependency; the cause list brought it
+   * in and the invoice simply uses it.
+   */
+  async function renderInvoicePdf({ invoice, assessee, profile }) {
+    const { buildInvoicePDF, computeInvoiceTotals, fmtRupee } = await import("./shared/invoicePdf.js");
+    const doc = buildInvoicePDF({ invoice, assessee, profile });
+    /* The figure in the message comes from the same function that prints the
+       figure in the PDF. A second implementation of "what does this invoice come
+       to" would one day disagree with the document attached to the same
+       message, and the client would be right to ask which one to pay. */
+    const amountLabel = fmtRupee(computeInvoiceTotals(invoice).grandTotal);
+    return { pdf: Buffer.from(doc.output("arraybuffer")), amountLabel };
+  }
+
+  /*
+   * Send one invoice over WhatsApp.
+   *
+   * TWO RECIPIENTS, TWO TEMPLATES. It goes to the group head where there is one
+   * to send to, and back to the practitioner where there is not — but the
+   * practitioner's copy says plainly that the client was NOT invoiced, and what
+   * to fix. A silent fallback would be worse than none: they would read the
+   * client's own wording and believe it had gone out.
+   *
+   * NEVER THROWS, for the same reason as sendDocRequest: the composer has to be
+   * able to say what happened.
+   */
+  async function sendInvoice({ uid, invoiceId }) {
+    const invSnap = await db.doc(`users/${uid}/invoices/${invoiceId}`).get();
+    if (!invSnap.exists) return { ok: false, reason: "not-found", message: "That invoice no longer exists." };
+    const invoice = { id: invSnap.id, ...invSnap.data() };
+
+    const profile = (await db.doc(`users/${uid}`).get()).data() || {};
+    if (!whatsAppEnabledFor(profile, "invoice")) {
+      return { ok: false, reason: "disabled", message: "WhatsApp invoices are switched off in Settings." };
+    }
+
+    /* Invoices link to an assessee by NAME, not by id — that is how the app has
+       always joined them (`assesseeOf` on the Invoices page does the same), so
+       the same match is used here rather than inventing a second rule. */
+    const name = String(invoice.assessee || "").trim();
+    const aq = name ? await db.collection(`users/${uid}/assessees`).where("name", "==", name).limit(1).get() : null;
+    const assessee = aq && !aq.empty ? aq.docs[0].data() : null;
+
+    const group = assessee ? await groupOf(uid, assessee.group) : null;
+    const client = clientReachability(group);
+    const practitioner = userReachability(profile);
+
+    // Neither door open: say so rather than rendering a PDF nobody will read.
+    if (!client.ok && !practitioner.ok) {
+      return { ok: false, reason: client.reason, message: `${client.message} Your own mobile isn't verified either, so there is nowhere to send it.` };
+    }
+
+    let pdf;
+    let amountLabel;
+    try {
+      ({ pdf, amountLabel } = await renderInvoicePdf({ invoice, assessee, profile }));
+    } catch (e) {
+      const message = String(e?.message || e).slice(0, 300);
+      console.error("invoice PDF failed:", message);
+      return { ok: false, reason: "render-failed", message };
+    }
+
+    let url;
+    try {
+      url = await publishPdf(uid, `users/${uid}/invoices/${invoiceId}.pdf`, pdf);
+    } catch (e) {
+      return { ok: false, reason: "publish-failed", message: String(e?.message || e).slice(0, 300) };
+    }
+
+    const fileName = `Invoice ${String(invoice.number || invoiceId).replace(/[\\/:*?"<>|]/g, "-")}.pdf`;
+
+    if (client.ok) {
+      const result = await deliver({
+        uid,
+        to: client.mobile,
+        template: "ph_invoice_v1",
+        params: invoiceParams(invoice, { headName: client.name, firmName: profile.firmName, amountLabel }),
+        media: { url, fileName },
+        assessee: invoice.assessee || "",
+        recipientRole: "groupHead",
+        recipientName: client.name,
+        subject: `Invoice ${invoice.number || ""}`.trim(),
+        body: amountLabel,
+      });
+      return { ...result, deliveredTo: "groupHead", recipientName: client.name };
+    }
+
+    const result = await deliver({
+      uid,
+      to: practitioner.mobile,
+      template: "ph_invoice_undeliverable_user_v1",
+      params: invoiceUndeliverableParams(invoice, { groupName: assessee?.group }),
+      media: { url, fileName },
+      assessee: invoice.assessee || "",
+      recipientRole: "user",
+      subject: `Invoice ${invoice.number || ""} could not be sent to the client`.trim(),
+      body: client.message,
+    });
+    return { ...result, deliveredTo: "user", fallbackReason: client.reason, fallbackMessage: client.message };
+  }
+
   /* The group an assessee belongs to, by the name stored on their record.
    *
    * Groups are joined by NAME rather than id — that is how the app has always
@@ -1035,6 +1146,10 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
     whatsappHearingReminders,
     whatsappWeeklyCauseList,
     sendDocRequest,
+    sendInvoice,
+    // The callables in index.js declare these so the WATI credentials are
+    // mounted on the instance that runs them.
+    secrets: WATI_SECRETS,
     // Used by the message senders in later phases, and by the tests.
     _whatsapp: {
       deliver,

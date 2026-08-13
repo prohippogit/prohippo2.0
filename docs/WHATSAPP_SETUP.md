@@ -3,9 +3,10 @@
 How a hearing, a notice or an invoice reaches somebody on WhatsApp, and how
 ProHippo knows whether it arrived.
 
-**Status: phases 0–3 are implemented** — the pipe, the three messages that reach
-the practitioner, and the two that reach a client. The invoice is phase 4 and is
-the plan, not code.
+**Status: complete.** All six messages are implemented, across phases 0–4.
+Nothing has been submitted to Meta yet — the eight templates in the appendix
+below are what remains to do, and two constants stay unconfirmed until one live
+send answers them.
 
 ---
 
@@ -432,6 +433,51 @@ Chromium upgrade to break. The launch is the expensive part, so sharing it is
 also the faster arrangement. What stayed behind in each caller is everything
 specific to its document — footer, fonts, margins.
 
+### Invoice
+
+`sendInvoiceWhatsApp`, a callable — the practitioner presses a button, so unlike
+the cause list there is nothing scheduled about it.
+
+**The same builder the Download PDF button uses, called the same way.**
+`buildInvoicePDF({ invoice, assessee, profile })` with no `settings`, exactly as
+`InvoiceView` and the invoice row call it. That is what makes the attachment and
+the download the same document rather than merely similar ones: there is no
+second set of defaults on the server to drift from the screen's.
+
+No vendoring was needed. `invoicePdf.js` was already in `functions/shared` as
+`pdfTheme.js`'s own dependency — the cause list brought it in and the invoice
+simply uses it.
+
+**The figure in the message comes from `computeInvoiceTotals()`**, the same
+function that prints the figure in the PDF. A second implementation of "what
+does this invoice come to" — GST split, rounding and all — would eventually
+disagree with the document attached to the same message, and the client would be
+right to ask which one to pay.
+
+**The caller supplies an invoice id and nothing else.** The PDF is rendered
+server-side from the practice's own records, so a stolen session cannot post a
+document of its own for ProHippo's number to deliver.
+
+#### Two recipients, two templates, and the difference is visible
+
+| Group head | What happens | Template |
+|---|---|---|
+| Reachable | The client is invoiced | `ph_invoice_v1` |
+| Missing, or no consent | It comes back to the practitioner to forward | `ph_invoice_undeliverable_user_v1` |
+
+A silent fallback would be worse than none: the practitioner would read the
+client's own wording on their own phone and believe the invoice had gone out.
+The fallback template says plainly that it did not, and what to fix.
+
+The UI carries the same distinction rather than reporting both as "sent" — the
+button reads **Send on WhatsApp** or **Send to me**, and the toast after a
+fallback is an alert, not a success. Nothing else would ever tell them; an
+invoice has no bounce.
+
+Invoices link to an assessee by **name**, not by id — that is how the app has
+always joined them (`assesseeOf` on the Invoices page does the same), so the
+server uses the same match rather than inventing a second rule.
+
 ### The clock
 
 `istDate()` applies the +5:30 offset explicitly rather than relying on
@@ -685,6 +731,42 @@ copy stay the same words. **English only for now** — see the Indic font
 limitation above.
 </details>
 
+<details>
+<summary><code>ph_invoice_v1</code> — 7 variables, <b>Document header</b></summary>
+
+```
+Namaste {{1}},
+
+Invoice {{2}} dated {{3}} is attached.
+
+For: {{4}}
+Amount: {{5}}
+Due by: {{6}}
+
+Sent by {{7}}.
+Reply here if you need anything changed.
+```
+
+Samples: `Rajesh M. Shah` · `PH/2026-27/0124` · `12 August 2026` ·
+`Shah Textiles Pvt. Ltd. - Scrutiny assessment, AY 2021-22` · `Rs 1,55,600.00` ·
+`11 September 2026` · `Mehta & Co.`
+</details>
+
+<details>
+<summary><code>ph_invoice_undeliverable_user_v1</code> — 4 variables, <b>Document header</b></summary>
+
+```
+Invoice {{1}} could not be sent to the client.
+
+No WhatsApp number is on file for the group head of {{2}}. The invoice for {{3}} ({{4}}) is attached so you can forward it yourself.
+
+Add a group head mobile in ProHippo and this will go out automatically next time.
+```
+
+Samples: `PH/2026-27/0124` · `Shah Group` · `Shah Textiles Pvt. Ltd.` ·
+`Scrutiny assessment`
+</details>
+
 Getting these approved also teaches you what the reviewer wants before the
 client-facing language variants go in.
 
@@ -780,3 +862,6 @@ the client-facing three are the ones to suspect — which is why they ship last 
 | Composer says "Open in WhatsApp", not "Send" | No consent, no group head mobile, or the Settings row is off | The button's tooltip names which one |
 | Doc request refused, "a script the PDF renderer has no font for" | The letter was translated; Montserrat covers Latin only | Send it by email, or add an Indic font — see above |
 | Client never gets the notice alert | `noticeAlertClient` defaults **off** per practice | Settings → WhatsApp updates → "Tell clients when a notice arrives" |
+| Invoice button says "Send to me" | No group head, no number on them, or no consent | The tooltip names which. The invoice still reaches you, to forward |
+| Invoice arrived but the client says they got nothing | The fallback fired — you were sent it to forward | The toast said so as an alert, and the log row reads `recipientRole: user` |
+| The amount in the message differs from the PDF | Should be impossible — both come from `computeInvoiceTotals()` | If it ever happens, something computed a second total; that is the bug |

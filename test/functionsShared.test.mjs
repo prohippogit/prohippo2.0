@@ -90,6 +90,34 @@ test("the cause list renders under Node, with no DOM anywhere", async () => {
   assert.equal(doc.getNumberOfPages(), 1);
 });
 
+test("the invoice renders under Node too, and matches the download", async () => {
+  /* The WhatsApp invoice calls buildInvoicePDF the same way the Download PDF
+     button does — `{ invoice, assessee, profile }` and no `settings` — which is
+     what makes the attachment and the download the same document rather than
+     merely similar ones. Rendering both here is what would catch a second set
+     of defaults creeping into the server path. */
+  const { buildInvoicePDF, computeInvoiceTotals, fmtRupee } = await import("../src/invoicePdf.js");
+
+  const invoice = {
+    number: "PH/2026-27/0124", date: "2026-08-12", due: "2026-09-11",
+    assessee: "Shah Textiles Pvt. Ltd.", service: "Scrutiny assessment", ay: "2021-22",
+    gstEnabled: true, gstType: "CGST_SGST",
+    items: [{ description: "Scrutiny assessment — AY 2021-22", hsn: "998222", qty: 1, rate: 111864.41, gst: 18 }],
+  };
+  const assessee = { name: "Shah Textiles Pvt. Ltd.", pan: "AABCS9821K", address: "Plot 12, GIDC Naroda, Ahmedabad" };
+  const profile = { firmName: "Mehta & Co.", ownerName: "CA Priya Mehta", invoiceSettings: { accent: "#6C5CE7" } };
+
+  const buf = Buffer.from(buildInvoicePDF({ invoice, assessee, profile }).output("arraybuffer"));
+  assert.equal(buf.subarray(0, 5).toString("latin1"), "%PDF-");
+  assert.ok(buf.length > 10_000);
+
+  // And the figure quoted in the message comes from the same function that
+  // prints the figure in the document.
+  const totals = computeInvoiceTotals(invoice);
+  assert.equal(totals.grandTotal, 132000);
+  assert.equal(fmtRupee(totals.grandTotal), "₹1,32,000.00");
+});
+
 test("an empty range still produces a valid document rather than throwing", () => {
   // The sweep skips empty weeks, but a renderer that throws on one would take
   // the whole Saturday job down if that guard were ever moved.

@@ -110,13 +110,39 @@ const RESEND_PLAN = {
  */
 const SARVAM_INR_PER_MINUTE = null; // unconfirmed — see the note above
 
+/*
+ * WATI resells Meta's WhatsApp Business Platform, and the bill has two parts:
+ * WATI's own monthly subscription, and Meta's per-message charge for every
+ * business-initiated conversation. Only the second is a marginal cost, and it
+ * is charged per message by CATEGORY — utility, authentication, marketing.
+ *
+ * Everything ProHippo sends is UTILITY. Nothing here is promotional, and a
+ * utility message miscategorised as marketing is both dearer and blockable by
+ * the recipient, so the category is fixed at the template rather than chosen
+ * per send.
+ *
+ * DELIBERATELY UNPRICED, for the same reason as SARVAM_INR_PER_MINUTE and
+ * gemini-3.1-flash above: the India utility rate has not been confirmed against
+ * an actual WATI invoice, and a made-up rate is worse than a visible gap. Sends
+ * are still metered — the Costs page reports them under "N calls had no rate",
+ * so the volume is in front of you before the invoice is.
+ *
+ * To price it: read the per-message utility rate off your first WATI invoice,
+ * set it here, add a `wati` branch to priceCall(), and bump RATE_VERSION. The
+ * expected order of magnitude is a few paise, so a practice sending a couple of
+ * hundred a month is well under ₹50 — immaterial beside the ₹0.22 per SMS this
+ * feature will eventually take over from.
+ */
+const WHATSAPP_INR_PER_UTILITY = null; // unconfirmed — see the note above
+
 /* Vendors and the SKUs each can bill. The console groups by these. */
-const VENDORS = ["gemini", "2factor", "resend", "sarvam", "firebase"];
+const VENDORS = ["gemini", "2factor", "resend", "sarvam", "wati", "firebase"];
 const SKUS = {
   gemini: Object.keys(GEMINI_RATES),
   "2factor": ["sms-otp"],
   resend: ["email-otp", "email-client"],
   sarvam: ["voice-agent"],
+  wati: ["whatsapp-utility"],
   firebase: ["manual"],
 };
 
@@ -125,6 +151,7 @@ const VENDOR_LABEL = {
   "2factor": "2Factor SMS",
   resend: "Resend email",
   sarvam: "Sarvam voice",
+  wati: "WATI WhatsApp",
   firebase: "Firebase",
 };
 
@@ -202,6 +229,7 @@ const notes = [
   `Email marginal cost is ₹0: Resend Free includes ${RESEND_PLAN.includedPerMonth.toLocaleString("en-IN")} messages a month with no overage billing. Watch the volume, not the rupees — the next step is Pro at $20/month.`,
   `Gemini output pricing includes thinking tokens, so thoughtsTokenCount is counted alongside the visible answer.`,
   `Sarvam voice minutes are metered but not yet priced — the per-minute rate is unconfirmed, so those calls show under "no rate" rather than as ₹0.`,
+  `WhatsApp messages are metered but not yet priced — the per-message utility rate is unconfirmed until the first WATI invoice, so those sends show under "no rate" rather than as ₹0.`,
 ];
 
 module.exports = {
@@ -212,6 +240,7 @@ module.exports = {
   SMS_INR_PER_SEND,
   SMS_PACK,
   SARVAM_INR_PER_MINUTE,
+  WHATSAPP_INR_PER_UTILITY,
   RESEND_PLAN,
   VENDORS,
   SKUS,

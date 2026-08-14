@@ -107,6 +107,11 @@ export const StatusPill = ({ status }) => {
     "Bounced": "danger",
     "Complained": "danger",
     "Failed": "danger",
+    // WhatsApp, from the WATI webhook. "Read" is WhatsApp's own word for what
+    // email calls "Opened" — kept rather than normalised, because it is the
+    // word on the recipient's own screen and the two ticks that mean it.
+    "Read": "success",
+    "Undelivered": "danger",
     // Hand-offs: we opened the app with the message ready, the user presses send.
     "Opened in WhatsApp": "info",
     "Opened in mail app": "info",

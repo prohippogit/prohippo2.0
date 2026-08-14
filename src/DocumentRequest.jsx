@@ -12,7 +12,8 @@ import React from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { Icon, Modal, FormField, TextInput, EmptyState, titleCase, fmtDateLong } from './shared';
-import { useData, newDocItem, docRequestProgress, derivedRequestStatus, todayISO } from './store';
+import { useData, newDocItem, docRequestProgress, derivedRequestStatus, todayISO, groupMeta } from './store';
+import { clientReachability, whatsAppEnabledFor } from './whatsappSettings';
 import { renderDocRequest, defaultTitle, whatsappLink, PHRASES } from './messageTemplates';
 import { presetsFor } from './docRequestPresets';
 import { LANGUAGES, languageName, isEnglish, defaultLanguage, translationStale, askableLabels } from './messageLanguages';
@@ -282,12 +283,43 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
     } finally { setBusy(false); }
   };
 
-  /* WhatsApp is a hand-off, not a send: we open wa.me with the message
-     pre-filled and the practitioner presses send there. The log says exactly
-     that — claiming "Sent" for a tab we merely opened would be a lie, and this
-     log is what gets shown to a client who says they never received the list. */
-  const sendWhatsApp = async () => {
-    if (busy || !canSend) return;
+  /* Can this go out on WhatsApp properly, or does it fall back to the hand-off?
+   *
+   * Two permissions and they are not the same question: the practice has to be
+   * willing to send (Settings), and this client has to have agreed to receive
+   * (the group). Either missing and the button still works — it just opens
+   * wa.me the way it always did, rather than disappearing on somebody who was
+   * happily using it yesterday. */
+  const group = groupMeta(data, assessee?.group);
+  const reach = clientReachability(group);
+  const waEnabled = whatsAppEnabledFor(profile, "docRequest");
+  const waDirect = waEnabled && reach.ok;
+  const waFallbackReason = !waEnabled
+    ? "WhatsApp document requests are off in Settings"
+    : reach.message;
+
+  /* The real send: the letter goes as a PDF from ProHippo's WhatsApp number to
+     the group head, and the delivery log tracks it the way email is tracked. */
+  const sendWhatsAppDirect = async () => {
+    setBusy(true);
+    try {
+      const saved = await persist({ sentAt: form.sentAt || new Date().toISOString() });
+      if (!saved) return;
+      await httpsCallable(functions, "sendClientMessage")({ requestId: saved.id, channel: "whatsapp" });
+      notify(`WhatsApp sent to ${reach.name || "the group head"}`);
+      onClose();
+    } catch (e) {
+      console.error("sendClientMessage whatsapp", e);
+      notify(e?.message || "Couldn't send that on WhatsApp — try again in a moment", "alert");
+    } finally { setBusy(false); }
+  };
+
+  /* The hand-off, kept for every client who has not opted in: we open wa.me with
+     the message pre-filled and the practitioner presses send there. The log says
+     exactly that — claiming "Sent" for a tab we merely opened would be a lie,
+     and this log is what gets shown to a client who says they never received
+     the list. */
+  const sendWhatsAppHandoff = async () => {
     const link = whatsappLink(assessee, preview.whatsappText);
     if (!link) { notify(`No mobile number on file for ${titleCase(assessee.name)} — add one on their profile`, "alert"); return; }
     setBusy(true);
@@ -304,6 +336,11 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
       notify("Opened in WhatsApp — press send there to deliver it");
       onClose();
     } finally { setBusy(false); }
+  };
+
+  const sendWhatsApp = async () => {
+    if (busy || !canSend) return;
+    return waDirect ? sendWhatsAppDirect() : sendWhatsAppHandoff();
   };
 
   const discard = async () => {
@@ -326,8 +363,19 @@ export default function DocumentRequestComposer({ request, seed, onClose }) {
         {!isNew && <button className="btn btn-ghost" onClick={discard} style={{marginRight: "auto"}}><Icon name="trash" size={14}/>Delete</button>}
         <button className="btn btn-secondary" disabled={busy} onClick={saveDraft}>{sent ? "Save changes" : "Save draft"}</button>
         {(form.channels || []).includes("whatsapp") && (
-          <button className="btn btn-secondary" disabled={busy || !canSend} style={{opacity: (canSend && !busy) ? 1 : 0.5}} onClick={sendWhatsApp}>
-            <Icon name="whatsapp" size={14}/>WhatsApp
+          <button
+            className="btn btn-secondary"
+            disabled={busy || !canSend}
+            style={{opacity: (canSend && !busy) ? 1 : 0.5}}
+            /* The button says which of the two it is about to do. A control that
+               sometimes sends and sometimes opens a tab, without saying which,
+               teaches people to distrust the delivery log. */
+            title={waDirect
+              ? `Sends the list to ${reach.name || "the group head"} from ProHippo's WhatsApp number`
+              : `Opens WhatsApp with the message ready — ${waFallbackReason}`}
+            onClick={sendWhatsApp}
+          >
+            <Icon name="whatsapp" size={14}/>{waDirect ? (busy ? "Sending…" : "Send WhatsApp") : "Open in WhatsApp"}
           </button>
         )}
         {(form.channels || []).includes("email") && (

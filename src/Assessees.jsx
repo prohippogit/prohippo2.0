@@ -1,5 +1,7 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Table, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Toggle, Table, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
+import { useAuth } from './auth';
+import { mobileTen, normaliseMobile, headConsent } from './whatsappSettings';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
   groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS,
   commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus, noticeDeadline } from './store';
@@ -337,25 +339,77 @@ function groupStats(data, members) {
   return { matters, hearings };
 }
 
-// Create / edit a group's metadata (name, colour, billing contact, notes).
+/* Create / edit a group's metadata (name, colour, group head, billing contact,
+   notes).
+
+   THE GROUP HEAD IS WHY THIS MODAL GREW. A group is a family or a business
+   house, and several of its members are companies and trusts — you do not
+   WhatsApp Shah Textiles Pvt. Ltd., you WhatsApp Rajesh Shah, who answers for
+   all of them. Every client-facing message therefore addresses the head rather
+   than the assessee the notice happens to name. */
 function GroupModal({ initial, onClose }) {
   const { data, addGroup, updateGroup, renameGroup, notify } = useData();
+  const { user } = useAuth();
   const isEdit = Boolean(initial?.id);
-  const [form, setForm] = React.useState({ name: "", color: GROUP_COLORS[0], notes: "", contact: "", ...initial });
+  const [form, setForm] = React.useState(() => ({
+    name: "", color: GROUP_COLORS[0], notes: "", contact: "", ...initial,
+    headName: initial?.head?.name || "",
+    headTen: mobileTen(initial?.head?.mobile),
+    headAssesseeId: initial?.head?.assesseeId || "",
+    consent: headConsent(initial).optedIn,
+  }));
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
   const [busy, setBusy] = React.useState(false);
   const name = form.name.trim();
   const dup = groupsOf(data).some((g) => g.name.toLowerCase() === name.toLowerCase() && g.name !== initial?.name);
   const valid = name && !dup;
 
+  // Members of this group, offered as the head — the number is almost always
+  // already on one of their profiles, and retyping it is how two spellings of
+  // the same mobile end up on file.
+  const members = React.useMemo(
+    () => data.assessees.filter((a) => (a.group || "").trim() === (initial?.name || "").trim()),
+    [data.assessees, initial?.name]
+  );
+
+  const headMobile = normaliseMobile(form.headTen);
+  const headMobileBad = form.headTen.replace(/\D/g, "").length > 0 && !headMobile;
+  // Consent is a statement about a reachable person. Without a number there is
+  // nobody for it to be about, so it cannot be given.
+  const canConsent = Boolean(form.headName.trim() && headMobile);
+  const revokedAt = headConsent(initial).revokedAt;
+
+  const pickMember = (id) => {
+    const a = data.assessees.find((x) => x.id === id);
+    if (!a) return;
+    setForm((f) => ({
+      ...f,
+      headAssesseeId: a.id,
+      headName: a.name || f.headName,
+      headTen: mobileTen(a.mobile) || f.headTen,
+    }));
+  };
+
   const save = async () => {
     if (!valid || busy) return;
     setBusy(true);
+    const head = { name: form.headName.trim(), mobile: headMobile, assesseeId: form.headAssesseeId || "" };
+    /* Consent records WHO attested it and WHEN, not a bare boolean. The group
+       head never sees ProHippo and cannot tick a box in it, so the practitioner
+       attests on their behalf — and an attestation with no author is not one.
+       Turning it off keeps `revokedAt`, so a client who said STOP is not
+       silently re-enrolled by someone toggling it back on. */
+    const prev = headConsent(initial);
+    const consent = form.consent && canConsent
+      ? { optedIn: true, at: prev.optedIn ? prev.at : new Date().toISOString(), by: user?.email || user?.uid || "", source: "practitioner", revokedAt: "" }
+      : { optedIn: false, at: prev.at || "", by: prev.by || "", source: prev.source || "", revokedAt: prev.revokedAt || (prev.optedIn ? new Date().toISOString() : "") };
+
+    const fields = { name, color: form.color, notes: form.notes.trim(), contact: form.contact.trim(), head, headWhatsappOptIn: consent };
     if (isEdit) {
       if (name !== initial.name) await renameGroup(initial.id, initial.name, name);
-      await updateGroup(initial.id, { name, color: form.color, notes: form.notes.trim(), contact: form.contact.trim() });
+      await updateGroup(initial.id, fields);
     } else {
-      await addGroup({ name, color: form.color, notes: form.notes.trim(), contact: form.contact.trim() });
+      await addGroup(fields);
     }
     setBusy(false);
     notify(isEdit ? "Group updated" : `Group “${name}” created`);
@@ -388,7 +442,61 @@ function GroupModal({ initial, onClose }) {
           ))}
         </div>
       </div>
-      <div className="form-grid" style={{marginTop: 12}}>
+      <div style={{marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--p-line-2)"}}>
+        <div style={{fontWeight: 700, fontSize: 13}}>Group head</div>
+        <div className="muted" style={{fontSize: 12, marginTop: 2, lineHeight: 1.5}}>
+          The person who answers for everyone in this group. Client messages — document requests, invoices — go to them
+          rather than to the company or trust the notice happens to name.
+        </div>
+
+        {members.length > 0 && (
+          <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 10}}>
+            <span className="muted" style={{fontSize: 11.5, alignSelf: "center"}}>Copy from</span>
+            {members.map((a) => (
+              <button key={a.id} type="button" className="btn btn-secondary btn-xs" onClick={() => pickMember(a.id)}>
+                {a.name}{a.mobile ? "" : " · no mobile"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="form-grid" style={{marginTop: 10}}>
+          <FormField label="Name" full>
+            <TextInput value={form.headName} onChange={set("headName")} placeholder="e.g. Rajesh M. Shah"/>
+          </FormField>
+          <FormField label="WhatsApp number" full>
+            <div style={{display: "flex", gap: 6}}>
+              <div style={{display: "grid", placeItems: "center", padding: "0 10px", borderRadius: 8, border: "1px solid var(--p-line-2)", background: "var(--p-card-tint)", fontSize: 13, fontWeight: 600}}>+91</div>
+              <input type="tel" inputMode="numeric" style={{flex: 1}} placeholder="98250 11234"
+                value={form.headTen}
+                onChange={(e) => set("headTen")(e.target.value.replace(/[^\d\s]/g, "").slice(0, 12))}/>
+            </div>
+            {headMobileBad && <div style={{fontSize: 11.5, color: "var(--p-danger)", marginTop: 4}}>That isn’t a valid 10-digit Indian mobile number.</div>}
+          </FormField>
+        </div>
+
+        <div style={{marginTop: 12, background: "var(--p-card-tint)", border: "1px solid var(--p-line-2)", borderRadius: 10, padding: "10px 12px"}}>
+          <div className="between" style={{gap: 12}}>
+            <div>
+              <div style={{fontSize: 13, fontWeight: 650}}>They’ve agreed to WhatsApp updates</div>
+              <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5, marginTop: 2}}>
+                {canConsent
+                  ? "WhatsApp requires the recipient’s consent. Tick this only if they have actually agreed — it is recorded against your account."
+                  : "Add a name and a valid mobile number first."}
+              </div>
+            </div>
+            <Toggle checked={form.consent && canConsent} disabled={!canConsent} onChange={(v) => set("consent")(v)} label="Consent to WhatsApp updates"/>
+          </div>
+          {revokedAt && (
+            <div style={{fontSize: 11.5, color: "var(--p-danger)", marginTop: 8, lineHeight: 1.5}}>
+              This number replied <b>STOP</b> on {fmtDate(revokedAt.slice(0, 10))}. WhatsApp will keep refusing messages to it
+              until they message the ProHippo number again themselves — turning this back on here will not override that.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="form-grid" style={{marginTop: 14}}>
         <FormField label="Billing contact (optional)" full><TextInput value={form.contact} onChange={set("contact")} placeholder="Name / phone / email for group billing"/></FormField>
         <FormField label="Notes (optional)" full><TextInput value={form.notes} onChange={set("notes")} placeholder="Anything worth remembering about this group"/></FormField>
       </div>

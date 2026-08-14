@@ -3,7 +3,9 @@
 How a notice becomes a list of documents that actually reaches the client, and
 how ProHippo knows whether it arrived.
 
-**Status: phases 0 and 1 are implemented.** Phases 2–3 are the plan, not code.
+**Status: phases 0, 1 and 3 are implemented.** Phase 3's WhatsApp delivery went
+in through WATI — see `docs/WHATSAPP_SETUP.md`. Phase 2 (email attachments, the
+client upload link, reminders) is still the plan, not code.
 
 ---
 
@@ -214,17 +216,31 @@ Signature verification implements the Svix scheme directly with `node:crypto`
 (HMAC-SHA256 over `${id}.${timestamp}.${body}`, 5-minute tolerance), so
 `functions/` needs no new dependency.
 
-### WhatsApp — a hand-off, honestly labelled
+### WhatsApp — a real send, or an honestly labelled hand-off
 
-WhatsApp opens `wa.me` with the message pre-filled; the practitioner presses
-send there. The log records **"Opened in WhatsApp"**, not "Sent".
+**Both, and the button says which.** See `docs/WHATSAPP_SETUP.md` for the whole
+of it; what matters here is what the log records.
 
-That wording matters. The previous code logged `status: "Sent"` for a tab it had
-merely opened — so the log could confidently claim a message was delivered that
-the user never actually sent. A delivery log that lies is worse than no log,
-because it is the thing you show a client who says they never received the list.
+Where the client's group head has a number and a recorded consent, and the
+practice has the row switched on, `sendClientMessage({ channel: "whatsapp" })`
+sends through WATI: the letter goes as a PDF attachment and the row walks
+`Queued → Sent → Delivered → Read` off the WATI webhook, the same ladder email
+walks.
 
-Real WhatsApp delivery is phase 3.
+Where any of that is missing, the old behaviour is unchanged — `wa.me` opens
+with the message pre-filled, the practitioner presses send there, and the log
+records **"Opened in WhatsApp"**, not "Sent".
+
+That wording still matters. The original code logged `status: "Sent"` for a tab
+it had merely opened, so the log could confidently claim a message was delivered
+that the user never actually sent. A delivery log that lies is worse than no
+log, because it is the thing you show a client who says they never received the
+list — which is also why the button reads "Send WhatsApp" or "Open in WhatsApp"
+rather than the same word for two different things.
+
+The attachment is this same letter, printed. `renderDocRequest()` builds it
+once; the email path sends the HTML and the WhatsApp path prints it. There is no
+second design of the document to keep in step.
 
 ---
 
@@ -435,14 +451,17 @@ Storage with the Admin SDK. Keep the total under ~10 MB.
 
 ### Phase 3 notes
 
-- **WhatsApp Cloud API** (Meta direct, or an Indian BSP — AiSensy / Interakt /
-  Gupshup / WATI). Business-initiated messages need a **pre-approved template**,
-  so a 12-item checklist cannot go in the body. Send a template with variables
-  (name, proceeding, due date, item count, link) plus the checklist PDF as a
-  document attachment. Once the client replies, the 24-hour customer-service
-  window allows free-form messages — reminders after a reply are unconstrained.
-  Meta business verification plus template approval is the long pole; start it
-  in parallel with other work.
+- **WhatsApp — done, through WATI.** It landed close to the sketch below: a
+  pre-approved template with variables plus the checklist as a document
+  attachment, because a template variable cannot contain a newline and a
+  12-item list therefore cannot go in the body. What the sketch did not
+  anticipate is that the attachment is the **letter itself**, printed — not a
+  separate checklist PDF — so there is no second design of the document to keep
+  in step. See `docs/WHATSAPP_SETUP.md`.
+- **The 24-hour window is still unclaimed.** Once a client replies, free-form
+  messages are unconstrained and free, which is where a client WhatsApping a PDF
+  back should attach itself to the matching `docRequests` item. The webhook that
+  would carry it already exists; nothing reads the attachment yet.
 - **Client upload link** — `prohippo.in/r/{token}` showing the checklist with
   tick boxes and an upload button. It **must** be served by a Function using the
   Admin SDK: Firestore and Storage rules deny all public access by design, and
@@ -463,8 +482,10 @@ Storage with the Admin SDK. Keep the total under ~10 MB.
   Escape handler on `window` — so one press closes both. Harmless, but fixing it
   properly needs a modal stack, which is more than this change warranted.
 - **wa.me URL length.** A long checklist produces a long URL. WhatsApp handles
-  it, but some browsers truncate around 2 000 characters. Phase 3's link + PDF
-  approach removes this.
+  it, but some browsers truncate around 2 000 characters. This applies only to
+  the hand-off, which is now the fallback rather than the whole story — a client
+  whose group head has opted in gets the real send, where the list travels as a
+  PDF and no URL carries it.
 - **The composer is a trusted surface.** The practitioner authors the message
   that goes to their own client, so the stored HTML is delivered as written. The
   rate limit, the server-resolved recipient and the fixed From address are the

@@ -5,7 +5,11 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // `functions/shared` is src/ copied in by scripts/build-functions-shared.mjs
+  // at deploy time. Linting it reports every finding in those files twice, and
+  // under the wrong rules besides — it is ESM inside a CommonJS directory. The
+  // originals in src/ are linted normally, which is where a fix would go anyway.
+  globalIgnores(['dist', 'functions/shared']),
   {
     // Cloud Functions run on Node (CommonJS), not in the browser.
     files: ['functions/**/*.js'],

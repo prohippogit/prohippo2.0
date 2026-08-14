@@ -6,7 +6,7 @@
   "scripts": {
     "predev": "node scripts/build-extension-zip.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/build-extension-zip.mjs",
+    "prebuild": "node scripts/build-extension-zip.mjs && node scripts/build-functions-shared.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

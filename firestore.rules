@@ -52,6 +52,22 @@ service cloud.firestore {
     // deviceSessions, portalCreds, googleTokens, inboundAliases, referralVisits,
     // rateLimits and voiceRateLimits, which only Admin-SDK functions ever touch.
     //
+    // WhatsApp adds three more, all deliberately unnamed here and so denied:
+    //   waOptOut/{phone}    who has replied STOP. Keyed on the number alone
+    //                       rather than on (practice, number), because everyone
+    //                       is messaged from one WhatsApp number and a person
+    //                       who opts out cannot tell the practices apart. A
+    //                       browser able to read it could enumerate mobiles.
+    //   waEvents/{msgId}    provider message id → the communications row it
+    //                       belongs to, so the webhook is a document read
+    //                       rather than a collection-group query. Same shape
+    //                       and same reason as emailEvents.
+    //   whatsappQuota/{uid} the per-user hourly send cap. Client-writable would
+    //                       make it a cap the client can raise.
+    // The practice's own copies — the group head, their consent, and every send
+    // in users/{uid}/communications — live under the rule above, which is where
+    // the practitioner reads them.
+    //
     // inboundAliases maps an ITAT email address back to the practice that owns
     // it. It is top-level for the same reason googleTokens is: the webhook has
     // no signed-in user to scope the lookup by, and a client able to read the

@@ -551,6 +551,10 @@ input, select, textarea { font-family: inherit; color: inherit; }
 /* Switched on: the state has to be readable at a glance, because what it means
    is "this password is on screen right now". */
 .pwd-eye[aria-pressed="true"] { color: var(--p-primary-3); }
+/* Reading a stored password back is a round trip to a Cloud Function, so the
+   eye says it is working rather than looking like a press that missed. */
+.pwd-eye.busy { opacity: .55; cursor: progress; animation: pwdEyePulse 1s ease-in-out infinite; }
+@keyframes pwdEyePulse { 50% { opacity: .95; } }
 
 /* Filter chip */
 .fchip {

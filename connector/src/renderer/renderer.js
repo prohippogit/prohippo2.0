@@ -206,15 +206,23 @@ $("code").addEventListener("input", () => {
 // --- Assessees + selection -------------------------------------------------
 let JOBS = [];
 const selected = new Set();
+// Whether a run currently owns the controls. Read by buildRow, because rows are
+// rebuilt mid-run now — a checkbox created while a sync is in flight has to be
+// born locked, the way the ones already on screen were.
+let controlsLocked = false;
 
 /* Per-row progress, kept OUTSIDE the DOM.
  *
- * Rows are destroyed and rebuilt whenever the search or a filter changes, so
- * progress painted straight onto the element would vanish the moment someone
- * typed in the search box mid-sync — and a row filtered out and back in would
- * come back reading "idle" while its PAN was still syncing. The map is the
- * truth; the DOM is a view of it. */
-const STATE = new Map(); // assesseeId -> { level, pct, msg, title }
+ * Rows are destroyed and rebuilt whenever the search or a filter changes — and
+ * now whenever a row moves between sections — so progress painted straight onto
+ * the element would vanish the moment someone typed in the search box mid-sync,
+ * and a row filtered out and back in would come back reading "idle" while its
+ * PAN was still syncing. The map is the truth; the DOM is a view of it.
+ *
+ * `stage` is what the list is arranged by (see syncStatus.js), `at` is when the
+ * row last said anything — the two numbers behind "is that one stuck?". */
+const STATE = new Map();
+// assesseeId -> { stage, phase, level, pct, msg, title, startedAt, at }
 
 async function loadAssessees() {
   const list = await window.connector.listAssessees();
@@ -235,7 +243,19 @@ async function loadAssessees() {
     lastSyncedAt: a.lastSyncedAt || "",
   }));
   selected.clear();
-  STATE.clear();
+  /* WHAT EACH ROW DID SURVIVES THE RELOAD.
+   *
+   * This used to be `STATE.clear()`, and it is why a synced PAN lost its green
+   * bar the moment the run ended: every finished run calls refreshRowsAfterRun()
+   * to bring the last-sync times back from Firestore, that reloads the list, and
+   * the reload wiped the record of what had just happened. The list came back
+   * reading "idle" from top to bottom, seconds after finishing, and the only
+   * evidence a sync had run at all was the summary card in front of it.
+   *
+   * Only rows that no longer exist are dropped — which is also how signing in as
+   * somebody else clears the board. */
+  const live = new Set(JOBS.map((j) => j.assesseeId));
+  for (const id of [...STATE.keys()]) if (!live.has(id)) STATE.delete(id);
   buildFilterOptions();
   renderRows();
   syncSelectionUI();
@@ -274,16 +294,67 @@ function visibleJobs() {
     if (f.group && j.group !== f.group) return false;
     if (f.staff && j.staff !== f.staff) return false;
     if (f.state) {
-      const level = (STATE.get(j.assesseeId) || {}).level;
-      if (f.state === "pending" && level && level !== "info") return false;
-      if (f.state === "success" && level !== "success") return false;
-      if (f.state === "error" && level !== "error") return false;
+      // The same buckets the list is grouped into, so the filter and the
+      // headings can never disagree about what "Done" means.
+      const group = SyncStatus.groupOf(STATE.get(j.assesseeId));
+      if (f.state === "pending" && (group === "done" || group === "failed")) return false;
+      if (f.state === "success" && group !== "done") return false;
+      if (f.state === "error" && group !== "failed") return false;
       if (f.state === "never" && j.lastSyncedAt) return false;
     }
     return true;
   });
 }
 
+// One row, built from the job and repainted from whatever STATE remembers
+// about it.
+function buildRow(j) {
+  const el = document.createElement("div");
+  el.className = "row";
+  el.id = "row-" + j.assesseeId;
+  el.innerHTML =
+    `<label class="cbx"><input type="checkbox"></label>` +
+    `<div class="nm"><div class="name"></div><div class="pan"></div><div class="last"></div></div>` +
+    `<div class="prog"><div class="bar-out"><div class="bar-in"></div></div>` +
+      `<div class="msg"><span class="pct">—</span> · <span class="txt">idle</span><span class="el"></span></div></div>` +
+    `<div class="st-cell"><span class="pill idle">idle</span>` +
+      `<button class="skip hidden">Skip</button></div>`;
+  el.querySelector(".name").textContent = j.label;
+  el.querySelector(".pan").textContent = [j.pan, j.group].filter(Boolean).join(" · ");
+  paintLastSync(el, j.lastSyncedAt);
+
+  const cb = el.querySelector('input[type="checkbox"]');
+  cb.checked = selected.has(j.assesseeId);
+  // Rows are rebuilt DURING a run now (a PAN finishing moves it to another
+  // section), so the lock has to be re-applied as they are built — a fresh
+  // checkbox would otherwise come back enabled mid-sync.
+  cb.disabled = controlsLocked;
+  el.classList.toggle("sel", cb.checked);
+  cb.addEventListener("change", () => {
+    if (cb.checked) selected.add(j.assesseeId);
+    else selected.delete(j.assesseeId);
+    el.classList.toggle("sel", cb.checked);
+    syncSelectionUI();
+  });
+
+  el.querySelector(".skip").addEventListener("click", () => skipOne(j));
+
+  const st = STATE.get(j.assesseeId);
+  if (st) paintRow(el, st);
+  return el;
+}
+
+/* Draw the list — in sections, ordered by what each row is DOING.
+ *
+ * A flat list of two hundred rows with five of them moving is unreadable: the
+ * five that matter are wherever the alphabet happens to have put them, and a
+ * row that finishes stays exactly where it was, so "what is left?" can only be
+ * answered by scrolling the whole list and reading every pill. Grouped, the
+ * question answers itself — work in progress at the top, finished work
+ * collected at the bottom under "Synced" and out of the way.
+ *
+ * Sections appear only once there is something to separate (syncStatus.js), so
+ * a list nobody has synced yet looks exactly as it always did. */
 function renderRows() {
   const rows = $("rows");
   const list = visibleJobs();
@@ -304,39 +375,37 @@ function renderRows() {
     return;
   }
 
-  $("selAll").disabled = false;
-  for (const j of list) {
-    const el = document.createElement("div");
-    el.className = "row";
-    el.id = "row-" + j.assesseeId;
-    el.innerHTML =
-      `<label class="cbx"><input type="checkbox" data-id="${escapeAttr(j.assesseeId)}"></label>` +
-      `<div class="nm"><div class="name"></div><div class="pan"></div><div class="last"></div></div>` +
-      `<div class="prog"><div class="bar-out"><div class="bar-in"></div></div>` +
-        `<div class="msg"><span class="pct">—</span> · <span class="txt">idle</span></div></div>` +
-      `<span class="pill idle">idle</span>`;
-    el.querySelector(".name").textContent = j.label;
-    el.querySelector(".pan").textContent = [j.pan, j.group].filter(Boolean).join(" · ");
-    paintLastSync(el, j.lastSyncedAt);
-    const cb = el.querySelector('input[type="checkbox"]');
-    cb.checked = selected.has(j.assesseeId);
-    el.classList.toggle("sel", cb.checked);
-    rows.appendChild(el);
-    // Repaint whatever this row was last showing.
-    const st = STATE.get(j.assesseeId);
-    if (st) paintRow(el, st);
+  $("selAll").disabled = controlsLocked;
+  const sections = SyncStatus.groupJobs(list, (j) => STATE.get(j.assesseeId));
+  const headed = SyncStatus.shouldShowHeadings(sections);
+  for (const sec of sections) {
+    if (headed) {
+      const h = document.createElement("div");
+      h.className = "shead " + sec.key;
+      h.innerHTML = `<span class="sh-label"></span><span class="sh-count"></span>`;
+      h.querySelector(".sh-label").textContent = sec.label;
+      h.querySelector(".sh-count").textContent = String(sec.jobs.length);
+      rows.appendChild(h);
+    }
+    for (const j of sec.jobs) rows.appendChild(buildRow(j));
   }
-
-  rows.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-    cb.addEventListener("change", () => {
-      const id = cb.dataset.id;
-      if (cb.checked) selected.add(id);
-      else selected.delete(id);
-      $("row-" + id).classList.toggle("sel", cb.checked);
-      syncSelectionUI();
-    });
-  });
+  paintLiveRows();
   updateFilterUI(list.length);
+}
+
+/* Rebuilding the list is how a finished row MOVES, so it happens on every
+   completion — five workers over two hundred PANs is a few hundred of these.
+   Coalesced into one repaint per frame so a burst of events cannot turn into a
+   burst of full re-renders. */
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    renderRows();
+    syncSelectionUI();
+  });
 }
 
 /* "Last sync" on a row, in the words somebody would use.
@@ -435,7 +504,10 @@ $("runBtn").addEventListener("click", async () => {
   const jobs = JOBS.filter((j) => selected.has(j.assesseeId));
   if (!jobs.length) return;
   setControlsDisabled(true);
-  for (const j of jobs) setRow(j.assesseeId, { level: "info", pct: 0, msg: "queued" });
+  // Everything picked goes to "Waiting" at once, so the list shows the shape of
+  // the run — five being fetched, the rest queued behind them — from the first
+  // second rather than after the first PAN reports in.
+  for (const j of jobs) setRow(j.assesseeId, { phase: "queued", level: "info", pct: 0, msg: "waiting to start" });
   try {
     const results = await window.connector.runSync(jobs, scope, headless);
     showSyncDone(results, jobs);
@@ -447,7 +519,48 @@ $("runBtn").addEventListener("click", async () => {
   }
 });
 
+/* Stop the whole run.
+ *
+ * The portal does occasionally stop answering for one document, and until this
+ * existed the only way out of that was to kill the app — which loses the run's
+ * lock on the practice's other machines and leaves the browser processes
+ * behind. Stopping properly closes each session, releases the lock, and reports
+ * what had already been saved. Nothing already ingested is lost: the next sync
+ * reads what is on file and picks up from there. */
+$("stopBtn").addEventListener("click", async () => {
+  const btn = $("stopBtn");
+  btn.disabled = true;
+  btn.textContent = "Stopping…";
+  try {
+    const res = await window.connector.stopSync();
+    // Nothing to stop — the run ended in the moment between the press and this
+    // call. sync:busy will hide the button; put it back in case it doesn't.
+    if (res && res.ok === false) { btn.disabled = false; btn.textContent = "Stop sync"; }
+  } catch (err) { toast(friendly(err), "warn"); btn.disabled = false; btn.textContent = "Stop sync"; }
+});
+
+/* Give up on ONE PAN and let the other four carry on.
+ *
+ * The pool runs five at a time, so a PAN the portal has stopped answering for
+ * holds a fifth of the run hostage while the rest of the list waits behind it.
+ * This closes that session only. */
+async function skipOne(job) {
+  const el = $("row-" + job.assesseeId);
+  const btn = el && el.querySelector(".skip");
+  if (btn) { btn.disabled = true; btn.textContent = "Skipping…"; }
+  try {
+    const res = await window.connector.skipSync(job.assesseeId);
+    // The PAN finished on its own while the click was in flight. Nothing went
+    // wrong and nothing needs saying; the row's own state will show it.
+    if (res && res.ok === false && btn) { btn.disabled = false; btn.textContent = "Skip"; }
+  } catch (err) {
+    toast(friendly(err), "warn");
+    if (btn) { btn.disabled = false; btn.textContent = "Skip"; }
+  }
+}
+
 function setControlsDisabled(on) {
+  controlsLocked = on;
   $("runBtn").disabled = on || selected.size === 0;
   $("reloadBtn").disabled = on;
   // The add form opens its own portal session. Starting one during a sync would
@@ -457,6 +570,16 @@ function setControlsDisabled(on) {
   $("selAll").disabled = on;
   $("scope").disabled = on;
   document.querySelectorAll('#rows input[type="checkbox"]').forEach((cb) => (cb.disabled = on));
+}
+
+/* The one control that stays alive while everything else is locked — but only
+   for a run THIS machine owns. The controls also lock when a partner's computer
+   is syncing (see onSyncElsewhere), and a Stop button that cannot stop anything
+   is worse than no button at all. */
+function setStopVisible(on) {
+  const stop = $("stopBtn");
+  stop.classList.toggle("hidden", !on);
+  if (on) { stop.disabled = false; stop.textContent = "Stop sync"; }
 }
 
 // Live per-PAN events from the pool.
@@ -483,29 +606,40 @@ window.connector.onSyncEvent((evt) => {
     console.info(`[sync timing] ${evt.pan || evt.assesseeId}: ${evt.message}`);
     return;
   }
-  setRow(evt.assesseeId, { level: evt.level || "info", pct: evt.pct, msg: `${evt.message}` });
+  setRow(evt.assesseeId, { phase: evt.phase, level: evt.level || "info", pct: evt.pct, msg: `${evt.message}` });
 });
 
 /* Record a row's progress and paint it if it is on screen. Writing to STATE
    first is what lets a filtered-out row keep its progress. */
-function setRow(assesseeId, { level, pct, msg }) {
+function setRow(assesseeId, evt) {
   const st = STATE.get(assesseeId) || {};
-  if (level) st.level = level;
-  if (typeof pct === "number") st.pct = pct;
-  if (msg) st.msg = msg;
+  const wasIn = SyncStatus.groupOf(st);
+  if (evt.level) st.level = evt.level;
+  if (typeof evt.pct === "number") st.pct = evt.pct;
+  if (evt.msg) st.msg = evt.msg;
+  if (evt.phase) st.phase = evt.phase;
+
+  const stage = SyncStatus.stageFor(st.stage, evt);
+  // The clock a row is judged by starts when it actually starts being fetched,
+  // not when it was picked — a PAN can sit in the queue for minutes behind the
+  // five in front of it, and counting that in would call every run stalled.
+  if (stage === "running" && st.stage !== "running") st.startedAt = Date.now();
+  st.stage = stage;
+  st.at = Date.now();
   STATE.set(assesseeId, st);
 
   const el = $("row-" + assesseeId);
   if (el) paintRow(el, st);
-  // A row can be hidden by the "status" filter and then belong in a different
-  // bucket a moment later, so the visible set has to be re-evaluated.
-  if ($("fState").value) { renderRows(); syncSelectionUI(); }
+  // A row that has changed section has to move to it; and the "status" filter
+  // can stop it belonging on screen at all.
+  if (SyncStatus.groupOf(st) !== wasIn || $("fState").value) scheduleRender();
 }
 
 // Paint one row from its recorded state. pct undefined → leave the bar alone.
-function paintRow(el, { level, pct, msg, title }) {
+function paintRow(el, st) {
+  const { pct, msg, title } = st;
+  const stage = SyncStatus.groupOf(st);
   const bar = el.querySelector(".bar-in");
-  const pill = el.querySelector(".pill");
   const txt = el.querySelector(".txt");
   const pctEl = el.querySelector(".pct");
 
@@ -513,17 +647,74 @@ function paintRow(el, { level, pct, msg, title }) {
     bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
     pctEl.textContent = Math.round(pct) + "%";
   }
-  bar.classList.toggle("ok", level === "success");
-  bar.classList.toggle("err", level === "error");
-  if (level === "error") { bar.style.width = "100%"; pctEl.textContent = "—"; }
-
-  if (level) {
-    pill.className = "pill " + level;
-    pill.textContent = { info: "running", success: "done", warn: "note", error: "error" }[level] || level;
+  /* The bar is coloured by the row's STAGE, not by the level of the last event.
+     "Logged in" is reported at level success a fifth of the way through a sync,
+     which used to turn the bar green and the pill to "done" while the notices
+     were still being fetched. */
+  bar.classList.toggle("ok", stage === "done");
+  bar.classList.toggle("err", stage === "failed" && st.phase !== "stopped");
+  bar.classList.toggle("stop", stage === "failed" && st.phase === "stopped");
+  // A moving stripe while the portal is being waited on. A bar that sits at 62%
+  // for twenty seconds and a bar that has died look identical without it.
+  bar.classList.toggle("live", stage === "running");
+  if (stage === "done") { bar.style.width = "100%"; pctEl.textContent = "100%"; }
+  if (stage === "failed") {
+    pctEl.textContent = "—";
+    // A failure fills the bar because the attempt is over; a PAN somebody
+    // stopped keeps the width it had actually reached, which is the honest
+    // picture — most of them never started at all.
+    if (st.phase !== "stopped") bar.style.width = "100%";
   }
+
+  const pill = el.querySelector(".pill");
+  const badge = SyncStatus.pillFor(st);
+  pill.className = "pill " + badge.cls;
+  pill.textContent = badge.text;
+
+  // Skipping is offered only while there is a session to close.
+  const skip = el.querySelector(".skip");
+  if (skip) {
+    skip.classList.toggle("hidden", stage !== "running");
+    if (stage !== "running") { skip.disabled = false; skip.textContent = "Skip"; }
+  }
+
   if (msg) txt.textContent = msg;
   if (title) el.title = title;
+  paintLiveRow(el, st, Date.now());
 }
+
+/* THE ANSWER TO "IS IT STUCK, OR IS IT JUST SLOW?"
+ *
+ * The portal takes fifteen or twenty seconds over a large document, and while
+ * it does, a percentage that does not move is indistinguishable from an app
+ * that has died — which is exactly what it felt like. So every running row
+ * carries a clock, ticking once a second, and once it has been quiet for longer
+ * than a slow step it says so in plain words and offers the way out.
+ *
+ * This is a SECOND line of defence, not the fix: the main process now puts real
+ * deadlines on every portal call and on each PAN (config.js TIMEOUTS), so a
+ * genuinely hung fetch is given up on and reported rather than waited on for
+ * ever. This is what the user sees while that is happening. */
+function paintLiveRow(el, st, now) {
+  const note = SyncStatus.progressNote(st, now);
+  const elapsed = el.querySelector(".el");
+  if (elapsed) elapsed.textContent = note ? ` · ${note.text}` : "";
+  el.classList.toggle("stalled", Boolean(note && note.stalled));
+  el.classList.toggle("stalled-hard", Boolean(note && note.hard));
+}
+
+function paintLiveRows() {
+  const now = Date.now();
+  for (const [id, st] of STATE) {
+    if (st.stage !== "running") continue;
+    const el = $("row-" + id);
+    if (el) paintLiveRow(el, st, now);
+  }
+}
+
+// One timer for the whole list rather than one per row. It only writes text
+// into rows that are actually being fetched, so an idle window does nothing.
+setInterval(paintLiveRows, 1000);
 
 // --- Sync finished card ----------------------------------------------------
 // A run started with "Run hidden" on has no visible browser, and the window is
@@ -535,32 +726,45 @@ function showSyncDone(results, jobs) {
   const byId = new Map(jobs.map((j) => [j.assesseeId, j]));
   const rows = (results || []).map((r) => ({
     ok: r.ok !== false,
+    stopped: Boolean(r.stopped),
     name: (byId.get(r.assesseeId) || {}).label || r.assesseeId,
     error: r.error || "",
   }));
-  const failed = rows.filter((r) => !r.ok);
+  const unfinished = rows.filter((r) => !r.ok);
+  // A run somebody stopped, or a PAN they skipped, is not a failure — nothing
+  // is wrong and nothing needs looking into. Counted and named separately so
+  // the card doesn't report the user's own decision back to them as a problem.
+  const stopped = unfinished.filter((r) => r.stopped);
+  const failed = unfinished.filter((r) => !r.stopped);
   lastFailedIds = (results || []).filter((r) => r.ok === false).map((r) => r.assesseeId);
+  const done = rows.length - unfinished.length;
 
   const icon = $("doneIcon");
-  icon.className = "doneicon" + (failed.length === rows.length && rows.length ? " err" : failed.length ? " warn" : "");
-  icon.textContent = failed.length ? "!" : "✓";
+  icon.className = "doneicon" + (failed.length === rows.length && rows.length ? " err" : unfinished.length ? " warn" : "");
+  icon.textContent = unfinished.length ? "!" : "✓";
 
-  $("doneTitle").textContent = failed.length ? "Sync finished with problems" : "Sync finished";
+  $("doneTitle").textContent = failed.length
+    ? "Sync finished with problems"
+    : stopped.length ? "Sync stopped" : "Sync finished";
   $("doneSub").textContent = failed.length
     ? `${failed.length} of ${rows.length} couldn't be synced. The rest are up to date.`
-    : `All ${rows.length} ${rows.length === 1 ? "assessee is" : "assessees are"} up to date.`;
+    : stopped.length
+      ? `${done} of ${rows.length} finished before you stopped. Nothing already saved is lost — the next sync carries on from there.`
+      : `All ${rows.length} ${rows.length === 1 ? "assessee is" : "assessees are"} up to date.`;
 
   $("doneStats").innerHTML =
-    `<div class="st ok"><div class="n">${rows.length - failed.length}</div><div class="k">Synced</div></div>` +
-    (failed.length ? `<div class="st err"><div class="n">${failed.length}</div><div class="k">Failed</div></div>` : "");
+    `<div class="st ok"><div class="n">${done}</div><div class="k">Synced</div></div>` +
+    (failed.length ? `<div class="st err"><div class="n">${failed.length}</div><div class="k">Failed</div></div>` : "") +
+    (stopped.length ? `<div class="st warn"><div class="n">${stopped.length}</div><div class="k">Stopped</div></div>` : "");
 
   // List the failures only — a wall of green tells nobody anything, and the
   // rows themselves already show each success.
-  $("doneList").innerHTML = failed
-    .map((r) => `<div class="dl bad"><span class="dot"></span><div class="nm2"><b>${escapeHtml(r.name)}</b><span>${escapeHtml(r.error || "Sync failed")}</span></div></div>`)
+  $("doneList").innerHTML = unfinished
+    .map((r) => `<div class="dl ${r.stopped ? "held" : "bad"}"><span class="dot"></span><div class="nm2"><b>${escapeHtml(r.name)}</b><span>${escapeHtml(r.error || "Sync failed")}</span></div></div>`)
     .join("");
 
-  $("doneRetryBtn").classList.toggle("hidden", failed.length === 0);
+  $("doneRetryBtn").textContent = failed.length ? "Select the failed ones" : "Select the ones that didn't finish";
+  $("doneRetryBtn").classList.toggle("hidden", unfinished.length === 0);
   $("doneOverlay").classList.remove("hidden");
 }
 
@@ -969,6 +1173,7 @@ window.connector.onSyncBusy((evt) => {
   // ...but never re-enable them while another of the practice's computers is
   // still syncing.
   setControlsDisabled(Boolean(evt.running) || Boolean(elsewhere));
+  setStopVisible(Boolean(evt.running));
   if (!evt.running) refreshRowsAfterRun();
 });
 

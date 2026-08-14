@@ -101,6 +101,14 @@ ipcMain.handle("auth:current", async () => fb.currentUser());
 let syncInFlight = false;
 const isBusy = () => syncInFlight;
 
+/* The handle onto the run that is in flight, whoever started it.
+ *
+ * Held here rather than passed around because the window has to be able to
+ * reach a run it did not start: the schedule fires unattended, and the person
+ * watching a stuck sync at 9pm is the same person either way. Null between
+ * runs, so a Stop pressed after one has ended says so instead of throwing. */
+let syncControl = null;
+
 async function runSync({ jobs, scope, headless, trigger = "manual" }) {
   if (!fb.currentUser()) throw new Error("Sign in first.");
   if (syncInFlight) throw new Error("A sync is already running.");
@@ -152,8 +160,10 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
     return await runPool(list, (evt) => send("sync:event", evt), {
       scope,
       headless: !(trigger === "manual" && headless === false),
+      onControl: (control) => { syncControl = control; },
     });
   } finally {
+    syncControl = null;
     syncInFlight = false;
     await stopHeartbeat();
     send("sync:busy", { running: false, trigger });
@@ -162,6 +172,26 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
 
 // jobs: [{ assesseeId, pan, label, scope, knowns }]
 ipcMain.handle("sync:run", async (_e, { jobs, scope, headless }) => runSync({ jobs, scope, headless, trigger: "manual" }));
+
+/* Stop the run, and skip one PAN out of it.
+ *
+ * Both are answers to the same complaint: the portal stops answering part-way
+ * through a document, and until the deadlines in config.js there was nothing
+ * between "wait" and "kill the app". The deadlines end a stall on their own;
+ * these are for the person who does not want to wait out even that.
+ *
+ * Neither throws when there is nothing to stop — a button pressed a second
+ * after the run ended is not an error worth showing anybody. */
+ipcMain.handle("sync:stop", async () => {
+  if (!syncControl) return { ok: false, reason: "nothing-running" };
+  syncControl.stop();
+  return { ok: true };
+});
+
+ipcMain.handle("sync:skip", async (_e, { assesseeId }) => {
+  if (!syncControl) return { ok: false, reason: "nothing-running" };
+  return { ok: syncControl.skip(assesseeId) };
+});
 
 /* ---- automatic syncing ---------------------------------------------------
    Settings live in settings.json; the timer and the launch run live in

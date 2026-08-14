@@ -97,6 +97,10 @@
         <button id="addBtn" class="ghost">+ Add assessee</button>
         <button id="reloadBtn" class="ghost">Reload</button>
         <button id="runBtn" class="primary" disabled>Sync selected</button>
+        <!-- Only while a run is in flight. A sync that has gone quiet on one
+             PAN must be something the user can end, rather than something they
+             sit and wait out. -->
+        <button id="stopBtn" class="danger hidden">Stop sync</button>
       </div>
     </div>
     <p class="muted note">Up to 5 PANs sync at once, each in its own isolated browser session, started a few seconds apart. Every step is randomly paced to stay within safe, human-like limits on your home connection.</p>
@@ -140,8 +144,8 @@
       <select id="fState" class="fsel" title="Filter by this run's outcome">
         <option value="">Any status</option>
         <option value="pending">Not synced yet</option>
-        <option value="success">Done</option>
-        <option value="error">Failed</option>
+        <option value="success">Synced</option>
+        <option value="error">Needs attention</option>
         <option value="never">Never synced before</option>
       </select>
       <button id="clearFilters" class="ghost sm hidden">Clear</button>
@@ -247,6 +251,7 @@
        list reloaded). Auto-hides. -->
   <div id="toast" class="toast hidden"></div>
 
+  <script src="syncStatus.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

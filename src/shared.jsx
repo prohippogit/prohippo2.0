@@ -271,14 +271,24 @@ export function FormField({ label, required, children, full }) {
 export function TextInput({ value, onChange, placeholder, type = "text", mono, required }) {
   const [revealed, setRevealed] = React.useState(false);
   const isPassword = type === "password";
+  /* A revealed password is set in MONOSPACE, and that is the point of revealing
+     it. A portal password is a string somebody read off a slip of paper, and in
+     a proportional face `Il1`, `O0` and `rn`/`m` are guesses — worse, the shape
+     of a capital and its lower-case twin (`Cc`, `Ss`, `Oo`, `Zz`) differ only in
+     size, which is exactly what you are trying to check. A monospace face with
+     a little tracking answers all of it. */
+  const showing = isPassword && revealed;
+  const face = mono || showing
+    ? {fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", letterSpacing: showing ? "0.04em" : undefined}
+    : undefined;
   const field = (
     <input
-      type={isPassword && revealed ? "text" : type}
+      type={showing ? "text" : type}
       value={value}
       required={required}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      style={mono ? {fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"} : undefined}
+      style={face}
     />
   );
   if (!isPassword) return field;

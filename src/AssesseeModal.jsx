@@ -251,7 +251,13 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
             <TextInput value={form.pan} onChange={onPan} placeholder="ABCPS1234F" mono/>
           </FormField>
           <FormField label="Portal password">
-            <TextInput value={portalPassword} onChange={setPortalPassword} type="password" placeholder="••••••••"/>
+            {/* NOT a row of bullets. That placeholder was indistinguishable
+                from a hidden password, so an empty field looked like a full
+                one — press the eye on it and nothing happens, because there is
+                nothing there. A saved password cannot be shown here at all: it
+                is encrypted server-side and this form has never held it. */}
+            <TextInput value={portalPassword} onChange={setPortalPassword} type="password"
+              placeholder={credSet ? "Type a new one to replace it" : "Type the e-filing password"}/>
           </FormField>
         </div>
 

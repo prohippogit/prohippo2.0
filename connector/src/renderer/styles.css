@@ -280,6 +280,23 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary);cursor:p
 .fld .req{color:var(--err)}
 .fld input,.fld select{width:100%;font-family:inherit;font-size:13.5px;padding:10px 12px}
 #aPan{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}
+/* Password + its reveal button. The e-filing password is typed once here, is
+   stored encrypted and never shown again, so this is the only moment it can be
+   checked — and a long password typed blind into a field that will not read it
+   back is how "check the credential" turns up in a sync three hours later. */
+.pwd{position:relative;display:flex}
+.pwd input{padding-right:40px}
+.pwd-eye{
+  position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;
+  width:30px;height:30px;padding:0;border-radius:8px;
+  background:transparent;color:var(--muted-2);
+}
+.pwd-eye:hover:not(:disabled){color:var(--text);background:rgba(255,255,255,.05)}
+/* Switched on means "this password is on screen right now", so it has to read
+   as a state rather than as a button somebody happens to be hovering. */
+.pwd-eye[aria-pressed="true"]{color:var(--primary)}
+.pwd-eye:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 /* The authorisation gate sits ABOVE the button it governs — a consent box
    below the action it permits is a box nobody reads. */
 .consent{display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--muted);line-height:1.5;cursor:pointer;margin-bottom:12px}

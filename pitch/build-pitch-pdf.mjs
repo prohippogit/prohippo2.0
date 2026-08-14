@@ -41,10 +41,23 @@ if (!chromium) {
 
 const b64 = (p) => readFileSync(p).toString("base64");
 
-const html = readFileSync(join(here, "prohippo-pitch.html"), "utf8")
-  .replace("__FONT_WOFF2__", b64(join(here, "assets", "plus-jakarta-sans-latin.woff2")))
-  .replace("__LOGO_PNG__", b64(join(root, "public", "prohippo-logo.png")))
-  .replace("__MARK_PNG__", b64(join(root, "public", "prohippo-mark.png")));
+/* Images are referenced as __IMG:path__, resolved against the repo root. The
+   deck carries dozens of screenshots and mascot panels; spelling each one out
+   here would mean editing two files to add a picture, and the one that gets
+   forgotten is always this one. */
+const inlineImages = (html) =>
+  html.replace(/__IMG:([^_]+?)__/g, (_, rel) => {
+    const path = join(root, rel);
+    if (!existsSync(path)) throw new Error(`Deck references a missing image: ${rel}`);
+    return b64(path);
+  });
+
+const html = inlineImages(
+  readFileSync(join(here, "prohippo-pitch.html"), "utf8")
+    .replace("__FONT_WOFF2__", b64(join(here, "assets", "plus-jakarta-sans-latin.woff2")))
+    .replace("__LOGO_PNG__", b64(join(root, "public", "prohippo-logo.png")))
+    .replace("__MARK_PNG__", b64(join(root, "public", "prohippo-mark.png")))
+);
 
 const work = mkdtempSync(join(tmpdir(), "prohippo-pitch-"));
 const page = join(work, "deck.html");

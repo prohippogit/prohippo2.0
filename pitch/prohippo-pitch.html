@@ -215,11 +215,12 @@ ul.dots li::before {
 .divider .deck { color: rgba(255,255,255,.85); font-size: 17px; max-width: 760px; margin-top: 20px; }
 
 /* ---------- journey strip ---------- */
-.journey { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.journey { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
 .jcell { border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; background: #fff; position: relative; }
-.jcell .step { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--violet-3); }
-.jcell h4 { font-size: 13.6px; font-weight: 800; margin: 5px 0 5px; letter-spacing: -.01em; }
-.jcell p { font-size: 12.4px; line-height: 1.42; }
+.jcell { padding: 11px 12px; }
+.jcell .step { font-size: 9.5px; font-weight: 800; letter-spacing: .1em; color: var(--violet-3); }
+.jcell h4 { font-size: 12.8px; font-weight: 800; margin: 4px 0 4px; letter-spacing: -.01em; }
+.jcell p { font-size: 11.6px; line-height: 1.4; }
 
 /* ---------- surface columns ---------- */
 .surface { border-radius: 16px; padding: 15px 16px; border: 1px solid var(--line); background: #fff; display: flex; flex-direction: column; gap: 8px; }
@@ -229,6 +230,70 @@ ul.dots li::before {
 .surface .badge.b4 { background: var(--amber); }
 .surface h3 { font-size: 14.6px; font-weight: 800; }
 .surface ul.dots li { font-size: 12.6px; }
+
+/* ---------- screenshots ----------
+   A thin browser chrome around each capture. It is doing one job: telling the
+   reader that what follows is a photograph of software rather than a mockup of
+   it, which a bare rounded rectangle on a slide does not. */
+.shot {
+  border-radius: 12px; overflow: hidden; background: #fff;
+  border: 1px solid #D9D3EE; box-shadow: 0 18px 40px rgba(30, 22, 80, .16);
+}
+.shot .bar {
+  height: 22px; background: #EFECF9; border-bottom: 1px solid #E1DBF2;
+  display: flex; align-items: center; gap: 5px; padding: 0 10px;
+}
+.shot .bar i { width: 7px; height: 7px; border-radius: 50%; background: #C9C2E4; display: block; }
+.shot .bar span {
+  margin-left: 8px; font-size: 8.5px; font-weight: 700; color: #9A93B8;
+  letter-spacing: .04em;
+}
+.shot img { display: block; width: 100%; height: auto; }
+/* Crops from the top when a page is taller than the space it is given, which
+   is the right half of a screen to lose — the app puts the answer at the top. */
+.shot.crop { position: relative; }
+.shot.crop .win { overflow: hidden; }
+.shot.crop img { margin-bottom: -1px; }
+
+.phone {
+  border-radius: 22px; overflow: hidden; background: #14102D;
+  border: 5px solid #221B4A; box-shadow: 0 18px 40px rgba(30, 22, 80, .22);
+}
+.phone img { display: block; width: 100%; height: auto; }
+
+/* Caption under a screenshot: what to look at, not what it is. */
+.shotcap { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 9px; line-height: 1.45; }
+.slide.dark .shotcap { color: rgba(255,255,255,.65); }
+
+/* Numbered pointers into a screenshot. */
+.points { display: flex; flex-direction: column; gap: 9px; }
+.point { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+.point .no {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--violet); color: #fff;
+  font-size: 11px; font-weight: 800; display: grid; place-items: center; margin-top: 1px;
+}
+.point .tx { font-size: 13px; line-height: 1.45; color: var(--ink-2); font-weight: 500; }
+.point .tx b { display: block; color: var(--ink); font-weight: 800; margin-bottom: 1px; }
+
+/* A screenshot and its annotations: the picture takes the larger share,
+   because the point of these slides is the picture. */
+.gshot { display: grid; grid-template-columns: 1.6fr 1fr; gap: 24px; align-items: start; }
+
+/* ---------- mascot journey panels ----------
+   The renders are not all the same shape, and eight panels whose pictures each
+   set their own height turn two tidy rows into a ragged wall. A fixed 16:10
+   window with the image covering it keeps the eight titles on one baseline —
+   and caps the row height, which is what stops the grid spilling past the
+   slide. */
+.jcell .pic { border-radius: 9px; overflow: hidden; margin-bottom: 8px; background: var(--lav-2); aspect-ratio: 16 / 9; }
+.jcell .pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* A handful of slides carry more than the body box fits — by four percent at
+   worst. `zoom` reflows the content rather than scaling a bitmap of it, so the
+   text stays real text in the PDF and the layout stays the layout; the
+   alternative was cutting a sentence that earns its place. Applied per slide,
+   never globally, so the deck keeps one type scale everywhere else. */
+.slide.tight .body { zoom: 0.93; }
 
 /* ---------- callout ---------- */
 .callout {
@@ -326,7 +391,7 @@ ul.dots li::before {
   <div class="eyebrow">The gap, in practice</div>
   <h2>Five ways a matter is lost today — none of them careless</h2>
   <div class="hr"></div>
-  <div class="body col" style="gap:11px">
+  <div class="body col" style="gap:9px">
     <div class="card">
       <h3>1 · The notice reaches the client, not the professional</h3>
       <p>Service goes to the assessee's registered email and portal account. The client does not read
@@ -424,43 +489,54 @@ ul.dots li::before {
 </section>
 
 <!-- ══════════════════ 7 · THE JOURNEY ══════════════════ -->
-<section class="slide">
+<section class="slide tight">
   <div class="eyebrow">The product, in eight moments</div>
   <h2>Notice → Appeal, without a handover that loses context</h2>
   <div class="hr"></div>
-  <div class="body col" style="gap:12px">
+  <div class="body col" style="gap:11px">
     <div class="journey">
-      <div class="jcell"><div class="step">01 · NOTICE DETECTED</div><h4>The notice is issued</h4>
-        <p>ProHippo starts watching the matter the moment a digital notice leaves the Department —
-          picked up by portal sync, not by somebody checking.</p></div>
-      <div class="jcell"><div class="step">02 · INBOX MONITORED</div><h4>Email misses it. ProHippo does not</h4>
-        <p>The assessee can leave the mail unopened. The deadline still appears on the dashboard and
-          in the queues that count.</p></div>
-      <div class="jcell"><div class="step">03 · USER ALERTED</div><h4>The right alert reaches WhatsApp</h4>
-        <p>Matter, assessment year and due date, delivered where attention already lives — to the
-          practitioner, and where consented, to the client's group head.</p></div>
-      <div class="jcell"><div class="step">04 · CALENDAR SYNCED</div><h4>The hearing books itself</h4>
-        <p>The hearing date is read off the notice and written into a Google calendar ProHippo creates,
-          with the matter attached.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/01-notice-issued.jpg__" alt="The ProHippo mascot watching an Income Tax officer issue a digital notice."></div>
+        <div class="step">01 · NOTICE DETECTED</div><h4>The notice is issued</h4>
+        <p>Watching from the moment a digital notice leaves the Department — picked up by portal sync,
+          not by somebody checking.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/02-email-unopened.jpg__" alt="The mascot finding an unopened notice inside a crowded inbox."></div>
+        <div class="step">02 · INBOX MONITORED</div><h4>Email misses it. ProHippo does not</h4>
+        <p>The assessee can leave the mail unopened. The deadline still appears in the queues that
+          count.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/03-whatsapp-alert.jpg__" alt="A tax notice travelling into a phone alert beside the mascot."></div>
+        <div class="step">03 · USER ALERTED</div><h4>The right alert reaches WhatsApp</h4>
+        <p>Matter, year and due date, delivered where attention already lives — and where consented,
+          to the client's group head.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/04-hearing-calendar.jpg__" alt="The mascot adding a tax hearing to a calendar automatically."></div>
+        <div class="step">04 · CALENDAR SYNCED</div><h4>The hearing books itself</h4>
+        <p>The date is read off the notice and written into a Google calendar ProHippo creates, with
+          the matter attached.</p></div>
     </div>
     <div class="journey">
-      <div class="jcell"><div class="step">05 · HEARING READY</div><h4>The reminder arrives on time</h4>
-        <p>A WhatsApp reminder the day before, a weekly cause list every Monday, and a printable
-          cause list for any range of dates.</p></div>
-      <div class="jcell"><div class="step">06 · REPLY SUBMITTED</div><h4>Type. Review. Submit</h4>
-        <p>Documents are called for as a tracked checklist, in the client's own language, and the
-          reply filed on the portal is synced back onto the proceeding.</p></div>
-      <div class="jcell"><div class="step">07 · WINDOW OPEN</div><h4>The order starts a live countdown</h4>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/05-hearing-reminder.jpg__" alt="A mobile hearing reminder connected to the prepared mascot."></div>
+        <div class="step">05 · HEARING READY</div><h4>The reminder arrives on time</h4>
+        <p>A WhatsApp reminder the day before, a cause list every Monday, and a printable list for any
+          range of dates.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/06-reply-submit.jpg__" alt="The mascot typing a reply and pressing a glowing submit control."></div>
+        <div class="step">06 · REPLY SUBMITTED</div><h4>Type. Review. Submit</h4>
+        <p>Documents called for as a tracked checklist, in the client's language, and the reply filed
+          on the portal synced back.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/07-order-countdown.jpg__" alt="The mascot reading an order beside a live appeal countdown."></div>
+        <div class="step">07 · WINDOW OPEN</div><h4>The order starts a live countdown</h4>
         <p>Every appealable order becomes a prepared appeal: deadline, regime, fee, checklist and a
-          pre-filled form worksheet.</p></div>
-      <div class="jcell"><div class="step">08 · PORTAL CONFIRMED</div><h4>The appeal closes the loop</h4>
+          pre-filled worksheet.</p></div>
+      <div class="jcell">
+        <div class="pic"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/08-appeal-filed.jpg__" alt="The mascot filing an appeal and receiving portal confirmation."></div>
+        <div class="step">08 · PORTAL CONFIRMED</div><h4>The appeal closes the loop</h4>
         <p>The Form 35 filed on the portal syncs back into the same matter — acknowledgement, date and
-          documents in one place.</p></div>
-    </div>
-    <div class="g3" style="margin-top:2px">
-      <div class="card tint"><h3>Always visible</h3><p>No notice gets buried.</p></div>
-      <div class="card tint"><h3>Always moving</h3><p>No handoff loses context.</p></div>
-      <div class="card tint"><h3>Always on time</h3><p>No deadline becomes a surprise.</p></div>
+          documents together.</p></div>
     </div>
   </div>
   <div class="foot">
@@ -521,6 +597,41 @@ ul.dots li::before {
       practitioner is there. The Connector is for the practice that carries hundreds of PANs and needs
       the morning's notices already in before anyone sits down — parallel, paced to look human, and
       running on the firm's own residential connection rather than a data-centre IP.</p>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 8b · THE REAL THING ══════════════════ -->
+<section class="slide tight">
+  <div class="eyebrow">Not a mockup</div>
+  <h2>The public page, and the same practice in a pocket</h2>
+  <div class="hr"></div>
+  <div class="body" style="display:grid; grid-template-columns: 1.75fr 1fr; gap:26px; align-items:start">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/00-landing.jpg__" alt="The ProHippo landing page.">
+      </div>
+      <div class="shotcap">The public site a practitioner lands on. Every screenshot in this deck is
+        the running application, captured from the app's own components — not a design file.</div>
+    </div>
+    <div class="col" style="gap:14px; align-items:flex-start">
+      <!-- 158px, not "as wide as the column": a 414x896 capture is 2.2 times
+           as tall as it is wide, and at the column's full width the phone alone
+           is taller than the slide. -->
+      <div class="phone" style="width:148px">
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/18-mobile-dashboard.jpg__" alt="The ProHippo dashboard on a phone.">
+      </div>
+      <div class="card tint">
+        <h3>The same app, on a phone</h3>
+        <p>Not a cut-down companion — the whole practice, with a drawer for navigation and haptic
+          feedback under every control. Installable from the browser, so it sits on the home screen
+          with its own icon.</p>
+      </div>
+    </div>
   </div>
   <div class="foot">
     <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
@@ -667,6 +778,73 @@ ul.dots li::before {
   </div>
 </section>
 
+<!-- ══════════════════ 12b · DASHBOARD, PHOTOGRAPHED ══════════════════ -->
+<section class="slide tight">
+  <div class="eyebrow">Page 01 · Dashboard</div>
+  <h2>What a practitioner sees at nine in the morning</h2>
+  <div class="hr"></div>
+  <div class="body gshot">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in — Dashboard</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/01-dashboard.jpg__" alt="The ProHippo dashboard.">
+      </div>
+      <div class="shotcap">Live data, live arithmetic — the appeal countdown, the badges and the
+        month grid are all computed from the same records the rest of the app works on.</div>
+    </div>
+    <div class="points">
+      <div class="point"><div class="no">1</div><div class="tx"><b>Four queues, not decorations</b>Each tile opens the records behind its number.</div></div>
+      <div class="point"><div class="no">2</div><div class="tx"><b>The appeal card leads</b>Nearest deadline, client, route, days left and the date — and it is silent when nothing is due.</div></div>
+      <div class="point"><div class="no">3</div><div class="tx"><b>Badges on the sidebar</b>Seven assessees, three appealable orders. The navigation carries the count so nothing waits unseen.</div></div>
+      <div class="point"><div class="no">4</div><div class="tx"><b>Hearings with a date block</b>Amber at four days, red at one, VC marked.</div></div>
+      <div class="point"><div class="no">5</div><div class="tx"><b>The month, and the mix</b>Hearing days dotted; the active load split by forum.</div></div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 12c · THE QUEUE BEHIND THE NUMBER ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 01 · Dashboard · Awaiting reply</div>
+  <h2>Every number opens</h2>
+  <div class="hr"></div>
+  <div class="body gshot">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in — Awaiting reply</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/02-dashboard-notice-queue.jpg__" alt="The awaiting-reply notice queue opened over the dashboard.">
+      </div>
+      <div class="shotcap">Clicking "Awaiting reply — 4" gives the four notices, not a page that has
+        to be filtered back down to them.</div>
+    </div>
+    <div class="col" style="gap:13px">
+      <div class="card lav">
+        <div class="k">What the list says about itself</div>
+        <p>A note at the top states what is in the list and what is not — orders are excluded,
+          because the answer to one is an appeal, which has its own card. A practitioner who counts
+          the rows and gets a different number needs the reason there, not in a support call.</p>
+      </div>
+      <div class="card">
+        <h3>A row opens the proceeding</h3>
+        <p>Not the notice alone. Somebody clicking "u/s 142(1), reply due the 7th" wants the file:
+          what else was issued, what was replied, when the hearing is.</p>
+      </div>
+      <div class="card tint">
+        <h3>The PDF is one click away</h3>
+        <p>Because every action here asks the practitioner to <b>decide</b> something, and no
+          decision can be taken off a one-line summary.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
 <!-- ══════════════════ 13 · ASSESSEES ══════════════════ -->
 <section class="slide">
   <div class="eyebrow">Page 02 · Assessees</div>
@@ -750,8 +928,40 @@ ul.dots li::before {
   </div>
 </section>
 
-<!-- ══════════════════ 15 · PORTAL CARD ══════════════════ -->
+<!-- ══════════════════ 14b · THE CLIENT FILE, PHOTOGRAPHED ══════════════════ -->
 <section class="slide">
+  <div class="eyebrow">Page 02 · The client file</div>
+  <h2>One client, eight tabs, nothing anywhere else</h2>
+  <div class="hr"></div>
+  <div class="body g2" style="gap:22px">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>Assessees → Rajesh M. Shah → Overview</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/04-assessee-overview.jpg__" alt="An assessee profile, Overview tab.">
+      </div>
+      <div class="shotcap"><b>Overview.</b> Identity, PAN, group and status in the header; active
+        matters, upcoming hearings, outstanding fees and notices on file beneath it — then the
+        activity timeline and the portal card that runs the sync.</div>
+    </div>
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>… → Returns</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/05-assessee-returns.jpg__" alt="An assessee profile, Returns tab.">
+      </div>
+      <div class="shotcap"><b>Returns.</b> Every assessment year the sync has pulled — form, filing
+        and e-verification, the portal's own status, demand or refund, and the three documents that
+        matter: <b>JSON, ITR-V and the full form</b>. The violet button generates the Computation of
+        Income from the JSON beside it.</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 15 · PORTAL CARD ══════════════════ -->
+<section class="slide tight">
   <div class="eyebrow">Page 02 · Overview tab · Income-tax portal</div>
   <h2>The card that does the fetching</h2>
   <div class="hr"></div>
@@ -775,8 +985,8 @@ ul.dots li::before {
       </div>
       <div class="card tint">
         <h3>Open portal</h3>
-        <p>One click opens the e-filing portal in a tab, already logged in as that assessee — for
-          everything the sync deliberately does not do.</p>
+        <p>One click opens the portal in a tab, already logged in as that assessee — for everything
+          the sync deliberately does not do.</p>
       </div>
     </div>
     <div class="col">
@@ -785,8 +995,8 @@ ul.dots li::before {
         <ul class="ticks">
           <li>Proceedings — created, updated and <b>closed</b>, with a pop-up naming what closed</li>
           <li>Notices and orders, with every PDF that came with them</li>
-          <li><b>Locked PDFs unlocked</b> using the date of birth or incorporation on file</li>
-          <li>Replies already filed on the portal, attached to the right proceeding</li>
+          <li><b>Locked PDFs unlocked</b> from the date of birth or incorporation on file</li>
+          <li>Replies already filed on the portal, on the right proceeding</li>
           <li>Form 35 appeals with their acknowledgements</li>
           <li>Filed returns, ITR JSON, ITR-V, and CPC intimations</li>
         </ul>
@@ -981,6 +1191,37 @@ ul.dots li::before {
   </div>
 </section>
 
+<!-- ══════════════════ 18b · MATTERS & HEARINGS, PHOTOGRAPHED ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Pages 03 &amp; 04 · Matters and the calendar</div>
+  <h2>The practice-wide load, and the week it lands in</h2>
+  <div class="hr"></div>
+  <div class="body g2" style="gap:22px">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in — Matters</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/07-matters.jpg__" alt="The Matters page.">
+      </div>
+      <div class="shotcap"><b>Matters.</b> Every proceeding, sortable on each column and filterable
+        by type and status, with the coloured stripe that tells a scrutiny from an appeal from a
+        penalty at a glance.</div>
+    </div>
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in — Hearings &amp; Calendar</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/08-hearings-calendar.jpg__" alt="The Hearings calendar.">
+      </div>
+      <div class="shotcap"><b>Hearings.</b> One of five views of the same dates — Calendar, Week,
+        List, Authority-wise and Staff-wise — with the cause list and the CSV export in the header,
+        and the Tribunal's inbox above the grid.</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
 <!-- ══════════════════ 19 · NOTICES ══════════════════ -->
 <section class="slide">
   <div class="eyebrow">Notices · the review screen</div>
@@ -1086,6 +1327,47 @@ ul.dots li::before {
   </div>
 </section>
 
+<!-- ══════════════════ 20b · APPEALS, PHOTOGRAPHED ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 05 · Appeals</div>
+  <h2>The limitation engine, running</h2>
+  <div class="hr"></div>
+  <div class="body gshot">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in — Appeals</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/10-appeals.jpg__" alt="The Appeals page with three countdowns.">
+      </div>
+      <div class="shotcap">Three orders on file, three countdowns, each already routed, dated and
+        costed. Nobody typed any of this.</div>
+    </div>
+    <div class="col" style="gap:12px">
+      <div class="card lav">
+        <div class="k">Read the row</div>
+        <p><b>17 days left · due 31 Aug 2026.</b> An assessment order u/s 143(3) routes to
+          <b>CIT(A)</b>; a CIT(A) order u/s 250 routes to the <b>ITAT</b>. The penalty order gets
+          47 days and its own flat fee.</p>
+      </div>
+      <div class="card">
+        <h3>"Act 2025 · Form 99"</h3>
+        <p>These orders were communicated after 1 April 2026, so the engine has selected the new
+          Act's clock and the new Act's form — and would have chosen Form 35 for an order
+          communicated a week earlier.</p>
+      </div>
+      <div class="card tint">
+        <h3>"Two possible dates" — the amber chip</h3>
+        <p>The regime turns on the date of communication, which can be disputed. Rather than pick
+          silently, the app <b>says so on the row</b> and offers both computations underneath. This
+          is the deck's central claim, visible in the product.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
 <!-- ══════════════════ 21 · INTIMATIONS ══════════════════ -->
 <section class="slide">
   <div class="eyebrow">Page 06 · Intimations &amp; rectifications</div>
@@ -1135,6 +1417,45 @@ ul.dots li::before {
           <li><b>No s.220(2) interest projection.</b> It would be our arithmetic sitting beside figures
             the department stated, and here the two must never be confusable.</li>
         </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 21b · INTIMATIONS, PHOTOGRAPHED ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 06 · Intimations &amp; rectifications</div>
+  <h2>What CPC did, totalled and named</h2>
+  <div class="hr"></div>
+  <div class="body gshot">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>prohippo.in — Intimations</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/12-intimations.jpg__" alt="The Intimations page.">
+      </div>
+      <div class="shotcap">Four CPC orders across four clients: one adverse, one in the assessee's
+        favour, two that agree with the return.</div>
+    </div>
+    <div class="col" style="gap:12px">
+      <div class="card lav">
+        <div class="k">Never netted</div>
+        <p><b>₹80,720 more payable</b> and <b>₹47,180 in the assessee's favour</b> are kept apart.
+          A practice with new demand on one client and extra refund on another has two urgent
+          conversations to have — a single net figure would say it had none.</p>
+      </div>
+      <div class="card">
+        <h3>The list shortens itself</h3>
+        <p>"2 orders where CPC agreed with the return — nothing to decide on those." One click
+          clears them and leaves only the orders that need a person.</p>
+      </div>
+      <div class="card tint">
+        <h3>By client · by cause · by staff</h3>
+        <p>The same rows cut three ways: whose file it is, which adjustment caused it, and who in
+          the practice is holding it.</p>
       </div>
     </div>
   </div>
@@ -1206,7 +1527,7 @@ ul.dots li::before {
 </section>
 
 <!-- ══════════════════ 23 · COMMUNICATIONS ══════════════════ -->
-<section class="slide">
+<section class="slide tight">
   <div class="eyebrow">Page 08 · Communications</div>
   <h2>A document request is not a message. It is a checklist that sends messages.</h2>
   <div class="hr"></div>
@@ -1225,8 +1546,8 @@ ul.dots li::before {
           <li>Items pre-filled from what the notice called for, or from <b>ready-made presets</b> by
             proceeding type</li>
           <li>Every item editable in place, reorderable, markable <b>received</b> or <b>waived</b></li>
-          <li>A note per item, and a required/optional flag</li>
-          <li>Live preview of exactly what the client will read</li>
+          <li>A note per item, a required/optional flag, and a live preview of exactly what the
+            client will read</li>
         </ul>
       </div>
       <div class="card">
@@ -1355,6 +1676,51 @@ ul.dots li::before {
         <p>Transactional email from your own domain, and Tally / Zoho Books invoice push — shown as
           coming, because a switch that does nothing is worse than no switch.</p>
       </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 25b · THE REST OF THE APP ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Pages 07–10 · The rest of it</div>
+  <h2>Billing, requests, exports and switches</h2>
+  <div class="hr"></div>
+  <div class="body g4" style="gap:16px">
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>Invoices</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/13-invoices.jpg__" alt="The Invoices page.">
+      </div>
+      <div class="shotcap"><b>Invoices.</b> Billing trend, top outstanding, the register, ledgers and
+        group accounts.</div>
+    </div>
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>Communications</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/14-communications.jpg__" alt="The Communications page.">
+      </div>
+      <div class="shotcap"><b>Communications.</b> Document requests as tracked checklists, drafts
+        first, then the delivery log.</div>
+    </div>
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>Reports</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/15-reports.jpg__" alt="The Reports page.">
+      </div>
+      <div class="shotcap"><b>Reports.</b> Eight CSV exports, each showing its row count before you
+        click it.</div>
+    </div>
+    <div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>Settings</span></div>
+        <img src="data:image/jpeg;base64,__IMG:pitch/assets/screens/16-settings.jpg__" alt="The Settings page.">
+      </div>
+      <div class="shotcap"><b>Settings.</b> Practice profile, account, data, and every integration
+        switch in one column.</div>
     </div>
   </div>
   <div class="foot">

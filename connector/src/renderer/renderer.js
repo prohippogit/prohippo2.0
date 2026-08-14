@@ -868,6 +868,10 @@ function showPassword(on) {
   const btn = $("aPasswordEye");
   const field = $("aPassword");
   field.type = on ? "text" : "password";
+  // Monospace while it is showing — see .pwd input.shown. A password read off a
+  // slip of paper is exactly the string where `Il1`, `O0` and a capital next to
+  // its lower-case twin have to be told apart at a glance.
+  field.classList.toggle("shown", on);
   btn.setAttribute("aria-pressed", String(on));
   btn.innerHTML = on ? PASSWORD_EYE.on : PASSWORD_EYE.off;
   const label = on ? "Hide password" : "Show password";

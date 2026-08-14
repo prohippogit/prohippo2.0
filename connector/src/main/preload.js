@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld("connector", {
     return () => ipcRenderer.removeListener("assessee:event", handler);
   },
   runSync: (jobs, scope, headless) => ipcRenderer.invoke("sync:run", { jobs, scope, headless }),
+  /* End the run that is in flight, whoever started it — the button or the
+     schedule. Each open portal session is closed properly, so the practice's
+     lock is released and no browser is left behind. */
+  stopSync: () => ipcRenderer.invoke("sync:stop"),
+  /* Give up on ONE PAN and let the rest of the run carry on. The pool syncs
+     five at a time, so a PAN the portal has stopped answering for otherwise
+     holds a fifth of the run while the queue waits behind it. */
+  skipSync: (assesseeId) => ipcRenderer.invoke("sync:skip", { assesseeId }),
 
   // --- automatic syncing (start with the computer, then every N hours) ---
   getAutoSync: () => ipcRenderer.invoke("auto:get"),

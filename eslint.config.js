@@ -37,12 +37,26 @@ export default defineConfig([
   },
   {
     // The connector's renderer is an ordinary browser script talking to the
-    // preload bridge on `window.connector`.
+    // preload bridge on `window.connector`. The window loads two scripts, so
+    // `SyncStatus` — the list's grouping and stall rules, defined in
+    // syncStatus.js — is a real global by the time renderer.js runs.
     files: ['connector/src/renderer/**/*.js'],
     extends: [js.configs.recommended],
     languageOptions: {
-      globals: globals.browser,
+      globals: { ...globals.browser, SyncStatus: 'readonly' },
       sourceType: 'script',
+    },
+  },
+  {
+    // ...and syncStatus.js itself is loaded BOTH ways: as that plain <script>,
+    // and as a CommonJS module by test/connectorSyncStatus.test.mjs, which is
+    // the whole reason those rules live in a file of their own rather than
+    // inside the renderer where they cannot be tested.
+    files: ['connector/src/renderer/syncStatus.js'],
+    languageOptions: {
+      // 'off' because this is the file that DEFINES SyncStatus — declaring the
+      // same name the other renderer files borrow would be a redeclaration.
+      globals: { ...globals.browser, module: 'readonly', SyncStatus: 'off' },
     },
   },
   {

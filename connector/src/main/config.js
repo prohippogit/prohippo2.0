@@ -44,6 +44,39 @@ const POOL = {
   startStagger: { min: 1500, max: 4200 }, // ms between launching workers
 };
 
+/* DEADLINES.
+ *
+ * THE REASON THIS EXISTS: every portal call in this app is a `fetch` made
+ * inside the page (see portalApi.js), and a browser fetch has no timeout. When
+ * the portal stalled part-way through handing over a document — which it does —
+ * nothing anywhere gave up. The call never returned, the PAN never finished,
+ * the pool held its slot for ever, and the window sat at the same percentage
+ * with a browser open behind it. From the outside that is indistinguishable
+ * from a crashed app, and the only way out was to kill it.
+ *
+ * So every call now has a ceiling, and so does every PAN. They are deliberately
+ * generous: the portal is genuinely slow, a rendered return is genuinely 11 MB
+ * on a home connection, and a deadline that fires on a working sync is worse
+ * than no deadline at all. These are "something has gone wrong" numbers, not
+ * "this is taking a while" numbers.
+ *
+ * A call that times out is RETRIED once, after a jittered pause, before it is
+ * given up on — a portal that stalls on one request usually answers the next.
+ * Nothing here is destructive: every portal call this app makes is a read, and
+ * a document it fails to fetch is simply fetched by the next sync. */
+const TIMEOUTS = {
+  api: 45000,        // one JSON service call
+  doc: 90000,        // one document download by id
+  binary: 150000,    // a rendered form or an intimation (can be tens of MB)
+  retries: 1,        // one more go before a call is given up on
+  retryPause: { min: 1200, max: 2800 },
+  /* One PAN, end to end. A first sync of a heavy file — years of returns, a
+     set of s.148 documents — runs into minutes legitimately, so this sits well
+     past that; it is there to stop ONE assessee holding a pool slot for the
+     rest of the evening, not to hurry anything along. */
+  pan: 15 * 60 * 1000,
+};
+
 // Google sign-in (system-browser loopback flow) needs a Google OAuth "Desktop
 // app" client. Its id + secret live in connector/google-oauth.json, which is
 // git-ignored (never committed). Shape:
@@ -58,4 +91,4 @@ function getGoogleOAuthConfig() {
   return null;
 }
 
-module.exports = { firebaseConfig, FUNCTIONS_REGION, PORTAL, POOL, getGoogleOAuthConfig };
+module.exports = { firebaseConfig, FUNCTIONS_REGION, PORTAL, POOL, TIMEOUTS, getGoogleOAuthConfig };

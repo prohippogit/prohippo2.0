@@ -470,7 +470,29 @@ async function syncPortalData(page, job, scope, emit, summary) {
     proceedings(page, { pan, statusFlag: "FYA", pageSize: 100 }),
     scope === "all" ? proceedings(page, { pan, statusFlag: "FYI", pageSize: 100 }) : null,
   ]));
-  push(lists[0], "For your Action");
+  /* A LIST CALL THAT NEVER ARRIVED IS NOT AN EMPTY LIST.
+   *
+   * `push` reads the rows out of the response and shrugs at anything else, so a
+   * call that timed out or died on the wire produced no rows — and no rows is
+   * indistinguishable, three lines further down, from an assessee with a clean
+   * compliance record. The sync then went on to report "Nothing in FYA — up to
+   * date" and stamp the PAN as synced, on a run that had not managed to ask the
+   * question. That is the worst outcome this file can produce: a green tick over
+   * data nobody fetched.
+   *
+   * Only a transport failure is treated this way. A response that arrived and
+   * simply is not shaped as expected keeps the old, forgiving behaviour — the
+   * portal has changed its own payloads before, and the rest of the sync should
+   * not stop for it. */
+  const fya = lists[0];
+  if (!fya || (!fya.ok && (fya.timedOut || fya.error))) {
+    throw new Error(
+      fya && fya.timedOut
+        ? "The portal did not answer when asked for this assessee's e-Proceedings. Nothing was changed — try again in a few minutes."
+        : `Couldn't reach the portal's e-Proceedings list (${(fya && fya.error) || "no response"}).`
+    );
+  }
+  push(fya, "For your Action");
   if (lists[1]) push(lists[1], "For your Information");
 
   // eproc closure detection: a proceeding we knew as ACTIVE that is no longer in

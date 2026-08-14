@@ -52,7 +52,7 @@ connector/
     updater.js       version + auto-update (full on Windows, notify-only on macOS)
     timing.js        per-phase stopwatch reported per PAN
     pacing.js        rand / jsleep / PACE / POLL (ported timings)
-    pool.js          worker pool: cap 5, randomised staggered launch
+    pool.js          worker pool: cap 5, randomised staggered launch, Stop/Skip
     settings.js      the switches, remembered between launches
     syncLock.js      one sync at a time ACROSS the practice's computers
     lockRules.js     when a held lock counts as dead (pure, tested)
@@ -64,6 +64,7 @@ connector/
     assessees.js     add an assessee: fetch from the portal, then create it
     ingest.js        pushes results to the Cloud Functions
   src/renderer/      thin UI (index.html / styles.css / renderer.js)
+    syncStatus.js    how the list groups + when a row counts as stalled (pure, tested)
   electron-builder.yml  packaging + signing + auto-update config
 ```
 
@@ -295,6 +296,94 @@ record, which is most of them, synced every six hours and still read "never
 synced". The web app's own "Last synced" line reads the same field and gets the
 same correction.
 
+## A run you can read, and a stall you can end
+
+Three complaints, all from watching the same list during a sync.
+
+### The list sorts itself
+
+Rows are grouped by what they are doing, in the order the questions get asked:
+
+| | |
+|---|---|
+| **Syncing now** | being fetched this second — the only rows that are changing |
+| **Waiting** | picked, queued behind the five in flight |
+| **Needs attention** | failed, or stopped by the user |
+| **Not synced yet** | untouched by this run |
+| **Synced** | done, collected at the bottom and out of the way |
+
+A PAN that finishes drops out of the top group and lands under **Synced**, so
+"what is left?" is answered by looking at the top of the list rather than by
+scrolling two hundred rows and reading every pill. The headings only appear once
+there is more than one group — a list nobody has synced yet looks exactly as it
+always did.
+
+The rules live in `src/renderer/syncStatus.js`, away from the DOM, and are
+tested in `test/connectorSyncStatus.test.mjs`.
+
+### A synced row stays synced
+
+It did not, and the cause was one line. Every finished run calls
+`refreshRowsAfterRun()` to bring the last-sync times back from Firestore; that
+reloads the list; and the reload ran `STATE.clear()`. So seconds after a sync
+finished, every row it had just turned green went back to reading "idle" — the
+only surviving evidence was the summary card in front of it. The reload now
+keeps what each row did and drops only rows that no longer exist, which is also
+how signing in as somebody else clears the board.
+
+The row's own **stage** now decides its colour, too. It used to be the level of
+the last event, and `portalLogin` reports "Logged in" at level `success` a fifth
+of the way through — so a row went green, said "done", and then carried on
+fetching notices.
+
+### Nothing gets to hang for ever
+
+**This was a real hang, not a slow sync.** Every portal call in this app is a
+`fetch` made inside the page (`portalApi.js`), and a browser fetch has no
+timeout. When the portal accepted a request for a document and then stopped
+sending it, nothing anywhere gave up: the call never returned, the PAN never
+finished, its pool slot was held for the rest of the evening, and the window sat
+at the same percentage with a hidden browser open behind it. From the outside
+that is a crashed app.
+
+Four things now stand between the portal and that:
+
+1. **Every call has a deadline** — `TIMEOUTS` in `config.js`: 45s for a JSON
+   service call, 90s for a document, 150s for a rendered form. The page's own
+   `AbortSignal` cancels the request *and* the body it was part-way through
+   reading, and a Node-side race backs it up in case the page itself is what has
+   stopped answering.
+2. **One retry, jittered**, for a stall, a dropped connection or a 5xx — a
+   portal that ignores one request usually answers the next. A 400 or a 404 is
+   not retried; the answer is "no" and asking twice is a wasted round trip.
+3. **A ceiling on each PAN** (15 minutes) so one assessee can never hold a pool
+   slot indefinitely. Its context is closed, which is the only thing that
+   reliably ends a request the portal is still holding open, and the other four
+   workers carry on.
+4. **The window says what is happening.** A running row carries a clock that
+   ticks every second; after 45 seconds without a word it says "still on this
+   step — 1m 12s", and past two and a half minutes it names the way out. The
+   progress bar itself has a moving stripe, because a bar frozen at 62% and a
+   dead app are the same picture.
+
+And two ways out, for the person who does not want to wait even that long:
+**Skip** on a row closes that one portal session and lets the other four carry
+on; **Stop sync** ends the whole run, releasing the practice's sync lock and
+closing every browser properly — which killing the app does not.
+
+Nothing already ingested is lost either way: the sync is incremental, so the
+next run reads what is on file and picks up from there. A PAN that was stopped,
+skipped or given up on is **never** stamped as synced — half the calls in a
+closed session fail quietly by design, so an abandoned worker can reach the end
+with a summary in its hand, and stamping that would tell the whole practice an
+assessee nobody finished was up to date.
+
+One more silent failure went with it: a proceedings-list call that timed out
+used to produce no rows, which three lines later was indistinguishable from an
+assessee with a clean compliance record — so the sync reported "Nothing in FYA —
+up to date" and stamped the PAN. A transport failure there is now a failed PAN
+with a sentence saying so.
+
 ## "Run hidden" means hidden
 
 A practitioner reported browser windows opening with the box ticked, on Windows
@@ -448,6 +537,13 @@ reaches it.
 - **Login (pass 1)** — `portalLogin.js` drives a real Playwright login through
   User ID → [secure-access confirm] → Password → Dashboard, handling the
   Dual Login and session-expiry dialogs, on a randomised poll cadence.
+- **A readable run** — the list groups itself into Syncing now / Waiting /
+  Needs attention / Not synced yet / Synced, a finished row keeps its green bar
+  instead of being reloaded back to "idle", and a row that has gone quiet says
+  how long for (see "A run you can read, and a stall you can end" above).
+- **Deadlines on every portal call**, one retry, a 15-minute ceiling per PAN,
+  plus **Skip** (one assessee) and **Stop sync** (the whole run) — so a portal
+  that stops answering mid-document can no longer hang the app.
 - **Scoped fetch + ingest (pass 2)** — `portalFetch.js` pulls the e-Proceedings
   list (FYA, plus FYI for `all`, plus synthetic closed rows for `eproc`),
   applies the same scope + `knowns` incremental diff as the extension, downloads

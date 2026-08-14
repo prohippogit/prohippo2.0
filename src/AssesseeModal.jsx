@@ -72,6 +72,11 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
   const [portalPassword, setPortalPassword] = React.useState("");
   const [portalConsent, setPortalConsent] = React.useState(false);
   const [credSet, setCredSet] = React.useState(Boolean(initial?.portalCredSet));
+  /* The stored password, once it has been read back — see revealSaved below.
+     Kept so the form can tell "shown" from "changed": a password that was
+     fetched and left alone is not a new one, and must not ask for consent all
+     over again or be written back over itself on save. */
+  const [savedPassword, setSavedPassword] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
 
   // Auto-fill from the portal.
@@ -157,6 +162,54 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
     }
   };
 
+  /* SHOW THE PASSWORD THAT IS ALREADY SAVED.
+   *
+   * The field itself is empty and always was — the stored password is encrypted
+   * server-side and this form has never held it — so pressing the eye on a saved
+   * assessee had nothing to reveal. It fetches it now.
+   *
+   * Nothing new is being exposed: getPortalCredential already hands this same
+   * password to this same signed-in user every time they open the portal from
+   * the Assessees list, and it writes an entry to the owner's own
+   * portalCredLogs on the way past, so a view is recorded whoever asked for it.
+   *
+   * Returns false when there is nothing to show, which leaves the eye switched
+   * off rather than open over an empty field. */
+  const revealSaved = async () => {
+    if (!initial?.id || !credSet) return false;
+    try {
+      const { data } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: initial.id });
+      const pw = (data && data.portalPassword) || "";
+      if (!pw) { notify("No password is stored for this assessee.", "alert"); return false; }
+      // Both, in this order: `savedPassword` is what makes the next line "shown"
+      // rather than "changed".
+      setSavedPassword(pw);
+      setPortalPassword(pw);
+      return true;
+    } catch (e) {
+      console.error("getPortalCredential failed", e);
+      notify(e?.message?.slice(0, 120) || "Couldn't read the stored password.", "alert");
+      return false;
+    }
+  };
+
+  /* A password the user has actually TYPED, as against one they have looked at.
+   *
+   * Everything that follows from entering a password — the authorisation box,
+   * and writing the credential on save — hangs off this rather than off the
+   * field being non-empty. Revealing the saved one fills the field, and without
+   * this distinction that alone would demand consent for a password already
+   * consented to and rewrite it over itself on every save. */
+  const passwordChanged = Boolean(portalPassword.trim()) && portalPassword !== savedPassword;
+
+  /* The consent box still appears for ANY password in the field, revealed or
+     typed, and still gates the fetch. It is tempting to waive it for a password
+     that came out of storage — it was consented to once already — but the note
+     on fetchMaster below is right and the waiver would be wrong: what consent
+     gates there is handing the client's password to the extension to sign in as
+     them, and that happens whichever way the password got into the field.
+     `passwordChanged` is only about whether to WRITE the credential. */
+  const needsConsent = Boolean(portalPassword.trim()) && !portalConsent;
   const canFetch = PAN_RE.test(pan) && Boolean(portalPassword.trim()) && portalConsent && !fetching;
 
   const save = async () => {
@@ -182,7 +235,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
          user was told "added" while the password was silently dropped. Every
          outcome is folded into one message instead. */
       let credNote = "";
-      if (portalPassword.trim() && portalConsent) {
+      if (passwordChanged && portalConsent) {
         try {
           await httpsCallable(functions, "savePortalCredential")({
             assesseeId,
@@ -193,7 +246,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
           console.error("savePortalCredential failed", e);
           credNote = " — but the portal login couldn't be stored";
         }
-      } else if (portalPassword.trim() && !portalConsent) {
+      } else if (passwordChanged && !portalConsent) {
         credNote = " — portal login NOT saved (consent box not ticked)";
       }
 
@@ -214,6 +267,7 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
       await httpsCallable(functions, "deletePortalCredential")({ assesseeId: initial.id });
       setCredSet(false);
       setPortalPassword("");
+      setSavedPassword(null);
       notify("Portal login removed");
     } catch (e) {
       console.error(e);
@@ -253,11 +307,12 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
           <FormField label="Portal password">
             {/* NOT a row of bullets. That placeholder was indistinguishable
                 from a hidden password, so an empty field looked like a full
-                one — press the eye on it and nothing happens, because there is
-                nothing there. A saved password cannot be shown here at all: it
-                is encrypted server-side and this form has never held it. */}
+                one. Now it says which of the two states this is — and on a
+                saved assessee the eye fetches the stored password rather than
+                revealing an empty field. */}
             <TextInput value={portalPassword} onChange={setPortalPassword} type="password"
-              placeholder={credSet ? "Type a new one to replace it" : "Type the e-filing password"}/>
+              placeholder={credSet ? "Type a new one, or press the eye to see the saved one" : "Type the e-filing password"}
+              onRevealEmpty={credSet && initial?.id ? revealSaved : undefined}/>
           </FormField>
         </div>
 
@@ -279,14 +334,14 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
               fetching ? "Fetching…"
                 : !PAN_RE.test(pan) ? "Enter a valid PAN first"
                   : !portalPassword.trim() ? "Enter the portal password to fetch"
-                    : !portalConsent ? "Tick the authorisation box above before fetching"
+                    : needsConsent ? "Tick the authorisation box above before fetching"
                       : "Sign in to the portal and pull this assessee's master data"
             }
             onClick={fetchMaster}
           >
             <Icon name="download" size={13}/>{fetching ? "Fetching…" : "Fetch master data"}
           </button>
-          {portalPassword.trim() && !portalConsent && !fetching && (
+          {needsConsent && !fetching && (
             <span className="center" style={{gap: 5, fontSize: 11.5, color: "#B07512"}}>
               <Icon name="alert" size={12}/>Tick the box above to enable
             </span>
@@ -313,7 +368,15 @@ export function AssesseeModal({ initial, onClose, onSaved }) {
         {credSet && (
           <div className="center" style={{gap: 10, padding: "10px 12px", background: "var(--p-mint)", borderRadius: 11, marginTop: 12}}>
             <Icon name="check" size={14}/>
-            <div style={{flex: 1, fontSize: 12.5}}>Portal login is saved{initial?.portalUserId ? ` for ${initial.portalUserId}` : ""}. Enter a new password above to replace it.</div>
+            {/* Says which of two things is true, because they need different
+                sentences: the password is hidden and can be looked at, or it is
+                on screen and that was recorded. */}
+            <div style={{flex: 1, fontSize: 12.5}}>
+              Portal login is saved{initial?.portalUserId ? ` for ${initial.portalUserId}` : ""}.{" "}
+              {savedPassword && portalPassword === savedPassword
+                ? "It is shown above — every view is recorded in your account's log."
+                : "Press the eye above to see it, or type a new password to replace it."}
+            </div>
             <button className="btn btn-ghost btn-xs" onClick={removePortalLogin}><Icon name="trash" size={12}/>Remove</button>
           </div>
         )}

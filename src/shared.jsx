@@ -268,8 +268,9 @@ export function FormField({ label, required, children, full }) {
  * itself. It is a plain <button> rather than a clickable icon so it is reachable
  * from the keyboard, and `type="button"` because inside a form a bare button
  * submits it. */
-export function TextInput({ value, onChange, placeholder, type = "text", mono, required }) {
+export function TextInput({ value, onChange, placeholder, type = "text", mono, required, onRevealEmpty }) {
   const [revealed, setRevealed] = React.useState(false);
+  const [fetching, setFetching] = React.useState(false);
   const isPassword = type === "password";
   /* A revealed password is set in MONOSPACE, and that is the point of revealing
      it. A portal password is a string somebody read off a slip of paper, and in
@@ -292,16 +293,39 @@ export function TextInput({ value, onChange, placeholder, type = "text", mono, r
     />
   );
   if (!isPassword) return field;
-  const label = revealed ? "Hide password" : "Show password";
+
+  /* Turning the eye on when there is nothing in the field.
+   *
+   * `onRevealEmpty` is how a caller says "there IS a password here, it just
+   * isn't in this form" — the assessee modal uses it to fetch the one stored
+   * against the assessee. It resolves false when there is nothing to show, and
+   * the eye then stays OFF rather than switching on over an empty field, which
+   * is exactly the "the eye does nothing" this control was reported for. */
+  const toggle = async () => {
+    if (revealed) { setRevealed(false); return; }
+    if (!value && onRevealEmpty) {
+      setFetching(true);
+      try {
+        if ((await onRevealEmpty()) === false) return;
+      } finally {
+        setFetching(false);
+      }
+    }
+    setRevealed(true);
+  };
+
+  const label = fetching ? "Fetching the saved password…" : revealed ? "Hide password" : "Show password";
   return (
     <div className="pwd">
       {field}
       <button
         type="button"
-        className="pwd-eye"
-        onClick={() => setRevealed((on) => !on)}
+        className={"pwd-eye" + (fetching ? " busy" : "")}
+        onClick={toggle}
+        disabled={fetching}
         aria-label={label}
         aria-pressed={revealed}
+        aria-busy={fetching}
         title={label}
         // Keeps the caret where it was: without this the field loses focus to
         // the button, and on a half-typed password that is its own annoyance.

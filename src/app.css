@@ -532,6 +532,26 @@ input, select, textarea { font-family: inherit; color: inherit; }
   box-shadow: 0 0 0 4px rgba(108,92,231,0.12);
 }
 
+/* Password field + its reveal button (see TextInput in shared.jsx). The wrapper
+   is a flex row so the input keeps filling the column it sits in, and the input
+   carries enough right padding that a long password never runs under the eye. */
+.pwd { position: relative; display: flex; }
+.pwd input { flex: 1; width: 100%; padding-right: 42px; }
+.pwd-eye {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: 9px; background: transparent; cursor: pointer;
+  color: var(--p-text-3); transition: color .12s ease, background .12s ease;
+}
+.pwd-eye:hover { color: var(--p-text); background: var(--p-card-tint); }
+/* The eye sits inside the input's own focus ring, so it needs a ring of its own
+   that does not look like a second field. */
+.pwd-eye:focus-visible { outline: 2px solid var(--p-primary-3); outline-offset: 1px; }
+/* Switched on: the state has to be readable at a glance, because what it means
+   is "this password is on screen right now". */
+.pwd-eye[aria-pressed="true"] { color: var(--p-primary-3); }
+
 /* Filter chip */
 .fchip {
   display: inline-flex; align-items: center; gap: 6px;

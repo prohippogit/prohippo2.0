@@ -57,6 +57,8 @@ export const Icon = ({ name, size = 18, stroke = 1.6, className = "" }) => {
     case "trash": return <svg {...common}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/></svg>;
     case "pdf": return <svg {...common}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><text x="7" y="17" fontSize="6" fontWeight="700" fill="currentColor" stroke="none">PDF</text></svg>;
     case "logout": return <svg {...common}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>;
+    case "eye": return <svg {...common}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>;
+    case "eye-off": return <svg {...common}><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.4 0 10 7 10 7a18.5 18.5 0 0 1-3.2 4.1M6.6 6.6A18.4 18.4 0 0 0 2 12s3.6 7 10 7a10.7 10.7 0 0 0 4.5-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>;
     case "apple": return <svg {...common} fill="currentColor" stroke="none"><path d="M15.8 12.6c0-2 1.6-3 1.7-3.1-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.4 2.1 2.4 2 1 0 1.3-.6 2.5-.6s1.5.6 2.5.6 1.7-.9 2.3-1.9c.7-1.1 1-2.2 1-2.2s-1.9-.7-1.9-2.7zM13.9 6.3c.5-.7.9-1.6.8-2.6-.8 0-1.8.6-2.4 1.2-.5.6-1 1.5-.8 2.5.9.1 1.8-.5 2.4-1.1z"/></svg>;
     case "windows": return <svg {...common} fill="currentColor" stroke="none"><path d="M3 5.6l7-1v6.6H3zM11 4.4L21 3v8.2H11zM3 12.9h7v6.5l-7-1zM11 12.9h10V21l-10-1.4z"/></svg>;
     default: return null;
@@ -253,16 +255,51 @@ export function FormField({ label, required, children, full }) {
   );
 }
 
+/* A password field you can check before you commit to it.
+ *
+ * The one place this matters is the portal password on an assessee: it is typed
+ * once, it is stored encrypted and never shown again, and if it is wrong nobody
+ * finds out until a sync fails hours later with "check the credential". Typing a
+ * long password blind into a field that will not tell you what it heard is how
+ * that happens.
+ *
+ * Hidden by default and revealed only while the eye is switched on — the eye is
+ * the whole consent step, which is why it never starts open and never opens by
+ * itself. It is a plain <button> rather than a clickable icon so it is reachable
+ * from the keyboard, and `type="button"` because inside a form a bare button
+ * submits it. */
 export function TextInput({ value, onChange, placeholder, type = "text", mono, required }) {
-  return (
+  const [revealed, setRevealed] = React.useState(false);
+  const isPassword = type === "password";
+  const field = (
     <input
-      type={type}
+      type={isPassword && revealed ? "text" : type}
       value={value}
       required={required}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       style={mono ? {fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"} : undefined}
     />
+  );
+  if (!isPassword) return field;
+  const label = revealed ? "Hide password" : "Show password";
+  return (
+    <div className="pwd">
+      {field}
+      <button
+        type="button"
+        className="pwd-eye"
+        onClick={() => setRevealed((on) => !on)}
+        aria-label={label}
+        aria-pressed={revealed}
+        title={label}
+        // Keeps the caret where it was: without this the field loses focus to
+        // the button, and on a half-typed password that is its own annoyance.
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <Icon name={revealed ? "eye-off" : "eye"} size={16} />
+      </button>
+    </div>
   );
 }
 

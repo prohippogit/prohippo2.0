@@ -833,6 +833,10 @@ function openAdd() {
   addCreated = false;
   currentJurisdiction = null;
   ADD_FIELDS.forEach((id) => { $(id).value = ""; });
+  // A form that opens with the last password still on screen would defeat the
+  // point of hiding it. Reset here as well as on close, so no path can leave it
+  // switched on.
+  showPassword(false);
   $("aStatus").value = "Individual";
   $("aConsent").checked = false;
   $("aErr").textContent = "";
@@ -846,9 +850,42 @@ function openAdd() {
   $("aPan").focus();
 }
 
+/* Show the e-filing password, while the eye is switched on.
+ *
+ * The password is typed once here and never displayed again — it goes to the
+ * server encrypted and comes back only as "a login is saved". So this is the
+ * one moment it can be checked, and a mistyped character that nobody can see
+ * turns up hours later as a sync that failed to log in.
+ *
+ * Off by default, and off again whenever the form closes: the eye is the whole
+ * consent step, so it must never be found already open. */
+const PASSWORD_EYE = {
+  on: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.4 0 10 7 10 7a18.5 18.5 0 0 1-3.2 4.1M6.6 6.6A18.4 18.4 0 0 0 2 12s3.6 7 10 7a10.7 10.7 0 0 0 4.5-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>`,
+  off: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`,
+};
+
+function showPassword(on) {
+  const btn = $("aPasswordEye");
+  const field = $("aPassword");
+  field.type = on ? "text" : "password";
+  btn.setAttribute("aria-pressed", String(on));
+  btn.innerHTML = on ? PASSWORD_EYE.on : PASSWORD_EYE.off;
+  const label = on ? "Hide password" : "Show password";
+  btn.setAttribute("aria-label", label);
+  btn.title = label;
+}
+
+$("aPasswordEye").addEventListener("click", () => {
+  showPassword($("aPassword").type === "password");
+});
+// Keeps the caret where it was — without this the field loses focus to the
+// button, which on a half-typed password is its own small annoyance.
+$("aPasswordEye").addEventListener("mousedown", (e) => e.preventDefault());
+
 function closeAdd() {
   if (addBusy) return; // a portal session is open — closing would orphan it
   $("aPassword").value = "";
+  showPassword(false);
   $("addOverlay").classList.add("hidden");
 }
 
@@ -857,6 +894,7 @@ function setAddBusy(on, label) {
   $("aFetchBtn").textContent = on && label === "fetch" ? "Fetching…" : "Fetch from portal";
   $("aSaveBtn").textContent = on && label === "save" ? "Saving…" : "Add assessee";
   ADD_FIELDS.forEach((id) => { $(id).disabled = on; });
+  $("aPasswordEye").disabled = on;
   $("aConsent").disabled = on;
   $("aCancelBtn").disabled = on;
   $("addCloseBtn").disabled = on;

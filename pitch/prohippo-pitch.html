@@ -1,0 +1,1966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ProHippo — Features, Navigation &amp; the Case for Now</title>
+<style>
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  src: url(data:font/woff2;base64,__FONT_WOFF2__) format('woff2');
+}
+
+:root {
+  --ink: #14102D;
+  --ink-2: #453D6B;
+  --ink-3: #857EA3;
+  --violet: #6C5CE7;
+  --violet-2: #5146C6;
+  --violet-3: #8E7CFF;
+  --lav: #EEE9FF;
+  --lav-2: #F6F4FF;
+  --line: #E4DFF4;
+  --tint: #F7F6FB;
+  --pink: #C13388;
+  --pink-bg: #FDE7F1;
+  --amber: #A96C0C;
+  --amber-bg: #FDF0D6;
+  --mint: #14795A;
+  --mint-bg: #DEF6EA;
+  --coral: #B23B3B;
+  --coral-bg: #FCE7E1;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+@page { size: 13.333in 7.5in; margin: 0; }
+
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: var(--ink);
+  background: #fff;
+  counter-reset: slide;
+  font-feature-settings: "kern" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+.slide {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  page-break-after: always;
+  break-after: page;
+  background: #fff;
+  padding: 52px 60px 62px;
+  display: flex;
+  flex-direction: column;
+  counter-increment: slide;
+}
+.slide:last-child { page-break-after: auto; break-after: auto; }
+
+/* ---------- shared type ---------- */
+.eyebrow {
+  font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--violet-2); margin-bottom: 10px;
+}
+.eyebrow.on-dark { color: #C9BEF5; }
+h1 { font-size: 40px; font-weight: 800; letter-spacing: -.025em; line-height: 1.12; }
+h2 { font-size: 34px; font-weight: 800; letter-spacing: -.025em; line-height: 1.14; }
+.deck { font-size: 16px; line-height: 1.55; color: var(--ink-2); font-weight: 500; margin-top: 10px; max-width: 900px; }
+.hr { height: 3px; width: 54px; border-radius: 2px; background: var(--violet); margin: 14px 0 16px; }
+.lead { font-size: 18.5px; line-height: 1.48; font-weight: 600; color: var(--ink); }
+p, li { font-size: 14.6px; line-height: 1.5; color: var(--ink-2); font-weight: 500; }
+b, strong { font-weight: 800; color: var(--ink); }
+.small { font-size: 12.8px; line-height: 1.45; color: var(--ink-3); font-weight: 600; }
+
+/* ---------- footer ---------- */
+.foot {
+  position: absolute; left: 60px; right: 60px; bottom: 22px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: #B3ADC8;
+}
+.foot .brandbit { display: flex; align-items: center; gap: 8px; }
+.foot img { height: 15px; width: auto; opacity: .55; }
+.foot .num::after { counter-increment: none; content: counter(slide); }
+.slide.dark .foot { color: rgba(255,255,255,.45); }
+.slide.dark .foot img { opacity: .8; filter: brightness(0) invert(1); }
+
+/* ---------- layout helpers ---------- */
+/* The body fills what is left between the heading and the footer, and any
+   slack is split evenly above and below the content rather than all of it
+   piling up at the bottom of the slide. */
+.body { flex: 1; min-height: 0; margin-top: 18px; align-content: center; }
+.body.col { justify-content: center; }
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; }
+.g5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 11px; }
+.g23 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
+.col { display: flex; flex-direction: column; gap: 13px; }
+.rowgap { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- cards ---------- */
+.card {
+  border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; background: #fff;
+}
+.card.tint { background: var(--tint); border-color: #EAE6F6; }
+.card.lav { background: var(--lav-2); border-color: #DDD5F8; }
+.card h3 { font-size: 15.5px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 6px; color: var(--ink); }
+.card p { font-size: 13.6px; }
+.card .k {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--violet-2); margin-bottom: 7px;
+}
+
+.stat { border-radius: 16px; padding: 15px 17px; background: var(--lav-2); border: 1px solid #DDD5F8; }
+.stat .v { font-size: 19px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; color: var(--violet-2); }
+.stat .l { font-size: 12.6px; font-weight: 600; color: var(--ink-2); margin-top: 7px; line-height: 1.4; }
+
+/* ---------- pills & chips ---------- */
+.pill {
+  display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
+  padding: 3px 9px; border-radius: 999px; background: var(--lav); color: var(--violet-2);
+}
+.pill.pink { background: var(--pink-bg); color: var(--pink); }
+.pill.mint { background: var(--mint-bg); color: var(--mint); }
+.pill.amber { background: var(--amber-bg); color: var(--amber); }
+.pill.coral { background: var(--coral-bg); color: var(--coral); }
+.pill.grey { background: #EFEDF6; color: #6E6890; }
+
+/* ---------- lists ---------- */
+ul.ticks { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+ul.ticks li { position: relative; padding-left: 20px; }
+ul.ticks li::before {
+  content: ""; position: absolute; left: 0; top: 7px; width: 8px; height: 8px;
+  border-radius: 3px; background: var(--violet-3);
+}
+ul.dots { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+ul.dots li { position: relative; padding-left: 15px; font-size: 13.4px; }
+ul.dots li::before {
+  content: ""; position: absolute; left: 0; top: 7px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--ink-3);
+}
+
+/* ---------- nav map rows ---------- */
+.navrow {
+  display: grid; grid-template-columns: 168px 1fr; gap: 14px; align-items: baseline;
+  padding: 8px 0; border-bottom: 1px dashed var(--line);
+}
+.navrow:last-child { border-bottom: none; }
+.navrow .n { font-size: 13.8px; font-weight: 800; color: var(--ink); }
+.navrow .n span { display: block; font-size: 10px; font-weight: 700; color: var(--ink-3); letter-spacing: .05em; text-transform: uppercase; margin-top: 2px; }
+.navrow .d { font-size: 13.2px; color: var(--ink-2); font-weight: 500; line-height: 1.45; }
+
+/* ---------- key/value table ---------- */
+.kv { width: 100%; border-collapse: collapse; }
+.kv td { padding: 8px 11px; font-size: 13.2px; vertical-align: top; border-bottom: 1px solid var(--line); color: var(--ink-2); font-weight: 500; }
+.kv tr:last-child td { border-bottom: none; }
+.kv td:first-child { font-weight: 800; color: var(--ink); width: 34%; background: var(--tint); }
+.kv thead td { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: var(--violet-2); background: transparent; }
+
+/* ---------- dark slides ---------- */
+.slide.dark {
+  background: linear-gradient(118deg, #221B5C 0%, #4B3FBA 52%, #7E6BF5 100%);
+  color: #fff;
+}
+.slide.dark h1, .slide.dark h2, .slide.dark .lead, .slide.dark b { color: #fff; }
+.slide.dark p, .slide.dark li { color: rgba(255,255,255,.85); }
+.slide.dark .card { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.22); }
+.slide.dark .card h3 { color: #fff; }
+.slide.dark .card p, .slide.dark .card li { color: rgba(255,255,255,.85); }
+.slide.dark .card .k { color: #CFC4FA; }
+.slide.dark .hr { background: #C9BEF5; }
+.slide.dark ul.ticks li::before { background: #C9BEF5; }
+.slide.dark .pill { background: rgba(255,255,255,.18); color: #fff; }
+.slide.dark .small { color: rgba(255,255,255,.65); }
+
+/* ---------- cover ---------- */
+.cover { padding: 0; display: block; }
+.cover .wash {
+  position: absolute; inset: 0;
+  background: linear-gradient(118deg, #1E1852 0%, #4B3FBA 50%, #8E7CFF 100%);
+}
+.cover .orb {
+  position: absolute; border-radius: 50%; filter: blur(60px);
+}
+.cover .orb.a { width: 460px; height: 460px; right: -110px; top: -130px; background: rgba(255,180,220,.42); }
+.cover .orb.b { width: 380px; height: 380px; left: -120px; bottom: -140px; background: rgba(120,220,255,.28); }
+/* The bottom padding clears the footer strip, which is positioned against the
+   slide rather than this box — without it the closing lines sit on top of it. */
+.cover .inner { position: relative; padding: 74px 72px 76px; height: 100%; display: flex; flex-direction: column; }
+.cover .logo { background: #fff; border-radius: 22px; padding: 16px 22px; width: 258px; box-shadow: 0 12px 40px rgba(0,0,0,.22); }
+.cover .logo img { width: 100%; height: auto; display: block; }
+.cover h1 { font-size: 62px; color: #fff; line-height: 1.05; letter-spacing: -.035em; margin-top: 46px; }
+.cover .kicker { font-size: 19px; color: rgba(255,255,255,.85); font-weight: 600; margin-top: 18px; max-width: 780px; line-height: 1.45; }
+.cover .meta { margin-top: auto; display: flex; gap: 34px; align-items: flex-end; justify-content: space-between; }
+.cover .meta .who { font-size: 12.5px; color: rgba(255,255,255,.72); font-weight: 600; line-height: 1.6; }
+.cover .badges { display: flex; gap: 8px; flex-wrap: wrap; max-width: 700px; justify-content: flex-end; }
+.cover .badges span {
+  font-size: 11.5px; font-weight: 700; color: #fff; background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.28); border-radius: 999px; padding: 6px 12px;
+  white-space: nowrap;
+}
+.slide.cover .foot { color: rgba(255,255,255,.5); }
+.slide.cover .foot img { opacity: .85; filter: brightness(0) invert(1); }
+
+/* ---------- section divider ---------- */
+.divider { justify-content: center; }
+.divider .no { font-size: 13px; font-weight: 800; letter-spacing: .3em; color: rgba(255,255,255,.55); }
+.divider h1 { font-size: 56px; margin-top: 12px; max-width: 900px; }
+.divider .deck { color: rgba(255,255,255,.85); font-size: 17px; max-width: 760px; margin-top: 20px; }
+
+/* ---------- journey strip ---------- */
+.journey { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.jcell { border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; background: #fff; position: relative; }
+.jcell .step { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--violet-3); }
+.jcell h4 { font-size: 13.6px; font-weight: 800; margin: 5px 0 5px; letter-spacing: -.01em; }
+.jcell p { font-size: 12.4px; line-height: 1.42; }
+
+/* ---------- surface columns ---------- */
+.surface { border-radius: 16px; padding: 15px 16px; border: 1px solid var(--line); background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.surface .badge { font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #fff; background: var(--violet); border-radius: 6px; padding: 3px 7px; align-self: flex-start; }
+.surface .badge.b2 { background: var(--pink); }
+.surface .badge.b3 { background: var(--mint); }
+.surface .badge.b4 { background: var(--amber); }
+.surface h3 { font-size: 14.6px; font-weight: 800; }
+.surface ul.dots li { font-size: 12.6px; }
+
+/* ---------- callout ---------- */
+.callout {
+  border-left: 4px solid var(--violet); background: var(--lav-2);
+  border-radius: 0 12px 12px 0; padding: 13px 17px;
+}
+.callout p { font-size: 14px; }
+.slide.dark .callout { background: rgba(255,255,255,.12); border-left-color: #C9BEF5; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ 1 · COVER ══════════════════ -->
+<section class="slide cover">
+  <div class="wash"></div>
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="inner">
+    <div class="logo"><img src="data:image/png;base64,__LOGO_PNG__" alt="ProHippo"></div>
+    <h1>Never miss an<br>income tax notice again.</h1>
+    <p class="kicker">Every feature, every screen, and why a practice cannot run on a diary any more —
+      the complete product pitch for ProHippo.</p>
+    <div class="meta">
+      <div class="who">
+        Tax matter management, notice to appeal<br>
+        A product of MEHTAJI BIZCON LLP · Ahmedabad · prohippo.in
+      </div>
+      <div class="badges">
+        <span>Portal sync</span><span>Limitation engine</span><span>WhatsApp</span>
+        <span>Calendar</span><span>ITAT mail</span><span>Voice line</span><span>Billing</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div>Features · Navigation · The case for now</div>
+  </div>
+</section>
+
+<!-- ══════════════════ 2 · SECTION: THE CASE ══════════════════ -->
+<section class="slide dark divider">
+  <div class="no">PART ONE</div>
+  <h1>The need of the hour</h1>
+  <p class="deck">Indian income tax assessment moved onto a portal. The practice that serves it
+    largely did not. Everything in this product follows from that gap.</p>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 3 · WHAT CHANGED ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">The shift</div>
+  <h2>Assessment is no longer a conversation. It is a clock.</h2>
+  <div class="hr"></div>
+  <p class="lead">Faceless assessment and faceless appeal removed the officer you could ring, the
+    counter you could visit, and the adjournment you could ask for across a desk. What replaced them
+    is a queue of dated documents on a website.</p>
+  <div class="body g4">
+    <div class="card tint">
+      <div class="k">Service is deemed</div>
+      <p>A notice is served the moment it is uploaded to the e-filing portal and pushed to the
+        registered email. <b>Whether anyone opens it is not the department's problem.</b></p>
+    </div>
+    <div class="card tint">
+      <div class="k">Windows are short</div>
+      <p>Compliance notices routinely allow <b>7 to 15 days</b>. An e-proceeding closes on the date
+        printed on it. There is no counter open the next morning.</p>
+    </div>
+    <div class="card tint">
+      <div class="k">Processing is automatic</div>
+      <p>CPC processes returns u/s 143(1) and makes adjustments without asking. Each intimation
+        starts <b>its own rectification and appeal clocks</b>.</p>
+    </div>
+    <div class="card tint">
+      <div class="k">The penalty is structural</div>
+      <p>A missed notice is not a rebuke. It is best-judgment assessment u/s 144, penalty
+        proceedings, and a demand that becomes <b>recoverable while you argue</b>.</p>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:16px">
+    <p><b>The asymmetry that defines the problem:</b> the department's side of this is fully
+      automated and never forgets. The practitioner's side is a person, a browser tab, and
+      a memory of which client mentioned what.</p>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 4 · WHAT IT COSTS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">The gap, in practice</div>
+  <h2>Five ways a matter is lost today — none of them careless</h2>
+  <div class="hr"></div>
+  <div class="body col" style="gap:11px">
+    <div class="card">
+      <h3>1 · The notice reaches the client, not the professional</h3>
+      <p>Service goes to the assessee's registered email and portal account. The client does not read
+        the portal; they forward the email a week later, or after the hearing. The one person who could
+        have acted was never told.</p>
+    </div>
+    <div class="card">
+      <h3>2 · Nobody logs into three hundred portals every morning</h3>
+      <p>A working practice carries hundreds of PANs. Checking each e-filing account daily is the only
+        reliable way to see a notice on the day it issues — and it is physically impossible by hand.</p>
+    </div>
+    <div class="card">
+      <h3>3 · One matter lives in four places</h3>
+      <p>Portal PDFs in a downloads folder, instructions on WhatsApp, the reply in email, the hearing
+        date in a diary. Nothing joins them, so context is rebuilt from scratch at every step —
+        and lost entirely at every handover between staff.</p>
+    </div>
+    <div class="card">
+      <h3>4 · Limitation is counted by hand, from a date somebody has to find</h3>
+      <p>Thirty days, sixty days, from service or from communication — computed off an order buried in
+        a folder. A date computed one day late is an appeal that no longer exists.</p>
+    </div>
+    <div class="card">
+      <h3>5 · The work is done and never billed</h3>
+      <p>Fees, receipts and outstanding follow-ups sit in a wholly separate system from the matters
+        that generated them — so recovery depends on whoever remembers.</p>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 5 · WHY NOW (2025 ACT) ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Why this year, specifically</div>
+  <h2>From 1 April 2026, two limitation regimes run side by side</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <p class="lead">The Income-tax Act, 2025 does not merely renumber the sections. It changes the
+        shape of the arithmetic every appeal deadline is computed with.</p>
+      <table class="kv">
+        <thead><tr><td>Appeal</td><td>Act, 1961</td><td>Act, 2025</td></tr></thead>
+        <tr><td>To CIT(A)</td><td>30 days from service</td><td>1 month from the <b>end of the month</b> of service</td></tr>
+        <tr><td>To ITAT</td><td>60 days from communication</td><td>2 months from the <b>end of the month</b> of communication</td></tr>
+      </table>
+      <div class="callout">
+        <p><b>Which clock applies is decided by when the order was communicated — not by the
+          assessment year.</b> Limitation is procedural. An order communicated in June 2026 runs on
+          the new Act even though the assessment it decides relates to A.Y. 2017-18. So for years to
+          come, a single practice will hold live deadlines on both regimes at once.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">What ProHippo does about it</div>
+        <ul class="ticks">
+          <li><b>Computes both</b> regimes for every appealable order, always — never only the one it
+            thinks is operative.</li>
+          <li><b>Marks which one governs</b> and shows the date arithmetic on screen, so it is
+            checkable rather than trusted.</li>
+          <li><b>Lets the practitioner override the communicated date</b> to force either regime, for
+            the cases where service is disputed.</li>
+          <li>Keeps the rules as <b>data in one file</b>, so a statutory change is an edit, not a
+            rebuild.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>The error that matters is one-directional</h3>
+        <p>A deadline shown <b>earlier</b> than the true one costs a few days of comfort. A deadline
+          shown <b>later</b> than the true one costs the appeal. The engine is built around that
+          asymmetry — it shows both computations rather than quietly picking one.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 6 · SECTION: THE PRODUCT ══════════════════ -->
+<section class="slide dark divider">
+  <div class="no">PART TWO</div>
+  <h1>One matter.<br>One unbroken journey.</h1>
+  <p class="deck">ProHippo watches the whole arc — the notice issuing, the alert reaching a human,
+    the hearing entering a calendar, the reply going out, the order starting a countdown, the appeal
+    being filed — and keeps every step attached to the matter that created it.</p>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 7 · THE JOURNEY ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">The product, in eight moments</div>
+  <h2>Notice → Appeal, without a handover that loses context</h2>
+  <div class="hr"></div>
+  <div class="body col" style="gap:12px">
+    <div class="journey">
+      <div class="jcell"><div class="step">01 · NOTICE DETECTED</div><h4>The notice is issued</h4>
+        <p>ProHippo starts watching the matter the moment a digital notice leaves the Department —
+          picked up by portal sync, not by somebody checking.</p></div>
+      <div class="jcell"><div class="step">02 · INBOX MONITORED</div><h4>Email misses it. ProHippo does not</h4>
+        <p>The assessee can leave the mail unopened. The deadline still appears on the dashboard and
+          in the queues that count.</p></div>
+      <div class="jcell"><div class="step">03 · USER ALERTED</div><h4>The right alert reaches WhatsApp</h4>
+        <p>Matter, assessment year and due date, delivered where attention already lives — to the
+          practitioner, and where consented, to the client's group head.</p></div>
+      <div class="jcell"><div class="step">04 · CALENDAR SYNCED</div><h4>The hearing books itself</h4>
+        <p>The hearing date is read off the notice and written into a Google calendar ProHippo creates,
+          with the matter attached.</p></div>
+    </div>
+    <div class="journey">
+      <div class="jcell"><div class="step">05 · HEARING READY</div><h4>The reminder arrives on time</h4>
+        <p>A WhatsApp reminder the day before, a weekly cause list every Monday, and a printable
+          cause list for any range of dates.</p></div>
+      <div class="jcell"><div class="step">06 · REPLY SUBMITTED</div><h4>Type. Review. Submit</h4>
+        <p>Documents are called for as a tracked checklist, in the client's own language, and the
+          reply filed on the portal is synced back onto the proceeding.</p></div>
+      <div class="jcell"><div class="step">07 · WINDOW OPEN</div><h4>The order starts a live countdown</h4>
+        <p>Every appealable order becomes a prepared appeal: deadline, regime, fee, checklist and a
+          pre-filled form worksheet.</p></div>
+      <div class="jcell"><div class="step">08 · PORTAL CONFIRMED</div><h4>The appeal closes the loop</h4>
+        <p>The Form 35 filed on the portal syncs back into the same matter — acknowledgement, date and
+          documents in one place.</p></div>
+    </div>
+    <div class="g3" style="margin-top:2px">
+      <div class="card tint"><h3>Always visible</h3><p>No notice gets buried.</p></div>
+      <div class="card tint"><h3>Always moving</h3><p>No handoff loses context.</p></div>
+      <div class="card tint"><h3>Always on time</h3><p>No deadline becomes a surprise.</p></div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 8 · THE FOUR SURFACES ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">How it is built</div>
+  <h2>Four surfaces, one record of truth</h2>
+  <div class="hr"></div>
+  <div class="body g4">
+    <div class="surface">
+      <span class="badge">Web &amp; mobile</span>
+      <h3>The ProHippo app</h3>
+      <ul class="dots">
+        <li>React 19 + Vite single-page app at <b>prohippo.in</b></li>
+        <li>Installable as a <b>PWA</b> on desktop and phone — own icon, own window, service worker</li>
+        <li>Full mobile layout: drawer navigation, tap-through cards, <b>haptic touch feedback</b></li>
+        <li>Sign in by <b>mobile OTP, email OTP or Google</b></li>
+      </ul>
+    </div>
+    <div class="surface">
+      <span class="badge b2">Browser</span>
+      <h3>ProHippo Sync — Chrome extension</h3>
+      <ul class="dots">
+        <li>Opens the e-filing portal <b>already logged in</b> for any assessee</li>
+        <li>Drives an on-demand sync from the practitioner's own browser and IP</li>
+        <li>Streams notices, orders, replies, Form 35 and returns back into the app live</li>
+        <li>Downloaded from inside the app — always the version the app expects</li>
+      </ul>
+    </div>
+    <div class="surface">
+      <span class="badge b3">Desktop</span>
+      <h3>ProHippo Connector</h3>
+      <ul class="dots">
+        <li>Electron + Playwright app for <b>macOS and Windows</b></li>
+        <li>Syncs <b>many PANs in parallel</b>, each in an isolated browser session</li>
+        <li><b>Unattended</b>: starts with the machine, re-runs on a jittered timer</li>
+        <li>Signs in from a device key held in the OS keychain</li>
+      </ul>
+    </div>
+    <div class="surface">
+      <span class="badge b4">Cloud</span>
+      <h3>Firebase backend</h3>
+      <ul class="dots">
+        <li>Per-user Firestore + Cloud Storage; rules deny cross-account reads outright</li>
+        <li><b>~40 Cloud Functions</b>: ingest, parse, compute, deliver, schedule</li>
+        <li>Integrations: WATI (WhatsApp), Google Calendar, Sarvam (voice), Resend + 2Factor (OTP), Gemini (document reads)</li>
+        <li>Multi-region, warm instances on the sync path</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:16px">
+    <p><b>Why both an extension and a desktop app.</b> The extension is zero-setup and runs when the
+      practitioner is there. The Connector is for the practice that carries hundreds of PANs and needs
+      the morning's notices already in before anyone sits down — parallel, paced to look human, and
+      running on the firm's own residential connection rather than a data-centre IP.</p>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 9 · SECTION: NAVIGATION ══════════════════ -->
+<section class="slide dark divider">
+  <div class="no">PART THREE</div>
+  <h1>Navigating the app</h1>
+  <p class="deck">Every page, every tab, every facility — in the order a practitioner meets them.</p>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 10 · THE SIDEBAR MAP ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">The map</div>
+  <h2>The sidebar — eleven doors, and what is behind each</h2>
+  <div class="hr"></div>
+  <div class="body g2" style="gap:26px">
+    <div>
+      <div class="small" style="margin-bottom:4px">PRACTICE</div>
+      <div class="navrow"><div class="n">Dashboard</div><div class="d">The morning screen: what landed, what is unanswered, what is due, what is owed.</div></div>
+      <div class="navrow"><div class="n">Assessees <span>badge · count</span></div><div class="d">The client register, and the door into every individual file.</div></div>
+      <div class="navrow"><div class="n">Matters</div><div class="d">Every proceeding across the practice — sortable, filterable, from notice to disposal.</div></div>
+      <div class="navrow"><div class="n">Hearings <span>badge · new tribunal mail</span></div><div class="d">Five calendar views, the ITAT inbox and the printable cause list.</div></div>
+      <div class="navrow"><div class="n">Appeals <span>badge · appealable orders</span></div><div class="d">The limitation engine: countdowns, fees, checklists and pre-filled forms.</div></div>
+      <div class="navrow"><div class="n">Invoices</div><div class="d">Billing, receipts, ledgers, group accounts and the outstanding position.</div></div>
+    </div>
+    <div>
+      <div class="navrow"><div class="n">Communications</div><div class="d">Document requests as tracked checklists, plus the full delivery log.</div></div>
+      <div class="navrow"><div class="n">Intimations</div><div class="d">Every s.143(1) and s.154 order, and what CPC did to each assessee's position.</div></div>
+      <div class="navrow"><div class="n">Reports</div><div class="d">Eight one-click CSV exports across the whole practice.</div></div>
+      <div class="small" style="margin:16px 0 4px">TOOLS</div>
+      <div class="navrow"><div class="n">Sync Connector App</div><div class="d">Download and first-run instructions for the desktop syncing app.</div></div>
+      <div class="navrow"><div class="n">Settings</div><div class="d">Practice profile, account, data and every integration switch.</div></div>
+      <div class="navrow"><div class="n">Admin console <span>ProHippo staff only</span></div><div class="d">A separate shell at /admin — invisible to practitioners, and blind to their client data.</div></div>
+      <div class="card lav" style="margin-top:14px">
+        <p><b>Below the nav:</b> the firm card — practice name, signed-in identity and sign-out —
+          so it is always clear whose data is on screen.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 11 · DASHBOARD 1 ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 01 · Dashboard</div>
+  <h2>Four numbers that open into the work behind them</h2>
+  <div class="hr"></div>
+  <div class="body col" style="gap:14px">
+    <p class="lead">The dashboard opens with a greeting, a practice-wide search on PAN or assessee
+      name, and a one-line brief — how many hearings this week, how many notices await review.</p>
+    <div class="g4">
+      <div class="stat"><div class="v">Active matters</div><div class="l">Every proceeding not closed or decided, against the total ever opened. Opens the Matters page.</div></div>
+      <div class="stat"><div class="v">Hearings this week</div><div class="l">Seven-day count, with how many fall inside the next 48 hours. Opens the calendar.</div></div>
+      <div class="stat"><div class="v">Notices last 24h</div><div class="l">What issued today and yesterday — the portal dates notices to the day, so the tile says so.</div></div>
+      <div class="stat"><div class="v">Awaiting reply</div><div class="l">Issued in the last 15 days with no reply on record, flagging how many are already past due.</div></div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <h3>A number nobody can open is a number nobody can act on</h3>
+        <p>Each of the last two tiles opens the notices behind it — assessee, section, assessment year,
+          issue date, the count of files that came with it, and a due-date pill that turns red when it
+          has passed. From a row you can open the PDF, or jump straight into the <b>proceeding</b> the
+          notice belongs to rather than the notice on its own.</p>
+      </div>
+      <div class="card">
+        <h3>Search that goes somewhere</h3>
+        <p>Typing a PAN or a name and pressing Enter lands on the assessee register already filtered.
+          The <b>Desktop app</b> button installs ProHippo as a real application, and the user chip
+          carries the practice identity through every screen.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 12 · DASHBOARD 2 ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 01 · Dashboard, continued</div>
+  <h2>The cards below the fold</h2>
+  <div class="hr"></div>
+  <div class="body g3">
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Appeals · filing deadlines</div>
+        <p>Silent when nothing is due. When something is, it leads with the nearest deadline — client,
+          route, days left, and the date — and <b>turns red inside seven days or once lapsed</b>.
+          Counts how many fall within fifteen days and how many have already gone. One tap adds the
+          deadline to the task board.</p>
+      </div>
+      <div class="card">
+        <h3>Notices · awaiting review</h3>
+        <p>Recent notices, or ones with a hearing coming. Read the PDF, open the record, ask the client
+          for documents, and tick as read — individually or in bulk.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Upcoming hearings</h3>
+        <p>The next four, each with a date block that turns amber at four days and red at one:
+          assessee, authority, bench, assessment year, section, time, and a video-conference marker.
+          One tap turns a hearing into a task.</p>
+      </div>
+      <div class="card">
+        <h3>Receivables — group-wise</h3>
+        <p>Outstanding professional fees rolled up by client group, as a ranked bar chart, so the
+          collection call is aimed at the family or business house rather than a single PAN.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Mini calendar</h3>
+        <p>The month at a glance with hearing days dotted, month-by-month navigation, and a jump into
+          the full calendar.</p>
+      </div>
+      <div class="card">
+        <h3>Authority-wise matters</h3>
+        <p>A donut of the active load — Scrutiny, CIT(A), ITAT, Penalty — with counts, so the shape of
+          the practice is visible without running a report.</p>
+      </div>
+      <div class="card tint">
+        <h3>Tasks &amp; notes board</h3>
+        <p>A Keep-style board of pinned notes and checklists in seven colours, with due dates, client
+          labels and archiving — fed directly by the hearing and appeal cards above.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 13 · ASSESSEES ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 02 · Assessees</div>
+  <h2>The register — and the group, which is how clients actually exist</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card">
+        <h3>Every client on file</h3>
+        <p>Name, PAN, status, assigned staff, mobile, email, address and date of birth or incorporation
+          — searchable, filterable, and openable into a full profile. Bulk selection allows a
+          <b>multi-PAN portal sync in one run</b>.</p>
+      </div>
+      <div class="card">
+        <h3>Groups: a family or a business house</h3>
+        <p>Members are gathered under a named group with its own colour. A group carries a
+          <b>head</b> — the person who actually answers for the companies and trusts inside it — with
+          their own mobile and a recorded WhatsApp opt-in. Group billing, group ledgers and group
+          payments all follow from it.</p>
+      </div>
+      <div class="card tint">
+        <h3>Why a head, and not the assessee</h3>
+        <p>You do not WhatsApp a private limited company. You WhatsApp the person who answers for it.
+          The head is picked from the group's own members in one click, so the number is copied off a
+          profile rather than retyped — because two spellings of one mobile is how a client who opted
+          out still gets messaged.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Opening a profile</div>
+        <p>A violet header carries the client's identity, PAN, group and status, with call, WhatsApp
+          and email buttons, plus <b>New matter</b> and <b>Edit</b>. Four mini-statistics sit beneath
+          it: active matters, upcoming hearings, outstanding fees, notices on file.</p>
+      </div>
+      <div class="card">
+        <h3>The eight tabs</h3>
+        <div class="rowgap" style="margin-top:4px">
+          <span class="pill">Overview</span><span class="pill">Returns</span>
+          <span class="pill">Matters</span><span class="pill">Hearings</span>
+          <span class="pill">Notices</span><span class="pill">Invoices</span>
+          <span class="pill">Communications</span><span class="pill">Notes</span>
+        </div>
+        <p style="margin-top:9px">Everything ProHippo knows about one client, in one place, without
+          leaving the file. Clicking a matter or a hearing anywhere else in the app lands here, on the
+          right tab, with the right card already open.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 14 · PROFILE TABS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 02 · Assessee profile</div>
+  <h2>The eight tabs, one by one</h2>
+  <div class="hr"></div>
+  <div class="body col" style="gap:9px">
+    <table class="kv">
+      <tr><td>Overview</td><td>A recent-activity timeline, upcoming hearings, the full particulars card, a financial-year ledger snapshot, and the <b>Income-tax portal</b> card that runs the sync.</td></tr>
+      <tr><td>Returns</td><td>Every assessment year on file: form and filing type, filed and e-verified dates, portal status, demand or refund, and downloads for the <b>ITR JSON, the ITR-V and the full form</b> — plus one-click <b>Computation of Income</b>.</td></tr>
+      <tr><td>Matters</td><td>Each proceeding as a card with a coloured stripe by type, expanding to the whole file: every notice and order in it, replies filed, hearings listed, documents attached.</td></tr>
+      <tr><td>Hearings</td><td>This client's dates — past and upcoming — with authority, bench, section, mode and the staff member holding it.</td></tr>
+      <tr><td>Notices</td><td>Every notice and order on file with DIN, section, issue date, response due date and the PDFs that came with it. A single s.148 often arrives as four files; the count is shown so nobody reads one and assumes that was all of it.</td></tr>
+      <tr><td>Invoices</td><td>Bills raised for this client, what has been received, what is outstanding, and payment entry with a receipt PDF.</td></tr>
+      <tr><td>Communications</td><td>Document requests — what was asked for and what is still outstanding — and a message log of every email and WhatsApp hand-off with its real delivery status.</td></tr>
+      <tr><td>Notes</td><td>Free-form practice notes against the client, kept with the file rather than in someone's head.</td></tr>
+    </table>
+    <div class="callout">
+      <p><b>The rule the whole app follows:</b> every record — matter, hearing, notice, invoice,
+        message — is linked to an assessee profile. Nothing floats free, which is why any row anywhere
+        can be traced back to the file it belongs to.</p>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 15 · PORTAL CARD ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 02 · Overview tab · Income-tax portal</div>
+  <h2>The card that does the fetching</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card">
+        <h3>Saved login, encrypted</h3>
+        <p>Each assessee's e-filing credentials are stored encrypted at rest with a key ProHippo holds
+          in Firebase secrets — never in the browser, never in plain text. The card shows
+          <b>Login saved</b> or <b>No login</b>, and the saved password can be revealed on the same
+          eye before it is committed to.</p>
+      </div>
+      <div class="card">
+        <h3>Four sync scopes</h3>
+        <table class="kv" style="margin-top:6px">
+          <tr><td>e-Proceedings only</td><td>Fast. Checks "For your action" for new notices and orders.</td></tr>
+          <tr><td>Full sync</td><td>Thorough. FYA + FYI + replies filed + Form 35. Use for the first run.</td></tr>
+          <tr><td>First appeals only</td><td>Re-pulls filed Form 35 appeals.</td></tr>
+          <tr><td>Returns &amp; CPC orders</td><td>Every year's ITR, its JSON, and any s.143(1) or s.154 order.</td></tr>
+        </table>
+      </div>
+      <div class="card tint">
+        <h3>Open portal</h3>
+        <p>One click opens the e-filing portal in a tab, already logged in as that assessee — for
+          everything the sync deliberately does not do.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">What a sync brings back</div>
+        <ul class="ticks">
+          <li>Proceedings — created, updated and <b>closed</b>, with a pop-up naming what closed</li>
+          <li>Notices and orders, with every PDF that came with them</li>
+          <li><b>Locked PDFs unlocked</b> using the date of birth or incorporation on file</li>
+          <li>Replies already filed on the portal, attached to the right proceeding</li>
+          <li>Form 35 appeals with their acknowledgements</li>
+          <li>Filed returns, ITR JSON, ITR-V, and CPC intimations</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>The hippo narrates it</h3>
+        <p>A live progress mascot reports the phase — authenticating, fetching the list, downloading
+          each file by name — with the count against the estimate, a retry on failure, and the exact
+          timing of how the data was obtained. A sync is never a spinner that might be stuck.</p>
+      </div>
+      <div class="card tint">
+        <h3>Last synced</h3>
+        <p>Every card carries the last sync time, the number of proceedings and the number of notices —
+          so the freshness of the file is a fact on screen, not an assumption.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 16 · RETURNS TAB ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 02 · Returns tab</div>
+  <h2>Every filed return, and what CPC did to it</h2>
+  <div class="hr"></div>
+  <div class="body g2">
+    <div class="col">
+      <div class="card">
+        <h3>The year-by-year table</h3>
+        <ul class="dots">
+          <li><b>A.Y.</b> and <b>form</b>, flagged where the filing was revised, defective, updated or condoned</li>
+          <li><b>Filed on</b>, and whether it was e-verified and by what mode</li>
+          <li>The portal's own <b>status description</b>, verbatim</li>
+          <li><b>Demand or refund</b> as computed — a blank cell and a genuine nil are shown differently</li>
+          <li>Downloads: <b>JSON · ITR-V · Form</b>, each named properly on the way out</li>
+        </ul>
+      </div>
+      <div class="card tint">
+        <h3>When a document cannot be opened, it says why</h3>
+        <p>"Add the date of birth to unlock", "the date on file doesn't unlock this PDF", "the portal
+          only sends this one by e-mail for A.Y. 2016-17 and earlier". The practitioner is told whether
+          it is theirs to fix.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">The variance line</div>
+        <p>Under each intimation or rectification order, one sentence saying what it did to that year's
+          position — <b>a signed rupee figure, green or red</b>, against the baseline it is measured
+          from. A s.154 order is measured against the intimation it rectified; a s.143(1) against the
+          return as filed. The baseline is part of the sentence, never a tooltip, because the same
+          figure otherwise describes two different events.</p>
+      </div>
+      <div class="card">
+        <h3>Where the numbers come from</h3>
+        <p>CPC's figure is read from the order's <b>status</b>, never by netting two fields against each
+          other — because when a refund is set off u/s 245 the portal populates both, and netting them
+          reports a demand on an order that says "there is no payment due". Where the portal sent no
+          amount at all, the order's own printed total is used and <b>labelled as such</b>. An
+          unrecognised status reports "could not be compared" rather than guessing.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 17 · MATTERS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 03 · Matters</div>
+  <h2>Every proceeding in the practice, from notice to disposal</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card">
+        <h3>The list</h3>
+        <p>One row per proceeding, sortable on every column and filterable by type and status. A row
+          opens the assessee's file at that proceeding's card, expanded — because somebody clicking a
+          matter wants the whole file, not a summary of it.</p>
+      </div>
+      <div class="card">
+        <h3>What a matter carries</h3>
+        <div class="rowgap">
+          <span class="pill">Assessee &amp; PAN</span><span class="pill">Assessment year</span>
+          <span class="pill">Section</span><span class="pill">Authority / bench</span>
+          <span class="pill">ITA number</span><span class="pill">Assigned staff</span>
+          <span class="pill">Status</span><span class="pill">Portal proceeding ID</span>
+        </div>
+      </div>
+      <div class="card tint">
+        <h3>Created two ways</h3>
+        <p>By hand for a matter that arrived on paper — or automatically, by the portal sync, which
+          keys each proceeding to its portal request ID so a re-sync updates the same matter instead of
+          creating a second one.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Six types</div>
+        <div class="rowgap">
+          <span class="pill">Scrutiny</span><span class="pill pink">CIT(A)</span>
+          <span class="pill mint">ITAT</span><span class="pill amber">Penalty</span>
+          <span class="pill grey">Rectification</span><span class="pill coral">High Court</span>
+        </div>
+        <div class="k" style="margin-top:14px">Five statuses</div>
+        <div class="rowgap">
+          <span class="pill">Active</span><span class="pill">Pending</span><span class="pill">Submitted</span>
+          <span class="pill">Decided</span><span class="pill">Closed</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Each type has a colour, everywhere</h3>
+        <p>The same accent runs down the left edge of a row, across the modal header and through the
+          dashboard donut — so a scrutiny, an appeal and a penalty read apart at a glance without
+          anyone reading a word.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 18 · HEARINGS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 04 · Hearings &amp; Calendar</div>
+  <h2>Five views of the same week, and a sheet you can carry in</h2>
+  <div class="hr"></div>
+  <div class="body g3">
+    <div class="col">
+      <div class="card lav">
+        <div class="k">The five views</div>
+        <ul class="ticks">
+          <li><b>Calendar</b> — the month, hearings on their days</li>
+          <li><b>Week</b> — the working week, hour by hour</li>
+          <li><b>List</b> — everything, newest first</li>
+          <li><b>Authority-wise</b> — grouped by forum, with the bench spread</li>
+          <li><b>Staff-wise</b> — who is holding what</li>
+        </ul>
+        <p style="margin-top:8px">Filter chips across the top narrow any view to Scrutiny, CIT(A) or
+          ITAT.</p>
+      </div>
+      <div class="card">
+        <h3>Adding a hearing</h3>
+        <p>Assessee, PAN, A.Y., authority, bench, section, date, time, mode (physical, video
+          conference or e-proceeding), ITA number, staff and status — with the option to keep this one
+          out of the Google sync.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>The cause list</h3>
+        <p>A printable PDF of the week's hearings — or any range of dates you choose — with everything
+          needed to walk into the room: <b>who, before whom, which year, under which section, and
+          whether it is by video</b>. Brand-typeset, one line per matter, in the order they are
+          called.</p>
+      </div>
+      <div class="card tint">
+        <h3>Also on this page</h3>
+        <ul class="dots">
+          <li>A <b>Google sync chip</b> showing when the calendar last mirrored</li>
+          <li><b>Export CSV</b> of the filtered set</li>
+          <li>Counts of what is upcoming and what falls inside 48 hours</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>The ITAT inbox sits above the calendar</h3>
+        <p>An email waiting to be confirmed is a hearing that is <b>not yet on any view below</b> —
+          which is exactly why it is placed above them. Each row shows what the parser read: appeal
+          number, appellant, A.Y., PAN, hearing date and time, bench, filing date and case type.</p>
+      </div>
+      <div class="card tint">
+        <h3>Nothing applies itself</h3>
+        <p>A practitioner presses <b>Confirm</b> and the matter or hearing is written; the assessee it
+          matched can be corrected first. An address that receives mail from the internet can be sent a
+          convincing forgery, and a wrong date in a diary is the mistake this app exists to prevent.
+          The card renders nothing at all when the queue is empty.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 19 · NOTICES ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Notices · the review screen</div>
+  <h2>Reading a notice, and turning it into work</h2>
+  <div class="hr"></div>
+  <div class="body g2">
+    <div class="col">
+      <div class="card">
+        <h3>The record</h3>
+        <p>Assessee, PAN, assessment year, section, authority, DIN, notice date, response due date and
+          hearing date, whether it is an order, and the documents attached to it. Notices that arrive
+          through the portal come in with these fields already authoritative; ones that arrive on paper
+          or by email are keyed in here.</p>
+      </div>
+      <div class="card lav">
+        <div class="k">Documents called for</div>
+        <p>The list of documents a notice demands — read out of the PDF and turned into a checklist
+          that feeds straight into a client document request. Editable before it goes anywhere.</p>
+      </div>
+      <div class="card">
+        <h3>On save, also…</h3>
+        <p>Create the matter, schedule the hearing, and draft the client document request — the three
+          things a notice always causes, offered at the moment the notice is filed rather than as three
+          separate errands.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Notice queues, not a notice page</h3>
+        <p>There is deliberately no practice-wide Notices menu item. The same records are surfaced
+          three ways, each in the context that makes them actionable: the dashboard's two live queues,
+          the awaiting-review card, and the assessee's own Notices tab. A fourth way in would be one
+          more place to keep in step.</p>
+      </div>
+      <div class="card tint">
+        <h3>A notice is often a set of files</h3>
+        <p>A s.148 arrives with its approval, the set note and the search print. Every screen that
+          shows a notice shows <b>how many files came with it</b>, so nobody opens one and assumes that
+          was all of it.</p>
+      </div>
+      <div class="card tint">
+        <h3>Ask for documents</h3>
+        <p>From any notice row, one button drafts the client request with the called-for documents
+          already listed — the shortest path from "this arrived" to "the client has been asked".</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 20 · APPEALS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 05 · Appeals</div>
+  <h2>Every appealable order, already prepared</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <p class="lead">One full-width row per order, led by a large countdown — green, amber, red, or
+        grey once lapsed. Opening a row expands the whole preparation.</p>
+      <div class="g2" style="gap:12px">
+        <div class="card"><h3>Order appealed against</h3><p>Which order, from which authority, on which
+          date, for which year — with the PDF one click away, correctly named.</p></div>
+        <div class="card"><h3>Filing deadline</h3><p><b>Both regimes computed</b>, the operative one
+          marked, and the date arithmetic shown. The communicated date can be overridden.</p></div>
+        <div class="card"><h3>Appeal fee &amp; challan</h3><p>The fee worked out from the statutory
+          slabs, with the separate penalty-appeal fee handled on its own footing.</p></div>
+        <div class="card"><h3>Document checklist</h3><p>What must accompany the appeal, generated from
+          the order type rather than remembered.</p></div>
+      </div>
+      <div class="card lav">
+        <div class="k">The pre-filled worksheet</div>
+        <p>Form 35 or Form 36 under the 1961 Act — Form 99 or 115 under the 2025 Act — populated from
+          the record already held: appellant, PAN, address, order particulars, section, assessment year,
+          demand and the grounds skeleton.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Fully deterministic. No AI anywhere in it.</h3>
+        <p>Limitation, fee and form selection are arithmetic on the record. There is no model in this
+          path, no network call, and nothing that can differ between two runs. A statutory deadline is
+          not a thing to be predicted.</p>
+      </div>
+      <div class="card">
+        <h3>It knows an order from its enclosures</h3>
+        <p>The portal's "Download closure order" returns the real order bundled with the computation
+          sheet and the notice of demand u/s 156 — all flagged as orders. ProHippo classifies each,
+          because only the order itself attracts an appeal. A demand notice does not.</p>
+      </div>
+      <div class="card tint">
+        <h3>The route is decided, not guessed</h3>
+        <p>Scrutiny and penalty orders route to <b>CIT(A)</b>; a CIT(A) order routes to the
+          <b>ITAT</b>. Orders whose onward forum is out of scope are not surfaced as false work.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 21 · INTIMATIONS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 06 · Intimations &amp; rectifications</div>
+  <h2>What the practice owes its clients after CPC has been through them</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card lav">
+        <div class="k">It drills down, it does not sprawl</div>
+        <p>A searchable list of <b>clients</b>, one row each, saying how much is at stake →
+          that client's <b>orders</b>, one row per assessment year → one order's <b>full card</b>,
+          in a pop-up. On a real practice, one flat page of every order is hundreds of rows deep and
+          tells nobody where to start.</p>
+      </div>
+      <div class="card">
+        <h3>Two more ways to cut it</h3>
+        <p><b>By cause</b> — every client hit by the same CPC adjustment, together, so one answer can
+          be written once and used many times. <b>By staff</b> — what each person is holding, and how
+          much of it they have finished.</p>
+      </div>
+      <div class="card tint">
+        <h3>Every order carries a decision</h3>
+        <p>Accept it, rectify it, or appeal it — recorded against the order, so the page is a place to
+          work rather than a place to look. Rectification and appeal windows are computed on the same
+          engine the Appeals page uses.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Red and green mean one thing, everywhere</h3>
+        <p><b>Positive is money coming back to the assessee.</b> A red figure means CPC left them worse
+          off than the baseline; green, better. One sign convention, set once at ingest, so the
+          dashboard number and the Returns-tab number cannot disagree.</p>
+      </div>
+      <div class="card">
+        <h3>Read the order</h3>
+        <p>One button reads the comparison table inside a s.143(1) or s.154 order, and the earlier
+          years' demand in its annexures. It can also run automatically for red-flagged orders — off by
+          default, switched on in Settings.</p>
+      </div>
+      <div class="card tint">
+        <h3>What is deliberately absent</h3>
+        <ul class="dots">
+          <li><b>No client messaging from this page.</b> One sync can pull a dozen new PANs; a screen
+            that could message off the back of that will one day message a dozen people nobody meant
+            to contact.</li>
+          <li><b>No s.220(2) interest projection.</b> It would be our arithmetic sitting beside figures
+            the department stated, and here the two must never be confusable.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 22 · INVOICES ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 07 · Invoices</div>
+  <h2>Billing that lives beside the work that earned it</h2>
+  <div class="hr"></div>
+  <div class="body g3">
+    <div class="col">
+      <div class="card">
+        <h3>Raising a bill</h3>
+        <p>Client, assessment year, service, line items and amount, with due date and status. Invoices
+          are numbered by the practice's own series and always tied to an assessee on file.</p>
+      </div>
+      <div class="card">
+        <h3>Invoice PDFs, in your brand</h3>
+        <p>Typeset with the firm's name, address and phone from the practice profile, an accent colour
+          chosen from presets, and proper Indian numbering. Previewed before it is sent.</p>
+      </div>
+      <div class="card tint">
+        <h3>Sent on WhatsApp</h3>
+        <p>Where the group head is reachable and has consented, the bill goes to them with the PDF
+          attached and is tracked to <b>Read</b>. Where they are not, it comes back to the practitioner
+          to forward — under a different template, so nobody is quietly unbilled.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Payments &amp; receipts</h3>
+        <p>Record part or full payment in cash, UPI, bank transfer, cheque or card. A numbered
+          <b>receipt PDF</b> is produced for each. Payments can be entered against an invoice, an
+          assessee, or a whole group — and allocated across open bills automatically.</p>
+      </div>
+      <div class="card">
+        <h3>Ledgers</h3>
+        <p>A running statement of account per assessee and per group — invoices raised, payments
+          received, balance carried — downloadable as a branded PDF for the client's own records.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">The page itself</div>
+        <ul class="ticks">
+          <li><b>Billing trend</b> over the last six months</li>
+          <li><b>Top outstanding</b>, sorted by due date</li>
+          <li>The full invoice register with status pills</li>
+          <li><b>Assessee ledgers</b> panel</li>
+          <li><b>Groups</b> panel for family and business-house accounts</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Why it belongs in this app</h3>
+        <p>Receivables are grouped the way clients are grouped, and every bill points back at the
+          matter that earned it. Collection stops being a separate memory exercise.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 23 · COMMUNICATIONS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 08 · Communications</div>
+  <h2>A document request is not a message. It is a checklist that sends messages.</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Why that distinction is the whole design</div>
+        <p>If a request were just text in a log, then "ask for six documents, four arrive, chase the
+          other two before the hearing" would have <b>nowhere to live</b>. Modelling it as an object
+          with a lifecycle — drafted → sent → items arriving → complete — means reminders,
+          multi-channel sending and per-item progress all fall out of one record.</p>
+      </div>
+      <div class="card">
+        <h3>The composer</h3>
+        <ul class="dots">
+          <li>Items pre-filled from what the notice called for, or from <b>ready-made presets</b> by
+            proceeding type</li>
+          <li>Every item editable in place, reorderable, markable <b>received</b> or <b>waived</b></li>
+          <li>A note per item, and a required/optional flag</li>
+          <li>Live preview of exactly what the client will read</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>In the client's own language</h3>
+        <p>Twelve Indian languages — Hindi, Gujarati, Marathi, Bengali, Tamil, Telugu, Kannada,
+          Malayalam, Punjabi, Odia, Urdu and English — shown in their own script beside the English
+          name. Translation is of <b>our sentences</b>, with the client's details held back in
+          placeholders. The letter itself is never sent anywhere to be translated.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>The page</h3>
+        <p>Four filters: <b>Requests</b> (drafts first, then sent), the full <b>message log</b>,
+          <b>WhatsApp</b> and <b>Email</b>. The page header says how many drafts are unsent and how many
+          requests are still awaiting documents.</p>
+      </div>
+      <div class="card">
+        <h3>The delivery log is append-only</h3>
+        <p>One row per send attempt — channel, recipient, subject, template and a real delivery status
+          carried back from the provider. One request can produce several rows: an email, then a
+          WhatsApp hand-off, then a reminder, each pointing back at its parent.</p>
+      </div>
+      <div class="card tint">
+        <h3>Also here</h3>
+        <p>A plain <b>New message</b> composer for the one-off note that is not a document request, and
+          the same request composer reachable from any notice, any assessee, or any draft.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 24 · REPORTS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 09 · Reports</div>
+  <h2>Eight exports, each one row-counted before you click</h2>
+  <div class="hr"></div>
+  <div class="body col" style="gap:14px">
+    <p class="lead">Every report is a CSV that opens straight in Excel, generated from live data, with
+      the row count shown on the card so nobody exports an empty file.</p>
+    <div class="g4">
+      <div class="card"><h3>Outstanding receivables</h3><p>Assessee-wise unpaid fees — invoice number,
+        due date, amount, received, outstanding.</p></div>
+      <div class="card"><h3>Billing report</h3><p>Every invoice raised with its status, year, service
+        and amount.</p></div>
+      <div class="card"><h3>Payments received</h3><p>Every invoice against which money has come in.</p></div>
+      <div class="card"><h3>Authority-wise case load</h3><p>Active matters by forum, with bench, section,
+        status and the staff holding them.</p></div>
+    </div>
+    <div class="g4">
+      <div class="card"><h3>Upcoming hearings</h3><p>A cause list in spreadsheet form — date, time,
+        assessee, PAN, A.Y., authority, bench, mode, staff.</p></div>
+      <div class="card"><h3>Notice register</h3><p>All notices with DIN, dates, section, authority and
+        review status.</p></div>
+      <div class="card"><h3>Assessee master</h3><p>The full client register with contact details, group
+        and assigned staff.</p></div>
+      <div class="card"><h3>Communication log</h3><p>Messages sent and drafted, by channel, with
+        delivery status.</p></div>
+    </div>
+    <div class="callout">
+      <p><b>Plus targeted exports where the work happens:</b> the Hearings page exports its filtered
+        set directly, and Settings downloads a complete <b>JSON backup</b> of the practice — because
+        data you cannot take out is data you do not own.</p>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 25 · SETTINGS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Page 10 · Settings</div>
+  <h2>Profile, data, and every switch in one place</h2>
+  <div class="hr"></div>
+  <div class="body g3">
+    <div class="col">
+      <div class="card">
+        <h3>Practice profile</h3>
+        <p>Your name, firm name, firm address and firm phone — the last two appear on every invoice and
+          receipt PDF the app produces.</p>
+      </div>
+      <div class="card">
+        <h3>Account</h3>
+        <p>The identity you signed in with, and <b>Link mobile</b> — attach and verify a mobile by OTP
+          so phone and email become one account. That verified number is the only one ProHippo will
+          ever WhatsApp or ring you on.</p>
+      </div>
+      <div class="card">
+        <h3>Your data</h3>
+        <ul class="dots">
+          <li><b>Download backup</b> as JSON</li>
+          <li><b>Load sample data</b> to explore the app safely</li>
+          <li><b>Clear all data</b>, behind a confirmation</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Live integrations</div>
+        <ul class="ticks">
+          <li><b>Voice help line</b> — the number, what it can and cannot do, and Call me</li>
+          <li><b>Google Calendar</b> — connect, choose what mirrors, see last sync</li>
+          <li><b>ITAT email</b> — your practice's inbound address and its status</li>
+          <li><b>WhatsApp</b> — which of the six messages this practice sends</li>
+          <li><b>Auto-read</b> red-flagged intimations</li>
+          <li><b>Touch feedback</b> — haptics on mobile</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Two permissions, kept separate</h3>
+        <p>"Is this practice willing to send this message?" is a Settings switch. "Has this person
+          agreed to receive it?" is recorded on the group head. Both must be true before anything is
+          sent — one is a preference, the other is consent, and conflating them is how a client who
+          said stop gets messaged anyway.</p>
+      </div>
+      <div class="card tint">
+        <h3>Announced, not yet live</h3>
+        <p>Transactional email from your own domain, and Tally / Zoho Books invoice push — shown as
+          coming, because a switch that does nothing is worse than no switch.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 26 · SECTION: MACHINERY ══════════════════ -->
+<section class="slide dark divider">
+  <div class="no">PART FOUR</div>
+  <h1>The machinery behind the screens</h1>
+  <p class="deck">Syncing, delivery, documents and the deliberate boundary around what a model is
+    allowed to touch.</p>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 27 · CONNECTOR ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Tools · Sync Connector App</div>
+  <h2>The morning's notices, in before anyone sits down</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card">
+        <h3>What it is</h3>
+        <p>A desktop application for <b>macOS and Windows</b>, downloaded from inside ProHippo with
+          OS-aware first-run instructions. It signs itself in from a device key held in the machine's
+          keychain — issued from the app, revocable from the app — so no password is typed on a machine
+          that runs unattended.</p>
+      </div>
+      <div class="card lav">
+        <div class="k">Parallel, and isolated</div>
+        <p>Several PAN syncs run at once, each inside its own isolated browser context with its own
+          cookies and session — the desktop equivalent of the portal's own dual-login rule, but with
+          every PAN a genuinely separate session, so portal sessions never collide.</p>
+      </div>
+      <div class="card">
+        <h3>Incremental by design</h3>
+        <p>Before logging in, it reads what ProHippo already holds for that PAN, then fetches only what
+          is new. A second sync is not a second download of the same four hundred files.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Unattended, on a timer that behaves</h3>
+        <ul class="dots">
+          <li>Starts with the operating system and syncs once at launch</li>
+          <li>Keeps going on a re-armed timer — every six hours by default — computed from the wall
+            clock, so a laptop that slept through three of them syncs <b>once</b> on waking, not three
+            times</li>
+          <li>The next run is drawn from a range around the interval, so the portal never sees the same
+            schedule two days running</li>
+          <li><b>Quiet hours</b> are respected</li>
+          <li>It will not run while another sync is in flight, and never runs at all unless it was
+            switched on</li>
+        </ul>
+      </div>
+      <div class="card tint">
+        <h3>Paced to look like a person</h3>
+        <p>Staggered, randomised launches and per-request jitter — because a firm's residential
+          connection making four hundred identical requests in eight seconds is a firm that gets
+          blocked. Runs the machine's real Chrome where it can.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 28 · WHATSAPP ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Delivery · WhatsApp</div>
+  <h2>Six messages, and the guards that stop the seventh</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <table class="kv">
+        <thead><tr><td>Message</td><td>Goes to</td><td>Falls back to</td></tr></thead>
+        <tr><td>Document request</td><td>Group head</td><td>The assessee's own mobile</td></tr>
+        <tr><td>New notice — practitioner</td><td>The practitioner</td><td>—</td></tr>
+        <tr><td>New notice — client</td><td>Group head</td><td>Not sent</td></tr>
+        <tr><td>Hearing reminder</td><td>The practitioner</td><td>—</td></tr>
+        <tr><td>Weekly cause list</td><td>The practitioner</td><td>—</td></tr>
+        <tr><td>Invoice</td><td>Group head</td><td>The practitioner, different template</td></tr>
+      </table>
+      <div class="card tint">
+        <h3>Delivered, read, or failed — recorded</h3>
+        <p>Every send is logged against the assessee with the status the provider reports, so "did the
+          client get it" is a fact on file rather than a belief.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">One number carries every practice</div>
+        <p>ProHippo is the sender; the practitioner's firm is named in the body. So a client who
+          reports a message as spam does not damage that practice's deliverability — <b>they damage
+          everyone's</b>. Consent, the opt-out list and the burst guards are not compliance theatre;
+          they are what stops one careless practice taking the platform down for the rest.</p>
+      </div>
+      <div class="card">
+        <h3>Four guards on the new-notice alert</h3>
+        <ul class="dots">
+          <li>Only notices whose deadline has <b>not already passed</b> — a first sync finds four years
+            of history, and nobody wants to be alerted to all of it</li>
+          <li>Only notices that came <b>from the portal</b> — not the one you just typed in</li>
+          <li>A claim on the DIN, so the same notice cannot alert twice</li>
+          <li>A <b>burst cap</b>, so a big sync cannot become a hundred messages</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 29 · CALENDAR + ITAT MAIL ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Integrations · Calendar and Tribunal mail</div>
+  <h2>Into the diary the practitioner already keeps</h2>
+  <div class="hr"></div>
+  <div class="body g2">
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Google Calendar</div>
+        <p>ProHippo creates <b>its own calendar inside the practitioner's Google account</b> and mirrors
+          hearings and deadlines into it. Sync is <b>one-way by design</b>: ProHippo is the record of
+          truth, and an event dragged in Google never silently moves a hearing here.</p>
+        <ul class="dots" style="margin-top:8px">
+          <li>Connect and disconnect from Settings, with the last sync time on screen</li>
+          <li>Choose separately whether hearings and deadlines mirror</li>
+          <li>Any single hearing can be kept out of the sync</li>
+          <li>Uses the narrowest possible Google scope — the app can only touch the calendar it
+            created, and can never read the practitioner's personal one</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">ITAT email ingest</div>
+        <p>Each practice gets <b>one inbound address of its own</b>. Anything sent to it that came from
+          the Tribunal is read — appeal number, appellant, PAN, assessment year, hearing date and time,
+          bench, filing date, case type — and offered on the Hearings page for one click of
+          confirmation.</p>
+        <ul class="dots" style="margin-top:8px">
+          <li>Register the address once with the Tribunal, or forward to it</li>
+          <li><b>Nothing reads anybody's mailbox</b> — there is no mail account to connect, no OAuth
+            scope to grant and no annual security review</li>
+          <li>A re-sent email cannot create a second matter</li>
+          <li>A superseded hearing is marked adjourned rather than duplicated</li>
+          <li>The sidebar badge counts what is waiting</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 30 · VOICE ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Integrations · The voice help line</div>
+  <h2>A colleague who knows the whole app, on the phone</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <p class="lead">Ring <b>+91 80715 82778</b>, or press <b>Call me</b> in the app and it rings you.
+        Speak English, Hindi or Gujarati.</p>
+      <div class="g2" style="gap:12px">
+        <div class="card">
+          <h3>It can</h3>
+          <ul class="dots">
+            <li>Find anything in the app — "where do I raise a bill", "how do I add a client"</li>
+            <li>Read out your hearings, pending notices, open tasks and outstanding fees</li>
+            <li>Summarise any one client — open matters, next date, what's due</li>
+            <li>Answer in whichever of the three languages you speak</li>
+          </ul>
+        </div>
+        <div class="card tint">
+          <h3>It cannot</h3>
+          <ul class="dots">
+            <li><b>Change anything.</b> It cannot add, edit, delete, send or file. It reads only.</li>
+            <li>Give an opinion on a tax position — that stays with you.</li>
+            <li>Tell you anything about ProHippo's own business, or any account but yours.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">Why "Call me" is the better door</div>
+        <p>The request arrives already authenticated, so ProHippo dials <b>the number that account
+          verified</b> — never a number supplied in the request, which would turn the line into a free
+          outbound dialler billed to us — and mints a signed token that lasts fifteen minutes, which is
+          a call.</p>
+      </div>
+      <div class="card">
+        <h3>Inbound is identified before the conversation starts</h3>
+        <p>The caller's number is resolved to an account the moment the call connects, and the same
+          signed token is issued. If your mobile is not linked, the Settings card <b>tells you the line
+          will not recognise you before you ring it</b> — which is the whole reason that card exists.</p>
+      </div>
+      <div class="card tint">
+        <h3>Every call is logged</h3>
+        <p>Recent calls appear in Settings, so a practice can see what the line has been asked.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 31 · COMPUTATION ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Documents · Computation of Income</div>
+  <h2>A computation sheet, generated from the return as filed</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <p class="lead">From the Returns tab, one click turns the ITR JSON already synced from the portal
+        into a fully typeset <b>Computation of Income</b> PDF in the practice's brand — the document a
+        client is given and a file is closed with.</p>
+      <div class="card">
+        <h3>Supported today</h3>
+        <table class="kv" style="margin-top:6px">
+          <tr><td>ITR-1</td><td>A.Y. 2022-23 to 2026-27</td></tr>
+          <tr><td>ITR-2</td><td>A.Y. 2022-23 to 2026-27</td></tr>
+          <tr><td>ITR-3</td><td>A.Y. 2022-23 to 2026-27</td></tr>
+          <tr><td>ITR-5</td><td>A.Y. 2025-26</td></tr>
+        </table>
+        <p class="small" style="margin-top:8px">A year without a mapper says so plainly, and names the
+          years that do work — rather than offering a button that fails.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">It must tie to the return, or it does not print</div>
+        <p>The generated document is <b>validated against the filed return</b> before it is rendered.
+          If any head or total does not reconcile, generation fails loudly instead of handing over a
+          computation that quietly disagrees with what was filed.</p>
+      </div>
+      <div class="card">
+        <h3>Deterministic, and specified</h3>
+        <p>Same JSON in, same document out. No model, no network in the mapping — the only server call
+          is the final render to PDF. The behaviour is written down in a specification the code is
+          tested against; where the two disagree, <b>the specification wins and the code is wrong</b>.</p>
+      </div>
+      <div class="card tint">
+        <h3>Nothing is silently dropped</h3>
+        <p>Fields the mappers do not yet handle are tracked rather than ignored, so an unmapped figure
+          is a known gap, not an invisible one.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 32 · AI BOUNDARY ══════════════════ -->
+<section class="slide dark">
+  <div class="eyebrow on-dark">The boundary</div>
+  <h2>Where AI is used — and where it deliberately is not</h2>
+  <div class="hr"></div>
+  <div class="body g2">
+    <div class="col">
+      <div class="card">
+        <h3>A model is allowed to read a PDF. Nothing else.</h3>
+        <ul class="dots">
+          <li><b>Summarise an order</b> — and say which document it is: the assessment order, its
+            computation sheet, or the notice of demand</li>
+          <li><b>Extract the documents a notice calls for</b>, to seed the client checklist</li>
+          <li><b>Read the comparison table</b> inside a s.143(1) or s.154 order</li>
+          <li><b>Translate our own sentences</b> into the client's language — with their details held
+            back in placeholders. The letter itself is never sent to be translated.</li>
+        </ul>
+        <p style="margin-top:9px">Each of these extracts something a PDF is the <b>sole source</b> of.
+          That is the entire test for admitting a model.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Everything else is arithmetic on stated facts</h3>
+        <ul class="dots">
+          <li>A notice's PAN, assessment year, section, DIN and dates come from the <b>portal's own
+            structured data</b> — not from reading the letter</li>
+          <li>Appeal limitation, the applicable regime, fees and forms are <b>deterministic</b></li>
+          <li>The s.143(1) and s.154 variance is arithmetic on figures <b>the department stated</b></li>
+          <li>The Computation of Income is a specified mapping, validated against the filed return</li>
+        </ul>
+      </div>
+      <div class="callout">
+        <p><b>Why draw the line here.</b> A summary that is slightly wrong costs a second read. A
+          <b>deadline</b> that is slightly wrong costs the appeal. The two must never be produced by
+          the same kind of process — so in ProHippo they are not.</p>
+      </div>
+      <p class="small">An earlier build let a model pre-fill the notice intake form from a PDF. It was
+        removed once notices began arriving through the sync with their fields already authoritative:
+        re-reading them cost money to produce a worse answer.</p>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 33 · SECURITY ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Trust</div>
+  <h2>The security posture, stated plainly</h2>
+  <div class="hr"></div>
+  <div class="body g3">
+    <div class="col">
+      <div class="card">
+        <h3>Data is per-account, at the database level</h3>
+        <p>Every record lives under the signed-in user. Firestore rules — not application code — deny
+          any read across accounts. A bug in a screen cannot leak another practice's file.</p>
+      </div>
+      <div class="card">
+        <h3>Portal passwords</h3>
+        <p>Encrypted at rest with a key held in Firebase secrets, never exposed to the browser, and
+          deletable at any time. The key is not derivable from the stored data.</p>
+      </div>
+      <div class="card">
+        <h3>Sign-in</h3>
+        <p>Mobile OTP, email OTP or Google. A mobile number becomes usable for WhatsApp and the voice
+          line <b>only after it is proved by OTP</b> — never one typed into a form.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card lav">
+        <div class="k">The console cannot see client data. Ever.</div>
+        <p>ProHippo's own admin console reads account-level facts — firm, plan, status, usage
+          <b>counts</b>. It has <b>no access</b> to any practitioner's assessees, notices, hearings or
+          portal credentials. Not "restricted" — the rules grant nothing there, and no server function
+          reads it.</p>
+        <p style="margin-top:8px">The console shows "12 assessees". It never shows <b>which twelve</b>.</p>
+      </div>
+      <div class="card">
+        <h3>Admin is a signed claim, not a flag</h3>
+        <p>It is signed into the token, so the rules and every server function agree without an extra
+          read — and nothing the browser can write can grant it. There is deliberately no self-service
+          way to become an admin.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Every privileged action is audited</h3>
+        <p>Account changes, role grants and referral reversals are written to an append-only audit log
+          with who did what and when.</p>
+      </div>
+      <div class="card">
+        <h3>Device keys</h3>
+        <p>The desktop Connector signs in with a key that is issued, stored in the OS keychain, and
+          <b>revocable from the app</b> — so a lost office machine is one click, not a password reset
+          across every client.</p>
+      </div>
+      <div class="card tint">
+        <h3>Your data leaves when you ask</h3>
+        <p>A full JSON backup on demand, CSV exports across the practice, and a documented data-deletion
+          route.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 34 · ADMIN + REFERRALS ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">Behind the product</div>
+  <h2>The business console, and how growth is attributed</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="card lav">
+        <div class="k">/admin — five screens</div>
+        <table class="kv" style="margin-top:4px">
+          <tr><td>Overview</td><td>Accounts, paying, on trial, past due; new and active this week; live referral codes and attributed signups; a daily snapshot written at 02:30 IST.</td></tr>
+          <tr><td>Customers</td><td>Account lookup by firm or email — plan, status, usage counts.</td></tr>
+          <tr><td>Referral codes</td><td>Create, edit and reverse redemptions.</td></tr>
+          <tr><td>Costs</td><td>What the platform spends, tracked per service.</td></tr>
+          <tr><td>Audit log</td><td>Every privileged action, append-only.</td></tr>
+        </table>
+      </div>
+      <div class="card tint">
+        <h3>It ships separately</h3>
+        <p>Lazily loaded, so none of it lands in the bundle a practitioner downloads — and the link is
+          drawn only for accounts carrying the claim. Everyone else has no link, no hint, and no route
+          that resolves to anything but the normal app.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Referrals, on first touch</h3>
+        <p>A partner sends someone to <b>prohippo.in/?ref=CODE</b>. That person reads the page, closes
+          the tab, and signs up four days later from a Google search — and it still counts as the
+          partner's signup.</p>
+        <ul class="dots" style="margin-top:8px">
+          <li><b>First touch is never overwritten</b> — it credits whoever actually introduced the
+            customer, and stops a coupon site intercepting attribution at the last second</li>
+          <li>A <b>30-day window</b>, about as long as a professional takes to get round to signing up</li>
+          <li>Codes are read off WhatsApp forwards and business cards, so case, spaces and hyphens do
+            not matter</li>
+          <li>The code is pre-filled and validated during onboarding, and attribution <b>never blocks
+            a signup</b> — a bad code still lets the account through</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 35 · SECTION: WHY NOW ══════════════════ -->
+<section class="slide dark divider">
+  <div class="no">PART FIVE</div>
+  <h1>Why this, and why now</h1>
+  <p class="deck">The argument in one page, the audience it is built for, and what comes next.</p>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 36 · THE ARGUMENT ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">The case, consolidated</div>
+  <h2>Six reasons this is the need of the hour</h2>
+  <div class="hr"></div>
+  <div class="body g2" style="gap:14px">
+    <div class="col">
+      <div class="card">
+        <h3>1 · Compliance became a machine. The response did not.</h3>
+        <p>The Department issues, serves, processes and penalises automatically. A practice answering it
+          with a browser tab and a diary is not slow — it is <b>structurally outmatched</b>.</p>
+      </div>
+      <div class="card">
+        <h3>2 · Service is deemed, so attention must be manufactured</h3>
+        <p>Nobody is coming to tell you a notice arrived. Something has to go and look, every day,
+          across every PAN — and then put it in front of a human. That is the product.</p>
+      </div>
+      <div class="card">
+        <h3>3 · Two limitation regimes now run at once</h3>
+        <p>From 1 April 2026 the appeal clock changes shape, and which clock governs depends on when
+          the order was communicated. Counting that by hand, across a full practice, for years — is
+          exactly the kind of arithmetic that should never be done by hand.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>4 · The cost of a miss is asymmetric and unrecoverable</h3>
+        <p>A lapsed appeal is not an inconvenience; it is a client's assessment becoming final. Software
+          that prevents one such lapse a year has already paid for itself many times over.</p>
+      </div>
+      <div class="card">
+        <h3>5 · Clients live on WhatsApp, in their own language</h3>
+        <p>A reminder in an inbox nobody opens is not a reminder. ProHippo delivers where attention
+          already is, in twelve Indian languages, with consent recorded and delivery tracked.</p>
+      </div>
+      <div class="card">
+        <h3>6 · The tooling finally exists to do this honestly</h3>
+        <p>Portal data is structured enough to be fetched rather than guessed. Documents can be read
+          where a PDF is the only source. And the parts that must never be wrong — limitation, fees,
+          computations — can stay <b>fully deterministic and testable</b>. That combination was not
+          available a few years ago. It is now.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 37 · WHO IT'S FOR ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">The audience</div>
+  <h2>Who it is for, and what it replaces</h2>
+  <div class="hr"></div>
+  <div class="body g23">
+    <div class="col">
+      <div class="g2" style="gap:12px">
+        <div class="card"><h3>Chartered Accountants</h3><p>In practice, carrying scrutiny, appeal and
+          penalty matters across a client book of any size.</p></div>
+        <div class="card"><h3>Tax advocates &amp; consultants</h3><p>Appearing before CIT(A) and the
+          Tribunal, where limitation is the whole game.</p></div>
+        <div class="card"><h3>Multi-partner firms</h3><p>Where matters change hands and context is what
+          gets lost at the handover.</p></div>
+        <div class="card"><h3>Family &amp; business-house advisors</h3><p>Where a "client" is fifteen
+          PANs and one person who answers for all of them.</p></div>
+      </div>
+      <div class="card lav">
+        <div class="k">Getting started</div>
+        <p>Sign in by mobile, email or Google → name your practice and firm (a referral code is
+          pre-filled if you arrived on a partner link) → add an assessee, or <b>load sample data</b> and
+          walk the whole app safely first.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>What it replaces</h3>
+        <table class="kv" style="margin-top:4px">
+          <tr><td>A daily portal round</td><td>Automated sync, on demand or unattended</td></tr>
+          <tr><td>A diary and a whiteboard</td><td>Five calendar views, cause lists, Google mirror</td></tr>
+          <tr><td>Hand-counted limitation</td><td>A deterministic engine showing both regimes</td></tr>
+          <tr><td>WhatsApp scrollback</td><td>Tracked requests with per-item status</td></tr>
+          <tr><td>A downloads folder</td><td>Every PDF attached to its proceeding</td></tr>
+          <tr><td>A separate billing book</td><td>Invoices, receipts and ledgers beside the matter</td></tr>
+          <tr><td>Excel registers</td><td>Eight live CSV exports and a full JSON backup</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 38 · ROADMAP ══════════════════ -->
+<section class="slide">
+  <div class="eyebrow">What is built, and what is next</div>
+  <h2>Honest state of the product</h2>
+  <div class="hr"></div>
+  <div class="body g3">
+    <div class="card">
+      <div class="k">Live today</div>
+      <ul class="ticks">
+        <li>Portal sync — extension and desktop Connector</li>
+        <li>Assessees, groups, matters, notices, hearings</li>
+        <li>Appeals limitation engine, both regimes</li>
+        <li>Intimations &amp; rectification variance</li>
+        <li>All six WhatsApp messages</li>
+        <li>Google Calendar mirror</li>
+        <li>ITAT email ingest</li>
+        <li>Voice help line, three languages</li>
+        <li>Computation of Income — ITR-1/2/3/5</li>
+        <li>Invoices, receipts, ledgers, groups</li>
+        <li>Document requests in twelve languages</li>
+        <li>Reports, backups, PWA install</li>
+        <li>Admin console and referral attribution</li>
+      </ul>
+    </div>
+    <div class="card tint">
+      <div class="k">Next</div>
+      <ul class="ticks">
+        <li>Email attachments and a client upload link, so documents come back <b>into</b> the request
+          rather than into an inbox</li>
+        <li>Automatic reminders on outstanding checklist items</li>
+        <li>Transactional email from the practice's own domain</li>
+        <li>More ITR forms and years for the computation</li>
+        <li>Plans, entitlements and billing</li>
+      </ul>
+    </div>
+    <div class="card lav">
+      <div class="k">The principles that will not move</div>
+      <ul class="ticks">
+        <li>Anything that must never be wrong stays <b>deterministic and tested</b></li>
+        <li>A model reads documents; it does not decide dates</li>
+        <li>Consent and delivery are <b>recorded facts</b>, not assumptions</li>
+        <li>ProHippo's own staff cannot see a practitioner's client data</li>
+        <li>Nothing writes itself from an untrusted source without a human confirming</li>
+        <li>A practice can take its data out at any time</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 39 · CLOSING ══════════════════ -->
+<section class="slide dark divider">
+  <div class="no">PROHIPPO</div>
+  <h1>Deadline anxiety<br>has a new ending.</h1>
+  <p class="deck">Every alert, hearing, reply, order and appeal stays connected to the matter that
+    created it. Never unseen. Never too late.</p>
+  <div style="margin-top:32px; display:flex; gap:12px; flex-wrap:wrap">
+    <span class="pill" style="font-size:12.5px; padding:7px 15px">prohippo.in</span>
+    <span class="pill" style="font-size:12.5px; padding:7px 15px">Help line · +91 80715 82778</span>
+    <span class="pill" style="font-size:12.5px; padding:7px 15px">MEHTAJI BIZCON LLP · Ahmedabad</span>
+  </div>
+  <div class="foot">
+    <div class="brandbit"><img src="data:image/png;base64,__MARK_PNG__" alt=""><span>ProHippo</span></div>
+    <div class="num"></div>
+  </div>
+</section>
+
+</body>
+</html>

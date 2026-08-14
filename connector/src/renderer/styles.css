@@ -286,10 +286,6 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary);cursor:p
    back is how "check the credential" turns up in a sync three hours later. */
 .pwd{position:relative;display:flex}
 .pwd input{padding-right:40px}
-/* Set in monospace while it is on screen, which is most of what "show me the
-   password" is asking for: in a proportional face a capital and its lower-case
-   twin differ only in size, and `Il1` / `O0` are a guess. */
-.pwd input.shown{font-family:var(--mono);letter-spacing:.04em}
 .pwd-eye{
   position:absolute;right:4px;top:50%;transform:translateY(-50%);
   display:flex;align-items:center;justify-content:center;

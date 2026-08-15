@@ -5,6 +5,10 @@ in the app, the navigation path through each page, and the case for why a
 practice needs this now. Illustrated throughout with **screenshots of the
 running application** and the ProHippo mascot's explainer panels.
 
+> **Outstanding:** seven further mascot explainer panels are specified and their
+> slide layout is written and measured, but the art has not been generated.
+> See `pending-explainers.md`.
+
 ## Rebuilding it
 
 ```bash

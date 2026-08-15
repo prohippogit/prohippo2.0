@@ -1,0 +1,123 @@
+diff --git a/pitch/prohippo-pitch.html b/pitch/prohippo-pitch.html
+index 5724096..3354b02 100644
+--- a/pitch/prohippo-pitch.html
++++ b/pitch/prohippo-pitch.html
+@@ -288,6 +288,27 @@ ul.dots li::before {
+ .jcell .pic { border-radius: 9px; overflow: hidden; margin-bottom: 8px; background: var(--lav-2); aspect-ratio: 16 / 9; }
+ .jcell .pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+ 
++/* ---------- slide explainer panel ----------
++   Seven slides carry a mascot panel of their own. Their bodies are already
++   full — measured, every one of them sits within about 25px of the footer —
++   so a picture placed in the body would push a sentence off the bottom of a
++   slide that clips rather than complains. The panel is taken out of flow and
++   parked in the band to the right of the heading, which every one of these
++   slides was leaving empty. The heading is capped to match, so a long title
++   wraps before it reaches the picture instead of running underneath it. */
++.slide.expl > .expl {
++  position: absolute; top: 46px; right: 60px; width: 216px; aspect-ratio: 16 / 9;
++  border-radius: 10px; overflow: hidden; background: var(--lav-2);
++  border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(20,16,45,.08);
++}
++.slide.expl > .expl img { display: block; width: 100%; height: 100%; object-fit: cover; }
++/* 890px clears the panel's left edge at x=1004 with room to spare, and is just
++   wide enough for the longest of these seven titles (884px) to stay on one
++   line — a cap 10px tighter costs three of them a second line, and slide 4 has
++   nowhere to put one. */
++.slide.expl > .eyebrow, .slide.expl > h2 { max-width: 890px; }
++.slide.dark.expl > .expl { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.22); }
++
+ /* A handful of slides carry more than the body box fits — by four percent at
+    worst. `zoom` reflows the content rather than scaling a bitmap of it, so the
+    text stays real text in the PDF and the layout stays the layout; the
+@@ -387,10 +408,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 4 · WHAT IT COSTS ══════════════════ -->
+-<section class="slide">
++<section class="slide expl">
+   <div class="eyebrow">The gap, in practice</div>
+   <h2>Five ways a matter is lost today — none of them careless</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/09-buried-in-folders.jpg__" alt="A tax professional buried under hundreds of client folders."></figure>
+   <div class="body col" style="gap:9px">
+     <div class="card">
+       <h3>1 · The notice reaches the client, not the professional</h3>
+@@ -427,10 +449,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 5 · WHY NOW (2025 ACT) ══════════════════ -->
+-<section class="slide">
++<section class="slide expl">
+   <div class="eyebrow">Why this year, specifically</div>
+   <h2>From 1 April 2026, two limitation regimes run side by side</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/10-two-limitation-clocks.jpg__" alt="The mascot standing between two clocks showing different dates."></figure>
+   <div class="body g23">
+     <div class="col">
+       <p class="lead">The Income-tax Act, 2025 does not merely renumber the sections. It changes the
+@@ -1742,10 +1765,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 27 · CONNECTOR ══════════════════ -->
+-<section class="slide">
++<section class="slide expl">
+   <div class="eyebrow">Tools · Sync Connector App</div>
+   <h2>The morning's notices, in before anyone sits down</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/11-overnight-sync.jpg__" alt="A desktop computer working alone overnight in an empty office, documents stacking into a tray."></figure>
+   <div class="body g23">
+     <div class="col">
+       <div class="card">
+@@ -1890,10 +1914,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 30 · VOICE ══════════════════ -->
+-<section class="slide">
++<section class="slide expl">
+   <div class="eyebrow">Integrations · The voice help line</div>
+   <h2>A colleague who knows the whole app, on the phone</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/12-voice-line.jpg__" alt="The mascot in a phone headset, answering a call."></figure>
+   <div class="body g23">
+     <div class="col">
+       <p class="lead">Ring <b>+91 80715 82778</b>, or press <b>Call me</b> in the app and it rings you.
+@@ -1945,10 +1970,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 31 · COMPUTATION ══════════════════ -->
+-<section class="slide">
++<section class="slide expl">
+   <div class="eyebrow">Documents · Computation of Income</div>
+   <h2>A computation sheet, generated from the return as filed</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/13-computation-sheet.jpg__" alt="The mascot presenting a printed statement of computation."></figure>
+   <div class="body g23">
+     <div class="col">
+       <p class="lead">From the Returns tab, one click turns the ITR JSON already synced from the portal
+@@ -1993,10 +2019,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 32 · AI BOUNDARY ══════════════════ -->
+-<section class="slide dark">
++<section class="slide dark expl">
+   <div class="eyebrow on-dark">The boundary</div>
+   <h2>Where AI is used — and where it deliberately is not</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/14-read-and-reckon.jpg__" alt="The mascot holding a magnifying glass over a document, beside an abacus."></figure>
+   <div class="body g2">
+     <div class="col">
+       <div class="card">
+@@ -2041,10 +2068,11 @@ ul.dots li::before {
+ </section>
+ 
+ <!-- ══════════════════ 33 · SECURITY ══════════════════ -->
+-<section class="slide">
++<section class="slide expl">
+   <div class="eyebrow">Trust</div>
+   <h2>The security posture, stated plainly</h2>
+   <div class="hr"></div>
++  <figure class="expl"><img src="data:image/jpeg;base64,__IMG:pitch/assets/mascot/15-vault.jpg__" alt="The mascot guarding a closed vault of client files."></figure>
+   <div class="body g3">
+     <div class="col">
+       <div class="card">

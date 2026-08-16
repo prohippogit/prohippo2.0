@@ -959,7 +959,7 @@ $("aFetchBtn").addEventListener("click", async () => {
   $("aPan").value = pan;
   $("aErr").textContent = "";
   setAddBusy(true, "fetch");
-  setFetchMsg("Starting Chrome…");
+  setFetchMsg("Starting…");
   try {
     const { record, filled } = await window.connector.fetchAssesseeMaster({
       pan,

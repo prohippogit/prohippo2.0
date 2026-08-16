@@ -41,7 +41,9 @@ async function fetchMasterForPan({ pan, portalUserId, portalPassword, headless =
   if (!PAN_RE.test(p)) throw new Error("Enter a valid PAN, e.g. ABCPS1234F.");
   if (!clean(portalPassword)) throw new Error("Enter the e-filing password for this PAN.");
 
-  emit("start", "Starting Chrome…");
+  // "Starting…", not what is being started: progress messages on this screen
+  // say where the work has got to, never what it is driving.
+  emit("start", "Starting…");
   const browser = await launchHardenedBrowser(headless !== false); // hidden unless told otherwise
   let context = null;
   try {

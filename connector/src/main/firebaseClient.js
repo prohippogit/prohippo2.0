@@ -48,6 +48,7 @@ const {
 const { getStorage, ref: storageRef, uploadString } = require("firebase/storage");
 const { firebaseConfig, FUNCTIONS_REGION } = require("./config");
 const deviceSession = require("./deviceSession");
+const { buildSyncKnowns } = require("./syncKnowns");
 
 let app = null;
 let auth = null;
@@ -410,92 +411,16 @@ async function getSyncKnowns(pan) {
     getDocs(query(collection(firestore, `users/${user.uid}/returns`), where("pan", "==", p))),
   ]);
 
-  const knownDins = new Set();
-  const knownResponseIds = new Set();
-  const procNotices = {}; // proceedingReqId -> Set<DIN>
-  const procHasOrder = new Set();
-  /* Notices stored before the sync understood that ONE notice is a SET of
-     files. Each carries the single document the old code asked for, while the
-     approval, the set note and the search print that came with it are still
-     only on the portal. Listed here so the fetch can go back for them once —
-     `docsSyncedAt` is stamped on every ingest, so a notice leaves this list the
-     moment it has been swept and never returns to it. Orders are excluded:
-     downloadClosureOrder has always returned its whole list. */
-  const noticeDocsPending = [];
-  const procNeedsDocs = new Set();
-
-  noticeSnap.forEach((d) => {
-    const n = d.data() || {};
-    if (n.din) knownDins.add(String(n.din));
-    if (n.docKey) knownDins.add(String(n.docKey));
-    const pid = n.proceedingReqId;
-    if (pid) {
-      if (n.isOrder) procHasOrder.add(String(pid));
-      if (n.din) (procNotices[pid] || (procNotices[pid] = new Set())).add(String(n.din));
-    }
-    if (n.din && !n.isOrder && !n.docsSyncedAt) {
-      noticeDocsPending.push({ din: String(n.din), fileName: String(n.fileName || "") });
-      if (pid) procNeedsDocs.add(String(pid));
-    }
-    for (const r of n.responses || []) {
-      if (r && r.responseId != null) knownResponseIds.add(String(r.responseId));
-    }
-  });
-
-  const knownByProc = {};
-  for (const pid of Object.keys(procNotices)) knownByProc[pid] = { n: procNotices[pid].size };
-  for (const pid of procHasOrder) (knownByProc[pid] || (knownByProc[pid] = { n: 0 })).o = true;
-
-  const knownActiveProcs = [];
-  matterSnap.forEach((d) => {
-    const m = d.data() || {};
-    if (m.status === "Active" && m.proceedingReqId) knownActiveProcs.push(String(m.proceedingReqId));
-  });
-
-  /* A return only gets re-fetched when it is new; an order only when there is
-     something a fetch could change.
-
-     "Known" therefore means finished, in either of two ways: we hold a readable
-     PDF, OR the portal will never give us one. Orders before A.Y. 2017-18 are
-     the second case — the portal routes those through a request-and-email flow
-     it will not serve to us, so `request-only` is a terminal state and asking
-     again every sync is pure cost.
-
-     An order we hold but could NOT unlock is a third case and is reported
-     separately: retrying it is the repair path once a date of birth is on file,
-     but retrying it when we still have no date of birth cannot succeed and just
-     re-downloads the same file every run. portalReturns.js decides. */
-  const knownAckNums = [];
-  const knownOrderRefs = [];
-  const lockedOrderRefs = [];
-  const knownFormAcks = [];
-  returnSnap.forEach((d) => {
-    const r = d.data() || {};
-    if (r.ackNum) knownAckNums.push(String(r.ackNum));
-    // "The sync should not fetch this again": either we hold it, or we tried
-    // and recorded why it did not work. Retrying a known failure every run is
-    // what made a caught-up practice's sync as slow as its first.
-    if (r.ackNum && (r.formPdfPath || r.formPdfError)) knownFormAcks.push(String(r.ackNum));
-    for (const o of r.orders || []) {
-      if (!o || !o.commRefNo) continue;
-      const ref = String(o.commRefNo);
-      if ((o.storagePath && !o.locked) || o.lockReason === "request-only") knownOrderRefs.push(ref);
-      else if (o.storagePath && o.locked) lockedOrderRefs.push(ref);
-    }
-  });
-
-  return {
-    knownDins: [...knownDins],
-    knownByProc,
-    knownResponseIds: [...knownResponseIds],
-    noticeDocsPending,
-    procNeedsDocs: [...procNeedsDocs],
-    knownActiveProcs,
-    knownAckNums,
-    knownOrderRefs,
-    lockedOrderRefs,
-    knownFormAcks,
-  };
+  /* The rules themselves live in syncKnowns.js — pure, and tested against the
+     web app's copy of them (test/syncKnowns.test.mjs). They were written out
+     here once, and drifted: this copy never computed `procNeedsMeta`, so the one
+     mechanism that reaches back into a closed proceeding did nothing on the path
+     that actually runs. Reading the documents is this function's job; deciding
+     what they mean is not. */
+  const data = (snap) => { const out = []; snap.forEach((d) => out.push(d.data() || {})); return out; };
+  // No date of birth here on purpose: on this side the order-unlock decision is
+  // made from `job.dob`, which the worker already carries (portalReturns.js).
+  return buildSyncKnowns(data(noticeSnap), p, data(matterSnap), data(returnSnap), false);
 }
 
 module.exports = {

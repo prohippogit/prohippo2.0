@@ -27,107 +27,11 @@ import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL, sameAppeal } from './a
 import NoticeDocuments from './NoticeDocuments';
 import { noticeDocumentCount, hasDocumentList } from './noticeDocs';
 import { describeVariance, BASELINE_LABEL } from './intimations';
-
-// Build the incremental-sync hints from what's already on file for one PAN, so
-// a re-sync only fetches what's genuinely new instead of re-downloading it all:
-//   - knownDins:        DINs + docKeys already held → skip re-downloading PDFs
-//   - knownByProc:      per-proceeding { n: notice count, o: has an order } →
-//                       the extension skips whole proceedings whose counts are
-//                       unchanged (a closed proceeding never changes)
-//   - knownResponseIds: replies already recorded → skip re-downloading them
-//   - noticeDocsPending / procNeedsDocs: the opposite of a "known" — notices we
-//                       hold with only ONE of their documents, because that is
-//                       all the old fetch asked for. A known DIN is skipped, so
-//                       these would never be repaired by a re-sync on their own
-//   - knownActiveProcs: proceedingReqIds we hold as Active → the extension spots
-//                       which ones left FYA (just closed) to grab their order
-//   - knownAckNums:     returns already on file → a filed return never changes,
-//                       so one fetch of its JSON and ITR-V is enough
-//   - knownOrderRefs:   CPC references already downloaded AND unlocked → an
-//                       order we hold but couldn't decrypt is deliberately not
-//                       "known", because a later sync is how it gets fixed
-//   - lockedOrderRefs:  orders we hold but could NOT decrypt, plus canUnlockOrders
-//                       (does this assessee have a date of birth on file?). The
-//                       password is derived from that date and nothing else, so
-//                       retrying without one re-downloads the same file every
-//                       sync and fails identically. An order the portal will
-//                       never serve — pre-2017, "request-only" — counts as
-//                       finished and goes in knownOrderRefs instead.
-//   - knownFormAcks:    returns whose rendered ITR form PDF is already stored.
-//                       Separate from knownAckNums because that document is
-//                       ~11 MB and is rationed per sync run — the extension can
-//                       only finish a deferred year if it can tell "return on
-//                       file" from "return on file WITH its form"
-function buildSyncKnowns(notices, pan, matters, returns, dob) {
-  const knownDins = new Set();
-  const knownResponseIds = new Set();
-  const procNotices = {};        // proceedingReqId -> Set<DIN>
-  const procHasOrder = new Set();
-  const procNeedsMeta = new Set();
-  /* Notices stored back when ONE notice meant ONE file. The portal serves a
-     s.148 notice as a set — the notice, the approval to the JAO, the set note,
-     the search print — and only one of them was ever taken. Listed here (with
-     the name of the file we DO hold, so nothing is fetched twice) for a single
-     sweep. Self-limiting the way procNeedsMeta is: the ingest stamps
-     `docsSyncedAt` however the sweep goes, and the notice drops out for good.
-     Orders are excluded — downloadClosureOrder always returned its whole list. */
-  const noticeDocsPending = [];
-  const procNeedsDocs = new Set();
-  (notices || []).forEach((n) => {
-    if (n.pan !== pan) return;
-    if (n.din) knownDins.add(n.din);
-    if (n.docKey) knownDins.add(n.docKey);
-    if (n.din && !n.isOrder && !n.docsSyncedAt) {
-      noticeDocsPending.push({ din: String(n.din), fileName: String(n.fileName || "") });
-      if (n.proceedingReqId) procNeedsDocs.add(n.proceedingReqId);
-    }
-    const pid = n.proceedingReqId;
-    if (pid) {
-      if (n.isOrder) procHasOrder.add(pid);
-      if (n.din) (procNotices[pid] || (procNotices[pid] = new Set())).add(String(n.din));
-      /* A notice with a reply on it but nothing yet from the portal's own
-         metadata — "Response viewed by AO on" is the one that matters.
-         Marking the PROCEEDING means the connector makes its one detail call
-         even where the count is unchanged and the proceeding is closed, which
-         is otherwise skipped outright. It is self-limiting: once the metadata
-         is on file the notice drops out of this set and the skip returns. */
-      if ((n.responses || []).length && !n.metaSyncedAt) procNeedsMeta.add(pid);
-    }
-    (n.responses || []).forEach((r) => { if (r && r.responseId != null) knownResponseIds.add(String(r.responseId)); });
-  });
-  const knownByProc = {};
-  Object.keys(procNotices).forEach((pid) => { knownByProc[pid] = { n: procNotices[pid].size }; });
-  procHasOrder.forEach((pid) => { (knownByProc[pid] || (knownByProc[pid] = { n: 0 })).o = true; });
-  const knownActiveProcs = (matters || [])
-    .filter((m) => m.pan === pan && m.status === "Active" && m.proceedingReqId)
-    .map((m) => String(m.proceedingReqId));
-  const knownAckNums = [];
-  const knownOrderRefs = [];
-  const lockedOrderRefs = [];
-  const knownFormAcks = [];
-  (returns || []).forEach((r) => {
-    if (r.pan !== pan) return;
-    if (r.ackNum) knownAckNums.push(String(r.ackNum));
-    // Either we hold it, or we tried and recorded why it failed. Both mean the
-    // sync should leave it alone; the Fetch form button is how it gets retried.
-    if (r.ackNum && (r.formPdfPath || r.formPdfError)) knownFormAcks.push(String(r.ackNum));
-    (r.orders || []).forEach((o) => {
-      if (!o || !o.commRefNo) return;
-      const ref = String(o.commRefNo);
-      // Finished, either way: we hold a readable PDF, or the portal will never
-      // give us one.
-      if ((o.storagePath && !o.locked) || o.lockReason === "request-only") knownOrderRefs.push(ref);
-      else if (o.storagePath && o.locked) lockedOrderRefs.push(ref);
-    });
-  });
-  return {
-    knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds],
-    procNeedsMeta: [...procNeedsMeta],
-    noticeDocsPending, procNeedsDocs: [...procNeedsDocs],
-    knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, knownFormAcks,
-    canUnlockOrders: Boolean(dob),
-  };
-}
+// What a re-sync already holds, so it fetches only what is genuinely new. The
+// rules are in that module because they are decisions about what NOT to fetch,
+// and a wrong one is invisible — it produces no error, just data that never
+// arrives. See src/syncKnowns.js.
+import { buildSyncKnowns } from './syncKnowns';
 
 // Pause between assessees in a bulk sync. The extension emits "sync-done" only
 // AFTER it logs the previous assessee out, so by the time we advance the portal

@@ -103,6 +103,57 @@ Two extra one-time deploy steps for this phase:
 
    `storage.rules` restricts every user to their own `users/{uid}/…` files.
 
+### What a re-sync decides NOT to fetch — and why that is the dangerous half
+
+A sync that re-read everything every run would be unusable, so it re-reads only
+what has changed. Every one of those decisions is a decision **not to ask the
+portal a question**, and a wrong one is invisible: no error, no empty result,
+just data that never arrives while the app reports a clean sync.
+
+They are therefore all in one place — `connector/src/main/syncDecisions.js` —
+and they follow one rule:
+
+> **Ask what the portal says has changed. Never infer it from something else.**
+
+That rule is written against a real failure. A closed A.Y. 2024-25 scrutiny
+carried four notices, three replies with 22 attachments, and a closure order set
+(assessment order, computation sheet, demand notice u/s 156). The app showed the
+four notices and nothing else, through four syncs, each reported as successful.
+Nothing had failed — the sync had decided not to look, on two pieces of
+reasoning that are true and are not evidence:
+
+| The old reasoning | Why it is wrong |
+|---|---|
+| "the notice count is unchanged, and the proceeding is closed — skip it" | Filing a reply does not change a notice count, and neither does issuing a closure order. A closed proceeding is exactly where both live. |
+| "a closed proceeding cannot receive new replies — don't ask" | True going forward, and beside the point: the replies were filed while it was open. If they were not already on file when it closed, they never would be. |
+| "the fast scope reads the *For your Action* tab only" | Once any sync records a proceeding as closed it is in neither the action tab nor the just-closed list, so on the scope the app defaults to after the first sync — and the one every bulk sync uses — it does not exist. |
+
+What the portal actually states, and what is now read:
+
+| Portal field | Where | What it settles |
+|---|---|---|
+| `viewNoticeCount` | list row | is there a notice we do not hold |
+| `lastResponseSubmittedOn` | list row **and** each notice | has a reply been filed since we last looked |
+| `respStatus: "S"` / `isSubmitted` / `respId` | each notice | does a reply exist at all |
+| `proceedingClosureOrder` | list row | is there a closure order we do not hold |
+
+A proceeding is skipped only when **all** of those are already on file, and the
+number skipped is reported to the practitioner rather than folded into a silent
+"up to date". Both tabs are listed in every scope; "fast" now means less work
+per proceeding, not less of the portal.
+
+Three tests hold this: `test/syncDecisions.test.mjs` (the rules),
+`test/portalFetchReplies.test.mjs` (the reported case replayed through the real
+fetch loop against the portal's own payloads), and `test/syncKnowns.test.mjs`
+(the two copies of the "what do we already hold" rules agree, and every field
+survives the hops to the connector — `procNeedsMeta` was being dropped by two of
+them, which is how the repair path meant to reach into a closed proceeding came
+to do nothing at all).
+
+**No migration is needed for data already missing.** These decisions are made
+fresh on every run from what the portal states, so the next sync of an affected
+assessee fetches the replies and orders that earlier runs skipped.
+
 ### One notice is a SET of files, not a file
 
 The portal's "Notice/Letter pdf" screen routinely lists several Download

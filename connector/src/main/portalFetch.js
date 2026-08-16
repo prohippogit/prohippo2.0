@@ -9,12 +9,18 @@
 // payload shapes the extension streamed.
 //
 // Scope:
-//   "all"     — FYA + FYI + notices/orders/replies (+ Form 35, pass 3, + filed
-//               returns and CPC orders, pass 4).
-//   "eproc"   — FYA only → diff → new notices/orders; synthetic closed rows for
-//               proceedings that just left FYA. No FYI scan.
+//   "all"     — both proceeding tabs + notices/orders/replies (+ Form 35, pass 3,
+//               + filed returns and CPC orders, pass 4).
+//   "eproc"   — the same two tabs, but per proceeding it fetches only what the
+//               portal says has moved, and asks for a closure order only where
+//               the portal names one. No Form 35, no filed returns.
 //   "appeals" — filed Form 35s only (pass 3).
 //   "returns" — filed ITRs + s.143(1) intimations and s.154 orders only (pass 4).
+//
+// "Fast" is about how much is fetched PER PROCEEDING, not about how much of the
+// portal is looked at. It used to mean the second — the fast scope read only the
+// "for your action" tab — and a closed scrutiny with three replies and an
+// assessment order was invisible to it for good. See syncDecisions.js.
 "use strict";
 
 const { jsleep, PACE } = require("./pacing");
@@ -22,6 +28,7 @@ const { PATHS, FORM, apiCall, getDoc, proceedings, noticeDocuments, pickPrimaryD
 const { ingestSyncMessage } = require("./ingest");
 const { syncAppealForms } = require("./portalAppeals");
 const { syncReturns } = require("./portalReturns");
+const { shouldFetchReplies, proceedingSettled, shouldFetchClosureOrder } = require("./syncDecisions");
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -60,6 +67,12 @@ function mapRow(o, tab) {
     viewNoticeCount: noticeCount,
     proceedingStatus: o.proceedingStatus || "",
     closureSeqNo: o.proceedingClosureOrder != null ? String(o.proceedingClosureOrder) : "",
+    /* When a reply was last filed ANYWHERE in this proceeding, as the portal
+       states it on the list row. Carried because it is the only thing on the row
+       that says a reply has moved — the notice count does not change when one is
+       filed, which is how a proceeding with three replies and a closure order
+       was skipped four times running as "unchanged". See syncDecisions.js. */
+    lastResponseSubmittedOn: o.lastResponseSubmittedOn || "",
   };
 }
 
@@ -173,7 +186,7 @@ async function fetchNoticeSet(page, t, { pan, proceedingReqId, headerSeqNo, sect
   return out;
 }
 
-// Responses filed against one notice (remarks + attachment PDFs).
+// Replies filed against one notice (remarks + attachment PDFs).
 async function syncResponses(page, job, pan, din, headerSeqNo) {
   const t = clock(job);
   const knownResp = new Set((job.knowns.knownResponseIds || []).map((x) => String(x)));
@@ -273,20 +286,30 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
     if (p && p.din) pendingDocs.set(String(p.din), String(p.fileName || ""));
   }
   const needsDocs = new Set((job.knowns.procNeedsDocs || []).map((p) => String(p)));
+  /* Replies already on file, per notice. The portal states on every notice when
+     one was last filed against it, so this is the other half of the comparison
+     that decides whether to ask for them (syncDecisions.js). */
+  const heldReplies = job.knowns.noticeReplies || {};
   const scope = job.scope;
-  const isClosed = (r) => /information/i.test(r.tab || "") || r.proceedingStatus === "C";
+  /* Nothing here asks "is this proceeding closed?" any more. It used to, in two
+     places, and both were wrong for the same reason: closed says nothing about
+     whether its replies and its order are on file. syncDecisions.js owns the
+     question now, and answers it from what the portal states. */
   const targets = rows.filter((r) => (r.viewNoticeCount || 0) > 0 && r.proceedingReqId);
 
   for (let i = 0; i < targets.length; i++) {
     const r = targets[i];
     const kp = knownByProc[r.proceedingReqId] || {};
-    const countMatches = (r.viewNoticeCount || 0) <= (kp.n || 0);
-    // Unchanged closed proceeding (or unchanged active one in eproc mode): skip
-    // its detail call and every per-notice reply call entirely — unless its
-    // notices are still missing the metadata that only that call carries.
-    if (countMatches && (isClosed(r) || scope === "eproc")
-        && !needsMeta.has(String(r.proceedingReqId))
-        && !needsDocs.has(String(r.proceedingReqId))) continue;
+    /* Skip only what the PORTAL says has not moved — its notice count, its last
+       reply, and its closure order — never the notice count alone. That was the
+       bug: replies and orders do not change a notice count, so the proceeding
+       holding them was the one guaranteed to be skipped. */
+    const settled = proceedingSettled(r, kp, {
+      scope,
+      needsMeta: needsMeta.has(String(r.proceedingReqId)),
+      needsDocs: needsDocs.has(String(r.proceedingReqId)),
+    });
+    if (settled.skip) { summary.skipped = (summary.skipped || 0) + 1; continue; }
     emit("fetch", `Notices ${i + 1}/${targets.length} — ${(r.name || "proceeding").slice(0, 28)}…`, "info", 30 + Math.round(((i + 1) / targets.length) * 50));
     const det = await t.time("notice-list", () => apiCall(page, {
       path: PATHS.GET_ENTITY, serviceName: "eProceedingDetailsService",
@@ -373,12 +396,18 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
         summary.documents += set.docsFetched;
         await t.time("pacing", () => jsleep(...PACE.betweenDocs));
       }
-      // Replies. A reply can be filed against a notice long after we first saw
-      // it, so a KNOWN notice still needs checking — but only while its
-      // proceeding is still open. A closed proceeding cannot receive new
-      // replies, so skip the call rather than asking the portal every sync.
-      const skipReplies = isKnown && isClosed(r);
-      if (headerSeqNo && din0 && !skipReplies) {
+      /* Replies. The portal states on the notice itself whether one has been
+         filed and when — `lastResponseSubmittedOn`, `respStatus: "S"` — so that
+         is what decides, not whether the proceeding is open.
+
+         It used to read "a closed proceeding cannot receive new replies, so
+         don't ask". True, and beside the point: the replies were filed while it
+         was open, and if we had not already fetched them by the time it closed
+         we never would. On the assessee that exposed this, three replies with 22
+         attachments were unreachable for good, on a proceeding the app showed as
+         complete. */
+      const want = shouldFetchReplies(it, heldReplies[String(din0)], isKnown);
+      if (headerSeqNo && din0 && want.fetch) {
         try { summary.responses += await syncResponses(page, job, pan, din0, String(headerSeqNo)); }
         catch { /* per-notice; keep going */ }
       }
@@ -392,14 +421,19 @@ async function syncNotices(page, job, pan, rows, summary, emit) {
     }
   }
 
-  // Closure / final orders — a separate pass over every proceeding, independent
-  // of the notice counts (some proceedings show a "Download Closure Order"
-  // button the list doesn't flag; the service returns empty where there's none).
+  /* Closure / final orders — a separate pass over every proceeding, independent
+     of the notice counts.
+
+     The portal names the order on the list row (`proceedingClosureOrder`), so
+     the decision is mostly answerable without a call; where it says nothing and
+     the proceeding is closed we still ask, because the service has returned
+     documents for rows that never flagged one. shouldFetchClosureOrder() holds
+     the rules and the reasons. */
   const withOrders = rows.filter((r) => r.proceedingReqId);
   for (const r of withOrders) {
     const kp = knownByProc[r.proceedingReqId] || {};
-    if (isClosed(r) && kp.o) continue;
-    if (scope === "eproc" && !isClosed(r) && !r.closureSeqNo) continue;
+    const wantOrder = shouldFetchClosureOrder(r, kp, { scope });
+    if (!wantOrder.fetch) continue;
     emit("fetch", `Orders — ${(r.name || "proceeding").slice(0, 28)}…`, "info", 84);
     try {
       const clo = await t.time("order-list", () => apiCall(page, {
@@ -458,17 +492,28 @@ async function syncPortalData(page, job, scope, emit, summary) {
 
   const t = clock(job);
 
-  emit("fetch", "Fetching e-Proceedings (FYA)…", "info", 24);
+  emit("fetch", "Fetching e-Proceedings…", "info", 24);
   const rows = [];
   const push = (res, tab) => {
     const list = res && res.json && res.json.eProceedingPaginatedRequests;
     if (Array.isArray(list)) for (const o of list) rows.push(mapRow(o, tab));
   };
-  // The two tabs are independent list calls against the same session — fetch
-  // them together rather than one after the other.
+  /* BOTH TABS, IN EVERY SCOPE THAT LISTS PROCEEDINGS AT ALL.
+   *
+   * The fast scope used to fetch "For your Action" only and infer closures from
+   * what had left it. That inference has one blind spot and it is a wide one:
+   * once any sync has recorded a proceeding as closed, it is in neither list the
+   * fast scope looks at, so the closure order that ended it — the assessment
+   * order, the computation sheet, the demand notice u/s 156 — is unreachable on
+   * the path the app defaults to after the first sync and the one every bulk
+   * sync uses. The practitioner who reported this had synced four times.
+   *
+   * The cost of closing that hole is one list call of a few kilobytes. What made
+   * the fast scope fast was never skipping this call; it is the per-proceeding
+   * skip below, which is now decided from what the portal says has moved. */
   const lists = await t.time("list", () => Promise.all([
     proceedings(page, { pan, statusFlag: "FYA", pageSize: 100 }),
-    scope === "all" ? proceedings(page, { pan, statusFlag: "FYI", pageSize: 100 }) : null,
+    proceedings(page, { pan, statusFlag: "FYI", pageSize: 100 }),
   ]));
   /* A LIST CALL THAT NEVER ARRIVED IS NOT AN EMPTY LIST.
    *
@@ -495,16 +540,15 @@ async function syncPortalData(page, job, scope, emit, summary) {
   push(fya, "For your Action");
   if (lists[1]) push(lists[1], "For your Information");
 
-  // eproc closure detection: a proceeding we knew as ACTIVE that is no longer in
-  // FYA has just closed — add a synthetic (closed) row so its closure order is
-  // fetched, without scanning the whole FYI list.
-  if (scope === "eproc") {
-    const fyaIds = new Set(rows.map((r) => r.proceedingReqId).filter(Boolean));
-    for (const pid of job.knowns.knownActiveProcs || []) {
-      const id = String(pid || "");
-      if (id && !fyaIds.has(id)) {
-        rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "" });
-      }
+  /* A proceeding we hold as ACTIVE that is now in neither list has closed and
+     been archived out of both. Rare, and cheap to cover: a synthetic closed row
+     so its closure order is still asked for. `justClosed` is what tells the
+     order pass to ask despite the row carrying no fields to judge by. */
+  const listed = new Set(rows.map((r) => r.proceedingReqId).filter(Boolean));
+  for (const pid of job.knowns.knownActiveProcs || []) {
+    const id = String(pid || "");
+    if (id && !listed.has(id)) {
+      rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "", justClosed: true });
     }
   }
 
@@ -512,13 +556,19 @@ async function syncPortalData(page, job, scope, emit, summary) {
   // stop: a PAN with a clean compliance record still has filed returns and CPC
   // intimations to pull in the "all" passes below.
   if (!rows.length) {
-    emit("fetch", "Nothing in FYA — up to date");
+    emit("fetch", "No e-Proceedings on the portal for this PAN");
   } else {
     emit("fetch", `${rows.length} proceeding(s) — saving…`, "info", 30);
     await t.time("ingest", () => ingestSyncMessage({ assesseeId: job.assesseeId, kind: "proceedings", proceedings: rows }));
     summary.proceedings = rows.length;
 
     await syncNotices(page, job, pan, rows, summary, emit);
+    /* Say what was NOT looked at. A skip is a decision, and until now it was an
+       invisible one: a practitioner told "up to date" had no way of telling a
+       portal with nothing on it from a sync that decided not to ask. */
+    if (summary.skipped) {
+      emit("fetch", `${summary.skipped} proceeding(s) unchanged on the portal — not re-read`, "info", 88);
+    }
   }
 
   if (scope === "all") {

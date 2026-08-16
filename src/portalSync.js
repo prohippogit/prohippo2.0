@@ -62,8 +62,17 @@ export async function detectExtension() {
  *                    10-12 MB per year and rarely opened.
  *  Incremental-sync hints let a re-sync skip work it's already done:
  *   - knownDins:         PDFs already held (DINs + docKeys) — don't re-download
- *   - knownByProc:       per-proceeding {n,o} counts — skip unchanged proceedings
+ *   - knownByProc:       per-proceeding {n,o,r} — notice count, whether an order
+ *                        is held, and the newest reply held. All three, because
+ *                        a reply and a closure order both leave the notice count
+ *                        untouched, and skipping on the count alone made a
+ *                        closed scrutiny with three replies and an assessment
+ *                        order permanently invisible
  *   - knownResponseIds:  replies already recorded — don't re-download
+ *   - noticeReplies:     per DIN {n,last} — what the portal's own per-notice
+ *                        "last response submitted on" is compared against
+ *   - procNeedsMeta:     proceedings holding a reply whose portal metadata has
+ *                        never been read
  *   - noticeDocsPending: notices held with only ONE of their documents, from
  *                        before a notice was understood to be a SET of files —
  *                        [{din, fileName}] so the sweep skips what we hold
@@ -78,8 +87,15 @@ export async function detectExtension() {
  *   - knownFormAcks:     returns whose rendered ITR form PDF is already stored —
  *                        that one is ~11 MB, so it is rationed per sync run
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeDocsPending = [], procNeedsDocs = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, noticeDocsPending, procNeedsDocs, knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, canUnlockOrders, knownFormAcks, formRequest, background, clientRef }, 8000);
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeReplies = {}, procNeedsMeta = [], noticeDocsPending = [], procNeedsDocs = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
+  /* EVERY FIELD IS NAMED TWICE HERE, and one of them used to be named once.
+     `procNeedsMeta` was built by buildSyncKnowns and spread into the call — and
+     dropped on this line, because a field this signature does not destructure
+     does not travel. It cost nothing visible: the sync just quietly kept
+     skipping the proceedings it was meant to reach back into. If you add a
+     known, add it in both places, and test/syncKnowns.test.mjs will tell you
+     when you have forgotten. */
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, noticeReplies, procNeedsMeta, noticeDocsPending, procNeedsDocs, knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, canUnlockOrders, knownFormAcks, formRequest, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

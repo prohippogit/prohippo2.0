@@ -47,6 +47,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           knownDins: Array.isArray(creds.knownDins) ? creds.knownDins : [],
           knownByProc: (creds.knownByProc && typeof creds.knownByProc === "object") ? creds.knownByProc : {},
           knownResponseIds: Array.isArray(creds.knownResponseIds) ? creds.knownResponseIds : [],
+          /* Replies already held, per notice, and the proceedings whose replies
+             have never had their portal metadata read. A hint that does NOT
+             arrive here makes the sync skip MORE, silently — which is how a
+             closed scrutiny's three replies and its assessment order stayed on
+             the portal through four syncs. test/syncKnowns.test.mjs fails if a
+             field is added to the builder and not carried here. */
+          noticeReplies: (creds.noticeReplies && typeof creds.noticeReplies === "object") ? creds.noticeReplies : {},
+          procNeedsMeta: Array.isArray(creds.procNeedsMeta) ? creds.procNeedsMeta : [],
           // Notices held with only one of their documents — see syncNotices.
           noticeDocsPending: Array.isArray(creds.noticeDocsPending) ? creds.noticeDocsPending : [],
           procNeedsDocs: Array.isArray(creds.procNeedsDocs) ? creds.procNeedsDocs : [],

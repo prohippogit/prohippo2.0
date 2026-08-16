@@ -445,10 +445,34 @@ app from a terminal:
 
 On Windows, run the installed `ProHippo Connector.exe` from a Command Prompt.
 
+## What the UI does not say
+
+**No screen in this app describes how the sync works.** Not the concurrency cap,
+not the per-PAN isolation, not the randomised pacing, not the browser being
+driven — and the header says what the app is for ("Income-tax portal sync")
+rather than how it goes about it.
+
+The toolbar used to carry a line reading "Up to 5 PANs sync at once, each in its
+own isolated browser session, started a few seconds apart. Every step is randomly
+paced to stay within safe, human-like limits on your home connection." Every word
+of it is true and none of it is the practitioner's problem: what they need to
+know is which assessee is being synced, how far it has got, and what to press.
+Taken together those sentences are a description of an approach that took real
+work to arrive at, sitting on a screen that anyone can photograph.
+
+So progress messages say where the work has got to ("Starting…", "Signing in…",
+"Fetching e-Proceedings…") and never what is doing it. The one deliberate
+exception is the error when Google Chrome is missing: that names Chrome because
+the practitioner cannot act on it otherwise.
+
+This is a rule for new copy too, not a one-off tidy-up. Design notes and the
+reasoning behind the pacing belong here and in the code, both of which are
+private; the app window is not.
+
 ## Which build am I running?
 
-The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.12.2` — with a **Check for updates** link beside it. Press it and the bar
+The version is in the header, next to "Income-tax portal sync" —
+`v1.12.3` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

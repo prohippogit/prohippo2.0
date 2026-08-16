@@ -42,8 +42,12 @@ import { pyLabel, longDate } from "../../format.js";
 import {
   regimeLabel, viaLabel, viaOrder, viaRef, personName, joinAddress,
   filingSection, isNonOrdinaryFiling, exemptAllowanceLabel,
-  tdsSection, tdsNature, headOfIncome,
 } from "../individual/labels.js";
+/* The one thing ITR-1 takes from the ITR-2/ITR-3 workings. It carries
+   Schedule 80GGC under the same path with the same fields, and that schedule is
+   printed rather than claimed for reasons §10 spells out — reasons a second copy
+   here would be a second place to forget. */
+import { politicalContributionRows } from "../individual/heads.js";
 
 const inr = (v) => Number(v || 0).toLocaleString("en-IN");
 
@@ -206,13 +210,17 @@ function housePropertyRows(src, hpTotal) {
 /* ----------------------------------------------------------- other sources --
  *
  * `OthersIncDtlsOthSrc[]` itemises the head: a code, the utility's own words for
- * it, and an amount. `SAV` is verified from the return itself — the A.Y. 2024-25
- * return states "Interest from Saving Account" against it. Every other code is
- * captioned from the return's own words where it gives them and prints as itself
- * where it does not (§5). Nothing here is decoded from what a code looks like it
- * might mean.
+ * it, and an amount. Both codes below are captioned from returns that state the
+ * department's own description beside the code — "Interest from Saving Account"
+ * against `SAV`, "Interest from Deposit(Bank/Post Office/Cooperative Society)"
+ * against `IFD`. Every other code is captioned from the return's own words where
+ * it gives them and prints as itself where it does not (§5). Nothing here is
+ * decoded from what a code looks like it might mean.
  */
-const OS_NATURE = { SAV: "Interest from a savings bank account" };
+const OS_NATURE = {
+  SAV: "Interest from a savings bank account",
+  IFD: "Interest from deposits with a bank, post office or co-operative society",
+};
 
 function otherSourcesRows(src, osTotal) {
   const rows = [];
@@ -265,6 +273,7 @@ function otherSourcesRows(src, osTotal) {
 function chapterVIA(src) {
   const claimed = src.claim(`${INC}.UsrDeductUndChapVIA`) || {};
   const allowed = src.claim(`${INC}.DeductUndChapVIA`) || {};
+  const contributions = politicalContributionRows(src);
   const rows = [];
   // Anything named Tot… is a subtotal of the block, not a deduction in it.
   const keys = Object.keys(allowed)
@@ -273,15 +282,27 @@ function chapterVIA(src) {
   for (const k of keys) {
     const amt = Number(allowed[k]);
     const askedFor = Number(claimed[k] || 0);
-    rows.push(sub(viaLabel(k), amt, {
-      ref: viaRef(k),
-      note: askedFor > amt ? `Claimed ${inr(askedFor)}; restricted to the statutory limit` : undefined,
-    }));
+    const note = [
+      askedFor > amt ? `Claimed ${inr(askedFor)}; restricted to the statutory limit` : "",
+      k === "Section80GGC" && contributions.length ? "Each contribution is itemised below" : "",
+    ].filter(Boolean).join(". ");
+    rows.push(sub(viaLabel(k), amt, { ref: viaRef(k), note: note || undefined }));
   }
   const allowedTotal = src.num(`${INC}.DeductUndChapVIA.TotalChapVIADeductions`);
   if (rows.length) rows.push(total("Total deductions under Chapter VI-A", allowedTotal));
-  // Schedule 80D itemises the health-insurance premium the block above totals.
-  src.claim("Schedule80D");
+  /* Schedule 80GGC goes on the face of the computation — the date of each
+     contribution, whether it went through the banking channel, and the bank
+     reference — because those are the particulars the Department is reopening
+     these claims on (§10). AFTER the total, never before it: they are particulars
+     of a deduction already counted, and rows between the deductions and their
+     total make the column stop adding up. */
+  if (rows.length) rows.push(...contributions);
+  /* The other itemising schedules restate what the block above already totals,
+     so they are claimed wholesale (§10). Schedule 80GGC is the exception, and it
+     is printed rather than claimed. */
+  for (const s of ["Schedule80C", "Schedule80D", "Schedule80G", "Schedule80GGA", "Schedule80DD", "Schedule80U"]) {
+    src.claim(s);
+  }
   return { rows, allowedTotal, claimedTotal: Number(claimed.TotalChapVIADeductions || 0) };
 }
 
@@ -339,22 +360,26 @@ function interestNote(src) {
 
 /* ----------------------------------------------------------- taxes paid ----
  *
- * ITR-1 renames the credit blocks and keeps the rows inside them: the totals it
- * states — `TotalTDSonSalaries`, `TotalTDSonOthThanSals`, `TotalSchTCS`,
- * `TotalTaxPayments` — are four of ITR-2's own key names, which is the evidence
- * that what sits under them is ITD's shared row definition rather than a new one
- * (§10).
+ * ITR-1's credit blocks are ITS OWN, and this is the place a reading taken from
+ * ITR-2 went wrong once already. The block names differ (`TDSonSalaries`,
+ * `TDSonOthThanSals`, `ScheduleTDS3Dtls`, `ScheduleTCS`, `TaxPayments`) and four
+ * of their five TOTAL keys are ITR-2's, which is what made the rows inside look
+ * like ITD's shared row type. For salary they are. For everything else they are
+ * not: a real return states a deduction as
  *
- * So each block's ARRAY is discovered rather than named, and every field inside a
- * row is then read by name. A return that names them differently prints no credit
- * rows and surfaces every figure in them under §8 — loud, and never a wrong
- * figure against a right-looking caption.
+ *     EmployerOrDeductorOrCollectDetl { TAN, EmployerOrDeductorOrCollecterName }
+ *     AmtForTaxDeduct            the receipt the deduction was made from
+ *     DeductedYr                 the year of deduction
+ *     TotTDSOnAmtPaid            deducted
+ *     ClaimOutOfTotTDSOnAmtPaid  claimed this year, out of that
  *
- * No return we hold has a rupee deducted at source, so there is no FIXTURE for
- * any of this; the rule is held instead by a mutation test in
- * test/computation/itr1.test.mjs, which builds the ITR-2 row shapes under these
- * wrappers and asserts both the rows and an empty review block. Add a fixture
- * when a return with credits arrives (§11).
+ * where ITR-2 would carry `TANOfDeductor`, `GrossAmount` and a nested
+ * `TaxDeductCreditDtls`. Nothing was printed wrongly when that was got wrong —
+ * every figure surfaced in the review block instead, which is §8 working — but a
+ * practitioner had to read a page of paths to see it. Read what the return says.
+ *
+ * Each block's ARRAY is still discovered rather than named, because the wrapper
+ * key is the part that varies and a missing array costs nothing.
  */
 function blockRows(src, block) {
   const node = src.peek(block);
@@ -363,26 +388,45 @@ function blockRows(src, block) {
   return key ? { path: `${block}.${key}`, list: node[key] } : { path: "", list: [] };
 }
 
-/* One credit, stated six ways.
+/**
+ * One deduction, as ITR-1 states it. Verified against a real return for
+ * `TDSonOthThanSals`; Schedule TDS3 is read the same way because it is the same
+ * form's sibling block, and if it turns out to differ its figures surface (§8)
+ * rather than printing wrongly.
  *
- * `TaxDeductCreditDtls` splits the same deduction by whose hands it is claimed in
- * and against which head. The computation prints the figure claimed in the
- * assessee's own hands; the other five are that figure again, so they are restated
- * rather than left to fill the review block on every return that has any TDS at
- * all (§8).
- *
- * `BroughtFwdTDSAmt` and `AmtCarriedFwd` are deliberately NOT restated. A credit
- * carried to another year is not this year's credit stated differently — it is a
- * fact about the return, and a practitioner should see it. */
-const restateCreditSiblings = (src, at) => src.restate([
-  `${at}.TaxDeductCreditDtls.TaxDeductedOwnHands`,
-  `${at}.TaxDeductCreditDtls.TaxDeductedIncome`,
-  `${at}.TaxDeductCreditDtls.TaxDeductedTDS`,
-  `${at}.TaxDeductCreditDtls.TaxClaimedIncome`,
-  `${at}.TaxDeductCreditDtls.TaxClaimedTDS`,
-]);
+ * `TotTDSOnAmtPaid` and `ClaimOutOfTotTDSOnAmtPaid` are not the same figure said
+ * twice: the first is what was deducted, the second what is claimed this year out
+ * of it. Where they differ the row says so, because the difference is a credit
+ * left for another year.
+ */
+function creditRow(src, at, entry) {
+  const detail = entry.EmployerOrDeductorOrCollectDetl || {};
+  return {
+    tan: src.val(`${at}.EmployerOrDeductorOrCollectDetl.TAN`) || entry.TANOfDeductor || "",
+    pan: detail.PAN || entry.PANOfBuyerTenant || entry.PANofTenant || entry.PANOfOtherPerson || "",
+    name: detail.EmployerOrDeductorOrCollecterName || "",
+    year: String(entry.DeductedYr || "").trim(),
+    gross: src.num(`${at}.AmtForTaxDeduct`),
+    deducted: src.num(`${at}.TotTDSOnAmtPaid`),
+    credit: src.num(`${at}.ClaimOutOfTotTDSOnAmtPaid`),
+  };
+}
 
-function taxesPaidRows(src, { aggregate }) {
+/* What a credit row says about itself, beyond its figure: who deducted it, how
+   many entries were merged into it, how much of what was deducted is claimed this
+   year, and — only where it is not this year's own — the year it was deducted in.
+   `py` is the previous year, e.g. "2023-24" for A.Y. 2024-25: a `DeductedYr` of
+   "2023" is then the ordinary case and worth no words. */
+function creditNote(g, py) {
+  return [
+    g.name,
+    g.count > 1 ? `${g.count} entries` : "",
+    g.deducted && g.deducted !== g.credit ? `Deducted ${inr(g.deducted)}, of which ${inr(g.credit)} claimed this year` : "",
+    [...(g.years || [])].filter((y) => y && !py.startsWith(y)).map((y) => `deducted in ${y}`).join(", "),
+  ].filter(Boolean).join(" · ") || undefined;
+}
+
+function taxesPaidRows(src, { aggregate, py }) {
   const rows = [];
 
   /* Tax deducted from salary, by employer. */
@@ -407,61 +451,47 @@ function taxesPaidRows(src, { aggregate }) {
     }
   }
 
-  /* Tax deducted from everything else. §12: rows against the same TAN stay
-     separate unless they also share a section, in which case one row carries the
-     count — a bank that paid interest quarterly is otherwise four near-identical
-     lines, and merging across sections would hide which receipt a credit belongs
-     to, which is exactly what a CPC mismatch query asks about. */
+  /* Tax deducted from everything else. §12: rows against the same deductor are
+     merged into one carrying the count — ITR-1's rows carry no section code, so
+     the deductor is all there is to merge on, and an insurer who deducted twice
+     is otherwise two near-identical lines. */
   const other = blockRows(src, "TDSonOthThanSals");
-  const byTanSection = new Map();
+  const byDeductor = new Map();
   other.list.forEach((t, i) => {
-    const at = `${other.path}[${i}]`;
-    const sec = tdsSection(t.TDSSection);
-    const key = `${t.TANOfDeductor}|${sec}`;
-    const prev = byTanSection.get(key) || { tan: t.TANOfDeductor || "", section: sec, gross: 0, credit: 0, count: 0 };
-    prev.gross += src.num(`${at}.GrossAmount`);
-    prev.credit += src.num(`${at}.TaxDeductCreditDtls.TaxClaimedOwnHands`);
+    const c = creditRow(src, `${other.path}[${i}]`, t);
+    const key = c.tan || c.name;
+    const prev = byDeductor.get(key) || { ...c, gross: 0, deducted: 0, credit: 0, count: 0, years: new Set() };
+    prev.gross += c.gross;
+    prev.deducted += c.deducted;
+    prev.credit += c.credit;
     prev.count += 1;
-    restateCreditSiblings(src, at);
-    byTanSection.set(key, prev);
+    if (c.year) prev.years.add(c.year);
+    byDeductor.set(key, prev);
   });
   // A row with neither a receipt nor a credit says nothing and is dropped. One
   // with a receipt and no deduction stays: that is what a s.143(1) mismatch
   // turns on.
-  const otherCredits = [...byTanSection.values()]
+  const otherCredits = [...byDeductor.values()]
     .filter((g) => g.gross || g.credit)
     .sort((a, b) => b.credit - a.credit || b.gross - a.gross);
   if (otherCredits.length && !salaryCredits.length) {
     rows.push(columnHeader("Tax Deducted at Source — TAN of Deductor", { ref: "Gross Receipt" }));
   }
-  for (const g of otherCredits) {
-    rows.push(sub(g.tan, g.credit, {
-      // Some years' returns carry no section code at all, and "Sec." with
-      // nothing after it is worse than saying nothing.
-      note: [tdsNature(g.section), g.section ? `Sec. ${g.section}` : "", g.count > 1 ? `${g.count} entries` : ""].filter(Boolean).join(" · "),
-      cols: { ref: g.gross ? inr(g.gross) : "" },
-    }));
-  }
+  for (const g of otherCredits) rows.push(sub(g.tan || g.name, g.credit, { note: creditNote(g, py), cols: { ref: g.gross ? inr(g.gross) : "" } }));
 
   /* Tax deducted by someone with no TAN — a buyer of immovable property under
      s.194-IA, an individual tenant under s.194-IB, or a payer under s.194M. They
      deduct against their own PAN, so these credits appear in neither block above. */
   const tds3 = blockRows(src, "ScheduleTDS3Dtls");
-  const tds3Credits = tds3.list.map((t, i) => {
-    const at = `${tds3.path}[${i}]`;
-    restateCreditSiblings(src, at);
-    return {
-      pan: t.PANOfBuyerTenant || t.PANofTenant || t.PANOfOtherPerson || "",
-      head: headOfIncome(t.HeadOfIncome),
-      gross: src.num(`${at}.GrossAmount`),
-      credit: src.num(`${at}.TaxDeductCreditDtls.TaxClaimedOwnHands`),
-    };
-  }).filter((g) => g.gross || g.credit).sort((a, b) => b.credit - a.credit || b.gross - a.gross);
+  const tds3Credits = tds3.list
+    .map((t, i) => creditRow(src, `${tds3.path}[${i}]`, t))
+    .filter((g) => g.gross || g.credit)
+    .sort((a, b) => b.credit - a.credit || b.gross - a.gross);
   if (tds3Credits.length) {
     rows.push(columnHeader("Tax Deducted at Source — PAN of Buyer or Tenant", { ref: "Gross Receipt" }));
     for (const g of tds3Credits) {
-      rows.push(sub(g.pan, g.credit, {
-        note: ["Deducted by a person not required to hold a TAN", g.head].filter(Boolean).join(" · "),
+      rows.push(sub(g.pan || g.name, g.credit, {
+        note: ["Deducted by a person not required to hold a TAN", creditNote(g, py)].filter(Boolean).join(" · "),
         cols: { ref: g.gross ? inr(g.gross) : "" },
       }));
     }
@@ -502,23 +532,12 @@ function taxesPaidRows(src, { aggregate }) {
   rows.push(sub("Self-Assessment Tax Paid", selfAssessment, { ref: "Sch. IT" }));
   src.num("TaxPayments.TotalTaxPayments");
 
-  /* Tax collected at source, by collector. Naming them costs two lines and
-     answers the same need the TDS rows do: a bare total leaves a reader with
-     nothing to tie to a 26AS entry. */
-  const tcsBlock = blockRows(src, "ScheduleTCS");
-  const collectors = tcsBlock.list.map((c, i) => {
-    const at = `${tcsBlock.path}[${i}]`;
-    // Both fields are read, never short-circuited: the collection of the year and
-    // the part of it claimed this year are the same figure on most returns, and a
-    // `||` would leave whichever came second to surface as an omission (§8).
-    const claimed = src.num(`${at}.TCSClaimedThisYearDtls.TCSAmtCollOwnHand`);
-    const collected = src.num(`${at}.TCSCurrFYDtls.TCSAmtCollOwnHand`);
-    return { tan: c.EmployerOrDeductorOrCollectTAN || c.TAN || "", credit: claimed || collected };
-  }).filter((c) => c.credit).sort((a, b) => b.credit - a.credit);
-  if (collectors.length) {
-    rows.push(columnHeader("Tax Collected at Source — TAN of Collector", { ref: "" }));
-    for (const c of collectors) rows.push(sub(c.tan, c.credit));
-  }
+  /* Tax collected at source is stated as a total and not itemised.
+     `ScheduleTCS` carries rows on other forms, and naming the collectors would be
+     worth two lines here too — but no ITR-1 we hold has a single one, and the one
+     time this mapper assumed ITR-2's row shape for an ITR-1 credit block it was
+     wrong (see the note above). A collector's row will surface under §8 the day
+     one arrives, which is when it can be written against a real return. */
   src.num("ScheduleTCS.TotalSchTCS");
 
   rows.push(sub("Tax Collected at Source", tcs, { ref: "Sch. TCS" }));
@@ -655,7 +674,7 @@ export function buildItr1(body, ctx) {
 
   /* ---- tax, taxes paid ------------------------------------------------------ */
   const tax = taxRows(src);
-  const paidRows = taxesPaidRows(src, { aggregate: tax.aggregate });
+  const paidRows = taxesPaidRows(src, { aggregate: tax.aggregate, py: pyLabel(ctx.ay) });
   const banner = refundOrPayable(src, notes);
   // A return can close level, and every ITR-1 we hold does: the rebate u/s 87A
   // leaves nothing to pay and nothing was deducted, so the return states nil

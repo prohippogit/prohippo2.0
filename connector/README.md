@@ -59,6 +59,11 @@ connector/
     autoStart.js     "start when I sign in" — the OS's own login item
     scheduler.js     unattended syncing: once at launch, then every N hours
     schedulePlan.js  when the next run is due (pure, tested)
+    syncKnowns.js    what this practice already holds, shaped for the diff
+                     (pure, tested — and tested against the web app's copy)
+    syncDecisions.js what a re-sync may SKIP, read off what the portal states
+                     has moved (pure, tested). A skip leaves no trace, so the
+                     rules for making one live in a file of their own
     portalWorker.js  ONE PAN in one isolated context (scaffold + porting plan)
     portalMaster.js  one PAN's profile / jurisdiction / contact, mapped
     assessees.js     add an assessee: fetch from the portal, then create it
@@ -443,7 +448,7 @@ On Windows, run the installed `ProHippo Connector.exe` from a Command Prompt.
 ## Which build am I running?
 
 The version is in the header, next to "Parallel, human-paced portal sync" —
-`v1.12.0` — with a **Check for updates** link beside it. Press it and the bar
+`v1.12.1` — with a **Check for updates** link beside it. Press it and the bar
 below the header answers either way: a newer build, or "you're on the latest
 version". Silence would be indistinguishable from a broken button, so there
 isn't any.

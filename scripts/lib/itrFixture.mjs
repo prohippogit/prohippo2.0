@@ -66,7 +66,7 @@ const OPAQUE_KEYS = new Set([
   // someone other than the assessee. A field that holds a person's contact
   // details is personal data whether or not it is the filer's own.
   "EmailAddressSec",
-  "AccountNumber", "DematAccountNo", "PassportNo", "TAN", "TANOfEmployer",
+  "AccountNumber", "DematAccountNo", "PassportNo",
   // Account, policy and security identifiers — an NPS PRAN, an insurance
   // policy number and an ISIN each point at a specific holding of a specific
   // person, and none of them is a figure the mapper reads.
@@ -82,6 +82,15 @@ const OPAQUE_KEYS = new Set([
 // NOT here on purpose: GSTINNo. A GSTIN embeds the PAN, so masking the whole
 // string destroys a shape the mapper displays; replacing the PAN inside it
 // leaves a structurally valid GSTIN belonging to the dummy assessee.
+//
+// NOT here either, for a sharper version of the same reason: TAN and
+// TANOfEmployer. Masking turns every deductor's TAN into the identical
+// XXXX00000X, and the computation groups credits BY TAN — so three deductors
+// became one row on the first ITR-1 fixture that had more than one. The regex
+// substitution below gives each a distinct, syntactically valid dummy instead,
+// which preserves both the shape the document prints and the distinctness the
+// mapper depends on. (Fixtures committed before this keep their masked TANs;
+// they carry at most one deductor each, so nothing about them is misleading.)
 const NUMERIC_ID_KEYS = new Set(["MobileNo", "MobileNoSec", "AckNum44AB", "PhoneNo", "STDcode", "SrlNoOfChaln"]);
 
 // A PAN's fourth character carries the assessee's status, and the mapper reads

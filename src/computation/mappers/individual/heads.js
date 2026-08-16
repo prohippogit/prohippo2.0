@@ -6,6 +6,13 @@
  * once and called by both mappers; ITR-3's business head, which ITR-2 has no
  * schedule for, lives in its own directory.
  *
+ * ITR-1 uses ONE thing from this file: `politicalContributionRows`. It has no
+ * schedules of income at all, so none of the workings below can serve it — but it
+ * carries `Schedule80GGC` under the same path and with the same seven fields per
+ * contribution, verified against a real ITR-1. That schedule goes on the face of
+ * the computation for a reason (§10), and a second copy of it in the ITR-1
+ * directory is a second place for that reason to be forgotten.
+ *
  * Every builder takes the reader from unmapped.js and returns rows. Reading a
  * figure through the reader is what marks it consumed, so a builder that skips
  * a schedule leaves it to surface in the "requiring review" block (§8) rather
@@ -698,8 +705,11 @@ export function chapterVIA(src) {
  * Nothing here is a wholesale `claim`. Every figure the schedule carries is read
  * by name, so a field a later schema adds still surfaces under §8 instead of
  * being swallowed by a subtree claim that was written before it existed.
+ *
+ * Exported because ITR-1 carries this schedule too, under the same path and with
+ * the same fields — see the note at the head of this file.
  */
-function politicalContributionRows(src) {
+export function politicalContributionRows(src) {
   const list = src.peek("Schedule80GGC.Schedule80GGCDetails") || [];
   const rows = [];
 

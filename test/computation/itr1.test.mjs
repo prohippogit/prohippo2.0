@@ -160,97 +160,37 @@ test("a s.112A gain, where the return's two gross totals differ, becomes a head 
   assert.deepEqual(validate(doc, body).failures, []);
 });
 
-/* ---------------- the credit rows, and the refund they can produce ---------------- */
+/* ---------------- the credit rows, and a shape taken from the wrong form -------- */
 
-test("credit rows print, account for every figure in themselves, and produce the refund", () => {
-  /* None of the five returns we hold has a single rupee deducted at source, so
-     there is no fixture for this and §11 says not to invent one. What is tested
-     instead is OUR rule, on a mutation of a real return: the credit blocks are
-     ITR-1's own wrappers around the row shapes ITR-2 carries, so a return built
-     that way must print its deductors and leave nothing for the review block.
-     If ITD names them otherwise, this is the test that keeps failing loud rather
-     than a caption going quietly wrong. */
-  const withTds = JSON.parse(JSON.stringify(json));
-  const itr1 = withTds.ITR.ITR1;
-  itr1.TDSonSalaries = {
-    TDSonSalary: [{
-      EmployerOrDeductorOrCollectDetl: { TAN: "AAAA00000A", EmployerOrDeductorOrCollecterName: "SAMPLE NAME 9" },
-      IncChrgSal: 539256,
-      TotalTDSSal: 8000,
-    }],
-    TotalTDSonSalaries: 8000,
-  };
-  // Two entries against one TAN and one section — a bank that paid interest
-  // twice — which §12 says become a single row carrying the count.
-  itr1.TDSonOthThanSals = {
-    TDSonOthThanSal: [1, 2].map(() => ({
-      TDSCreditName: "S",
-      TANOfDeductor: "AAAB00001A",
-      TDSSection: "94A",
-      BroughtFwdTDSAmt: 0,
-      TaxDeductCreditDtls: { TaxDeductedOwnHands: 25, TaxClaimedOwnHands: 25, TaxClaimedIncome: 0 },
-      GrossAmount: 250,
-      HeadOfIncome: "OS",
-      AmtCarriedFwd: 0,
-    })),
-    TotalTDSonOthThanSals: 50,
-  };
-  itr1.TaxPaid.TaxesPaid.TDS = 8050;
-  itr1.TaxPaid.TaxesPaid.TotalTaxesPaid = 8050;
-  // The tax is nil after the rebate, so everything deducted comes back.
-  itr1.Refund.RefundDue = 8050;
+test("a row shaped the way ITR-2 states one is not read, and every figure in it surfaces", () => {
+  /* This mapper once read the credit blocks with ITR-2's field names, on the
+     strength of the two forms sharing four block TOTAL keys. A real ITR-1 (see
+     itr1-80ggc-tds.test.mjs) proved the rows inside are ITR-1's own, and this
+     test pins the behaviour that made the wrong reading safe: nothing is
+     printed against a caption it does not belong to, and every figure the
+     mapper could not read is reported for review (§8).
 
-  const { body, ay, schemaVersion } = detect(withTds);
-  const doc = mapItr1(body, { ...CTX, ay, schemaVersion });
-
-  const paid = section(doc, "TAXES_PAID");
-  const salaryRow = paid.rows.find((r) => r.label === "AAAA00000A");
-  assert.equal(salaryRow.amount, 8000);
-  assert.match(salaryRow.note, /SAMPLE NAME 9 · Salary · Sec\. 192/);
-  assert.equal(salaryRow.cols.ref, "5,39,256");
-
-  const bankRow = paid.rows.find((r) => r.label === "AAAB00001A");
-  assert.equal(bankRow.amount, 50, "the two entries are summed, not listed twice");
-  assert.match(bankRow.note, /Interest other than interest on securities · Sec\. 194A · 2 entries/);
-  assert.equal(bankRow.cols.ref, "500");
-  assert.equal(row(doc, "TAXES_PAID", /^Total Tax Deducted at Source/).amount, 8050);
-
-  // §8: the same credit is stated six ways inside TaxDeductCreditDtls, and the
-  // five we do not print are restated rather than reported as omissions.
-  assert.deepEqual(doc.unmapped, []);
-
-  // And the banner, which no ITR-1 fixture reaches: a refund, with the account
-  // the return flagged for it.
-  assert.equal(doc.payable, null);
-  assert.equal(doc.refund.amount, 8050);
-  assert.equal(doc.refund.bank.ifsc, body.Refund.BankAccountDtls.AddtnlBankDetails[0].IFSCCode);
-  assert.equal(doc.refund.bank.type, "SB");
-  assert.equal(closing(paid).label, "Refund Due");
-  assert.equal(closing(paid).amount, 8050);
-  assert.equal(doc.notes.find((n) => /No bank account is flagged/.test(n.text)), undefined);
-  assert.deepEqual(validate(doc, body).failures, []);
-});
-
-test("a credit carried to another year is surfaced rather than swallowed", () => {
-  // The line the restate list deliberately does not cross: a TDS credit brought
-  // forward or carried forward is not this year's credit stated differently, and
-  // a practitioner should be told it is there.
-  const carried = JSON.parse(JSON.stringify(json));
-  carried.ITR.ITR1.TDSonOthThanSals = {
+     If a future ITR-1 does carry ITR-2's shape, this test is what will say so —
+     by failing here rather than by a figure going quietly missing from a
+     document somebody signs. */
+  const itr2Shaped = JSON.parse(JSON.stringify(json));
+  itr2Shaped.ITR.ITR1.TDSonOthThanSals = {
     TDSonOthThanSal: [{
       TANOfDeductor: "AAAB00001A",
-      TaxDeductCreditDtls: { TaxDeductedOwnHands: 100, TaxClaimedOwnHands: 0 },
-      GrossAmount: 1000,
-      AmtCarriedFwd: 100,
+      TDSSection: "94A",
+      TaxDeductCreditDtls: { TaxDeductedOwnHands: 500, TaxClaimedOwnHands: 500 },
+      GrossAmount: 5000,
+      HeadOfIncome: "OS",
     }],
     TotalTDSonOthThanSals: 0,
   };
-  const { body, ay, schemaVersion } = detect(carried);
+  const { body, ay, schemaVersion } = detect(itr2Shaped);
   const doc = mapItr1(body, { ...CTX, ay, schemaVersion });
-  assert.deepEqual(doc.unmapped, [{ path: "TDSonOthThanSals.TDSonOthThanSal[0].AmtCarriedFwd", value: 100 }]);
-  // The row itself is still printed: a receipt with no credit claimed against it
-  // is exactly what a s.143(1) mismatch turns on.
-  assert.equal(section(doc, "TAXES_PAID").rows.find((r) => r.label === "AAAB00001A").amount, 0);
+
+  assert.deepEqual(doc.unmapped.map((u) => u.value), [5000, 500, 500]);
+  for (const u of doc.unmapped) assert.match(u.path, /^TDSonOthThanSals\.TDSonOthThanSal\[0\]/);
+  // No row was invented for figures the mapper could not read.
+  assert.equal(section(doc, "TAXES_PAID").rows.find((r) => r.label === "AAAB00001A"), undefined);
 });
 
 /* ---------------- §7: the oracle is wired to ITR-1's own fields ---------------- */
@@ -284,12 +224,14 @@ test("a mis-stated tax or refund is caught the same way", () => {
 
 const itr1Fixtures = readdirSync(FIXTURES).filter((f) => /^itr1-.*\.json$/.test(f)).sort();
 
-test("there are five years of fixtures to walk", () => {
-  assert.equal(itr1Fixtures.length, 5, itr1Fixtures.join(", "));
+test("all five years are represented among the fixtures", () => {
+  const years = new Set(itr1Fixtures.map((f) => /ay(\d{4}-\d{2})/.exec(f)[1]));
+  assert.deepEqual([...years].sort(), ["2022-23", "2023-24", "2024-25", "2025-26", "2026-27"]);
+  assert.ok(itr1Fixtures.length >= 6, itr1Fixtures.join(", "));
 });
 
 for (const file of itr1Fixtures) {
-  test(`${file.replace(/\.json$/, "")} — every year builds, ties and accounts for every figure`, () => {
+  test(`${file.replace(/\.json$/, "")} — builds, ties and accounts for every figure`, () => {
     const source = JSON.parse(readFileSync(path.join(FIXTURES, file), "utf8"));
     const { doc } = buildComputation(source, CTX);
     // buildComputation raises on a validation failure (§7), so reaching here is
@@ -298,17 +240,40 @@ for (const file of itr1Fixtures) {
     assert.equal(doc.meta.form, "ITR1");
     assert.equal(doc.assessee.status, "Individual");
     assert.equal(doc.signatory.capacity, "Self");
-    // §12: none of these returns pays or reclaims anything, so no banner and a
-    // closing row that says so rather than "Refund Due — nil".
-    assert.equal(doc.refund, null);
-    assert.equal(doc.payable, null);
-    assert.equal(closing(section(doc, "TAXES_PAID")).label, "Nothing further payable or refundable");
     // The three sections §4 requires always, in order, whatever heads exist.
     const ids = doc.sections.map((s) => s.id);
     assert.deepEqual(ids.slice(-3), ["TI", "TAX", "TAXES_PAID"]);
     assert.deepEqual([...ids].sort(), ids.slice().sort());
+
+    /* §12: refund, or payable, or neither — never both, and the closing row of
+       the taxes-paid section names whichever it is. Five of these returns close
+       at nil, which CPC neither refunds nor demands; the sixth is a refund. */
+    assert.ok(!(doc.refund && doc.payable), "one banner at most");
+    const close = closing(section(doc, "TAXES_PAID"));
+    if (doc.refund) {
+      assert.equal(close.label, "Refund Due");
+      assert.equal(close.amount, doc.refund.amount);
+    } else if (doc.payable) {
+      assert.equal(close.label, "Tax Payable");
+      assert.equal(close.amount, doc.payable.amount);
+    } else {
+      // Not "Refund Due — nil", which reads like a claim that was rejected.
+      assert.equal(close.label, "Nothing further payable or refundable");
+    }
   });
 }
+
+test("five of the six returns close at nil, and one is a refund", () => {
+  // Stated as a fact about the fixture set rather than asserted per file: §11's
+  // coverage table says the same thing, and the two should not drift.
+  const banners = itr1Fixtures.map((f) => {
+    const { doc } = buildComputation(JSON.parse(readFileSync(path.join(FIXTURES, f), "utf8")), CTX);
+    return doc.refund ? "refund" : doc.payable ? "payable" : "nil";
+  });
+  assert.equal(banners.filter((b) => b === "refund").length, 1);
+  assert.equal(banners.filter((b) => b === "nil").length, 5);
+  assert.equal(banners.filter((b) => b === "payable").length, 0, "§11 records tax-payable as not yet exercised");
+});
 
 test("a capacity code ITR-2's table would name prints as itself instead", () => {
   // §10: a form's code list must be read from that form's own schema. No ITR-1

@@ -1,0 +1,341 @@
+{
+ "ITR": {
+  "ITR1": {
+   "CreationInfo": {
+    "SWVersionNo": "24.2.0",
+    "SWCreatedBy": "XX00000000",
+    "JSONCreatedBy": "XX00000000",
+    "JSONCreationDate": "2024-07-01",
+    "IntermediaryCity": "SAMPLE PLACE 1",
+    "Digest": "XXXX00X00XXXX0XXX0/XXXX0X0XXX00XXX00XXXXXXX="
+   },
+   "Form_ITR1": {
+    "FormName": "ITR-1",
+    "Description": "For Indls having Income from Salary, Pension, family pension and Interest",
+    "AssessmentYear": "2024",
+    "SchemaVer": "Ver1.0",
+    "FormVer": "Ver1.0"
+   },
+   "PersonalInfo": {
+    "AssesseeName": {
+     "FirstName": "SAMPLE NAME 1",
+     "MiddleName": "SAMPLE NAME 2",
+     "SurNameOrOrgName": "SAMPLE NAME 3"
+    },
+    "PAN": "AAAPZ1000A",
+    "Address": {
+     "ResidenceNo": "SAMPLE PLACE 2",
+     "RoadOrStreet": "SAMPLE PLACE 3",
+     "LocalityOrArea": "SAMPLE PLACE 4",
+     "CityOrTownOrDistrict": "SAMPLE PLACE 5",
+     "StateCode": "11",
+     "CountryCode": "91",
+     "PinCode": 380055,
+     "CountryCodeMobile": 91,
+     "MobileNo": 9800000001,
+     "EmailAddress": "sample@example.com"
+    },
+    "DOB": "1985-02-18",
+    "EmployerCategory": "OTH",
+    "AadhaarCardNo": "000000000000"
+   },
+   "FilingStatus": {
+    "ReturnFileSec": 11,
+    "SeventhProvisio139": "N",
+    "OptOutNewTaxRegime": "Y",
+    "ItrFilingDueDate": "2024-07-31"
+   },
+   "ITR1_IncomeDeductions": {
+    "GrossSalary": 2110164,
+    "Salary": 2110164,
+    "PerquisitesValue": 0,
+    "ProfitsInSalary": 0,
+    "AllwncExemptUs10": {
+     "TotalAllwncExemptUs10": 0
+    },
+    "NetSalary": 2110164,
+    "DeductionUs16": 52400,
+    "DeductionUs16ia": 50000,
+    "EntertainmentAlw16ii": 0,
+    "ProfessionalTaxUs16iii": 2400,
+    "IncomeFromSal": 2057764,
+    "GrossRentReceived": 0,
+    "TaxPaidlocalAuth": 0,
+    "AnnualValue": 0,
+    "StandardDeduction": 0,
+    "InterestPayable": 0,
+    "ArrearsUnrealizedRentRcvd": 0,
+    "TotalIncomeOfHP": 0,
+    "IncomeOthSrc": 14000,
+    "OthersInc": {
+     "OthersIncDtlsOthSrc": [
+      {
+       "OthSrcNatureDesc": "SAV",
+       "OthSrcOthNatOfInc": "SAMPLE NAME 4",
+       "OthSrcOthAmount": 10628
+      },
+      {
+       "OthSrcNatureDesc": "IFD",
+       "OthSrcOthNatOfInc": "SAMPLE NAME 5",
+       "OthSrcOthAmount": 3372
+      }
+     ]
+    },
+    "DeductionUs57iia": 0,
+    "GrossTotIncome": 2071764,
+    "UsrDeductUndChapVIA": {
+     "Section80C": 150000,
+     "Section80CCC": 0,
+     "Section80CCDEmployeeOrSE": 0,
+     "Section80CCD1B": 0,
+     "Section80CCDEmployer": 0,
+     "Section80D": 65000,
+     "Section80DD": 0,
+     "Section80DDB": 0,
+     "Section80E": 0,
+     "Section80EE": 0,
+     "Section80EEA": 0,
+     "Section80EEB": 0,
+     "Section80G": 0,
+     "Section80GG": 0,
+     "Section80GGA": 0,
+     "Section80GGC": 1300000,
+     "Section80U": 0,
+     "Section80TTA": 10000,
+     "Section80TTB": 0,
+     "TotalChapVIADeductions": 1525000,
+     "AnyOthSec80CCH": 0
+    },
+    "DeductUndChapVIA": {
+     "Section80C": 150000,
+     "Section80CCC": 0,
+     "Section80CCDEmployeeOrSE": 0,
+     "Section80CCD1B": 0,
+     "Section80CCDEmployer": 0,
+     "Section80D": 65000,
+     "Section80DD": 0,
+     "Section80DDB": 0,
+     "Section80E": 0,
+     "Section80EE": 0,
+     "Section80EEA": 0,
+     "Section80EEB": 0,
+     "Section80G": 0,
+     "Section80GG": 0,
+     "Section80GGA": 0,
+     "Section80GGC": 1300000,
+     "Section80U": 0,
+     "Section80TTA": 10000,
+     "Section80TTB": 0,
+     "TotalChapVIADeductions": 1525000,
+     "AnyOthSec80CCH": 0
+    },
+    "TotalIncome": 546760,
+    "ExemptIncAgriOthUs10": {
+     "ExemptIncAgriOthUs10Total": 0
+    },
+    "IncomeNotified89A": 0,
+    "IncomeNotifiedOther89A": 0,
+    "Increliefus89A": 0,
+    "Increliefus89AOS": 0
+   },
+   "ITR1_TaxComputation": {
+    "TotalTaxPayable": 21852,
+    "Rebate87A": 0,
+    "TaxPayableOnRebate": 21852,
+    "EducationCess": 874,
+    "GrossTaxLiability": 22726,
+    "Section89": 0,
+    "NetTaxLiability": 22726,
+    "TotalIntrstPay": 0,
+    "IntrstPay": {
+     "IntrstPayUs234A": 0,
+     "IntrstPayUs234B": 0,
+     "IntrstPayUs234C": 0,
+     "LateFilingFee234F": 0
+    },
+    "TotTaxPlusIntrstPay": 22726
+   },
+   "TaxPaid": {
+    "TaxesPaid": {
+     "AdvanceTax": 0,
+     "TDS": 34555,
+     "TCS": 0,
+     "SelfAssessmentTax": 0,
+     "TotalTaxesPaid": 34555
+    },
+    "BalTaxPayable": 0
+   },
+   "Refund": {
+    "RefundDue": 11830,
+    "BankAccountDtls": {
+     "AddtnlBankDetails": [
+      {
+       "IFSCCode": "XXXX0000000",
+       "BankName": "SAMPLE NAME 6",
+       "BankAccountNo": "000000000000000",
+       "AccountType": "OTH"
+      },
+      {
+       "IFSCCode": "XXXX0000000",
+       "BankName": "SAMPLE NAME 7",
+       "BankAccountNo": "00000000000",
+       "AccountType": "OTH"
+      }
+     ]
+    }
+   },
+   "Schedule80G": {
+    "TotalDonationsUs80GCash": 0,
+    "TotalDonationsUs80GOtherMode": 0,
+    "TotalDonationsUs80G": 0,
+    "TotalEligibleDonationsUs80G": 0
+   },
+   "Schedule80D": {
+    "Sec80DSelfFamSrCtznHealth": {
+     "SeniorCitizenFlag": "N",
+     "SelfAndFamily": 25000,
+     "HealthInsPremSlfFam": 20709,
+     "PrevHlthChckUpSlfFam": 4291,
+     "SelfAndFamilySeniorCitizen": 0,
+     "HlthInsPremSlfFamSrCtzn": 0,
+     "PrevHlthChckUpSlfFamSrCtzn": 0,
+     "MedicalExpSlfFamSrCtzn": 0,
+     "ParentsSeniorCitizenFlag": "Y",
+     "Parents": 0,
+     "HlthInsPremParents": 0,
+     "PrevHlthChckUpParents": 0,
+     "ParentsSeniorCitizen": 40000,
+     "HlthInsPremParentsSrCtzn": 0,
+     "PrevHlthChckUpParentsSrCtzn": 0,
+     "MedicalExpParentsSrCtzn": 40000,
+     "EligibleAmountOfDedn": 65000
+    }
+   },
+   "TDSonSalaries": {
+    "TDSonSalary": [
+     {
+      "EmployerOrDeductorOrCollectDetl": {
+       "TAN": "AAAA00000A",
+       "EmployerOrDeductorOrCollecterName": "SAMPLE NAME 8"
+      },
+      "IncChrgSal": 2110163,
+      "TotalTDSSal": 34000
+     }
+    ],
+    "TotalTDSonSalaries": 34000
+   },
+   "TDSonOthThanSals": {
+    "TDSonOthThanSal": [
+     {
+      "EmployerOrDeductorOrCollectDetl": {
+       "TAN": "AAAC00002A",
+       "EmployerOrDeductorOrCollecterName": "SAMPLE NAME 9"
+      },
+      "AmtForTaxDeduct": 45,
+      "DeductedYr": "2023",
+      "TotTDSOnAmtPaid": 0,
+      "ClaimOutOfTotTDSOnAmtPaid": 0
+     },
+     {
+      "EmployerOrDeductorOrCollectDetl": {
+       "TAN": "AAAC00002A",
+       "EmployerOrDeductorOrCollecterName": "SAMPLE NAME 9"
+      },
+      "AmtForTaxDeduct": 60,
+      "DeductedYr": "2023",
+      "TotTDSOnAmtPaid": 0,
+      "ClaimOutOfTotTDSOnAmtPaid": 0
+     },
+     {
+      "EmployerOrDeductorOrCollectDetl": {
+       "TAN": "AAAB00001A",
+       "EmployerOrDeductorOrCollecterName": "SAMPLE NAME 10"
+      },
+      "AmtForTaxDeduct": 5551,
+      "DeductedYr": "2023",
+      "TotTDSOnAmtPaid": 555,
+      "ClaimOutOfTotTDSOnAmtPaid": 555
+     }
+    ],
+    "TotalTDSonOthThanSals": 555
+   },
+   "ScheduleTDS3Dtls": {
+    "TotalTDS3Details": 0
+   },
+   "ScheduleTCS": {
+    "TotalSchTCS": 0
+   },
+   "Verification": {
+    "Declaration": {
+     "AssesseeVerName": "SAMPLE NAME 11",
+     "FatherName": "SAMPLE NAME 12",
+     "AssesseeVerPAN": "AAAPZ1000A"
+    },
+    "Capacity": "S",
+    "Place": "SAMPLE PLACE 5"
+   },
+   "Schedule80GGC": {
+    "Schedule80GGCDetails": [
+     {
+      "DonationDate": "2023-05-04",
+      "DonationAmtCash": 0,
+      "DonationAmtOtherMode": 200000,
+      "TransactionRefNum": "000000000000",
+      "IFSCCode": "XXXX0000000",
+      "DonationAmt": 200000,
+      "EligibleDonationAmt": 200000
+     },
+     {
+      "DonationDate": "2023-10-13",
+      "DonationAmtCash": 0,
+      "DonationAmtOtherMode": 300000,
+      "TransactionRefNum": "000000000000",
+      "IFSCCode": "XXXX0000000",
+      "DonationAmt": 300000,
+      "EligibleDonationAmt": 300000
+     },
+     {
+      "DonationDate": "2023-12-01",
+      "DonationAmtCash": 0,
+      "DonationAmtOtherMode": 200000,
+      "TransactionRefNum": "000000000000",
+      "IFSCCode": "XXXX0000000",
+      "DonationAmt": 200000,
+      "EligibleDonationAmt": 200000
+     },
+     {
+      "DonationDate": "2024-01-09",
+      "DonationAmtCash": 0,
+      "DonationAmtOtherMode": 400000,
+      "TransactionRefNum": "0000000000000",
+      "IFSCCode": "XXXX0000000",
+      "DonationAmt": 400000,
+      "EligibleDonationAmt": 400000
+     },
+     {
+      "DonationDate": "2024-02-26",
+      "DonationAmtCash": 0,
+      "DonationAmtOtherMode": 100000,
+      "TransactionRefNum": "000000000000",
+      "IFSCCode": "XXXX0000000",
+      "DonationAmt": 100000,
+      "EligibleDonationAmt": 100000
+     },
+     {
+      "DonationDate": "2024-02-29",
+      "DonationAmtCash": 0,
+      "DonationAmtOtherMode": 100000,
+      "TransactionRefNum": "000000000000",
+      "IFSCCode": "XXXX0000000",
+      "DonationAmt": 100000,
+      "EligibleDonationAmt": 100000
+     }
+    ],
+    "TotalDonationAmtCash80GGC": 0,
+    "TotalDonationAmtOtherMode80GGC": 1300000,
+    "TotalDonationsUs80GGC": 1300000,
+    "TotalEligibleDonationAmt80GGC": 1300000
+   }
+  }
+ }
+}

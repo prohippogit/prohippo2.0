@@ -99,6 +99,25 @@ test("contact details and free text are scrubbed", () => {
   assert.match(clean.ITR.ITR3.ScheduleHP.PropertyDetails[0].TenantDetails[0].NameofTenant, /^SAMPLE NAME/);
 });
 
+test("two deductors keep two TANs, because the computation groups credits by TAN", () => {
+  // Masking a TAN the way an account number is masked turns every deductor into
+  // the identical XXXX00000X — and the taxes-paid section merges rows by TAN, so
+  // three deductors became one row on the first fixture that had more than one.
+  const withDeductors = JSON.parse(JSON.stringify(RETURN));
+  withDeductors.ITR.ITR3.TDSonSalaries = {
+    TDSonSalary: [
+      { EmployerOrDeductorOrCollectDetl: { TAN: "AHMN08362E" }, TotalTDSSal: 34000 },
+      { EmployerOrDeductorOrCollectDetl: { TAN: "MUMA35845F" }, TotalTDSSal: 555 },
+    ],
+  };
+  const { clean, values } = anonymise(withDeductors);
+  const [a, b] = clean.ITR.ITR3.TDSonSalaries.TDSonSalary.map((t) => t.EmployerOrDeductorOrCollectDetl.TAN);
+  assert.notEqual(a, b, "distinct deductors must stay distinct");
+  for (const t of [a, b]) assert.match(t, /^[A-Z]{4}\d{5}[A-Z]$/, "and must still look like a TAN");
+  const blob = values.join("\n");
+  assert.ok(!blob.includes("AHMN08362E") && !blob.includes("MUMA35845F"));
+});
+
 test("a second contact is scrubbed too, whoever it belongs to", () => {
   // A.Y. 2026-27's ITR-1 carries `MobileNoSec` and `EmailAddressSec`, and on the
   // return that brought them to light the second contact was somebody other than

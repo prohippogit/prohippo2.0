@@ -934,11 +934,12 @@ Recorded so nobody has to rediscover them.
   it as the salary standard deduction would put a 30% statutory allowance under
   the wrong head.
 - `OthersInc.OthersIncDtlsOthSrc[]` itemises other sources with a code in
-  `OthSrcNatureDesc` and the utility's own words in `OthSrcOthNatOfInc`. `SAV` is
-  the savings-bank interest — verified from the return itself, which states
-  "Interest from Saving Account" against it. Every other code is captioned from
-  the return's own words where it gives them, and prints as itself where it does
-  not (§5). No code is decoded from what it looks like it means.
+  `OthSrcNatureDesc` and the utility's own words in `OthSrcOthNatOfInc`. Two codes
+  are captioned, both from returns that state the department's own description
+  beside the code: `SAV` ("Interest from Saving Account") and `IFD` ("Interest
+  from Deposit(Bank/Post Office/Cooperative Society)"). Every other code is
+  captioned from the return's own words where it gives them, and prints as itself
+  where it does not (§5). No code is decoded from what it looks like it means.
 - `GrossTotIncomeIncLTCG112A` appears from A.Y. 2025-26, when ITR-1 was first
   allowed to carry a long-term capital gain u/s 112A within the s.112A
   exemption. Where it exceeds `GrossTotIncome` the difference is that gain, and
@@ -953,22 +954,45 @@ Recorded so nobody has to rediscover them.
   year's module records the reconciliation where the figures permit one and says
   so where they do not — it never treats "the field name reads that way" as a
   verification.
-- The credit blocks are renamed wrappers around the individual forms' own row
-  types: `TDSonSalaries`, `TDSonOthThanSals`, `ScheduleTDS3Dtls`, `ScheduleTCS`
-  and `TaxPayments` carry the totals `TotalTDSonSalaries`,
-  `TotalTDSonOthThanSals`, `TotalTDS3Details`, `TotalSchTCS` and
-  `TotalTaxPayments`. Four of those five total keys are ITR-2's own, which is the
-  evidence that the rows inside are ITD's shared row definitions. The builder
-  therefore **discovers the array** inside each wrapper and reads each row's
-  fields by the shared names. If a real return names them differently, the rows
-  simply do not print and every figure in them surfaces under §8 — loud, never
-  wrong. No return we hold carries a single credit row, so there is no fixture for
-  it; the rule is held by a mutation test instead, and §11 records the difference.
-- `TaxDeductCreditDtls` states one credit six ways — by whose hands it is claimed
-  in and against which head. Five of the six are restated (§8), because leaving
-  them to surface would put a review block on every ITR-1 that has any TDS at all.
-  `BroughtFwdTDSAmt` and `AmtCarriedFwd` are **not** restated: a credit moved
-  between years is a fact about the return, not this year's figure said twice.
+**ITR-1's credit rows are its own, and reading ITR-2's into them was wrong**
+- The blocks are `TDSonSalaries`, `TDSonOthThanSals`, `ScheduleTDS3Dtls`,
+  `ScheduleTCS` and `TaxPayments`, and four of their five TOTAL keys —
+  `TotalTDSonSalaries`, `TotalTDSonOthThanSals`, `TotalSchTCS`,
+  `TotalTaxPayments` — are ITR-2's own. That looked like evidence the ROWS inside
+  were ITD's shared row type too. It is not. For salary it holds; for everything
+  else the rows are ITR-1's own shape:
+
+  | | ITR-1 | ITR-2 |
+  |---|---|---|
+  | deductor | `EmployerOrDeductorOrCollectDetl.TAN`, and the name beside it | `TANOfDeductor`, no name |
+  | receipt | `AmtForTaxDeduct` | `GrossAmount` |
+  | deducted | `TotTDSOnAmtPaid` | `TaxDeductCreditDtls.TaxDeductedOwnHands` |
+  | claimed | `ClaimOutOfTotTDSOnAmtPaid` | `TaxDeductCreditDtls.TaxClaimedOwnHands` |
+  | section | *absent* | `TDSSection` |
+
+  Nothing was printed wrongly while that was got wrong — every figure surfaced in
+  the review block, which is §8 working exactly as designed — but the practitioner
+  who reported it had to read 26 JSON paths to satisfy themselves the document was
+  complete. **A block name shared across forms is not evidence about the rows
+  inside it.** Read the rows from a return of that form.
+- The rows carry no section code, so credits merge on the deductor alone.
+- `TotTDSOnAmtPaid` and `ClaimOutOfTotTDSOnAmtPaid` are not one figure twice: the
+  second is what is claimed this year out of the first, and the difference is a
+  credit left for another year. The row says so where they differ.
+- Schedule TCS is **not** itemised. It carries rows on other forms and naming the
+  collectors would be worth the two lines here too, but no ITR-1 we hold has one,
+  and this is the exact spot where borrowing another form's shape already misled
+  once. The total prints; a collector's row surfaces under §8 the day one arrives.
+  Schedule TDS3 IS read, using its sibling block's shape — an inference within one
+  form rather than across two — and surfaces if that turns out to be wrong.
+
+**Schedule 80GGC is the same schedule on ITR-1, and is printed there too**
+- Same path, same seven fields per contribution, verified against a real ITR-1
+  carrying a claim of 13,00,000 over six payments. It is therefore built by the
+  same function (`mappers/individual/heads.js`), because the reason it is printed
+  rather than claimed — the Department reopens these on the date, the mode and the
+  bank reference — does not change with the form, and a second copy would be a
+  second place to forget it.
 
 **Capacity codes (`Verification.Capacity`)**
 - The code list differs by form and must be read from that form's schema, not
@@ -1016,6 +1040,7 @@ test/fixtures/
   itr1-salary-belated-nil-ay2022-23.json        // salary only, s.139(4) belated, no tax before rebate
   itr1-salary-commission-80tta-ay2023-24.json   // NewTaxRegime, commission in other sources, s.80TTA
   itr1-oldregime-commission-rebate-ay2024-25.json  // OptOutNewTaxRegime "Y", rebate 87A, s.80TTA
+  itr1-80ggc-tds-refund-ay2024-25.json          // Sch. 80GGC itemised, 3 deductors, REFUND, s.16(iii)
   itr1-newregime-savings-rebate-ay2025-26.json  // new regime, 75,000 u/s 16(ia), GTI incl. s.112A
   itr1-newregime-altaddress-rebate-ay2026-27.json  // TotalIncomeChargeableUnHP, second contact
   itr4-…                                         // add as forms are supported
@@ -1101,28 +1126,28 @@ than it is:
 | ITR-3 | 2022-23 | ✓      | —    | — (level) | — not yet |
 | ITR-1 | 2026-27 | ✓      | —    | — (nil)   | — not yet |
 | ITR-1 | 2025-26 | ✓      | —    | — (nil)   | — not yet |
-| ITR-1 | 2024-25 | ✓      | —    | — (nil)   | — not yet |
+| ITR-1 | 2024-25 | ✓      | —    | ✓      | — not yet   |
 | ITR-1 | 2023-24 | ✓      | —    | — (nil)   | — not yet |
 | ITR-1 | 2022-23 | ✓      | —    | — (nil)   | — not yet |
 
-The five ITR-1 returns are one assessee's five consecutive years, and none of
-them pays or reclaims anything: the rebate u/s 87A extinguishes the tax in four
-of the years and the fifth is below the exemption limit, so each closes at nil
-against both `RefundDue` and `BalTaxPayable`. That makes §12's nil-banner case
-the best-covered path on the form and leaves four columns of this table honestly
-empty. Four paths in the ITR-1 builder consequently have no fixture at all: house
-property, the s.112A gain, the itemised credit rows, and the refund banner.
+Five of the six ITR-1 fixtures are one assessee's five consecutive years, and not
+one of them pays or reclaims anything: the rebate u/s 87A extinguishes the tax in
+four of them and the fifth is below the exemption limit. That makes §12's
+nil-banner case the best-covered path on the form. The sixth, a second A.Y.
+2024-25 return, is the one that carries a refund, tax deducted by three deductors
+and a s.80GGC claim — and it arrived as a bug report against the first release of
+this form, which is why it is worth its own fixture rather than a mention.
 
-Each of those is exercised by a **mutation test** — a real return with one figure
-changed, in `test/computation/itr1*.test.mjs` — and the distinction matters.
-Mutating a return tests OUR rule (that a s.112A gain is the difference between the
-return's own two gross totals; that a loss is not floored on this form; that the
-credit blocks hold the row shapes ITR-2 uses). It cannot test what a real return
-of that kind actually looks like, which is what a fixture is for. So the columns
-above stay empty, the mapper is written to fail loud rather than quietly on a
-shape it does not recognise (§8), and a fixture goes in when a return carrying one
-arrives. Do not fabricate one: it would test our reading of the schema against
-itself.
+Two paths still have no fixture: **house property** and the **s.112A gain**. Both
+are exercised by a *mutation test* — a real return with one figure changed — and
+the distinction matters. Mutating a return tests OUR rule (that a s.112A gain is
+the difference between the return's own two gross totals; that a loss is not
+floored on this form). It cannot test what a real return of that kind looks like,
+which is what a fixture is for, and the difference between the two is precisely
+what the credit-row bug was made of: a rule that was reasonable, tested against
+itself, and wrong about the return. So those columns stay empty, the mapper fails
+loud rather than quietly on a shape it does not recognise (§8), and a fixture goes
+in when a return carrying one arrives. Do not fabricate one.
 
 The tax-payable path is written and rendered for both individual forms (the
 banner and the "Tax Payable" closing row), but no real return exercising it has

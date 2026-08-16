@@ -1,0 +1,424 @@
+{
+ "meta": {
+  "form": "ITR1",
+  "assessmentYear": "2024-25",
+  "previousYear": "2023-24",
+  "schemaVersion": "Ver1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+ },
+ "assessee": {
+  "name": "SAMPLE NAME 1 SAMPLE NAME 2 SAMPLE NAME 3",
+  "pan": "AAAPZ1000A",
+  "status": "Individual",
+  "address": "SAMPLE PLACE 2, SAMPLE PLACE 3, SAMPLE PLACE 4, SAMPLE PLACE 5, 380055",
+  "email": "sample@example.com",
+  "mobile": "9800000001",
+  "residentialStatus": "Resident",
+  "dateOfFormation": "1985-02-18",
+  "facts": [
+   {
+    "label": "Status",
+    "value": "Individual"
+   },
+   {
+    "label": "Date of birth",
+    "value": "18 February 1985"
+   },
+   {
+    "label": "Return filed under",
+    "value": "Section 139(1) — on or before the due date"
+   },
+   {
+    "label": "Tax regime",
+    "value": "Old regime — opted out of s.115BAC(1A)"
+   },
+   {
+    "label": "Due date",
+    "value": "31 July 2024"
+   },
+   {
+    "label": "E-mail / mobile",
+    "value": "sample@example.com\n+91 9800000001"
+   }
+  ],
+  "partners": []
+ },
+ "sections": [
+  {
+   "id": "SALARY",
+   "letter": "A",
+   "title": "Income from Salaries",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Salary as per section 17(1)",
+     "amount": 2110164,
+     "ref": "Part B"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Standard deduction u/s 16(ia)",
+     "amount": 50000,
+     "ref": "Sec. 16(ia)"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Tax on employment u/s 16(iii)",
+     "amount": 2400,
+     "ref": "Sec. 16(iii)"
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Salaries",
+     "amount": 2057764
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "OS",
+   "letter": "B",
+   "title": "Income from Other Sources",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Interest from a savings bank account",
+     "amount": 10628,
+     "ref": "Part B"
+    },
+    {
+     "kind": "sub",
+     "label": "Interest from deposits with a bank, post office or co-operative society",
+     "amount": 3372,
+     "ref": ""
+    },
+    {
+     "kind": "total",
+     "label": "Income chargeable under the head Other Sources",
+     "amount": 14000
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "VIA",
+   "letter": "C",
+   "title": "Deductions under Chapter VI-A",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "u/s 80C — life insurance, provident fund, tuition fees etc.",
+     "amount": 150000,
+     "ref": "80C"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80D — health insurance premium",
+     "amount": 65000,
+     "ref": "80D"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80GGC — contribution to a political party",
+     "amount": 1300000,
+     "ref": "80GGC",
+     "note": "Each contribution is itemised below"
+    },
+    {
+     "kind": "sub",
+     "label": "u/s 80TTA — interest on deposits in a savings account",
+     "amount": 10000,
+     "ref": "80TTA"
+    },
+    {
+     "kind": "total",
+     "label": "Total deductions under Chapter VI-A",
+     "amount": 1525000
+    },
+    {
+     "kind": "columnHeader",
+     "label": "Contributions claimed u/s 80GGC — date of payment",
+     "amount": null,
+     "cols": {
+      "ref": "Mode of payment",
+      "amt": "Amount (₹)"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "04 May 2023",
+     "amount": 200000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. 000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "sub",
+     "label": "13 October 2023",
+     "amount": 300000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. 000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "sub",
+     "label": "01 December 2023",
+     "amount": 200000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. 000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "sub",
+     "label": "09 January 2024",
+     "amount": 400000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. 0000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "sub",
+     "label": "26 February 2024",
+     "amount": 100000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. 000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "sub",
+     "label": "29 February 2024",
+     "amount": 100000,
+     "cols": {
+      "ref": "Banking channel"
+     },
+     "note": "Ref. 000000000000 · IFSC XXXX0000000"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Contributions Claimed u/s 80GGC",
+     "amount": 1300000
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": true
+  },
+  {
+   "id": "TI",
+   "letter": "D",
+   "title": "Computation of Total Income",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "head",
+     "label": "Income from Salaries",
+     "amount": 2057764,
+     "ref": "Part B"
+    },
+    {
+     "kind": "head",
+     "label": "Income from House Property",
+     "amount": 0,
+     "ref": "Part B"
+    },
+    {
+     "kind": "head",
+     "label": "Income from Other Sources",
+     "amount": 14000,
+     "ref": "Part B"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Total Income",
+     "amount": 2071764
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Deductions under Chapter VI-A",
+     "amount": 1525000,
+     "ref": "Part C"
+    },
+    {
+     "kind": "total",
+     "label": "Total Income (rounded off u/s 288A)",
+     "amount": 546760
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAX",
+   "letter": "E",
+   "title": "Computation of Tax Liability",
+   "tone": "gold",
+   "rows": [
+    {
+     "kind": "sub",
+     "label": "Tax on Total Income at the rates in force",
+     "amount": 21852,
+     "ref": "Para A, Sch. I"
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Rebate u/s 87A",
+     "amount": 0,
+     "ref": "Sec. 87A"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Health & Education Cess @ 4%",
+     "amount": 874
+    },
+    {
+     "kind": "subtotal",
+     "label": "Gross Tax Liability",
+     "amount": 22726
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Relief u/s 89",
+     "amount": 0,
+     "ref": "Sec. 89"
+    },
+    {
+     "kind": "sub",
+     "label": "Add: Interest u/s 234A / 234B / 234C and fee u/s 234F",
+     "amount": 0
+    },
+    {
+     "kind": "total",
+     "label": "Total Tax and Interest Payable",
+     "amount": 22726
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  },
+  {
+   "id": "TAXES_PAID",
+   "letter": "F",
+   "title": "Taxes Paid & Prepaid Taxes",
+   "tone": "navy",
+   "rows": [
+    {
+     "kind": "columnHeader",
+     "label": "Tax Deducted at Source — TAN of Deductor",
+     "amount": null,
+     "cols": {
+      "ref": "Gross Receipt"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAA00000A",
+     "amount": 34000,
+     "note": "SAMPLE NAME 8 · Salary · Sec. 192",
+     "cols": {
+      "ref": "21,10,163"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAB00001A",
+     "amount": 555,
+     "note": "SAMPLE NAME 10",
+     "cols": {
+      "ref": "5,551"
+     }
+    },
+    {
+     "kind": "sub",
+     "label": "AAAC00002A",
+     "amount": 0,
+     "note": "SAMPLE NAME 9 · 2 entries",
+     "cols": {
+      "ref": "105"
+     }
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Tax Deducted at Source",
+     "amount": 34555,
+     "ref": "Sch. TDS"
+    },
+    {
+     "kind": "sub",
+     "label": "Advance Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Self-Assessment Tax Paid",
+     "amount": 0,
+     "ref": "Sch. IT"
+    },
+    {
+     "kind": "sub",
+     "label": "Tax Collected at Source",
+     "amount": 0,
+     "ref": "Sch. TCS"
+    },
+    {
+     "kind": "subtotal",
+     "label": "Total Taxes Paid",
+     "amount": 34555
+    },
+    {
+     "kind": "sub",
+     "label": "Less: Total Tax and Interest Payable",
+     "amount": 22726
+    },
+    {
+     "kind": "total",
+     "label": "Refund Due",
+     "amount": 11830
+    }
+   ],
+   "footnote": "",
+   "omitIfAllNil": false
+  }
+ ],
+ "refund": {
+  "amount": 11830,
+  "bank": {
+   "name": "SAMPLE NAME 6",
+   "accountNo": "000000000000000",
+   "type": "OTH",
+   "ifsc": "XXXX0000000"
+  }
+ },
+ "payable": null,
+ "notes": [
+  {
+   "severity": "info",
+   "text": "This computation has been prepared from the ITR-1 return data (JSON) for A.Y. 2024-25 and the figures correspond to Part B, Part C and Part D of the return."
+  },
+  {
+   "severity": "attention",
+   "text": "No bank account is flagged for the refund in the return; the first account listed is shown."
+  },
+  {
+   "severity": "info",
+   "text": "The return is filed under the old regime — opted out of s.115BAC(1A)."
+  }
+ ],
+ "signatory": {
+  "name": "SAMPLE NAME 11",
+  "capacity": "Self",
+  "pan": "AAAPZ1000A",
+  "place": "SAMPLE PLACE 5",
+  "date": ""
+ },
+ "unmapped": []
+}

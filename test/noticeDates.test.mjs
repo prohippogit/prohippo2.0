@@ -14,7 +14,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { viewedByOfficer, unnamedFields, looksLikeDate, fmtPortalDate } from "../src/noticeDates.js";
+import { viewedByOfficer, looksLikeDate, fmtPortalDate } from "../src/noticeDates.js";
 
 /* ---------------- did the officer open it ---------------- */
 
@@ -57,25 +57,26 @@ test("a reply the portal said nothing extra about reports nothing", () => {
   assert.equal(viewedByOfficer({ responseId: "R1" }), null);
   assert.equal(viewedByOfficer({ responseId: "R1", extra: {} }), null);
   assert.equal(viewedByOfficer(null), null);
-  assert.deepEqual(unnamedFields({ responseId: "R1" }), []);
 });
 
-test("fields we have no name for are surfaced, minus the one we do", () => {
-  /* This is the discovery hatch: the real name of the viewed field gets read
-     off a live reply instead of guessed at again. */
-  const r = reply({ viewedOn: "12/06/2026", ackNo: "ACK9", someFlag: true, respStatus: "Submitted" });
-  assert.equal(viewedByOfficer(r).key, "viewedOn");
-  assert.deepEqual(
-    unnamedFields(r).map((f) => f.key).sort(),
-    ["ackNo", "respStatus", "someFlag"],
-    "the recognised field is not repeated in the raw list"
-  );
+test("the field the portal actually uses is the one that is read", () => {
+  /* The name, confirmed from live traffic rather than matched by luck:
+     eProceedingDetailsService states `responseViewedByAoOn` on the notice, in
+     epoch milliseconds, beside `lastResponseSubmittedOn` and `respStatus`. */
+  const notice = { extra: { responseViewedByAoOn: 1709683200000, respStatus: "S", readFlag: "Y", proceedingReqId: "32725557" } };
+  const out = viewedByOfficer(notice);
+  assert.equal(out.key, "responseViewedByAoOn");
+  assert.match(fmtPortalDate(out.value), /2024/);
 });
 
-test("with nothing recognised, every field is offered for identification", () => {
-  const r = reply({ someUnknownDate: "12/06/2026", respStatus: "Submitted" });
-  assert.equal(viewedByOfficer(r), null);
-  assert.equal(unnamedFields(r).length, 2, "including the one that is probably it");
+test("everything else in `extra` is carried but never rendered", async () => {
+  /* The discovery hatch is closed. `extra` still holds what the portal sent —
+     that is where the date above comes from — but there is no longer a helper
+     that turns the leftovers into screen output, and the card that used to print
+     them (`readFlag: Y`, `proceedingLimitationDate: 1711823400000`,
+     `nameOfAssesse`) does not. A reply card shows the reply. */
+  const mod = await import("../src/noticeDates.js");
+  assert.equal(mod.unnamedFields, undefined, "no helper exists to list the raw fields");
 });
 
 /* ---------------- rendering what the portal sent ---------------- */

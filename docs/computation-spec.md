@@ -451,6 +451,25 @@ to the return is worse than no computation. In production a failure raises, and
 the Returns tab reports it rather than issuing a document that does not
 reconcile.
 
+### What these checks CANNOT see
+
+Every check above compares a total. So a working whose own rows do not add up to
+its own subtotal passes all eight of them, because the subtotal is read from the
+return rather than summed from the rows. That is not a hypothetical: the land and
+building working omitted the s.54 exemptions entirely, and the page stated a
+long-term subtotal 9.67 crore below what the rows above it came to, while every
+check here passed.
+
+Adding a row-level check to `validate()` was considered and rejected: a working
+is an argument, not a column — the s.24 deductions, the agricultural rebate and
+the special-rate split all move figures in ways a generic summer would misread,
+and a false failure here stops a practitioner getting a document at all. So the
+guard lives in the tests, where a wrong answer costs a red run rather than a
+blocked document, and it is written per working:
+`test/computation/itr3-landbuilding-54f.test.mjs` walks every property sale in
+the fixture set and requires each to net to the gain the return states for it.
+When another working gains this class of fault, add its walk there too.
+
 On ITR-1, checks 1 and 2 read the same figure: the form has no total-of-heads
 field distinct from gross total income, because it allows no set-off between the
 years — a house property loss is already inside `GrossTotIncome` as a negative
@@ -820,6 +839,25 @@ Recorded so nobody has to rediscover them.
   buckets differ by year (2024-25 has no 20% short-term or 12.5% long-term;
   2025-26 added both), and the section attribution lives in the tax section
   where Schedule SI states it against each figure.
+- **An exemption claimed against a gain is part of the working, in EVERY class of
+  asset.** `exemptionRows()` existed and was called for each of them except land
+  and building, which has a working of its own — so a return claiming 9,67,09,854
+  under ss.54F and 54EC across four property sales printed none of it. The head
+  total still tied (it is the return's own figure), so the page simply stated a
+  subtotal 9.67 crore below what its own rows added to. A missing deduction in a
+  working is invisible to §7's checks: they compare totals, and the total was
+  right. What catches it is adding the column up the way a reader does, which
+  `test/computation/itr3-landbuilding-54f.test.mjs` now does for every property
+  sale in the fixture set.
+- **`ImproveCost` on a long-term property detail is the INDEXED figure**, despite
+  the name, and there is no `ImproveCostIndex` beside it. Verified on the return
+  above: `TotalDedn` is `AquisitCostIndex + ImproveCost + ExpOnTrans` to the
+  rupee, and the itemised `CostOfImprovements.CostOfImprovementsDtls[]` shows the
+  raw cost of 16,99,462 indexing to exactly that `ImproveCost` of 17,89,799.
+  Captioning it "cost of improvement" understates the deduction by the
+  indexation, so the caption is decided by whether the itemised block indexed it.
+  That block also carries the year the improvement was incurred, which is printed
+  as a note and is what substantiates the indexation.
 - **Land and building** does not share the s.48 shape the other classes use:
   `SaleofLandBuild.SaleofLandBuildDtls[]` carries `PropertyValuation` and
   `FullConsideration50C` alongside the consideration, because s.50C substitutes
@@ -1034,6 +1072,7 @@ test/fixtures/
   itr3-partner-capgains-44ad-ay2024-25.json     // 44AD, land & building ST + LT, 4 rate buckets
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
   itr3-oldregime-marginal-relief-ay2022-23.json // NewTaxRegime, marginal relief, VI-A subtotals
+  itr3-landbuilding-54f-ay2022-23.json          // 4 property sales, s.54F + s.54EC, indexed improvement
   itr3-partner-cgloss-tds3-ay2023-24.json       // capital LOSS + losses c/f, Sch. TDS3, TCS, refund
   itr3-fno-busloss-unabsdepr-ay2024-25.json     // BUSINESS LOSS, 6 years of loss c/f, Schedule UD
   itr3-fno-bfloss-setoff-ay2026-27.json         // b/f loss set off u/s 72, depreciation fully absorbed

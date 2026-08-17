@@ -294,12 +294,55 @@ function landAndBuildingWorking(src, base, indexed, rows) {
     } else if (cost) {
       rows.push(sub("Less: Cost of acquisition", cost));
     }
+    /* Cost of improvement, which the return states TWICE and in two shapes.
+     *
+     * `ImproveCost` on the detail itself is the figure that enters `TotalDedn` —
+     * and on a long-term gain it is the INDEXED one, despite the name: on the
+     * return that exposed this, TotalDedn is AquisitCostIndex + ImproveCost +
+     * ExpOnTrans to the rupee, and `ImproveCost` there is 17,89,799, matching
+     * the itemised block's `CostOfImpIndex` rather than its raw 16,99,462.
+     * Captioning it "cost of improvement" while it is an indexed figure
+     * understates it by the indexation on a document somebody signs.
+     *
+     * The itemised block, `CostOfImprovements.CostOfImprovementsDtls[]`, carries
+     * the raw cost, the year it was incurred and the indexed figure — which is
+     * where the note comes from, and which is read by name so nothing in it
+     * surfaces for review (§8). */
+    const improvements = (src.claim(`${at}.CostOfImprovements.CostOfImprovementsDtls`) || [])
+      .map((d, k) => ({
+        raw: src.num(`${at}.CostOfImprovements.CostOfImprovementsDtls[${k}].ImproveCost`),
+        idx: src.num(`${at}.CostOfImprovements.CostOfImprovementsDtls[${k}].CostOfImpIndex`),
+        when: String((d && d.ImproveDate) || "").trim(),
+        // A row number, not a figure. Read so it cannot reach the review block.
+        slno: src.num(`${at}.CostOfImprovements.CostOfImprovementsDtls[${k}].slno`),
+      }))
+      .filter((d) => d.raw || d.idx);
     const improve = src.num(`${at}.ImproveCost`);
     const improveIndexed = src.num(`${at}.ImproveCostIndex`);
-    if (improveIndexed) rows.push(sub("Less: Indexed cost of improvement", improveIndexed));
-    else if (improve) rows.push(sub("Less: Cost of improvement", improve));
+    const shown = improveIndexed || improve;
+    if (shown) {
+      // Indexed if the return says so — either by carrying the indexed field, or
+      // by the itemised block indexing to the figure the deduction total used.
+      const isIndexed = Boolean(improveIndexed) || improvements.some((d) => d.idx === shown && d.raw !== shown);
+      const detail = improvements
+        .map((d) => [d.raw && d.raw !== shown ? inr(d.raw) : "", d.when].filter(Boolean).join(" in "))
+        .filter(Boolean)
+        .join(", ");
+      rows.push(sub(isIndexed ? "Less: Indexed cost of improvement" : "Less: Cost of improvement", shown, {
+        note: detail ? `Improvement of ${detail}${isIndexed ? ", indexed" : ""}` : undefined,
+      }));
+    }
     const expense = src.num(`${at}.ExpOnTrans`);
     if (expense) rows.push(sub("Less: Expenditure on transfer", expense));
+
+    /* THE EXEMPTIONS, which were not printed at all until a return arrived
+       claiming 9,67,09,854 of them across four properties. Their absence did not
+       break the head total — that comes from the return's own field — so the
+       page simply stated a subtotal 9.67 crore below what its own rows added to,
+       and said nothing about the s.54F and s.54EC claims that are the most
+       examined figures in any property sale. Same helper the other classes of
+       asset use; the schedule is the same shape here. */
+    exemptionRows(src, at, rows);
 
     // The buyers, their shares and the amounts against them restate the
     // consideration already shown; they are a disclosure, not a step in the
@@ -356,6 +399,18 @@ function exemptionRows(src, base, rows) {
   const named = claimed.filter((e) => Number(e.ExemptionAmount || 0));
   if (named.length === 1) {
     rows.push(sub(`Less: Exemption u/s ${named[0].ExemptionSecCode}`, total, { ref: `Sec. ${named[0].ExemptionSecCode}` }));
+    return;
+  }
+  /* Two claims under the SAME section — a property sale reinvested in two
+     houses is one s.54F claim in two parts — so the row names the section and
+     the note carries the parts. Only where they differ is the caption left
+     general, because there the section cannot go in it. */
+  const codes = [...new Set(named.map((e) => String(e.ExemptionSecCode || "").trim()))];
+  if (named.length > 1 && codes.length === 1 && codes[0]) {
+    rows.push(sub(`Less: Exemption u/s ${codes[0]}`, total, {
+      ref: `Sec. ${codes[0]}`,
+      note: `${named.length} claims: ${named.map((e) => inr(e.ExemptionAmount)).join(" + ")}`,
+    }));
     return;
   }
   rows.push(sub("Less: Exemption claimed against the gain", total, {

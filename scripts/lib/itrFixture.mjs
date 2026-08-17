@@ -58,6 +58,16 @@ const PLACE_KEYS = new Set([
   // A sold property's address identifies it on the public land record.
   "AddressOfProperty",
 ]);
+/* Any key naming an Aadhaar, however ITD spells it.
+ *
+ * A list of exact names missed `AaadhaarOfBuyer` — three a's, the department's
+ * own typo — which is where a property sale records the BUYER's Aadhaar. Four
+ * strangers' Aadhaar numbers would have gone into a public fixture because the
+ * catalogue was spelled correctly and the schema was not. A pattern is the right
+ * shape for this one: there is no field whose name mentions Aadhaar and whose
+ * value should survive. */
+const AADHAAR_KEY = /a+dha*r/i; // Aadhaar, Aadhar, AaadhaarOfBuyer, AudFrmAadhaar
+
 const OPAQUE_KEYS = new Set([
   "Digest", "UDIN", "BankAccountNo", "IFSCCode", "AadhaarCardNo", "SWCreatedBy", "JSONCreatedBy",
   "LoanAccNoOfBankOrInstnRefNo", "EmailAddress", "AudFrmRegNo", "AuditorMemNo", "AudFrmAadhaar",
@@ -140,11 +150,13 @@ export function anonymise(json) {
       if (PERSON_KEYS.has(key) && isProse(node)) return name(node);
       if (PLACE_KEYS.has(key) && isProse(node)) return where(node);
       if (SCOPED_PLACE_KEYS.has(`${parentKey}.${key}`) && isProse(node)) return where(node);
-      if (OPAQUE_KEYS.has(key) && node.trim()) return /^EmailAddress/.test(key) ? "sample@example.com" : mask(node);
+      if ((OPAQUE_KEYS.has(key) || AADHAAR_KEY.test(key)) && node.trim()) return /^EmailAddress/.test(key) ? "sample@example.com" : mask(node);
       let s = node;
       for (const [from, to] of Object.entries(ids)) if (s.includes(from)) s = s.split(from).join(to);
       return s;
     }
+    // An Aadhaar arrives as a string on some forms and a number on others.
+    if (typeof node === "number" && AADHAAR_KEY.test(String(key))) return Number("9".repeat(String(node).length));
     if (typeof node === "number" && NUMERIC_ID_KEYS.has(key)) {
       return key === "MobileNo" ? 9800000001 : Number("9".repeat(String(node).length));
     }

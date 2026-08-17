@@ -134,6 +134,39 @@ test("a second contact is scrubbed too, whoever it belongs to", () => {
   assert.ok(!values.join("\n").includes("someone.else@gmail.com"));
 });
 
+test("an Aadhaar is scrubbed however the department spells the field", () => {
+  /* A catalogue of exact names missed `AaadhaarOfBuyer` — three a's, ITD's own
+     typo — which is where a property sale records the BUYER's Aadhaar. Four
+     strangers' Aadhaar numbers were headed for a public fixture because the list
+     was spelled correctly and the schema was not. */
+  const withBuyers = JSON.parse(JSON.stringify(RETURN));
+  withBuyers.ITR.ITR3.ScheduleCGFor23 = {
+    LongTermCapGain23: {
+      SaleofLandBuild: {
+        SaleofLandBuildDtls: [{
+          FullConsideration: 74205000,
+          TrnsfImmblPrprty: { TrnsfImmblPrprtyDtls: [{ NameOfBuyer: "REAL BUYER LLP", AaadhaarOfBuyer: "111122223333", PANofBuyer: "ZZZFZ9999Z" }] },
+        }],
+      },
+    },
+  };
+  // And as a NUMBER, which is how some forms send it — src/computation/
+  // ignore-paths.js carries a numeric-leaf rule for exactly that.
+  withBuyers.ITR.ITR3.PartA_GEN1.PersonalInfo.AadhaarCardNo = 111122223333;
+
+  const { clean, values } = anonymise(withBuyers);
+  const buyer = clean.ITR.ITR3.ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild.SaleofLandBuildDtls[0].TrnsfImmblPrprty.TrnsfImmblPrprtyDtls[0];
+  assert.equal(buyer.AaadhaarOfBuyer, "000000000000");
+  assert.match(buyer.NameOfBuyer, /^SAMPLE NAME/);
+  assert.doesNotMatch(buyer.PANofBuyer, /ZZZFZ9999Z/);
+  assert.equal(clean.ITR.ITR3.PartA_GEN1.PersonalInfo.AadhaarCardNo, 999999999999);
+  const blob = values.join("\n");
+  assert.ok(!blob.includes("111122223333"), "no Aadhaar survives as a string");
+  assert.ok(!blob.includes("REAL BUYER"));
+  // The figures either side of it are untouched — the fixture must still be the case.
+  assert.equal(clean.ITR.ITR3.ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild.SaleofLandBuildDtls[0].FullConsideration, 74205000);
+});
+
 test("ITR-1's nature-of-income line is scrubbed, because the mapper prints it as a label", () => {
   // `OthSrcOthNatOfInc` is the assessee's own words for a receipt, and those
   // words routinely name the payer. It is the same case as ITR-2's OthNatOfInc

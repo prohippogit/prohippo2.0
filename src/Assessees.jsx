@@ -5,7 +5,7 @@ import { mobileTen, normaliseMobile, headConsent } from './whatsappSettings';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
   groupsOf, groupLedger, assesseeOutstanding, GROUP_COLORS,
   commsOf, docRequestsOf, docRequestProgress, derivedRequestStatus, noticeDeadline } from './store';
-import { viewedByOfficer, unnamedFields, fmtPortalDate } from './noticeDates';
+import { viewedByOfficer, fmtPortalDate } from './noticeDates';
 import { downloadLedgerPDF } from './ledgerPdf';
 import { MatterModal } from './Other';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
@@ -117,41 +117,28 @@ function fmtSubmitted(v) {
  * checked as a fallback. What ITBA calls the field in the JSON behind that
  * label is not something that could be read off a live row while this was
  * built, so the connector forwards every unmapped scalar and
- * src/noticeDates.js matches the likely names. Where none matches, the raw
- * fields sit behind a disclosure, which is how the real name gets identified
- * from one live notice rather than from more guessing. */
+ * src/noticeDates.js matches the likely names against them. It matches
+ * `responseViewedByAoOn`, which is what the portal calls it. */
 function ViewedByOfficer({ notice, response }) {
   const seen = viewedByOfficer(notice, response);
-  // Only the notice's own unnamed fields are offered: that is where the label
-  // lives on the portal, so that is where the answer will be.
-  const rest = unnamedFields(notice);
-  /* "We looked and the portal said nothing" is a different answer from "we
-     have never looked", and with no marker the screen showed the same blank
-     for both — which is exactly how the first attempt at this went unnoticed.
-     `metaSyncedAt` is stamped whenever the metadata pass touches the notice,
-     empty result included, so the two can be told apart. */
-  const looked = Boolean(notice?.metaSyncedAt);
-  if (!seen && !rest.length && !looked) return null;
+  /* THE DISCOVERY HATCH IS CLOSED, and this is where it used to be.
+   *
+   * Under the date sat a disclosure listing every portal field we had no name
+   * for — `readFlag: Y`, `proceedingLimitationDate: 1711823400000`,
+   * `nameOfAssesse`, `respStatus: S` and so on. It existed for one purpose: to
+   * read the real name of the "Response viewed by AO on" field off a live reply
+   * instead of guessing at it. That worked, the date above is the result, and
+   * what remained in the list was JSON keys and epoch numbers on a card a
+   * practitioner shows a client.
+   *
+   * The fields are still collected and still stored on the notice — that is
+   * where the date is read from, and where the next unnamed field will be found
+   * when one is needed. They are simply not a thing to print. */
+  if (!seen) return null;
   return (
-    <>
-      {seen && (
-        <span style={{fontWeight: 700, color: "#1A8A53"}} title={`Portal field: ${seen.key}`}>
-          · viewed by AO on {fmtPortalDate(seen.value)}
-        </span>
-      )}
-      {(rest.length > 0 || (looked && !seen)) && (
-        <details style={{width: "100%", marginTop: 4}}>
-          <summary style={{fontSize: 10.5, cursor: "pointer", opacity: 0.7}}>
-            {seen ? "What else the portal said" : "No viewed-by-AO date came through — what the portal did send"}
-          </summary>
-          <div style={{fontSize: 10.5, marginTop: 4, lineHeight: 1.7, fontFamily: "ui-monospace, monospace", opacity: 0.85}}>
-            {rest.length
-              ? rest.map((f) => <div key={f.key}>{f.key}: {String(f.value)}</div>)
-              : <div>Nothing beyond the fields already shown. The portal prints the date on its own page, so its API is not returning it on this notice.</div>}
-          </div>
-        </details>
-      )}
-    </>
+    <span style={{fontWeight: 700, color: "#1A8A53"}} title={`Portal field: ${seen.key}`}>
+      · viewed by AO on {fmtPortalDate(seen.value)}
+    </span>
   );
 }
 
@@ -159,7 +146,27 @@ function ViewedByOfficer({ notice, response }) {
 // attachment PDFs. Shared by the Matters view and the per-assessee Notices tab
 // so the two never drift apart.
 function ResponsesBlock({ notice, responses, plain }) {
-  const list = responses || [];
+  /* A REPLY WITH NOTHING IN IT IS NOT A REPLY WORTH A CARD.
+   *
+   * The portal returns rows carrying no remarks and no attachment — and a reply
+   * whose remarks are a single space counts as one of them, which is why this
+   * trims rather than testing for truth. Three such rows appeared under one
+   * s.142(1) notice as three empty green boxes, each saying "Response" and
+   * nothing else.
+   *
+   * A row whose attachments exist but never came down is different, and is kept:
+   * "the portal has two files here that we do not hold" is worth knowing, and
+   * silently dropping it would be the quiet-omission failure again. */
+  const shaped = (responses || []).map((rsp) => {
+    const files = (rsp.attachments || []).filter((at) => at.storagePath);
+    return {
+      rsp,
+      text: String(rsp.remarks || "").trim(),
+      files,
+      missing: (rsp.attachments || []).length - files.length,
+    };
+  });
+  const list = shaped.filter((r) => r.text || r.files.length || r.missing > 0);
   if (list.length === 0) return null;
   return (
     <div style={{marginTop: plain ? 0 : 8, borderTop: plain ? "none" : "1px dashed var(--p-line)", paddingTop: plain ? 0 : 8}}>
@@ -167,22 +174,29 @@ function ResponsesBlock({ notice, responses, plain }) {
         Response{list.length > 1 ? "s" : ""} filed
       </div>
       <div className="col" style={{gap: 8}}>
-        {list.map((rsp, ri) => (
+        {list.map(({ rsp, text, files, missing }, ri) => (
           <div key={ri} style={{padding: "9px 11px", background: "var(--p-mint)", border: "1px solid #CDEED9", borderRadius: 10, fontSize: 12, color: "#3A5A46"}}>
-            <div className="center" style={{gap: 7, justifyContent: "flex-start", marginBottom: rsp.remarks ? 5 : 0, flexWrap: "wrap"}}>
+            <div className="center" style={{gap: 7, justifyContent: "flex-start", marginBottom: text ? 5 : 0, flexWrap: "wrap"}}>
               <span style={{width: 18, height: 18, borderRadius: "50%", background: "#20B978", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0}}><Icon name="check" size={11} stroke={3}/></span>
               <span style={{fontWeight: 800, color: "#1A8A53"}}>{rsp.respType || "Response"}</span>
               {rsp.submittedOn && <span style={{fontWeight: 700, color: "#1A8A53"}}>· filed {fmtSubmitted(rsp.submittedOn)}</span>}
               <ViewedByOfficer notice={notice} response={rsp}/>
             </div>
-            {rsp.remarks && <div style={{whiteSpace: "pre-wrap"}}>{rsp.remarks}</div>}
-            {(rsp.attachments || []).filter((at) => at.storagePath).length > 0 && (
+            {text && <div style={{whiteSpace: "pre-wrap"}}>{text}</div>}
+            {files.length > 0 && (
               <div className="row" style={{gap: 6, flexWrap: "wrap", marginTop: 6}}>
-                {rsp.attachments.filter((at) => at.storagePath).map((at, ci) => (
+                {files.map((at, ci) => (
                   <button key={ci} className="btn btn-ghost btn-xs" title={at.label ? `${at.label} — ${at.filename}` : at.filename} onClick={(e) => { e.stopPropagation(); downloadDoc(at.storagePath, at.filename); }}>
                     <Icon name="doc" size={11}/>{(at.label || at.filename || "PDF").slice(0, 26)}
                   </button>
                 ))}
+              </div>
+            )}
+            {/* Listed by the portal, never received. Said out loud rather than
+                left as a card with nothing on it. */}
+            {missing > 0 && (
+              <div style={{marginTop: files.length ? 6 : 4, opacity: 0.75}}>
+                {missing} attachment{missing > 1 ? "s" : ""} the portal listed but did not return — re-sync to try again.
               </div>
             )}
           </div>

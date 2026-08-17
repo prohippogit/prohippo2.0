@@ -209,7 +209,12 @@ async function syncResponses(page, job, pan, din, headerSeqNo) {
   const refresh = [];
   for (const rr of list) {
     const atts = Array.isArray(rr.attachmentLst) ? rr.attachmentLst : [];
-    if (!rr || (!rr.remarks && atts.length === 0)) continue;
+    /* Remarks TRIMMED, not merely present. ITBA returns reply rows whose remarks
+       are a single space and whose attachment list is empty; stored, they became
+       empty green "Response" cards on the notice — three of them under one
+       s.142(1) notice, saying nothing at all. A row with no words and no file is
+       not a reply anyone can read. */
+    if (!rr || (!String(rr.remarks || "").trim() && atts.length === 0)) continue;
     const responseId = String(rr.responseId || rr.remarksHash || rr.submittedOn || (rr.remarks || "").slice(0, 24));
     if (knownResp.has(responseId)) {
       refresh.push({ responseId, extra: extraFields(rr, RESPONSE_MAPPED) });

@@ -114,20 +114,18 @@ export function viewedByOfficer(...records) {
   return null;
 }
 
-/* Everything the portal sent that we have no name for.
+/* WHAT ELSE THE PORTAL SENT is no longer shown, and there is no helper for it.
  *
- * Shown on screen, quietly, behind a disclosure. It is how the real name of the
- * "Response viewed by AO on" field gets identified from one live notice instead
- * of from more guessing — and it costs nothing, because the connector is
- * already carrying these. */
-export function unnamedFields(record) {
-  const extra = record?.extra;
-  if (!extra || typeof extra !== "object") return [];
-  const known = viewedByOfficer(record);
-  return Object.entries(extra)
-    .filter(([k]) => k !== known?.key)
-    .map(([key, value]) => ({ key, value }));
-}
+ * There used to be `unnamedFields()`, feeding a disclosure on the notice card
+ * that listed every portal field we had no name for. It existed to identify the
+ * real name of the field above — `responseViewedByAoOn` — off a live reply
+ * rather than by guessing, and having done that it was printing JSON keys and
+ * epoch numbers on a card practitioners show their clients.
+ *
+ * The fields are still carried by the connector and still stored in `extra` on
+ * the notice: that is where the date above is read from, and where the next
+ * unnamed field can be read when one is wanted. Nothing renders them, and a
+ * helper whose only purpose was to render them would be an invitation to. */
 
 /** The portal sends dates as epoch millis or as printed text; render either. */
 export function fmtPortalDate(v) {

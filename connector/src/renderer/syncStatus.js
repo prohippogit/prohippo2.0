@@ -46,6 +46,12 @@ const SyncStatus = (function () {
     { key: "running", label: "Syncing now" },
     { key: "queued", label: "Waiting" },
     { key: "failed", label: "Needs attention" },
+    /* A run that finished without getting everything. Its own section, above
+       the finished work and below the broken, because it is neither: nothing
+       needs fixing, but nothing should be read as complete either. It used to
+       land in "Synced" — a green pill over an assessee whose filed appeal had
+       come down without its PDF, which is the reported complaint in one word. */
+    { key: "partial", label: "Partly synced" },
     { key: "idle", label: "Not synced yet" },
     { key: "done", label: "Synced" },
   ];
@@ -63,11 +69,15 @@ const SyncStatus = (function () {
     const phase = (evt && evt.phase) || "";
     if (phase === "queued") return "queued";
     if (phase === "start") return "running";
-    if (phase === "done") return "done";
+    /* `done` is the only phase whose LEVEL is read, and only to tell the two
+       kinds of finished apart: the pool warns on a PAN it could not fetch
+       everything for (pool.js), and the difference between that and a clean run
+       is the whole point of this row. */
+    if (phase === "done") return (evt && evt.level) === "warn" ? "partial" : "done";
     if (phase === "error" || phase === "stopped") return "failed";
     // A finished row is not dragged back into "Syncing now" by a late straggler
     // (the pool emits `synced` and `timing` around the end of a PAN).
-    if (prev === "done" || prev === "failed") return prev;
+    if (prev === "done" || prev === "failed" || prev === "partial") return prev;
     return "running";
   }
 
@@ -139,6 +149,7 @@ const SyncStatus = (function () {
     const stage = groupOf(st);
     const phase = (st && st.phase) || "";
     if (stage === "done") return { cls: "success", text: "synced" };
+    if (stage === "partial") return { cls: "warn", text: "partly synced" };
     if (stage === "failed") return phase === "stopped"
       ? { cls: "warn", text: "stopped" }
       : { cls: "error", text: "error" };

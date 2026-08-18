@@ -216,6 +216,13 @@ async function runPool(jobs, onEvent, opts = {}) {
 
       try {
         emit("start", `Sync started (${scope})`, "info", 3);
+        /* WHEN THIS PAN RUNS OUT, told to the passes rather than only enforced
+           over them. A deadline the work cannot see is a deadline the work walks
+           into: the appeals pass would start a Form 35 with forty seconds left
+           and be cut off mid-render, having spent the time and saved nothing.
+           Knowing the wall, a pass can stop one step short of it and say what it
+           did not reach. See BUDGETS in config.js. */
+        job.deadlineAt = Date.now() + TIMEOUTS.pan;
         const r = await withPanDeadline(
           runPanSync({ context, job, scope, emit }),
           TIMEOUTS.pan, context,
@@ -267,7 +274,26 @@ async function runPool(jobs, onEvent, opts = {}) {
           : [];
         const took = r.timing ? ` · ${(r.timing.totalMs / 1000).toFixed(1)}s` : "";
         const where = heaviest.length ? ` (${heaviest.join(", ")})` : "";
-        emit("done", (parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date") + took + where, "success", 100);
+        /* "SYNCED" IS A CLAIM, AND IT HAS TO BE TRUE.
+         *
+         * A pass that could not finish — a Form 35 the renderer would not
+         * render, an attachment that never came, a pass that ran out of its
+         * share of the deadline — used to end here indistinguishable from a
+         * clean run: green pill, "Done", and a practitioner told the portal had
+         * nothing more on it. That was the worst part of what was reported, and
+         * it is the part that made the rest invisible.
+         *
+         * What did come down is still saved and the stamp still goes on, because
+         * the stamp records when the portal was last read, not that there is
+         * nothing left to read. What is outstanding is now said, on the row,
+         * in the words of the thing that is missing. */
+        const short = Array.isArray(r.incomplete) ? r.incomplete : [];
+        if (short.length) {
+          const got = parts.length ? ` — ${parts.join(", ")}` : "";
+          emit("done", `Partly synced${got}${took}${where}. Still to fetch: ${short.join("; ")}. The next sync starts there.`, "warn", 100);
+        } else {
+          emit("done", (parts.length ? `Done — ${parts.join(", ")}` : "Done — up to date") + took + where, "success", 100);
+        }
       } catch (err) {
         // Something the user asked for is not a failure to report as one.
         const held = abandoned.get(job.assesseeId) || stopping;

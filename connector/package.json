@@ -1,7 +1,7 @@
 {
   "name": "prohippo-connector",
   "productName": "ProHippo Connector",
-  "version": "1.12.3",
+  "version": "1.12.4",
   "private": true,
   "description": "Local desktop connector for ProHippo — parallel, human-paced portal sync across many PANs on a residential IP.",
   "author": "MEHTAJI BIZCON LLP",

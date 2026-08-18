@@ -377,6 +377,9 @@ function watchPortalAssessees(onChange) {
 //   knownByProc      per-proceeding { n: notice count, o: has an order } so a
 //                    proceeding whose count hasn't moved is skipped entirely
 //   knownResponseIds replies already recorded
+//   appealFormsPending filed Form 35s held without a document they should have
+//                    — the one thing that brings the appeals pass back to a
+//                    form it has already written a docKey for
 //   knownActiveProcs proceedingReqIds we hold as Active — lets "eproc" scope
 //                    spot which ones just left FYA (i.e. closed) without
 //                    scanning the whole FYI list

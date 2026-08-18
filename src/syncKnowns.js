@@ -33,12 +33,18 @@
  *                     never been read
  *   noticeDocsPending notices held with only ONE of their documents
  *   procNeedsDocs     the proceedings those notices sit in
+ *   appealFormsPending filed Form 35s held WITHOUT a document they should have
  *   knownActiveProcs  proceedingReqIds held as Active
  *   knownAckNums      returns already on file
  *   knownOrderRefs    CPC references already downloaded and unlocked
  *   lockedOrderRefs   orders held but not decryptable
  *   knownFormAcks     returns whose rendered ITR form PDF is already stored
  */
+
+/* How many syncs may go looking for the same missing appeal document before it
+   is accepted as one the portal will not hand over. Kept in step with MAX_TRIES
+   in connector/src/main/portalAppeals.js, which is the pass this feeds. */
+export const APPEAL_MAX_TRIES = 3;
 
 /* The portal states every timestamp as epoch milliseconds. A reply we hold
    carries whatever it was stored as — the ingest keeps it as a string — so this
@@ -90,6 +96,16 @@ export function buildSyncKnowns(notices, pan, matters, returns, dob) {
      Orders are excluded — downloadClosureOrder always returned its whole list. */
   const noticeDocsPending = [];
   const procNeedsDocs = new Set();
+  /* A filed Form 35 whose own PDF never rendered, or whose grounds never came
+     down. The appeals pass skips anything whose `f35:<ackNum>` is in knownDins,
+     and the ingest writes that key however badly the fetch went — so a form
+     saved without its documents was marked as held for ever and no later sync
+     would look at it again. That is why re-syncing changed nothing for the
+     practitioner who reported it.
+     Self-limiting, the way noticeDocsPending is, but by a count rather than a
+     stamp: the ingest counts the tries, and after APPEAL_MAX_TRIES a document
+     the portal is never going to hand over stops costing every future sync. */
+  const appealFormsPending = [];
 
   (notices || []).forEach((n) => {
     if (n.pan !== pan) return;
@@ -98,6 +114,14 @@ export function buildSyncKnowns(notices, pan, matters, returns, dob) {
     if (n.din && !n.isOrder && !n.docsSyncedAt) {
       noticeDocsPending.push({ din: String(n.din), fileName: String(n.fileName || "") });
       if (n.proceedingReqId) procNeedsDocs.add(String(n.proceedingReqId));
+    }
+    if (n.isAppealForm && n.appeal && n.appeal.ackNum) {
+      const ap = n.appeal;
+      const missing = Array.isArray(ap.attachmentsMissing) ? ap.attachmentsMissing.length : 0;
+      const tries = Number(ap.fetchTries) || 0;
+      if ((ap.formPdfError || missing) && tries < APPEAL_MAX_TRIES) {
+        appealFormsPending.push({ ackNum: String(ap.ackNum), tries });
+      }
     }
     const rs = replyState(n);
     if (n.din) noticeReplies[String(n.din)] = rs;
@@ -155,7 +179,7 @@ export function buildSyncKnowns(notices, pan, matters, returns, dob) {
   return {
     knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds],
     noticeReplies, procNeedsMeta: [...procNeedsMeta],
-    noticeDocsPending, procNeedsDocs: [...procNeedsDocs],
+    noticeDocsPending, procNeedsDocs: [...procNeedsDocs], appealFormsPending,
     knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, knownFormAcks,
     canUnlockOrders: Boolean(dob),
   };

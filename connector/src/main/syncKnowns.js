@@ -14,6 +14,12 @@
 // what makes it testable, and testable is the whole point.
 "use strict";
 
+/* How many syncs may go looking for the same missing appeal document before it
+   is accepted as one the portal will not hand over. Kept in step with MAX_TRIES
+   in portalAppeals.js, which is the pass this feeds, and with the same constant
+   in src/syncKnowns.js. */
+const APPEAL_MAX_TRIES = 3;
+
 /* The portal states every timestamp as epoch milliseconds. A reply we hold
    carries whatever it was stored as — the ingest keeps it as a string — so this
    accepts both and answers 0 for anything it cannot read, which reads as "we
@@ -61,6 +67,13 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
      Self-limiting: the ingest stamps `docsSyncedAt` however the sweep goes. */
   const noticeDocsPending = [];
   const procNeedsDocs = new Set();
+  /* A filed Form 35 held WITHOUT a document it should have — its own rendered
+     PDF, or one of the grounds uploaded with it. The appeals pass skips any form
+     whose `f35:<ackNum>` is already a known docKey, and the ingest writes that
+     key however badly the fetch went, so an incomplete form was marked as held
+     for ever. Capped by a try count so a document the portal will never render
+     stops costing every future sync. See portalAppeals.js. */
+  const appealFormsPending = [];
 
   (notices || []).forEach((n) => {
     if (n.pan !== pan) return;
@@ -69,6 +82,14 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
     if (n.din && !n.isOrder && !n.docsSyncedAt) {
       noticeDocsPending.push({ din: String(n.din), fileName: String(n.fileName || "") });
       if (n.proceedingReqId) procNeedsDocs.add(String(n.proceedingReqId));
+    }
+    if (n.isAppealForm && n.appeal && n.appeal.ackNum) {
+      const ap = n.appeal;
+      const missing = Array.isArray(ap.attachmentsMissing) ? ap.attachmentsMissing.length : 0;
+      const tries = Number(ap.fetchTries) || 0;
+      if ((ap.formPdfError || missing) && tries < APPEAL_MAX_TRIES) {
+        appealFormsPending.push({ ackNum: String(ap.ackNum), tries });
+      }
     }
     const rs = replyState(n);
     if (n.din) noticeReplies[String(n.din)] = rs;
@@ -122,10 +143,10 @@ function buildSyncKnowns(notices, pan, matters, returns, dob) {
   return {
     knownDins: [...knownDins], knownByProc, knownResponseIds: [...knownResponseIds],
     noticeReplies, procNeedsMeta: [...procNeedsMeta],
-    noticeDocsPending, procNeedsDocs: [...procNeedsDocs],
+    noticeDocsPending, procNeedsDocs: [...procNeedsDocs], appealFormsPending,
     knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, knownFormAcks,
     canUnlockOrders: Boolean(dob),
   };
 }
 
-module.exports = { buildSyncKnowns, replyState, toMillis };
+module.exports = { buildSyncKnowns, replyState, toMillis, APPEAL_MAX_TRIES };

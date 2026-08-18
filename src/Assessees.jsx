@@ -2315,6 +2315,17 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                       {appeal && ap.formPdfError && !apAtts.some((at) => /form 35/i.test(at.label || at.filename || "")) && (
                         <div className="muted" style={{marginTop: 6, fontSize: 10.5, color: "var(--p-danger)"}}>Form 35 PDF couldn't be fetched — {ap.formPdfError}</div>
                       )}
+                      {/* GROUNDS THAT NEVER ARRIVED. The portal lists what was
+                          uploaded with the appeal; a download that failed used
+                          to be dropped in silence, so a Form 35 with no grounds
+                          attached looked exactly like one filed without any.
+                          The count is the portal's own, and the sync comes back
+                          for these on its next run. */}
+                      {appeal && (ap.attachmentsMissing || []).length > 0 && (
+                        <div className="muted" style={{marginTop: 6, fontSize: 10.5, color: "var(--p-danger)"}}>
+                          {ap.attachmentsMissing.length} of {ap.attachmentsExpected || ap.attachmentsMissing.length} attachment(s) not fetched yet — {ap.attachmentsMissing.slice(0, 3).join(", ")}
+                        </div>
+                      )}
                       {!appeal && n.aiSummary && (n.aiSummary.summary || (n.aiSummary.items || []).length > 0) && (
                         <div style={{marginTop: 8, padding: "8px 10px", background: "white", borderRadius: 8, border: "1px solid var(--p-line-2)", fontSize: 12}}>
                           <div className="center" style={{gap: 6, justifyContent: "flex-start", marginBottom: (n.aiSummary.items || []).length ? 5 : 0}}>

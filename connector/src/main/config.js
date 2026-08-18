@@ -68,6 +68,14 @@ const TIMEOUTS = {
   api: 45000,        // one JSON service call
   doc: 90000,        // one document download by id
   binary: 150000,    // a rendered form or an intimation (can be tens of MB)
+  /* A FILED FORM RENDERED TO PDF, which is a much smaller thing than the
+     `binary` above and had been sharing its ceiling.
+     `binary` is sized for an 11 MB rendered return. A Form 35 is a few hundred
+     kilobytes, and pdfweb either renders it in seconds or 502s. Waiting two and
+     a half minutes — twice, because the call is retried — for an answer that was
+     never coming is most of why the appeals pass ran into the per-PAN deadline
+     and took everything queued behind it with it. */
+  render: 60000,
   retries: 1,        // one more go before a call is given up on
   retryPause: { min: 1200, max: 2800 },
   /* One PAN, end to end. A first sync of a heavy file — years of returns, a
@@ -75,6 +83,33 @@ const TIMEOUTS = {
      past that; it is there to stop ONE assessee holding a pool slot for the
      rest of the evening, not to hurry anything along. */
   pan: 15 * 60 * 1000,
+};
+
+/* HOW LONG ONE PASS MAY HAVE OF THE PAN'S TIME.
+ *
+ * A deadline per call is not enough on its own. The appeals pass makes a dozen
+ * calls per filed Form 35 — the form data, the rendered form, the ARN receipt,
+ * the attachment list, then a download for each attachment — and every one of
+ * them can sit at its own ceiling without a single one of them timing out
+ * "wrongly". An assessee with four filed appeals could therefore spend the whole
+ * per-PAN deadline inside this one pass, and the passes AFTER it (filed returns,
+ * CPC intimations) then never ran at all. From the window that looked like the
+ * sync stalling at 88% and skipping the rest, which is exactly what was
+ * reported.
+ *
+ * So a pass gets a slice of the run, not the run. When the slice is gone it
+ * stops where it is, says which forms it did not reach, and leaves them for the
+ * next sync — which now knows to come back for them (see syncKnowns.js
+ * `appealFormsPending`). Nothing is lost: everything already fetched is saved,
+ * and a document not fetched today is fetched tomorrow.
+ *
+ * `reserve` is what is held back from the per-PAN deadline for whatever comes
+ * after: appeals will not START a form it cannot finish inside the time the
+ * returns pass needs. */
+const BUDGETS = {
+  appeals: 6 * 60 * 1000,      // the whole filed-Form-35 pass
+  appealForm: 2 * 60 * 1000,   // one Form 35: its data, its PDFs, its attachments
+  reserve: 3 * 60 * 1000,      // kept back for the passes that follow
 };
 
 // Google sign-in (system-browser loopback flow) needs a Google OAuth "Desktop
@@ -91,4 +126,4 @@ function getGoogleOAuthConfig() {
   return null;
 }
 
-module.exports = { firebaseConfig, FUNCTIONS_REGION, PORTAL, POOL, TIMEOUTS, getGoogleOAuthConfig };
+module.exports = { firebaseConfig, FUNCTIONS_REGION, PORTAL, POOL, TIMEOUTS, BUDGETS, getGoogleOAuthConfig };

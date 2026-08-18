@@ -577,10 +577,19 @@ async function syncPortalData(page, job, scope, emit, summary) {
   }
 
   if (scope === "all") {
+    /* BEST-EFFORT, BUT NOT SILENT. A pass that fell over here used to leave no
+       trace at all: the sync carried on, finished, and reported success. The
+       swallow is still right — one portal hiccup in the appeals pass should not
+       throw away the proceedings that did come down — but what was swallowed is
+       now on the summary, so the window says "partly synced" rather than
+       "synced" over it.
+       Each pass keeps its own share of the per-PAN deadline (BUDGETS in
+       config.js), which is what stops the first of them taking the run and
+       leaving the second unrun and unmentioned. */
     try { await syncAppealForms(page, job, pan, summary, emit); }
-    catch { /* appeals are best-effort; don't fail the whole sync */ }
+    catch (e) { (summary.incomplete || (summary.incomplete = [])).push(`filed appeals (${(e && e.message) || e})`); }
     try { await syncReturns(page, job, pan, summary, emit); }
-    catch { /* returns are best-effort too; a portal hiccup here is not a failed sync */ }
+    catch (e) { (summary.incomplete || (summary.incomplete = [])).push(`filed returns (${(e && e.message) || e})`); }
   }
   return summary;
 }

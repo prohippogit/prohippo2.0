@@ -58,6 +58,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Notices held with only one of their documents — see syncNotices.
           noticeDocsPending: Array.isArray(creds.noticeDocsPending) ? creds.noticeDocsPending : [],
           procNeedsDocs: Array.isArray(creds.procNeedsDocs) ? creds.procNeedsDocs : [],
+          // Filed Form 35s held without a document they should have — see
+          // syncAppealForms. Without this a form saved with a failed render is
+          // marked as held for ever and no later sync goes back for it.
+          appealFormsPending: Array.isArray(creds.appealFormsPending) ? creds.appealFormsPending : [],
           knownActiveProcs: Array.isArray(creds.knownActiveProcs) ? creds.knownActiveProcs : [],
           knownAckNums: Array.isArray(creds.knownAckNums) ? creds.knownAckNums : [],
           knownOrderRefs: Array.isArray(creds.knownOrderRefs) ? creds.knownOrderRefs : [],

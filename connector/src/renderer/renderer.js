@@ -653,11 +653,13 @@ function paintRow(el, st) {
      were still being fetched. */
   bar.classList.toggle("ok", stage === "done");
   bar.classList.toggle("err", stage === "failed" && st.phase !== "stopped");
-  bar.classList.toggle("stop", stage === "failed" && st.phase === "stopped");
+  // A run that finished without everything is not green. Same amber as a PAN
+  // somebody stopped: the attempt is over, and something is still outstanding.
+  bar.classList.toggle("stop", stage === "partial" || (stage === "failed" && st.phase === "stopped"));
   // A moving stripe while the portal is being waited on. A bar that sits at 62%
   // for twenty seconds and a bar that has died look identical without it.
   bar.classList.toggle("live", stage === "running");
-  if (stage === "done") { bar.style.width = "100%"; pctEl.textContent = "100%"; }
+  if (stage === "done" || stage === "partial") { bar.style.width = "100%"; pctEl.textContent = "100%"; }
   if (stage === "failed") {
     pctEl.textContent = "—";
     // A failure fills the bar because the attempt is over; a PAN somebody
@@ -729,42 +731,61 @@ function showSyncDone(results, jobs) {
     stopped: Boolean(r.stopped),
     name: (byId.get(r.assesseeId) || {}).label || r.assesseeId,
     error: r.error || "",
+    // What a PAN that finished did NOT get. See pool.js: a run can succeed and
+    // still be short of a Form 35's PDF or its attachments.
+    short: (Array.isArray(r.incomplete) ? r.incomplete : []).join("; "),
   }));
   const unfinished = rows.filter((r) => !r.ok);
+  /* "All N assessees are up to date" was printed over runs that were nothing of
+     the kind. Every PAN here succeeded — it logged in, it read the portal, it
+     saved what came — and some of them came back short, which is a different
+     sentence and needs to be said in one. */
+  const partial = rows.filter((r) => r.ok && r.short);
   // A run somebody stopped, or a PAN they skipped, is not a failure — nothing
   // is wrong and nothing needs looking into. Counted and named separately so
   // the card doesn't report the user's own decision back to them as a problem.
   const stopped = unfinished.filter((r) => r.stopped);
   const failed = unfinished.filter((r) => !r.stopped);
-  lastFailedIds = (results || []).filter((r) => r.ok === false).map((r) => r.assesseeId);
+  // What the "select the ones that didn't finish" button selects. A PAN that
+  // came back short belongs here too — re-running it is exactly how the missing
+  // document is fetched, and it is the one thing the user can do about it.
+  lastFailedIds = (results || [])
+    .filter((r) => r.ok === false || (Array.isArray(r.incomplete) && r.incomplete.length))
+    .map((r) => r.assesseeId);
   const done = rows.length - unfinished.length;
 
   const icon = $("doneIcon");
-  icon.className = "doneicon" + (failed.length === rows.length && rows.length ? " err" : unfinished.length ? " warn" : "");
-  icon.textContent = unfinished.length ? "!" : "✓";
+  icon.className = "doneicon" + (failed.length === rows.length && rows.length ? " err" : (unfinished.length || partial.length) ? " warn" : "");
+  icon.textContent = (unfinished.length || partial.length) ? "!" : "✓";
 
   $("doneTitle").textContent = failed.length
     ? "Sync finished with problems"
-    : stopped.length ? "Sync stopped" : "Sync finished";
+    : stopped.length ? "Sync stopped"
+      : partial.length ? "Sync finished — some documents still to come"
+        : "Sync finished";
   $("doneSub").textContent = failed.length
     ? `${failed.length} of ${rows.length} couldn't be synced. The rest are up to date.`
     : stopped.length
       ? `${done} of ${rows.length} finished before you stopped. Nothing already saved is lost — the next sync carries on from there.`
-      : `All ${rows.length} ${rows.length === 1 ? "assessee is" : "assessees are"} up to date.`;
+      : partial.length
+        ? `${done - partial.length} of ${rows.length} are up to date. ${partial.length} came back short of a document or two — everything fetched is saved, and the next sync starts with what is missing.`
+        : `All ${rows.length} ${rows.length === 1 ? "assessee is" : "assessees are"} up to date.`;
 
   $("doneStats").innerHTML =
-    `<div class="st ok"><div class="n">${done}</div><div class="k">Synced</div></div>` +
+    `<div class="st ok"><div class="n">${done - partial.length}</div><div class="k">Synced</div></div>` +
+    (partial.length ? `<div class="st warn"><div class="n">${partial.length}</div><div class="k">Partly synced</div></div>` : "") +
     (failed.length ? `<div class="st err"><div class="n">${failed.length}</div><div class="k">Failed</div></div>` : "") +
     (stopped.length ? `<div class="st warn"><div class="n">${stopped.length}</div><div class="k">Stopped</div></div>` : "");
 
-  // List the failures only — a wall of green tells nobody anything, and the
-  // rows themselves already show each success.
+  // The ones that need reading: what failed, and what came back short. A wall of
+  // green tells nobody anything, and the rows themselves already show a success.
   $("doneList").innerHTML = unfinished
     .map((r) => `<div class="dl ${r.stopped ? "held" : "bad"}"><span class="dot"></span><div class="nm2"><b>${escapeHtml(r.name)}</b><span>${escapeHtml(r.error || "Sync failed")}</span></div></div>`)
+    .concat(partial.map((r) => `<div class="dl held"><span class="dot"></span><div class="nm2"><b>${escapeHtml(r.name)}</b><span>${escapeHtml("Still to fetch: " + r.short)}</span></div></div>`))
     .join("");
 
   $("doneRetryBtn").textContent = failed.length ? "Select the failed ones" : "Select the ones that didn't finish";
-  $("doneRetryBtn").classList.toggle("hidden", unfinished.length === 0);
+  $("doneRetryBtn").classList.toggle("hidden", unfinished.length + partial.length === 0);
   $("doneOverlay").classList.remove("hidden");
 }
 

@@ -78,6 +78,11 @@ export async function detectExtension() {
  *                        [{din, fileName}] so the sweep skips what we hold
  *   - procNeedsDocs:     the proceedings those notices sit in, so an unchanged
  *                        one is not skipped before the sweep can reach them
+ *   - appealFormsPending: filed Form 35s held WITHOUT a document they should
+ *                        have — [{ackNum, tries}]. The appeals pass skips any
+ *                        form whose docKey it already holds, and the ingest
+ *                        writes that key however badly the fetch went, so this
+ *                        is the only thing that brings it back to one
  *   - knownActiveProcs:  proceedingReqIds we hold as Active — used in "eproc" to
  *                        spot ones that left FYA (just closed) and grab the order
  *   - knownAckNums:      returns already on file — a filed return never changes
@@ -87,7 +92,7 @@ export async function detectExtension() {
  *   - knownFormAcks:     returns whose rendered ITR form PDF is already stored —
  *                        that one is ~11 MB, so it is rationed per sync run
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeReplies = {}, procNeedsMeta = [], noticeDocsPending = [], procNeedsDocs = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeReplies = {}, procNeedsMeta = [], noticeDocsPending = [], procNeedsDocs = [], appealFormsPending = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
   /* EVERY FIELD IS NAMED TWICE HERE, and one of them used to be named once.
      `procNeedsMeta` was built by buildSyncKnowns and spread into the call — and
      dropped on this line, because a field this signature does not destructure
@@ -95,7 +100,7 @@ export async function openPortalLogin({ portalUserId, portalPassword, assesseeId
      skipping the proceedings it was meant to reach back into. If you add a
      known, add it in both places, and test/syncKnowns.test.mjs will tell you
      when you have forgotten. */
-  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, noticeReplies, procNeedsMeta, noticeDocsPending, procNeedsDocs, knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, canUnlockOrders, knownFormAcks, formRequest, background, clientRef }, 8000);
+  const res = await request("OPEN_PORTAL_LOGIN", { portalUserId, portalPassword, assesseeId, mode, scope, knownDins, knownByProc, knownResponseIds, noticeReplies, procNeedsMeta, noticeDocsPending, procNeedsDocs, appealFormsPending, knownActiveProcs, knownAckNums, knownOrderRefs, lockedOrderRefs, canUnlockOrders, knownFormAcks, formRequest, background, clientRef }, 8000);
   if (!res || !res.ok) throw new Error(res?.error || "Could not open the portal.");
   return res;
 }

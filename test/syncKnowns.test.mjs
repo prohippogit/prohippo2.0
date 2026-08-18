@@ -51,6 +51,30 @@ const NOTICES = [
   },
   // A closure order held for another proceeding, keyed by docKey, not a DIN.
   { pan: PAN, docKey: "sat:440242261", isOrder: true, proceedingReqId: "61138249", docsSyncedAt: "2026-01-02T00:00:00.000Z" },
+  /* Three filed Form 35s, which is where the SECOND reported version of the
+     same fault lived. The appeals pass skips any form whose `f35:<ackNum>` it
+     already holds, and the ingest writes that key however the fetch went — so
+     the first two below, saved without documents they should have, were held
+     for ever and no re-sync went back for them. */
+  {
+    pan: PAN, docKey: "f35:132456789012345", isAppealForm: true, proceedingReqId: "61138249",
+    appeal: { ackNum: "132456789012345", formPdfError: "HTTP 502", attachmentsExpected: 1, attachmentsMissing: [], fetchTries: 1, attachments: [] },
+  },
+  {
+    pan: PAN, docKey: "f35:132456789012346", isAppealForm: true, proceedingReqId: "61138249",
+    appeal: { ackNum: "132456789012346", formPdfError: "", attachmentsExpected: 2, attachmentsMissing: ["Grounds of Appeal.pdf"], fetchTries: 0, attachments: [{ storagePath: "users/x/f35.pdf", filename: "Form 35 - 132456789012346.pdf" }] },
+  },
+  // Asked for as many times as it is going to be: the portal is not going to
+  // render this one, and it must stop costing every future sync.
+  {
+    pan: PAN, docKey: "f35:132456789012347", isAppealForm: true, proceedingReqId: "61138249",
+    appeal: { ackNum: "132456789012347", formPdfError: "HTTP 502", attachmentsExpected: 0, attachmentsMissing: [], fetchTries: 3, attachments: [] },
+  },
+  // And one that came down whole, which must never be fetched again.
+  {
+    pan: PAN, docKey: "f35:132456789012348", isAppealForm: true, proceedingReqId: "61138249",
+    appeal: { ackNum: "132456789012348", formPdfError: "", attachmentsExpected: 1, attachmentsMissing: [], fetchTries: 0, attachments: [{ storagePath: "users/x/g.pdf", filename: "Grounds.pdf" }] },
+  },
   // Another assessee's notice, which must not leak into this PAN's knowns.
   { pan: "AAAPZ9999A", din: "999", proceedingReqId: "99999", responses: [{ responseId: "9", submittedOn: "1800000000000" }] },
 ];
@@ -85,6 +109,25 @@ test("the web app's rules and the connector's produce the same knowns", () => {
     else assert.deepEqual(x, y, k);
   }
   assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort(), "and neither carries a field the other does not");
+});
+
+test("a filed Form 35 held without its documents is asked for again — and one held whole is not", () => {
+  /* The reported fault: "most of the time it does not fetch the pdfs of all the
+     Form 35 and its attachments", and re-syncing changed nothing. It changed
+     nothing because the ingest had already written the docKey the appeals pass
+     skips on, so the form was "held" — with no PDF behind it. */
+  for (const fn of [web, connector]) {
+    const pending = build(fn).appealFormsPending;
+    assert.deepEqual(pending, [
+      { ackNum: "132456789012345", tries: 1 }, // its PDF never rendered
+      { ackNum: "132456789012346", tries: 0 }, // its grounds never came down
+    ]);
+    // Not the one asked for three times already — a document the portal will
+    // genuinely never hand over must stop costing every sync from here on.
+    assert.ok(!pending.some((p) => p.ackNum === "132456789012347"));
+    // And never the complete one.
+    assert.ok(!pending.some((p) => p.ackNum === "132456789012348"));
+  }
 });
 
 test("both carry procNeedsMeta — the field one of them used to omit entirely", () => {

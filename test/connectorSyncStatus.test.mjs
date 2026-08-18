@@ -43,6 +43,29 @@ test("a sync ends in Synced and stays there", () => {
   assert.deepEqual(S.pillFor({ stage: "done" }), { cls: "success", text: "synced" });
 });
 
+test("a run that finished short of the portal's documents does not say 'synced'", () => {
+  /* The fourth complaint, and the one that hid the other three from anybody
+     looking at the window: "it shows the user that the data is synced though the
+     data is not synced."
+
+     A PAN whose filed Form 35 came down without its PDF, or whose appeals pass
+     ran out of its share of the run, finished successfully — it logged in, it
+     read the portal, it saved what came — and got the same green pill as a run
+     that got everything. The pool now warns on the `done` event when something
+     is outstanding (see pool.js), and that is the ONE place a level is read. */
+  const stage = S.stageFor("running", { phase: "done", level: "warn" });
+  assert.equal(stage, "partial");
+  assert.deepEqual(S.pillFor({ stage }), { cls: "warn", text: "partly synced" });
+  // And it stays partial: the pool's own trailing "synced"/"timing" events must
+  // not quietly promote it.
+  assert.equal(S.stageFor(stage, { phase: "synced" }), "partial");
+  assert.equal(S.stageFor(stage, { phase: "timing" }), "partial");
+  // It has its own section, and it reads between "needs attention" and "synced".
+  const order = S.GROUPS.map((g) => g.key);
+  assert.ok(order.indexOf("partial") > order.indexOf("failed"));
+  assert.ok(order.indexOf("partial") < order.indexOf("done"));
+});
+
 test("'Logged in' does not count as finished", () => {
   /* THIS IS THE BUG THAT MADE THE OLD LIST UNREADABLE. The login state machine
      reports success a fifth of the way through a sync, and the row was coloured

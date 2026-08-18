@@ -58,7 +58,12 @@ const ITR_FORM = { formName: "FO-006-ITRST" }; // the filed-returns page's own f
  * Returns the same `{ ok:false, … }` shape the in-page helpers already return
  * on a network error, plus `timedOut:true`. No caller has to learn anything
  * new: every one of them already handles a call that did not come back. */
-async function withDeadline(page, fn, arg, ms, what) {
+async function withDeadline(page, fn, arg, ms, what, retries) {
+  /* A caller may ask for FEWER goes than the default — never for more. The one
+     that does is the appeals pass, which is working to a budget and would rather
+     move on to the next form than spend the rest of its slice asking a renderer
+     that has already said no. */
+  const maxRetries = Number.isFinite(retries) ? Math.max(0, Math.min(retries, TIMEOUTS.retries)) : TIMEOUTS.retries;
   for (let attempt = 0; ; attempt++) {
     const res = await once(page, fn, arg, ms, what);
     if (res && res.ok) return res;
@@ -69,7 +74,7 @@ async function withDeadline(page, fn, arg, ms, what) {
        portal falling over (5xx / 429). A 400 or a 404 means the answer is "no",
        and asking twice is a second portal round trip for the same no. */
     const worthRetrying = Boolean(res) && (res.timedOut || res.error || res.status >= 500 || res.status === 429);
-    if (!worthRetrying || attempt >= TIMEOUTS.retries) return res;
+    if (!worthRetrying || attempt >= maxRetries) return res;
     console.warn(`[portal] ${what} ${res.timedOut ? `timed out after ${Math.round(ms / 1000)}s` : `failed (${res.status || res.error})`} — retrying once`);
     await jsleep(TIMEOUTS.retryPause.min, TIMEOUTS.retryPause.max);
   }
@@ -108,11 +113,11 @@ function once(page, fn, arg, ms, what) {
 //
 // extraHeaders covers the handful of services that read a value from a header
 // rather than the body (the ITR form preview wants `ackNum` up there).
-function apiCall(page, { path, serviceName, method, payload, extraHeaders }) {
+function apiCall(page, { path, serviceName, method, payload, extraHeaders, timeoutMs, retries }) {
   return withDeadline(
     page, inPageApiCall,
     { path, serviceName, method, payload, extraHeaders },
-    TIMEOUTS.api, serviceName || path
+    timeoutMs || TIMEOUTS.api, serviceName || path, retries
   );
 }
 
@@ -141,8 +146,8 @@ const inPageApiCall = async ({ path, serviceName, method, payload, extraHeaders,
 
 // Download a document (notice/order PDF) by id → base64 + filename. Port of
 // portal-net.js getDoc().
-function getDoc(page, { docId }) {
-  return withDeadline(page, inPageGetDoc, { docId: String(docId), DOC_BASE: PATHS.DOC_BASE }, TIMEOUTS.doc, `document ${docId}`);
+function getDoc(page, { docId, timeoutMs, retries }) {
+  return withDeadline(page, inPageGetDoc, { docId: String(docId), DOC_BASE: PATHS.DOC_BASE }, timeoutMs || TIMEOUTS.doc, `document ${docId}`, retries);
 }
 
 const inPageGetDoc = async ({ docId, DOC_BASE, timeoutMs }) => {
@@ -179,8 +184,8 @@ const inPageGetDoc = async ({ docId, DOC_BASE, timeoutMs }) => {
 // POST a JSON body to a service that streams back a binary (PDF), e.g. pdfweb
 // which renders a filed form. Returns base64 like getDoc, or an error/notPdf.
 // Port of portal-net.js postDoc().
-function postDoc(page, { path, serviceName, payload }) {
-  return withDeadline(page, inPagePostDoc, { path, serviceName, payload }, TIMEOUTS.binary, serviceName || path);
+function postDoc(page, { path, serviceName, payload, timeoutMs, retries }) {
+  return withDeadline(page, inPagePostDoc, { path, serviceName, payload }, timeoutMs || TIMEOUTS.binary, serviceName || path, retries);
 }
 
 const inPagePostDoc = async ({ path, serviceName, payload, timeoutMs }) => {

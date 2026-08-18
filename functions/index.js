@@ -1808,22 +1808,65 @@ exports.ingestPortalAppealForm = onCall({ region: REGIONS, maxInstances: 10 }, a
   }
   const proceedingReqId = target ? target.proceedingReqId : "";
 
-  const atts = Array.isArray(attachments)
-    ? attachments.map((x) => ({ storagePath: x.storagePath || "", filename: x.filename || "appeal.pdf", label: (x.label || "").toString() }))
-    : [];
+  const docKey = "f35:" + ackNum;
+  const noticesCol = db.collection(`users/${uid}/notices`);
+  const dup = await noticesCol.where("docKey", "==", docKey).limit(1).get();
+  const prevAppeal = (!dup.empty && (dup.docs[0].data() || {}).appeal) || {};
+
+  /* A SECOND GO AT A FORM ADDS TO WHAT THE FIRST GOT; IT DOES NOT REPLACE IT.
+   *
+   * A Form 35 whose PDF or grounds did not come down is now fetched again by a
+   * later sync (syncKnowns `appealFormsPending`), and that sync re-fetches the
+   * whole form — it has no way to ask the portal for only the missing piece. So
+   * this merges: what is already stored stays stored unless this run brought a
+   * newer copy of the same file. Without that, a run that rendered the form but
+   * lost an attachment would be followed by one that fetched the attachment and
+   * threw the form away, and the two would take turns for ever. */
+  const KEY = (x) => `${(x.label || "").toString()}|${x.filename || ""}`;
+  const merged = new Map();
+  for (const x of Array.isArray(prevAppeal.attachments) ? prevAppeal.attachments : []) {
+    if (x && x.storagePath) merged.set(KEY(x), { storagePath: x.storagePath, filename: x.filename || "appeal.pdf", label: (x.label || "").toString() });
+  }
+  for (const x of Array.isArray(attachments) ? attachments : []) {
+    const one = { storagePath: x.storagePath || "", filename: x.filename || "appeal.pdf", label: (x.label || "").toString() };
+    if (one.storagePath || !merged.has(KEY(one))) merged.set(KEY(one), one);
+  }
+  const atts = [...merged.values()];
   const primary = atts.find((x) => x.storagePath) || null;
+
+  /* WHAT IS STILL OUTSTANDING, after the merge rather than before it. The
+     connector reports what THIS run failed to get; a file an earlier run already
+     stored is not missing, whatever happened this time. Getting this wrong in
+     the forgiving direction costs a re-fetch; getting it wrong the other way
+     leaves a document nobody ever goes back for. */
+  const held = new Set(atts.filter((x) => x.storagePath).map((x) => x.filename));
+  const hasFormPdf = atts.some((x) => x.storagePath && /^Form 35 - /.test(x.filename || ""));
+  const stillMissing = (Array.isArray(appeal.attachmentsMissing) ? appeal.attachmentsMissing : [])
+    .map((s) => String(s || "").slice(0, 160))
+    .filter((s) => s && !held.has(s))
+    .slice(0, 20);
+  const formPdfError = hasFormPdf ? "" : (appeal.formPdfError || "").toString().slice(0, 240);
+
+  /* HOW MANY TIMES THIS FORM HAS BEEN ASKED FOR. What stops a form the portal
+     will genuinely never render — a filing whose data the renderer rejects —
+     from costing every sync from here to the end of the practice. Counted only
+     while something is still missing: a complete form starts from zero if the
+     portal ever adds a document to it. */
+  const short = Boolean(formPdfError) || stillMissing.length > 0;
+  const fetchTries = short ? (Number(prevAppeal.fetchTries) || 0) + 1 : 0;
+
   const appealMeta = {
     ackNum, ackDt: appeal.ackDt || "", ay,
     orderDin: appeal.orderDin || "", orderSection, appealSection: String(appeal.appealSection || ""),
     dateOrder, dateFiling: parsePortalDate(appeal.dateFiling) || "",
     authorityOrder: appeal.authorityOrder || "",
     amountAssessed: appeal.amountAssessed || "", disputedDemand: appeal.disputedDemand || "",
-    formPdfError: (appeal.formPdfError || "").toString().slice(0, 240),
+    formPdfError,
+    attachmentsExpected: Number(appeal.attachmentsExpected) || 0,
+    attachmentsMissing: stillMissing,
+    fetchTries,
     attachments: atts,
   };
-  const docKey = "f35:" + ackNum;
-  const noticesCol = db.collection(`users/${uid}/notices`);
-  const dup = await noticesCol.where("docKey", "==", docKey).limit(1).get();
   const base = {
     assessee: assesseeName, pan, ay,
     din: "", docKey, isOrder: false, isAppealForm: true, proceedingReqId,

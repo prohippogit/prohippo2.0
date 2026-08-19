@@ -40,6 +40,9 @@ function Shell() {
   const [profileFocus, setProfileFocus] = React.useState(null); // { tab, matterId } when opened via a matter/hearing click
   const [reviewNotice, setReviewNotice] = React.useState(null); // notice record, or {} for a new one
   const [assesseeQuery, setAssesseeQuery] = React.useState("");
+  // A record handed to the Tools page to start a tool from — today, the s.158BC
+  // notice an ITR-B is being built against.
+  const [toolsSeed, setToolsSeed] = React.useState(null);
   const [menuOpen, setMenuOpen] = React.useState(false); // mobile drawer
 
   /* TOUCH FEEDBACK, WIRED ONCE.
@@ -78,6 +81,22 @@ function Shell() {
     setOpenAssesseeId(null);
     setProfileFocus(null);
     setReviewNotice(null);
+    setToolsSeed(null);
+    setMenuOpen(false);
+  };
+
+  /* Open the ITR-B builder against a notice under s.158BC.
+   *
+   * The block return is furnished through the e-Proceeding for this very
+   * notice, and the notice already carries the four things the return's Part A
+   * asks for — the DIN, the date, the date of service and the period the AO has
+   * allowed. Carrying the record across means none of them is typed twice. */
+  const openItrbForNotice = (notice) => {
+    setReviewNotice(null);
+    setOpenAssesseeId(null);
+    setProfileFocus(null);
+    setToolsSeed({ tool: "itrb", notice });
+    setRoute("tools");
     setMenuOpen(false);
   };
 
@@ -163,6 +182,7 @@ function Shell() {
         onClose={() => setReviewNotice(null)}
         onSaved={(dest) => { setReviewNotice(null); if (dest) setRoute(dest); }}
         onOpenNotice={openReview}
+        onBuildItrB={openItrbForNotice}
       />
     );
   } else if (openAssessee) {
@@ -187,7 +207,7 @@ function Shell() {
       case "communications": content = <Communications/>; break;
       case "intimations": content = <Intimations/>; break;
       case "reports": content = <Reports/>; break;
-      case "tools": content = <Tools/>; break;
+      case "tools": content = <Tools seed={toolsSeed} onSeedUsed={() => setToolsSeed(null)}/>; break;
       case "connector": content = <ConnectorDownload/>; break;
       case "settings": content = <SettingsPage/>; break;
       default: content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onOpenProceeding={openNoticeInProfile} onSearch={handleSearch}/>;

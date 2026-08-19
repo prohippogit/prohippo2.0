@@ -15,13 +15,10 @@
  * with `node --test`.
  */
 import { blockPeriod, dueDateFor } from "./blockPeriod.js";
+import { DII_ITEMS } from "./form.js";
+export { STATUSES, EMPLOYMENT_NATURE, FILED_UNDER, PENDING_UNDER } from "./form.js";
 import { UNDISCLOSED_HEADS } from "./compute.js";
 import { HEADS, declaredTotal } from "./declared.js";
-
-export const STATUSES = [
-  "Individual", "HUF", "Firm", "LLP", "Company", "AOP", "BOI",
-  "Trust", "Local authority", "Artificial juridical person",
-];
 
 /** How the block proceeding was initiated. */
 export const SEARCH_SECTIONS = [
@@ -45,6 +42,8 @@ const blankDeclared = () =>
 export function blankYear(period) {
   return {
     key: period.key,
+    // "Y6" … "Y1", "Y0", "Y+1" — the form's own names for the rows.
+    slot: period.slot,
     ay: period.ay,
     py: period.py,
     from: period.from,
@@ -63,8 +62,24 @@ export function blankYear(period) {
     filedOn: "",
     returnFiled: true,
     undisclosed: blankUndisclosed(),
+    /* Part D-II — the same undisclosed income, broken up item-wise instead of
+       head-wise. The form requires the two to agree; computeItrB() checks. */
+    items: Object.fromEntries(DII_ITEMS.map((i) => [i.key, ""])),
+    itemRemarks: {},
+    /* A32/A34 (ii) and (iii) — the aggregate VALUE of international and
+       specified domestic transactions in a part period. Disclosed on the form,
+       but deliberately not part of the block income: s.158BB(3) and Note 4 put
+       undisclosed income on that account outside the block return entirely. */
+    intlTxnValue: "",
+    sdtValue: "",
     manner: "",           // s.158BC(1)(a) — the manner in which the income was derived
     evidence: "",         // the seized material it is derived from
+    /* Credits, split the way the form splits them:
+         Part G — advance tax and self-assessment tax paid EARLIER
+         Part H — TDS and TCS, and only where NOT CLAIMED EARLIER
+       Kept as one object because they are keyed against one year, but never
+       presented as one list: the "not claimed earlier" condition applies to
+       H alone, and a practitioner who cannot see the split cannot apply it. */
     credits: { tds: "", tcs: "", advance: "", selfAssessment: "" },
   };
 }
@@ -86,12 +101,23 @@ export function blankDraft() {
     residentialStatus: "Resident",
 
     searchSection: "132",
+    // The date the search was initiated / the requisition made. Together with
+    // lastAuthDate it fixes the whole block period — see blockPeriod.js.
     searchDate: "",
+    // The date the LAST of the authorisations was executed. Blank means the
+    // same day, which is what every draft written before the form's two-date
+    // shape was understood carries, so those keep the period they had.
+    lastAuthDate: "",
     lastPanchnamaDate: "",
     returnSection: "158BC",
     noticeDate: "",
     noticeDin: "",
     serviceDate: "",
+    /* s.158BC(1)(a) allows the AO to fix a period not exceeding sixty days.
+       The fifth proviso, inserted by the Finance Act 2025 with retrospective
+       effect from 01-09-2024, allows a further thirty on conditions — so the
+       period is 60 or 90, and it is read off the notice rather than assumed. */
+    dueDateDays: 60,
     dueDate: "",
     filedOn: "",
     auditUs44AB: false,
@@ -103,6 +129,9 @@ export function blankDraft() {
     interestRate: "",
     interestMonths: "",   // blank means "derive it from the dates"
 
+    noticeId: "",
+    proceedingReqId: "",
+
     verifierName: "",
     verifierFather: "",
     verifierPan: "",
@@ -110,6 +139,10 @@ export function blankDraft() {
     verificationPlace: "",
     verificationDate: "",
 
+    /* Part F — tax actually paid on the undisclosed income of the block period,
+       as challans. Distinct from Parts G and H, which claim credit for tax paid
+       in earlier years; this is money paid against THIS return. */
+    blockTaxPaid: [],
     notes: "",
     years: [],
     updatedAt: "",
@@ -117,26 +150,43 @@ export function blankDraft() {
 }
 
 /**
- * Re-cut the year rows for a search date, keeping anything already entered.
+ * Re-cut the year rows for the search dates, keeping anything already entered.
  *
- * Changing the search date moves the whole block period, and a practitioner who
- * corrects a typo in it should not lose the six years of figures they had
- * already keyed. Rows are matched by assessment year, so a date correction
- * inside the same financial year keeps everything, and a genuine change of year
- * keeps the overlap and blanks the rest.
+ * Either date moves the whole block period, and a practitioner who corrects a
+ * typo in one should not lose the six years of figures they had already keyed.
+ * Rows are matched by assessment year, so a date correction inside the same
+ * financial year keeps everything, and a genuine change of year keeps the
+ * overlap and blanks the rest.
+ *
+ * `patch` carries whichever date changed; the other is taken from the draft.
  */
-export function withBlockPeriod(draft, searchDate) {
-  const period = blockPeriod(searchDate);
+export function withBlockPeriod(draft, patch) {
+  const next = typeof patch === "string" ? { searchDate: patch } : (patch || {});
+  const searchDate = next.searchDate !== undefined ? next.searchDate : draft.searchDate;
+  const lastAuthDate = next.lastAuthDate !== undefined ? next.lastAuthDate : draft.lastAuthDate;
+
+  const period = blockPeriod(searchDate, lastAuthDate);
   const existing = new Map((draft.years || []).map((y) => [y.ay, y]));
   const years = period.ok
     ? period.years.map((p) => {
       const prev = existing.get(p.ay);
+      // The period's own fields always win over the stored copy: a row that was
+      // the part period yesterday may be a whole year today.
       return prev
-        ? { ...blankYear(p), ...prev, key: p.key, py: p.py, from: p.from, to: p.to, part: p.part }
+        ? { ...blankYear(p), ...prev, key: p.key, slot: p.slot, py: p.py, from: p.from, to: p.to, part: p.part }
         : blankYear(p);
     })
     : [];
-  return { ...draft, searchDate, years, blockFrom: period.from || "", blockTo: period.to || "" };
+  return {
+    ...draft,
+    searchDate,
+    lastAuthDate,
+    years,
+    blockFrom: period.from || "",
+    blockTo: period.to || "",
+    // Part C of the form has two mutually exclusive tables and this chooses.
+    blockSpansYears: Boolean(period.spansYears),
+  };
 }
 
 /**
@@ -164,6 +214,48 @@ export function fromAssessee(draft, a) {
     name: a.name ? `ITR-B — ${a.name}` : draft.name,
     verifierName: set(draft.verifierName, a.name),
     verifierPan: set(draft.verifierPan, (a.pan || "").toUpperCase()),
+  };
+}
+
+/**
+ * Is this notice the one that starts a block return?
+ *
+ * Matched on the section rather than on the subject line, because the section
+ * is what the portal supplies and what a practitioner keys. Both limbs count:
+ * s.158BC for the searched person, and s.158BC in pursuance of s.158BD for the
+ * other person whose income turns up in someone else's search.
+ */
+export const isBlockNotice = (notice) =>
+  /158\s*BC/i.test(`${notice?.section || ""} ${notice?.subject || ""}`);
+
+/**
+ * Start a draft from the s.158BC notice already on file.
+ *
+ * The notice that begins a block assessment is almost always in the app before
+ * anyone opens this tool — the portal sync brings it in with its DIN, its date,
+ * the date it was served and the date the AO has allowed. Re-keying those four
+ * is both wasted work and four chances to mistype the one thing that fixes a
+ * sixty-day statutory deadline.
+ *
+ * `responseDueDate` is preferred over deriving the due date from service: the
+ * AO fixes the period under s.158BC(1)(a), it may be sixty days or ninety under
+ * the fifth proviso, and the notice says which. Deriving it would be guessing at
+ * a figure we have been told.
+ */
+export function fromNotice(draft, notice, assessee) {
+  if (!notice) return draft;
+  const base = assessee ? fromAssessee(draft, assessee) : draft;
+  const under158BD = /158\s*BD/i.test(`${notice.section || ""} ${notice.subject || ""}`);
+  return {
+    ...base,
+    noticeId: notice.id || base.noticeId || "",
+    proceedingReqId: notice.proceedingReqId || base.proceedingReqId || "",
+    returnSection: under158BD ? "158BC/158BD" : "158BC",
+    noticeDin: notice.din || base.noticeDin,
+    noticeDate: notice.date || base.noticeDate,
+    serviceDate: notice.servedOn || base.serviceDate,
+    dueDate: notice.responseDueDate || base.dueDate,
+    name: assessee?.name ? `ITR-B — ${assessee.name}` : base.name,
   };
 }
 
@@ -201,7 +293,7 @@ export function withDeclared(year, reading, source = "json") {
 /** Fill the s.158BC due date from the date the notice was served, if unset. */
 export function withDueDate(draft) {
   if (draft.dueDate || !draft.serviceDate) return draft;
-  return { ...draft, dueDate: dueDateFor(draft.serviceDate) };
+  return { ...draft, dueDate: dueDateFor(draft.serviceDate, Number(draft.dueDateDays) || 60) };
 }
 
 /**
@@ -226,6 +318,19 @@ export function readiness(draft, result) {
   });
   if (unexplained.length) {
     gaps.push(`The manner in which the income was derived, for ${unexplained.map((y) => y.ay).join(", ")} — s.158BC(1)(a) asks for it.`);
+  }
+  if (result && result.misplaced158BB3 && result.misplaced158BB3.length) {
+    gaps.push(
+      `Undisclosed income is shown against International or Specified Domestic Transactions for ${result.misplaced158BB3.join(", ")}, `
+      + "which is a part period. s.158BB(3) puts that income outside the block return — it is assessed under the ordinary "
+      + "provisions instead, so it should come out of Part D-II here (Note 4 to the form)."
+    );
+  }
+  if (result && result.itemsEntered && !result.itemsTie) {
+    gaps.push(
+      `Part D-II totals ${result.totalByItem.toLocaleString("en-IN")} against Part D-I's ${result.totalUndisclosed.toLocaleString("en-IN")}. `
+      + "The form requires the two to agree."
+    );
   }
   if (!d.verifierName) gaps.push("The name of the person verifying the return.");
   return gaps;

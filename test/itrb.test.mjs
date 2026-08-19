@@ -14,9 +14,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy } from "../src/tools/itrb/blockPeriod.js";
+import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
-import { blankDraft, withBlockPeriod, fromAssessee, withDeclared, withDueDate, readiness } from "../src/tools/itrb/draft.js";
+import {
+  blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
+  withDeclared, withDueDate, readiness,
+} from "../src/tools/itrb/draft.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
 
@@ -48,7 +52,7 @@ test("a search in January falls in the previous financial year", () => {
   // 20 January 2025 is P.Y. 2024-25, so the block runs to A.Y. 2025-26 and the
   // part period starts 1 April 2024 — not 1 April 2025.
   const bp = blockPeriod("2025-01-20");
-  assert.equal(bp.searchPy, "2024-25");
+  assert.equal(bp.initiationPy, "2024-25");
   assert.equal(bp.years[6].ay, "2025-26");
   assert.equal(bp.years[6].from, "2024-04-01");
   assert.equal(bp.years[0].ay, "2019-20");
@@ -347,4 +351,204 @@ test("readiness names what is missing, and goes quiet once it is all there", () 
 
   d.years = d.years.map((y, i) => (i === 2 ? { ...y, manner: "Suppressed cash sales." } : y));
   assert.deepEqual(readiness(d, computeItrB(d)), []);
+});
+
+
+/* ---------------------------------------------------------------------------
+ * The notified form — Notification No. 30/2025, G.S.R. 221(E).
+ *
+ * These pin the parts of the tool that were built from the gazette rather than
+ * from a description of it, because a description is what got them wrong first.
+ * ------------------------------------------------------------------------- */
+
+test("the block period is derived from BOTH search dates, as A19 and A20 require", () => {
+  // The form's own worked examples (Note 1). Same six preceding years in each;
+  // what differs is the tail.
+  const same = blockPeriod("2025-07-01", "2025-07-31");
+  assert.deepEqual(same.years.map((y) => y.slot), ["Y6", "Y5", "Y4", "Y3", "Y2", "Y1", "Y0"]);
+  assert.equal(same.spansYears, false);
+  assert.equal(same.years[6].from, "2025-04-01");
+  assert.equal(same.years[6].to, "2025-07-31");
+  assert.equal(same.years[6].part, true);
+
+  const spans = blockPeriod("2026-03-15", "2026-04-05");
+  assert.deepEqual(spans.years.map((y) => y.slot), ["Y6", "Y5", "Y4", "Y3", "Y2", "Y1", "Y0", "Y+1"]);
+  assert.equal(spans.spansYears, true);
+  // Y0 becomes a COMPLETE year once the tail moves into the next previous year.
+  assert.equal(spans.years[6].part, false);
+  assert.equal(spans.years[6].from, "2026-04-01".replace("2026", "2025"));
+  assert.equal(spans.years[6].to, "2026-03-31");
+  assert.equal(spans.years[7].from, "2026-04-01");
+  assert.equal(spans.years[7].to, "2026-04-05");
+  assert.equal(spans.years[7].part, true);
+
+  // Y6…Y1 are identical in both — they hang off the year of INITIATION alone.
+  assert.deepEqual(same.years.slice(0, 6).map((y) => y.ay), spans.years.slice(0, 6).map((y) => y.ay));
+});
+
+test("exactly one row is ever the part period, however far apart the dates are", () => {
+  const bp = blockPeriod("2025-11-15", "2027-06-10");
+  assert.equal(bp.years.filter((y) => y.part).length, 1);
+  assert.equal(bp.years[bp.years.length - 1].to, "2027-06-10");
+  // Whole years in between are carried whole rather than special-cased away.
+  assert.equal(bp.years[7].to, "2027-03-31");
+  assert.equal(bp.years[7].part, false);
+});
+
+test("an execution date before the initiation date is refused", () => {
+  const bp = blockPeriod("2025-11-15", "2025-01-01");
+  assert.equal(bp.ok, false);
+  assert.match(bp.reason, /before the search was initiated/);
+});
+
+test("a draft written before the second date existed keeps the period it had", () => {
+  // Backward compatibility is the point: a stored draft carries searchDate and
+  // no lastAuthDate, and must not silently acquire a different block period.
+  const legacy = blockPeriod("2025-11-15");
+  assert.equal(legacy.years.length, 7);
+  assert.equal(legacy.to, "2025-11-15");
+  assert.equal(legacy.spansYears, false);
+  assert.deepEqual(legacy.years.map((y) => y.ay), blockPeriod("2025-11-15", "2025-11-15").years.map((y) => y.ay));
+});
+
+test("Part D-II carries the form's fourteen items, in the form's order", () => {
+  assert.equal(DII_ITEMS.length, 14);
+  assert.deepEqual(DII_ITEMS.map((i) => i.no), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  assert.equal(DII_ITEMS[0].label, "Money");
+  assert.equal(DII_ITEMS[4].label, "Virtual Digital Asset");
+  assert.equal(DII_ITEMS[13].label, "Any Other");
+  // Rows 11 and 12 are the two the form restricts to a complete Y0.
+  assert.deepEqual(DII_ITEMS.filter((i) => i.completeYearOnly).map((i) => i.no), [11, 12]);
+});
+
+test("Part D-II is expected to tie to Part D-I, and says so when it does not", () => {
+  const tied = computeItrB(draftWith([
+    { undisclosed: { deemed: 1500000 }, items: { money: 1200000, jewellery: 300000 } },
+  ]));
+  assert.equal(tied.totalByItem, 1500000);
+  assert.equal(tied.itemsTie, true);
+  assert.equal(tied.years[0].itemMismatch, false);
+
+  const off = computeItrB(draftWith([
+    { undisclosed: { deemed: 1500000 }, items: { money: 1200000 } },
+  ]));
+  assert.equal(off.itemsTie, false);
+  assert.equal(off.years[0].itemMismatch, true);
+  assert.ok(readiness(blankDraft(), off).some((g) => /Part D-II totals/.test(g)));
+
+  // An untouched Part D-II is not a mismatch — most drafts never reach it.
+  const untouched = computeItrB(draftWith([{ undisclosed: { deemed: 1500000 } }]));
+  assert.equal(untouched.itemsEntered, false);
+  assert.equal(untouched.itemsTie, true);
+});
+
+test("s.158BB(3) — transaction income in a PART period is flagged, not silently taxed", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  d.years[6].undisclosed.business = 800000;          // Y0, the part period
+  d.years[6].items.internationalTxn = 800000;
+  const r = computeItrB(d);
+  assert.deepEqual(r.misplaced158BB3, ["2026-27"]);
+  assert.equal(r.years[6].excluded158BB3, 800000);
+  assert.ok(readiness(d, r).some((g) => /158BB\(3\)/.test(g)));
+});
+
+test("s.158BB(3) — the same figures on a COMPLETE Y0 are perfectly proper", () => {
+  // Note 4 confines the exclusion to a part previous year, and Part D-II marks
+  // rows 11 and 12 fillable where Y0 is a complete year. Flagging those would
+  // be as wrong as missing the part-period case.
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2026-03-15", lastAuthDate: "2026-04-05" });
+  d.years[6].undisclosed.business = 800000;          // Y0, now a complete year
+  d.years[6].items.internationalTxn = 800000;
+  const r = computeItrB(d);
+  assert.deepEqual(r.misplaced158BB3, []);
+  assert.equal(r.itemsTie, true);
+});
+
+test("credits are split the way Parts G and H split them", () => {
+  const r = computeItrB(draftWith([
+    { undisclosed: { deemed: 1000000 }, credits: { advance: 100000, selfAssessment: 20000, tds: 30000, tcs: 5000 } },
+  ]));
+  // Part G — advance tax and self-assessment tax paid earlier.
+  assert.equal(r.credits.partG, 120000);
+  // Part H — TDS and TCS not claimed earlier.
+  assert.equal(r.credits.partH, 35000);
+  assert.equal(r.credits.total, 155000);
+  assert.equal(r.years[0].credits.partG, 120000);
+});
+
+test("Part F — self-assessment tax for the block period reduces the balance", () => {
+  const base = computeItrB(draftWith([{ undisclosed: { deemed: 1000000 } }]));
+  const paid = computeItrB(draftWith([{ undisclosed: { deemed: 1000000 } }], {
+    blockTaxPaid: [
+      { bsrCode: "0510308", date: "2026-06-10", challanNo: "00123", amount: 400000 },
+      { bsrCode: "0510308", date: "2026-06-11", challanNo: "00124", amount: 100000 },
+    ],
+  }));
+  assert.equal(paid.blockTaxPaidTotal, 500000);
+  assert.equal(paid.netPayable, base.netPayable - 500000);
+});
+
+test("rule 12AE(2) decides how the return must be furnished", () => {
+  assert.equal(furnishingMode({ status: "Company" }).dscOnly, true);
+  assert.equal(furnishingMode({ status: "Individual", auditUs44AB: true }).dscOnly, true);
+  assert.equal(furnishingMode({ status: "Trust", politicalParty: true }).dscOnly, true);
+  const ordinary = furnishingMode({ status: "Individual" });
+  assert.equal(ordinary.dscOnly, false);
+  assert.match(ordinary.label, /electronic verification code/);
+});
+
+test("the verification is the form's sentence, with the blanks filled", () => {
+  const t = VERIFICATION_TEXT("A B Shah", "C D Shah", "Karta", "ABCPS1234F");
+  assert.match(t, /^I, A B Shah son\/ daughter of C D Shah solemnly declare/);
+  assert.match(t, /in my capacity as Karta/);
+  assert.match(t, /permanent account number ABCPS1234F\.$/);
+  // An unfilled name leaves a rule to write on rather than the word undefined.
+  assert.match(VERIFICATION_TEXT("", "", "", ""), /^I, _+ son/);
+});
+
+test("a s.158BC notice is recognised, and an ordinary notice is not", () => {
+  assert.equal(isBlockNotice({ section: "158BC" }), true);
+  assert.equal(isBlockNotice({ section: "158BC r.w.s. 158BD" }), true);
+  assert.equal(isBlockNotice({ section: "158 BC" }), true);
+  assert.equal(isBlockNotice({ section: "", subject: "Notice u/s 158BC for the block period" }), true);
+  assert.equal(isBlockNotice({ section: "143(2)" }), false);
+  assert.equal(isBlockNotice({ section: "148" }), false);
+  assert.equal(isBlockNotice(null), false);
+});
+
+test("a draft started from the notice takes Part A's notice details from it", () => {
+  const notice = {
+    id: "n1", section: "158BC", din: "ITBA/AST/S/158BC/2025-26/1234567",
+    date: "2026-01-05", servedOn: "2026-01-10", responseDueDate: "2026-04-10",
+    pan: "ABCPS1234F", proceedingReqId: "P-9",
+  };
+  const a = { id: "a1", name: "Rajesh M. Shah", pan: "ABCPS1234F", status: "Individual" };
+  const d = fromNotice(blankDraft(), notice, a);
+  assert.equal(d.noticeDin, notice.din);
+  assert.equal(d.noticeDate, "2026-01-05");
+  assert.equal(d.serviceDate, "2026-01-10");
+  // The AO's own period is taken from the notice rather than derived: it may be
+  // sixty days or ninety under the fifth proviso, and the notice says which.
+  assert.equal(d.dueDate, "2026-04-10");
+  assert.equal(withDueDate(d).dueDate, "2026-04-10");
+  assert.equal(d.returnSection, "158BC");
+  assert.equal(d.noticeId, "n1");
+  assert.equal(d.proceedingReqId, "P-9");
+  // Part A also fills from the assessee the notice belongs to.
+  assert.equal(d.pan, "ABCPS1234F");
+  assert.equal(d.assessee, "Rajesh M. Shah");
+});
+
+test("a notice under s.158BD picks the other limb of s.158BC", () => {
+  const d = fromNotice(blankDraft(), { section: "158BC r.w.s. 158BD", din: "X" }, null);
+  assert.equal(d.returnSection, "158BC/158BD");
+  // And a draft with no notice is returned untouched.
+  const blank = blankDraft();
+  assert.deepEqual(fromNotice(blank, null, null), blank);
+});
+
+test("the due date honours the period the notice actually allowed", () => {
+  assert.equal(withDueDate({ ...blankDraft(), serviceDate: "2026-01-10" }).dueDate, "2026-03-11");
+  // The fifth proviso to s.158BC(1)(a) allows a further thirty days.
+  assert.equal(withDueDate({ ...blankDraft(), serviceDate: "2026-01-10", dueDateDays: 90 }).dueDate, "2026-04-10");
 });

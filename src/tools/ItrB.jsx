@@ -30,9 +30,10 @@ import { readDeclared } from './itrb/declared';
 import { computeItrB, UNDISCLOSED_HEADS, RATE_113, RATE_CESS, RATE_158BFA } from './itrb/compute';
 import { HEADS } from './itrb/declared';
 import {
-  blankDraft, withBlockPeriod, fromAssessee, withDeclared, withDueDate,
+  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withDueDate,
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
+import { DII_ITEMS, furnishingMode } from './itrb/form';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -47,18 +48,22 @@ const TABS = ["Details", "Block period", "Tax", "Review"];
  * is indistinguishable at a glance from a keyed nil, and this is a form where
  * "not worked out yet" and "nil" are different answers. Where a field has a
  * real default — the statutory rates on the Tax tab — the caller passes it. */
-function Amount({ value, onChange, placeholder = "", align = "right", width }) {
+function Amount({ value, onChange, placeholder = "", align = "right", width, disabled }) {
   return (
     <input
       type="text"
       inputMode="numeric"
+      disabled={disabled}
       value={value === null || value === undefined ? "" : value}
       placeholder={placeholder}
       onChange={(e) => {
         const raw = e.target.value.replace(/[,\s₹]/g, "");
         if (raw === "" || raw === "-" || /^-?\d*\.?\d*$/.test(raw)) onChange(raw);
       }}
-      style={{ textAlign: align, fontVariantNumeric: "tabular-nums", width, minWidth: 0 }}
+      style={{
+        textAlign: align, fontVariantNumeric: "tabular-nums", width, minWidth: 0,
+        ...(disabled ? { background: "var(--p-card-tint)" } : null),
+      }}
     />
   );
 }
@@ -101,14 +106,28 @@ async function readStoredJson(path) {
   }
 }
 
-export default function ItrB({ draftId, onBack }) {
+export default function ItrB({ draftId, seedNotice, onBack }) {
   const { data, notify, addItrbDraft, updateItrbDraft, removeItrbDraft } = useData();
   const saved = draftId ? (data.itrbDrafts || []).find((d) => d.id === draftId) : null;
 
-  const [draft, setDraft] = React.useState(() => (saved ? { ...blankDraft(), ...saved } : blankDraft()));
+  const [draft, setDraft] = React.useState(() => {
+    if (saved) return { ...blankDraft(), ...saved };
+    if (seedNotice) {
+      /* Arrived from the notice. Part A fills from the notice and from the
+         assessee it belongs to, so the only thing still to key on this screen
+         is the pair of search dates — which are on the panchnama, not on the
+         notice, and are the practitioner's to supply. */
+      const pan = (seedNotice.pan || "").toUpperCase();
+      const a = (data.assessees || []).find((x) => pan && (x.pan || "").toUpperCase() === pan)
+        || (data.assessees || []).find((x) => x.name && x.name === seedNotice.assessee);
+      return fromNotice(blankDraft(), seedNotice, a);
+    }
+    return blankDraft();
+  });
   const [id, setId] = React.useState(draftId || null);
   const [tab, setTab] = React.useState("Details");
-  const [dirty, setDirty] = React.useState(false);
+  // A draft seeded from a notice has unsaved content from the moment it opens.
+  const [dirty, setDirty] = React.useState(Boolean(seedNotice) && !saved);
   const [saving, setSaving] = React.useState(false);
   const [busyYear, setBusyYear] = React.useState("");
   const fileRef = React.useRef(null);
@@ -121,7 +140,14 @@ export default function ItrB({ draftId, onBack }) {
 
   const result = React.useMemo(() => computeItrB(draft), [draft]);
   const gaps = React.useMemo(() => readiness(draft, result), [draft, result]);
-  const period = React.useMemo(() => blockPeriod(draft.searchDate), [draft.searchDate]);
+  const period = React.useMemo(
+    () => blockPeriod(draft.searchDate, draft.lastAuthDate),
+    [draft.searchDate, draft.lastAuthDate]
+  );
+  const furnishing = React.useMemo(
+    () => furnishingMode({ status: draft.status, auditUs44AB: draft.auditUs44AB, politicalParty: draft.politicalParty }),
+    [draft.status, draft.auditUs44AB, draft.politicalParty]
+  );
 
   /* ---- assessee, and the block period it hangs off ---- */
 
@@ -131,8 +157,8 @@ export default function ItrB({ draftId, onBack }) {
     notify(`Part A filled from ${titleCase(a.name)}'s record.`);
   };
 
-  const setSearchDate = (iso) => {
-    setDraft((d) => withBlockPeriod(d, iso));
+  const setPeriodDate = (patch) => {
+    setDraft((d) => withBlockPeriod(d, patch));
     setDirty(true);
   };
 
@@ -321,6 +347,15 @@ export default function ItrB({ draftId, onBack }) {
         </div>
       </div>
 
+      {draft.noticeId && (
+        <div style={{margin: "0 0 12px", padding: "10px 14px", borderRadius: 12, background: "var(--p-mint)", color: "#1B8C5C", fontSize: 12.5, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap"}}>
+          <Icon name="link" size={14}/>
+          <span>
+            Started from the notice on file{draft.noticeDin ? ` — DIN ${draft.noticeDin}` : ""}. Part A's notice details came across with it;
+            the two search dates are on the panchnama and still need entering.
+          </span>
+        </div>
+      )}
       <SummaryBar draft={draft} result={result}/>
 
       <div className="utabs">
@@ -331,9 +366,9 @@ export default function ItrB({ draftId, onBack }) {
 
       {tab === "Details" && (
         <DetailsTab
-          draft={draft} edit={edit} period={period}
+          draft={draft} edit={edit} period={period} furnishing={furnishing}
           assesseeOptions={assesseeOptions} onPickAssessee={pickAssessee}
-          onSearchDate={setSearchDate} onServiceDate={setServiceDate}
+          onPeriodDate={setPeriodDate} onServiceDate={setServiceDate}
         />
       )}
 
@@ -388,7 +423,7 @@ function SummaryBar({ draft, result }) {
 
 /* ------------------------------ Part A ------------------------------ */
 
-function DetailsTab({ draft, edit, period, assesseeOptions, onPickAssessee, onSearchDate, onServiceDate }) {
+function DetailsTab({ draft, edit, period, furnishing, assesseeOptions, onPickAssessee, onPeriodDate, onServiceDate }) {
   return (
     <>
       <div className="card">
@@ -442,15 +477,24 @@ function DetailsTab({ draft, edit, period, assesseeOptions, onPickAssessee, onSe
         <div className="card-head">
           <div>
             <div className="card-title">The search and the notice</div>
-            <div className="card-sub">The date of the search fixes the block period; the date the s.158BC notice was served fixes the sixty-day due date.</div>
+            <div className="card-sub">
+              A19 and A20 together derive the whole block period — the form calls it "derived by system based on A19-A20". The date of
+              service and the period the notice allowed fix the due date.
+            </div>
           </div>
         </div>
         <div className="form-grid">
           <FormField label="Initiated under" required>
             <SelectInput value={draft.searchSection} onChange={(v) => edit({ searchSection: v })} options={SEARCH_SECTIONS}/>
           </FormField>
-          <FormField label="Date of search / requisition" required>
-            <input type="date" value={draft.searchDate || ""} onChange={(e) => onSearchDate(e.target.value)}/>
+          <FormField label="First authorisation executed / requisition made" required>
+            <input type="date" value={draft.searchDate || ""} onChange={(e) => onPeriodDate({ searchDate: e.target.value })}/>
+          </FormField>
+          {/* A20. Together with A19 this derives the whole block period, which
+              is why the form calls the period itself "derived by system based
+              on A19-A20" — and why a second date is not optional detail. */}
+          <FormField label="Last of the authorisations executed">
+            <input type="date" value={draft.lastAuthDate || ""} onChange={(e) => onPeriodDate({ lastAuthDate: e.target.value })}/>
           </FormField>
           <FormField label="Date of last panchnama">
             <input type="date" value={draft.lastPanchnamaDate || ""} onChange={(e) => edit({ lastPanchnamaDate: e.target.value })}/>
@@ -468,7 +512,17 @@ function DetailsTab({ draft, edit, period, assesseeOptions, onPickAssessee, onSe
           <FormField label="Date of service" required>
             <input type="date" value={draft.serviceDate || ""} onChange={(e) => onServiceDate(e.target.value)}/>
           </FormField>
-          <FormField label="Due date (60 days from service)">
+          <FormField label="Period allowed by the notice">
+            <SelectInput
+              value={String(draft.dueDateDays || 60)}
+              onChange={(v) => edit({ dueDateDays: Number(v), dueDate: "" })}
+              options={[
+                { value: "60", label: "60 days — s.158BC(1)(a)" },
+                { value: "90", label: "90 days — extended under the fifth proviso" },
+              ]}
+            />
+          </FormField>
+          <FormField label="Due date for filing">
             <input type="date" value={draft.dueDate || ""} onChange={(e) => edit({ dueDate: e.target.value })}/>
           </FormField>
           <FormField label="Date this return is furnished">
@@ -493,10 +547,17 @@ function DetailsTab({ draft, edit, period, assesseeOptions, onPickAssessee, onSe
         )}
         {period.ok && (
           <div style={{marginTop: 14, padding: "11px 13px", borderRadius: 12, background: "var(--p-lavender-2)", fontSize: 12.5}}>
-            Block period: <strong>{dateOf(period.from)} to {dateOf(period.to)}</strong> — the six previous years relevant to
-            A.Y. {period.years[0].ay} to A.Y. {period.years[5].ay}, and the part of P.Y. {period.searchPy} up to the date of the search (s.158B(b)).
+            Block period: <strong>{dateOf(period.from)} to {dateOf(period.to)}</strong> — Y6 to Y1 are A.Y. {period.years[0].ay} to
+            A.Y. {period.years[5].ay}.{" "}
+            {period.spansYears
+              ? `The last authorisation was executed in a later previous year, so Y0 (A.Y. ${period.years[6].ay}) is a complete year and Y+1 (A.Y. ${period.years[7].ay}) is the part period up to ${dateOf(period.to)}.`
+              : `Y0 (A.Y. ${period.years[6].ay}) is the part period from 1 April to ${dateOf(period.to)}.`}
           </div>
         )}
+        <div style={{marginTop: 12, fontSize: 12.5}} className="muted">
+          Rule 12AE(2) — this return must be furnished electronically under <strong>{furnishing.label}</strong>
+          {furnishing.reason ? `, because the assessee is ${furnishing.reason}` : ""}.
+        </div>
       </div>
 
       <div className="card" style={{marginTop: 16}}>
@@ -564,7 +625,9 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
           <div>
             <div className="card-title">Income already declared</div>
             <div className="card-sub">
-              s.158BB(1) reduces the block income by what was already disclosed. Read it out of each year's filed return rather than keying it — the figure that reduces the undisclosed income should be the one in the return.
+              Part C asks for the income already determined, assessed or declared for each year alongside the undisclosed income you
+              declare in column [A]. Read it out of each year's filed return rather than keying it — the figure the department will
+              reconcile against is the one in the return.
             </div>
           </div>
           <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
@@ -595,10 +658,14 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
                 onClick={() => setOpen(expanded ? "" : y.key)}
                 style={{display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", cursor: "pointer", flexWrap: "wrap"}}
               >
-                <div style={{minWidth: 108}}>
-                  <div style={{fontWeight: 700, fontSize: 14}}>A.Y. {y.ay}</div>
-                  <div className="muted" style={{fontSize: 11}}>
-                    P.Y. {y.py}{y.part ? ` · to ${dateOf(y.to)}` : ""}
+                <div style={{minWidth: 116, display: "flex", gap: 9, alignItems: "baseline"}}>
+                  {/* The form's own row name, so the two sheets read alike. */}
+                  <span className="pill pill-muted" style={{fontSize: 10.5, fontWeight: 700}}>{y.slot}</span>
+                  <div>
+                    <div style={{fontWeight: 700, fontSize: 14}}>A.Y. {y.ay}</div>
+                    <div className="muted" style={{fontSize: 11}}>
+                      P.Y. {y.py}{y.part ? ` · to ${dateOf(y.to)}` : ""}
+                    </div>
                   </div>
                 </div>
                 {y.part && <span className="pill pill-info" style={{fontSize: 10.5}}>Part period</span>}
@@ -629,6 +696,7 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
                 <div style={{padding: "0 18px 18px", borderTop: "1px solid var(--p-line)"}}>
                   <YearPanel
                     year={draft.years.find((row) => row.key === y.key) || y}
+                    computed={y}
                     ret={ret} busy={busyYear === y.key}
                     onFill={() => onFillYear(y)}
                     onFiles={(files) => onFiles(files, y.ay)}
@@ -675,11 +743,20 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
   );
 }
 
-function YearPanel({ year, ret, busy, onFill, onFiles, editYear }) {
+function YearPanel({ year, computed, ret, busy, onFill, onFiles, editYear }) {
   const upload = React.useRef(null);
   const set = (patch) => editYear(year.key, patch);
   const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
+  const setItem = (key, v) => set({ items: { ...year.items, [key]: v } });
   const setCredit = (key, v) => set({ credits: { ...year.credits, [key]: v } });
+
+  /* Part D-II rows 11 and 12 are marked on the form "to be filled only in case
+     Y0 is a complete year". For a part period s.158BB(3) puts that income
+     outside the block return altogether (Note 4), so the fields are disabled
+     rather than merely warned about — the amount does not belong here at all,
+     and the aggregate VALUE of those transactions is what the form asks for
+     instead, in A32/A34. */
+  const blocked = (item) => item.completeYearOnly && year.part;
 
   return (
     <div style={{paddingTop: 16, display: "flex", flexDirection: "column", gap: 18}}>
@@ -751,14 +828,71 @@ function YearPanel({ year, ret, busy, onFill, onFiles, editYear }) {
         </div>
       </div>
 
+      {/* ---- Part D-II ---- */}
+      <div>
+        <div style={{display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4}}>
+          <div style={{fontWeight: 700, fontSize: 12.5}}>Part D-II — item-wise break-up</div>
+          {computed.itemTotal > 0 && (
+            <span className={`pill ${computed.itemMismatch ? "pill-danger" : "pill-success"}`} style={{fontSize: 10.5}}>
+              {computed.itemMismatch
+                ? `${fmtINR(computed.itemTotal)} against ${fmtINR(computed.totalUndisclosed)} in Part D-I`
+                : "Ties to Part D-I"}
+            </span>
+          )}
+        </div>
+        <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+          The same undisclosed income, described item by item. The form requires this to total exactly what Part D-I totals.
+        </div>
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10}}>
+          {DII_ITEMS.map((item) => (
+            <div key={item.key} className="field">
+              <label style={{fontSize: 11}}>
+                {item.no}. {item.label}
+                {blocked(item) && <span className="muted"> — not in a part period</span>}
+              </label>
+              <Amount
+                value={blocked(item) ? "" : year.items?.[item.key]}
+                onChange={(v) => setItem(item.key, v)}
+                disabled={blocked(item)}
+              />
+            </div>
+          ))}
+        </div>
+
+        {year.part && (
+          <div style={{marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "var(--p-lavender-2)"}}>
+            <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>
+              International and specified domestic transactions — s.158BB(3)
+            </div>
+            <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+              Undisclosed income on this account for a part period is assessed under the ordinary provisions and is
+              <strong> not part of this return</strong> (Note 4 to the form). What the form asks for here is the aggregate
+              <em> value</em> of the transactions in the part period, not income.
+            </div>
+            <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10}}>
+              <div className="field">
+                <label style={{fontSize: 11}}>Aggregate value of international transactions</label>
+                <Amount value={year.intlTxnValue} onChange={(v) => set({ intlTxnValue: v })}/>
+              </div>
+              <div className="field">
+                <label style={{fontSize: 11}}>Aggregate value of specified domestic transactions</label>
+                <Amount value={year.sdtValue} onChange={(v) => set({ sdtValue: v })}/>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ---- credits ---- */}
       <div>
         <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>Taxes already paid for this year</div>
         <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
-          Only what is relatable to the undisclosed income — credit already taken in the year's own assessment cannot be claimed again here.
+          Advance tax and self-assessment tax paid earlier go to <strong>Part G</strong>; TDS and TCS <em>not claimed in any
+          earlier return</em> go to <strong>Part H</strong>. Rule 12AE(4): every credit here except self-assessment tax for
+          the block period itself is allowed only on the Assessing Officer's verification and satisfaction.
         </div>
         <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
-          {[["tds", "TDS"], ["tcs", "TCS"], ["advance", "Advance tax"], ["selfAssessment", "Self-assessment tax"]].map(([k, label]) => (
+          {[["advance", "Advance tax — Part G"], ["selfAssessment", "Self-assessment tax — Part G"], ["tds", "TDS — Part H"], ["tcs", "TCS — Part H"]].map(([k, label]) => (
             <div key={k} className="field">
               <label style={{fontSize: 11}}>{label}</label>
               <Amount value={year.credits?.[k]} onChange={(v) => setCredit(k, v)}/>

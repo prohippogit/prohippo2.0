@@ -28,6 +28,7 @@ import {
 } from "../../pdfTheme.js";
 import { UNDISCLOSED_HEADS, RATE_PENALTY } from "./compute.js";
 import { HEADS } from "./declared.js";
+import { DII_ITEMS, VERIFICATION_TEXT, furnishingMode } from "./form.js";
 
 const L = 14, R = 196, W = R - L, PAGE_H = 297, FOOT = 20;
 
@@ -213,30 +214,37 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
       { label: "ADDRESS", value: draft.address },
       { label: "MOBILE / E-MAIL", value: [draft.mobile, draft.email].filter(Boolean).join("  ·  ") },
       { label: "SEARCH / REQUISITION UNDER", value: draft.searchSection ? `s.${draft.searchSection}` : "" },
-      { label: "DATE OF SEARCH / REQUISITION", value: fmtDate(draft.searchDate) },
+      { label: "A19  FIRST AUTHORISATION EXECUTED", value: fmtDate(draft.searchDate), strong: true },
+      { label: "A20  LAST AUTHORISATION EXECUTED", value: fmtDate(draft.lastAuthDate || draft.searchDate), strong: true },
       { label: "DATE OF LAST PANCHNAMA", value: fmtDate(draft.lastPanchnamaDate) },
       { label: "RETURN FURNISHED UNDER", value: draft.returnSection ? `s.${draft.returnSection}` : "" },
       { label: "NOTICE u/s 158BC DATED", value: fmtDate(draft.noticeDate) },
       { label: "DIN OF NOTICE", value: draft.noticeDin, mono: true },
       { label: "DATE OF SERVICE OF NOTICE", value: fmtDate(draft.serviceDate) },
-      { label: "DUE DATE (60 DAYS FROM SERVICE)", value: fmtDate(draft.dueDate), strong: true },
+      { label: `DUE DATE (${draft.dueDateDays || 60} DAYS ALLOWED)`, value: fmtDate(draft.dueDate), strong: true },
       { label: "ACCOUNTS AUDITED u/s 44AB", value: draft.auditUs44AB ? "Yes" : "No" },
       { label: "BOOKS / DOCUMENTS FOUND IN SEARCH", value: draft.booksFound ? "Yes" : "No" },
+      { label: "MUST BE FURNISHED UNDER (RULE 12AE(2))", value: furnishingMode({ status: draft.status, auditUs44AB: draft.auditUs44AB, politicalParty: draft.politicalParty }).short },
     ]);
 
     /* ---------------- PART B — TOTAL INCOME OF THE BLOCK PERIOD ---------------- */
-    partHead(ctx, p, accent, "B", "Total income of the block period", "Income already disclosed, plus the undisclosed income of each previous year — s.158BB(1)");
+    partHead(ctx, p, accent, "C", "Computation of undisclosed income",
+      "Column [A] — undisclosed income declared for each year comprised in the block period, s.158BB(1)(a) r.w.s. 158B(b)");
     table(ctx, p, accent,
       [
-        { label: "PREVIOUS YEAR", w: 40 },
+        // The form's own row names, so the person keying the portal is looking
+        // for the same labels on both sheets.
+        { label: "ROW", w: 16 },
+        { label: "PREVIOUS YEAR", w: 34 },
         { label: "A.Y.", w: 22 },
-        { label: "RETURN FILED", w: 36 },
-        { label: "DISCLOSED", w: 28, align: "right" },
-        { label: "UNDISCLOSED", w: 28, align: "right" },
-        { label: "TOTAL INCOME", w: 28, align: "right" },
+        { label: "RETURN FILED", w: 32 },
+        { label: "DECLARED", w: 26, align: "right" },
+        { label: "UNDISCLOSED [A]", w: 26, align: "right" },
+        { label: "TOTAL", w: 26, align: "right" },
       ],
       [
         ...result.years.map((y) => [
+          y.slot || "",
           y.part ? `${y.py} (part)` : y.py,
           y.ay,
           y.returnFiled === false ? "Not filed" : [y.declaredForm, y.ackNum].filter(Boolean).join(" · ") || "—",
@@ -245,21 +253,23 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
           amt(y.assessedTotal, { zero: "Nil" }),
         ]),
         {
-          0: "TOTAL — BLOCK PERIOD", 1: "", 2: "",
-          3: amt(result.totalDeclared, { zero: "Nil" }),
-          4: amt(result.totalUndisclosed, { zero: "Nil" }),
-          5: amt(result.totalDeclared + result.totalUndisclosed, { zero: "Nil" }),
+          0: "", 1: "TOTAL — BLOCK PERIOD", 2: "", 3: "",
+          4: amt(result.totalDeclared, { zero: "Nil" }),
+          5: amt(result.totalUndisclosed, { zero: "Nil" }),
+          6: amt(result.totalDeclared + result.totalUndisclosed, { zero: "Nil" }),
           _tone: "total",
         },
       ]
     );
-    const partYear = result.years.find((y) => y.part);
-    if (partYear) {
-      p.need(8);
-      text(`The last row is the part period — 1 April ${partYear.from.slice(0, 4)} to ${fmtDate(partYear.to)}, the date of the search — and not the whole previous year (s.158B(b)).`,
-        L, p.y, { size: 6.8, weight: "medium", color: MUTED });
-      p.y += 6;
-    }
+    p.need(9);
+    text(draft.blockSpansYears
+      ? `The last authorisation was executed in a later previous year, so Y0 is a complete year and Y+1 is the part period ending ${fmtDate(result.years[result.years.length - 1].to)} — the form's second Part C table applies (s.158B(b), Note 1).`
+      : `Y0 is the part period ending ${fmtDate(result.years[result.years.length - 1].to)}, the date the last authorisation was executed — the form's first Part C table applies (s.158B(b), Note 1).`,
+      L, p.y, { size: 6.8, weight: "medium", color: MUTED });
+    p.y += 6;
+    text("Columns [B] to [H] of Part C — income already determined, assessed or declared — are not reproduced here and must be completed on the portal.",
+      L, p.y, { size: 6.8, weight: "medium", color: MUTED });
+    p.y += 6;
     if (result.years.some((y) => y.floored)) {
       p.need(8);
       text("A year whose heads net to a loss is carried at nil: no loss is set off against the undisclosed income of the block period — s.158BB(4).",
@@ -269,7 +279,8 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
     p.y += 2;
 
     /* ---------------- PART C — HEAD-WISE UNDISCLOSED INCOME ---------------- */
-    partHead(ctx, p, accent, "C", "Undisclosed income, head-wise", "Year-wise and head-wise break-up of the undisclosed income of the block period");
+    partHead(ctx, p, accent, "D-I", "Head-wise break-up of the undisclosed income",
+      "The total declared in column [A] of Part C, head by head");
     const headW = (W - 22 - 24) / UNDISCLOSED_HEADS.length;
     table(ctx, p, accent,
       [
@@ -291,6 +302,58 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
         },
       ]
     );
+
+    /* Part D-II. The same total again, item by item, in the form's own fourteen
+       rows — and the form requires this table to cast to Part D-I's row 6. When
+       it does not, that is said here rather than left to be discovered on the
+       portal. */
+    partHead(ctx, p, accent, "D-II", "Item-wise break-up of the undisclosed income",
+      "The same total as Part D-I, described item by item");
+    /* Eight year columns and a total across 182mm leaves about 13mm a column,
+       so this table is set a notch smaller and uses the items' short names. A
+       clipped LABEL is a nuisance; a clipped FIGURE is a wrong number. */
+    const dIIcols = [
+      { label: "ITEM", w: 50 },
+      ...result.years.map((y) => ({ label: y.slot || y.ay, w: (W - 50 - 24) / result.years.length, align: "right" })),
+      { label: "TOTAL", w: 24, align: "right" },
+    ];
+    table(ctx, p, accent, dIIcols, [
+      ...DII_ITEMS.map((item) => [
+        `${item.no}. ${item.short}`,
+        ...result.years.map((y) => (item.completeYearOnly && y.part ? "—" : amt(y.items[item.key]))),
+        amt(result.byItem[item.key]),
+      ]),
+      {
+        0: "TOTAL — ITEM-WISE",
+        ...Object.fromEntries(result.years.map((y, i) => [i + 1, amt(y.itemTotal, { zero: "—" })])),
+        [result.years.length + 1]: amt(result.totalByItem, { zero: "Nil" }),
+        _tone: "total",
+      },
+    ], { size: 6.2, pad: 1.4 });
+    if (result.itemsEntered && !result.itemsTie) {
+      p.need(8);
+      text(`Part D-II totals ${amt(result.totalByItem)} against Part D-I's ${amt(result.totalUndisclosed)}. The form requires the two to agree.`,
+        L, p.y, { size: 6.8, weight: "semibold", color: [193, 51, 120] });
+      p.y += 7;
+    }
+    if (result.misplaced158BB3.length) {
+      p.need(10);
+      wrap(`Rows 11 and 12 carry income for ${result.misplaced158BB3.join(", ")}, which is a part period. Under s.158BB(3) and Note 4 to the form, undisclosed income from an international or specified domestic transaction in a part period is assessed under the ordinary provisions and does not form part of this return.`,
+        W - 4, 6.8, "regular").forEach((ln) => { text(ln, L, p.y, { size: 6.8, weight: "semibold", color: [193, 51, 120] }); p.y += 3.2; });
+      p.y += 4;
+    }
+    const partRows = result.years.filter((y) => y.part && (y.intlTxnValue || y.sdtValue));
+    if (partRows.length) {
+      p.need(8 + partRows.length * 4);
+      text("AGGREGATE VALUE OF TRANSACTIONS IN THE PART PERIOD (A32 / A34)", L, p.y + 3, { size: 6.6, weight: "semibold", color: accent, spacing: 0.3 });
+      p.y += 8;
+      partRows.forEach((y) => {
+        text(`${y.ay} — international ${amt(y.intlTxnValue)} · specified domestic ${amt(y.sdtValue)}`,
+          L, p.y, { size: 7.2, color: BODY });
+        p.y += 4;
+      });
+      p.y += 3;
+    }
 
     /* Manner of derivation and the material it comes from — s.158BC(1)(a) asks
        for both, and a block return that states a figure without them invites
@@ -317,7 +380,8 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
     }
 
     /* ---------------- PART D — TAX ---------------- */
-    partHead(ctx, p, accent, "D", "Tax on the undisclosed income", "Charged at a flat rate under s.113, with interest for late furnishing under s.158BFA(1)");
+    partHead(ctx, p, accent, "E", "Tax payable",
+      "60% of the undisclosed income of the block period — s.158BA(7) r.w.s. 113 — with interest under s.158BFA(1)");
     table(ctx, p, accent,
       [
         { label: "PARTICULARS", w: 118 },
@@ -325,47 +389,80 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
         { label: "AMOUNT (₹)", w: 30, align: "right" },
       ],
       [
-        ["Total undisclosed income of the block period", "Part C", amt(result.totalUndisclosed, { zero: "Nil" })],
-        ["Rounded off", "s.288B", amt(result.roundedUndisclosed, { zero: "Nil" })],
-        [`Tax on undisclosed income`, `s.113 @ ${result.tax.rate}%`, amt(result.tax.amount, { zero: "Nil" })],
-        ["Add: Surcharge", `@ ${result.tax.surchargeRate}%`, amt(result.tax.surcharge, { zero: "Nil" })],
-        ["Add: Health and education cess", `@ ${result.tax.cessRate}%`, amt(result.tax.cess, { zero: "Nil" })],
-        { 0: "Tax, surcharge and cess", 1: "", 2: amt(result.tax.grossLiability, { zero: "Nil" }), _tone: "sub" },
-        [
-          "Add: Interest for late furnishing of the block return",
-          `s.158BFA(1) · ${result.tax.interestMonths} mth`,
-          amt(result.tax.interest, { zero: "Nil" }),
-        ],
-        { 0: "AGGREGATE LIABILITY", 1: "", 2: amt(result.tax.aggregate, { zero: "Nil" }), _tone: "total" },
-      ]
-    );
-
-    /* ---------------- PART E — TAXES PAID ---------------- */
-    partHead(ctx, p, accent, "E", "Taxes paid and credit claimed", "Credit is claimed only for taxes relatable to the undisclosed income of the block period");
-    table(ctx, p, accent,
-      [
-        { label: "ASSESSMENT YEAR", w: 42 },
-        { label: "TDS", w: 26, align: "right" },
-        { label: "TCS", w: 24, align: "right" },
-        { label: "ADVANCE TAX", w: 30, align: "right" },
-        { label: "SELF-ASST. TAX", w: 30, align: "right" },
-        { label: "TOTAL", w: 30, align: "right" },
-      ],
-      [
-        ...result.years.map((y) => [
-          y.ay,
-          amt(y.credits.tds), amt(y.credits.tcs), amt(y.credits.advance), amt(y.credits.selfAssessment),
-          amt(y.credits.total, { zero: "—" }),
-        ]),
+        ["Undisclosed income of the block period — Part C", "158BB(5)", amt(result.totalUndisclosed, { zero: "Nil" })],
+        ["Rounded off", "288B", amt(result.roundedUndisclosed, { zero: "Nil" })],
+        [`1.  Tax payable on the undisclosed income @ ${result.tax.rate}%`, "113", amt(result.tax.amount, { zero: "Nil" })],
+        [`2.  Surcharge on (1) above`, `@ ${result.tax.surchargeRate}%`, amt(result.tax.surcharge, { zero: "Nil" })],
+        [`3.  Health and education cess on (1+2)`, `@ ${result.tax.cessRate}%`, amt(result.tax.cess, { zero: "Nil" })],
+        { 0: "4.  Total tax payable (1+2+3)", 1: "", 2: amt(result.tax.grossLiability, { zero: "Nil" }), _tone: "sub" },
+        [`5.  Interest payable`, `158BFA(1) · ${result.tax.interestMonths} mth`, amt(result.tax.interest, { zero: "Nil" })],
+        { 0: "6.  Gross tax payable on the undisclosed income", 1: "", 2: amt(result.tax.aggregate, { zero: "Nil" }), _tone: "total" },
+        ["7.  Taxes paid — Parts F, G and H", "", amt(-(result.credits.total + result.blockTaxPaidTotal), { zero: "Nil" })],
         {
-          0: "TOTAL CREDIT CLAIMED",
-          1: amt(result.credits.tds), 2: amt(result.credits.tcs),
-          3: amt(result.credits.advance), 4: amt(result.credits.selfAssessment),
-          5: amt(result.credits.total, { zero: "Nil" }),
+          0: result.netPayable > 0 ? "8.  Balance payable" : "8.  Balance refundable", 1: "",
+          2: amt(result.netPayable > 0 ? result.netPayable : result.refundDue, { zero: "Nil" }),
           _tone: "total",
         },
       ]
     );
+
+    /* ---------------- PART E — TAXES PAID ---------------- */
+    /* Part F — self-assessment tax for the block period, by challan. This is
+       the one payment rule 12AE(4) does NOT make conditional on the Assessing
+       Officer's satisfaction: it is money paid against this very return. */
+    partHead(ctx, p, accent, "F", "Taxes paid on the undisclosed income of the block period",
+      "Self-assessment tax for the block period, challan by challan");
+    table(ctx, p, accent,
+      [
+        { label: "BSR CODE", w: 40 },
+        { label: "DATE OF DEPOSIT", w: 46 },
+        { label: "SERIAL NO. OF CHALLAN", w: 56 },
+        { label: "AMOUNT (₹)", w: 40, align: "right" },
+      ],
+      [
+        ...(result.blockTaxPaid.length
+          ? result.blockTaxPaid.map((c) => [c.bsrCode || "—", fmtDate(c.date) || "—", c.challanNo || "—", amt(c.amount)])
+          : [{ 0: "No self-assessment tax recorded against the block period.", _span: true, _muted: true }]),
+        { 0: "TOTAL", 1: "", 2: "", 3: amt(result.blockTaxPaidTotal, { zero: "Nil" }), _tone: "total" },
+      ]
+    );
+
+    /* Parts G and H — credit for tax paid in earlier years. Kept apart because
+       the form keeps them apart and the conditions differ: H is confined to
+       TDS and TCS for which no credit has been claimed in any earlier return. */
+    partHead(ctx, p, accent, "G", "Advance tax and self-assessment tax paid earlier",
+      "Credit sought against the undisclosed income — allowable only on the Assessing Officer's verification (rule 12AE(4))");
+    table(ctx, p, accent,
+      [
+        { label: "ASSESSMENT YEAR", w: 62 },
+        { label: "ADVANCE TAX", w: 40, align: "right" },
+        { label: "SELF-ASSESSMENT TAX", w: 40, align: "right" },
+        { label: "TOTAL", w: 40, align: "right" },
+      ],
+      [
+        ...result.years.map((y) => [y.ay, amt(y.credits.advance), amt(y.credits.selfAssessment), amt(y.credits.partG, { zero: "—" })]),
+        { 0: "TOTAL — PART G", 1: amt(result.credits.advance), 2: amt(result.credits.selfAssessment), 3: amt(result.credits.partG, { zero: "Nil" }), _tone: "total" },
+      ]
+    );
+
+    partHead(ctx, p, accent, "H", "TDS and TCS not claimed earlier",
+      "Credit sought only where no credit has been claimed in any return filed u/s 139, or no return was filed");
+    table(ctx, p, accent,
+      [
+        { label: "ASSESSMENT YEAR", w: 62 },
+        { label: "TDS", w: 40, align: "right" },
+        { label: "TCS", w: 40, align: "right" },
+        { label: "TOTAL", w: 40, align: "right" },
+      ],
+      [
+        ...result.years.map((y) => [y.ay, amt(y.credits.tds), amt(y.credits.tcs), amt(y.credits.partH, { zero: "—" })]),
+        { 0: "TOTAL — PART H", 1: amt(result.credits.tds), 2: amt(result.credits.tcs), 3: amt(result.credits.partH, { zero: "Nil" }), _tone: "total" },
+      ]
+    );
+    p.need(8);
+    text("The portal asks for these by challan and by deductor — BSR code, date and serial number in Part G; TAN of the deductor with the credit available, already claimed and now claimed in Part H. Have those to hand.",
+      L, p.y, { size: 6.8, weight: "medium", color: MUTED });
+    p.y += 7;
 
     /* ---- the closing position ---- */
     p.need(22);
@@ -381,13 +478,9 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
     p.y += 17 + 7;
 
     /* ---- verification ---- */
-    partHead(ctx, p, accent, "F", "Verification", "");
-    const decl = `I, ${draft.verifierName || "________________"}, ${draft.verifierFather ? `son / daughter of ${draft.verifierFather}, ` : ""}`
-      + `solemnly declare that to the best of my knowledge and belief the information given in this return and the schedules to it is correct and complete, `
-      + `and that it discloses fully and truly the undisclosed income of the block period `
-      + `${draft.blockFrom ? `from ${fmtDate(draft.blockFrom)} to ${fmtDate(draft.blockTo)}` : ""}. `
-      + `I further declare that I am making this return in my capacity as ${draft.verifierCapacity || "self"} `
-      + `and that I am competent to make and verify it.`;
+    partHead(ctx, p, accent, "§", "Verification", "");
+    // Verbatim from the notified form. Not ours to reword.
+    const decl = VERIFICATION_TEXT(draft.verifierName, draft.verifierFather, draft.verifierCapacity, draft.verifierPan);
     const lines = wrap(decl, W - 4, 7.6, "regular");
     p.need(lines.length * 3.8 + 26);
     lines.forEach((ln) => { text(ln, L + 2, p.y + 3, { size: 7.6, color: BODY }); p.y += 3.8; });

@@ -7,6 +7,7 @@ import Appeals from './Appeals';
 import { NoticeReview } from './Notices';
 import Intimations from './Intimations';
 import { Matters, Invoices, Communications, Reports, SettingsPage } from './Other';
+import Tools from './Tools';
 import { Icon } from './shared';
 import { DataProvider, useData } from './store';
 import { AuthProvider, useAuth } from './auth';
@@ -186,6 +187,7 @@ function Shell() {
       case "communications": content = <Communications/>; break;
       case "intimations": content = <Intimations/>; break;
       case "reports": content = <Reports/>; break;
+      case "tools": content = <Tools/>; break;
       case "connector": content = <ConnectorDownload/>; break;
       case "settings": content = <SettingsPage/>; break;
       default: content = <Dashboard onNav={handleNav} onOpenNotice={openReview} onOpenProceeding={openNoticeInProfile} onSearch={handleSearch}/>;

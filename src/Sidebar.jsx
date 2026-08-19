@@ -18,6 +18,11 @@ const NAV_ITEMS = [
      context; a fourth way in was one more place to keep in step. */
   { id: "intimations", label: "Intimations", icon: "chart" },
   { id: "reports", label: "Reports", icon: "list" },
+  /* Tools sits at the end because it is the only link that is not a register of
+     the practice's own records — it is where a calculation gets done. The Beta
+     tag is not decoration: what is behind it produces working papers a
+     practitioner will act on, and they are entitled to know it is new. */
+  { id: "tools", label: "Tools", icon: "sparkle", beta: true },
 ];
 
 const NAV_BOTTOM = [
@@ -61,6 +66,7 @@ export default function Sidebar({ active, onNav, open }) {
           >
             <Icon name={item.icon} size={18} className="nav-icon"/>
             <span>{item.label}</span>
+            {item.beta && <span className="nav-beta">Beta</span>}
             {badges[item.id] && <span className="nav-badge">{badges[item.id]}</span>}
           </div>
         ))}

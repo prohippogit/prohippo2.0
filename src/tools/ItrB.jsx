@@ -1,0 +1,1007 @@
+/*
+ * Tools → ITR-B. The block assessment return for a search case.
+ *
+ * WHAT THE PAGE IS FOR. A block return under s.158BC covers seven years behind
+ * one PAN, and sixty days from the service of the notice is not long to settle
+ * seven years of figures with a client who has just been searched. Almost
+ * everything the return needs is already in this app — the PAN and the contact
+ * details from the assessee register, the income declared in each year from the
+ * ITR JSONs the portal sync has on file — so the work that is genuinely the
+ * practitioner's is the undisclosed income and the manner it was derived in.
+ * This page asks for that and nothing else, and hands back a working paper to
+ * take into the portal.
+ *
+ * It does NOT file anything. The document it produces says so on its face.
+ *
+ * WHERE THE LOGIC IS. Not here. The block period (blockPeriod.js), the read of a
+ * filed return (declared.js), the tax (compute.js), the draft's shape
+ * (draft.js) and the document (pdf.js) are all pure modules under itrb/, tested
+ * with `node --test`. This file is the form over them: it holds one draft
+ * object in state, hands it to those modules, and renders what comes back.
+ */
+import React from 'react';
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase';
+import { Icon, EmptyState, FormField, SelectInput, ComboBox, Toggle, Table, fmtINR, fmtDateLong, titleCase } from '../shared';
+import { useData } from '../store';
+import { saveBlob } from '../downloadFile';
+import { blockPeriod } from './itrb/blockPeriod';
+import { readDeclared } from './itrb/declared';
+import { computeItrB, UNDISCLOSED_HEADS, RATE_113, RATE_CESS, RATE_158BFA } from './itrb/compute';
+import { HEADS } from './itrb/declared';
+import {
+  blankDraft, withBlockPeriod, fromAssessee, withDeclared, withDueDate,
+  readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
+} from './itrb/draft';
+
+const TABS = ["Details", "Block period", "Tax", "Review"];
+
+/* A rupee field.
+ *
+ * `type="text"` with an inputMode rather than type="number": a number input
+ * scrolls its value when the wheel passes over it, and on a page carrying
+ * seventy money fields that is a quiet way to change a figure nobody meant to
+ * touch.
+ *
+ * No placeholder by default either. A greyed "0" sitting in every empty field
+ * is indistinguishable at a glance from a keyed nil, and this is a form where
+ * "not worked out yet" and "nil" are different answers. Where a field has a
+ * real default — the statutory rates on the Tax tab — the caller passes it. */
+function Amount({ value, onChange, placeholder = "", align = "right", width }) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={value === null || value === undefined ? "" : value}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/[,\s₹]/g, "");
+        if (raw === "" || raw === "-" || /^-?\d*\.?\d*$/.test(raw)) onChange(raw);
+      }}
+      style={{ textAlign: align, fontVariantNumeric: "tabular-nums", width, minWidth: 0 }}
+    />
+  );
+}
+
+const money = (v) => (v === null || v === undefined || v === "" ? "—" : fmtINR(Number(v) || 0));
+
+/* The income returned for a year, or a dash.
+ *
+ * computeItrB() coerces an unread year's declared total to 0 so the arithmetic
+ * has a number to work with. Printing that as "₹0" would say the assessee
+ * returned nil income for the year, which is a statement about the assessee
+ * rather than about this draft. A year is only shown a figure once a return has
+ * actually been read into it, or somebody has keyed one. */
+const returned = (y) => (y.declaredSource || y.declaredTotal ? fmtINR(y.declaredTotal) : "—");
+
+/* fmtDateLong, not fmtDate: shared's short form prints "15 Nov" with no year,
+   and every date on this page spans years — a block period reading
+   "01 Apr to 15 Nov" says nothing at all. An absent date reads as a dash rather
+   than as "Invalid Date", which is what Date("") formats to. */
+const dateOf = (iso) => (iso ? fmtDateLong(iso) : "—");
+
+/* Read one ITR JSON out of Storage. The CORS failure is named rather than
+   passed on: a browser reports it as a bare "Failed to fetch", and the fix
+   (storage.cors.json) is not something anyone guesses from that. */
+async function readStoredJson(path) {
+  try {
+    const url = await getDownloadURL(storageRef(storage, path));
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`the stored return could not be read (HTTP ${res.status})`);
+    return await res.json();
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(
+        "Couldn't read the filed return from storage. The storage bucket is not allowing this site to read files — "
+        + "apply storage.cors.json (see docs/PORTAL_SYNC_SETUP.md) and try again.",
+        { cause: err }
+      );
+    }
+    throw err;
+  }
+}
+
+export default function ItrB({ draftId, onBack }) {
+  const { data, notify, addItrbDraft, updateItrbDraft, removeItrbDraft } = useData();
+  const saved = draftId ? (data.itrbDrafts || []).find((d) => d.id === draftId) : null;
+
+  const [draft, setDraft] = React.useState(() => (saved ? { ...blankDraft(), ...saved } : blankDraft()));
+  const [id, setId] = React.useState(draftId || null);
+  const [tab, setTab] = React.useState("Details");
+  const [dirty, setDirty] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [busyYear, setBusyYear] = React.useState("");
+  const fileRef = React.useRef(null);
+
+  const edit = (patch) => { setDraft((d) => ({ ...d, ...patch })); setDirty(true); };
+  const editYear = (key, patch) => {
+    setDraft((d) => ({ ...d, years: d.years.map((y) => (y.key === key ? { ...y, ...patch } : y)) }));
+    setDirty(true);
+  };
+
+  const result = React.useMemo(() => computeItrB(draft), [draft]);
+  const gaps = React.useMemo(() => readiness(draft, result), [draft, result]);
+  const period = React.useMemo(() => blockPeriod(draft.searchDate), [draft.searchDate]);
+
+  /* ---- assessee, and the block period it hangs off ---- */
+
+  const pickAssessee = (a) => {
+    setDraft((d) => withDueDate(fromAssessee(d, a)));
+    setDirty(true);
+    notify(`Part A filled from ${titleCase(a.name)}'s record.`);
+  };
+
+  const setSearchDate = (iso) => {
+    setDraft((d) => withBlockPeriod(d, iso));
+    setDirty(true);
+  };
+
+  const setServiceDate = (iso) => {
+    setDraft((d) => withDueDate({ ...d, serviceDate: iso, dueDate: "" }));
+    setDirty(true);
+  };
+
+  /* ---- filling declared income ---- */
+
+  /* The return this practice already holds for a year, if the portal sync has
+     been run. Matched on PAN and assessment year, which is how returns are
+     keyed in Firestore. */
+  const syncedReturn = React.useCallback((ay) => {
+    const pan = (draft.pan || "").toUpperCase();
+    if (!pan) return null;
+    return (data.returns || []).find((r) => (r.pan || "").toUpperCase() === pan && r.ay === ay) || null;
+  }, [data.returns, draft.pan]);
+
+  /* Apply one reading to the row its assessment year belongs to.
+   *
+   * Deliberately routed by the A.Y. IN THE FILE rather than by the row the
+   * button sits on. Seven JSONs downloaded from the portal in one go are named
+   * by acknowledgement number, and a practitioner picking the wrong one out of
+   * that list would otherwise put one year's declared income against another —
+   * silently, and in a figure that reduces the undisclosed income. */
+  const applyReading = (reading, source, expectedAy) => {
+    if (!reading) { notify("That file isn't an ITR JSON downloaded from the portal.", "alert"); return false; }
+    const pan = (draft.pan || "").toUpperCase();
+    if (pan && reading.pan && reading.pan !== pan) {
+      notify(`That return is for PAN ${reading.pan}, not ${pan}.`, "alert");
+      return false;
+    }
+    const row = draft.years.find((y) => y.ay === reading.ay);
+    if (!row) {
+      notify(
+        reading.ay
+          ? `That return is for A.Y. ${reading.ay}, which is outside this block period.`
+          : "That file doesn't say which assessment year it is for.",
+        "alert"
+      );
+      return false;
+    }
+    setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === row.ay ? withDeclared(y, reading, source) : y)) }));
+    setDirty(true);
+    if (expectedAy && expectedAy !== row.ay) {
+      notify(`That file is A.Y. ${row.ay}, so it was filed against that year instead.`, "info");
+    }
+    return true;
+  };
+
+  const fillFromSync = async (year) => {
+    const ret = syncedReturn(year.ay);
+    if (!ret?.jsonPath) { notify(`No synced ITR JSON on file for A.Y. ${year.ay}.`, "alert"); return; }
+    setBusyYear(year.key);
+    try {
+      const json = await readStoredJson(ret.jsonPath);
+      if (applyReading(readDeclared(json), "sync", year.ay)) notify(`A.Y. ${year.ay} filled from the return on file.`);
+    } catch (e) {
+      console.error("itr-b: sync fill", e);
+      notify(e?.message?.slice(0, 240) || "Couldn't read that return.", "alert");
+    } finally {
+      setBusyYear("");
+    }
+  };
+
+  const fillAllFromSync = async () => {
+    const todo = draft.years.filter((y) => syncedReturn(y.ay)?.jsonPath);
+    if (!todo.length) { notify("No synced ITR JSONs on file for this block period yet — run a returns sync first.", "alert"); return; }
+    setBusyYear("all");
+    let done = 0;
+    for (const y of todo) {
+      try {
+        const json = await readStoredJson(syncedReturn(y.ay).jsonPath);
+        if (applyReading(readDeclared(json), "sync", y.ay)) done += 1;
+      } catch (err) {
+        console.error("itr-b: sync fill", y.ay, err);
+      }
+    }
+    setBusyYear("");
+    notify(done ? `Filled ${done} of ${todo.length} year${todo.length === 1 ? "" : "s"} from the returns on file.` : "Couldn't read any of the returns on file.", done ? "check" : "alert");
+  };
+
+  const onFiles = async (files, expectedAy) => {
+    let done = 0;
+    for (const file of files) {
+      try {
+        const reading = readDeclared(JSON.parse(await file.text()));
+        if (applyReading(reading, "json", expectedAy)) done += 1;
+      } catch (e) {
+        console.error("itr-b: upload", file.name, e);
+        notify(`${file.name} couldn't be read as an ITR JSON.`, "alert");
+      }
+    }
+    if (done) notify(`${done} return${done === 1 ? "" : "s"} read into the block period.`);
+  };
+
+  /* ---- saving, and the documents ---- */
+
+  const persist = async () => {
+    /* `id` is the Firestore document id, not part of the draft. It arrives on
+       the object because the store spreads it onto every snapshot row, and
+       writing it back would store the id inside the document it names. */
+    const payload = { ...draft, updatedAt: new Date().toISOString() };
+    delete payload.id;
+    setSaving(true);
+    try {
+      if (id) {
+        await updateItrbDraft(id, payload);
+      } else {
+        const created = await addItrbDraft(payload);
+        // The store has already said why it failed; saying "saved" over the
+        // top of that would be the one message the practitioner remembers.
+        if (!created?.id) return false;
+        setId(created.id);
+      }
+      setDraft((d) => ({ ...d, ...payload }));
+      setDirty(false);
+      return true;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const save = async () => { if (await persist()) notify("Draft saved."); };
+
+  const download = async (sections) => {
+    try {
+      const { buildItrBPDF, itrbFilename } = await import("./itrb/pdf.js");
+      const doc = buildItrBPDF({ draft, result, profile: data.profile });
+      saveBlob(doc.output("blob"), itrbFilename(draft, sections));
+      // A document that has been handed over should correspond to something on
+      // file, so the draft it was built from is saved with it.
+      if (dirty) await persist();
+      notify(sections === "computation" ? "Computation downloaded." : "Mock ITR-B downloaded.");
+    } catch (e) {
+      console.error("itr-b: pdf", e);
+      notify("Couldn't build the document.", "alert");
+    }
+  };
+
+  const exportJson = () => {
+    saveBlob(
+      new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" }),
+      `${(draft.name || "ITR-B draft").replace(/[\\/:*?"<>|]+/g, "")}.json`
+    );
+  };
+
+  const discard = async () => {
+    if (!id) { onBack(); return; }
+    if (!window.confirm("Delete this ITR-B draft? This cannot be undone.")) return;
+    await removeItrbDraft(id);
+    notify("Draft deleted.");
+    onBack();
+  };
+
+  /* ---- render ---- */
+
+  const assesseeOptions = (data.assessees || []).map((a) => ({
+    value: a.name, label: titleCase(a.name), sub: `${a.pan || "No PAN"} · ${a.status || ""}`, a,
+  }));
+
+  return (
+    <div className="animate-in">
+      <div className="topbar">
+        <div style={{minWidth: 0}}>
+          <button className="btn btn-ghost btn-sm" onClick={onBack} style={{marginBottom: 6, marginLeft: -8}}>
+            <Icon name="arrow-left" size={13}/>All tools
+          </button>
+          <div className="page-title" style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
+            ITR-B
+            <span className="pill pill-warning" style={{fontSize: 11}}>BETA</span>
+          </div>
+          <div className="page-sub">
+            Block assessment return under s.158BC — Chapter XIV-B, rule 12AE. A working paper, not a filing.
+          </div>
+        </div>
+        <div className="topbar-actions">
+          {dirty && <span className="pill pill-warning" style={{fontSize: 11}}>Unsaved</span>}
+          <button className="btn btn-secondary btn-sm" onClick={save} disabled={saving}>
+            <Icon name="check" size={13}/>{saving ? "Saving…" : "Save draft"}
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => download("both")}>
+            <Icon name="pdf" size={13}/>Download
+          </button>
+        </div>
+      </div>
+
+      <SummaryBar draft={draft} result={result}/>
+
+      <div className="utabs">
+        {TABS.map((t) => (
+          <div key={t} className={`utab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</div>
+        ))}
+      </div>
+
+      {tab === "Details" && (
+        <DetailsTab
+          draft={draft} edit={edit} period={period}
+          assesseeOptions={assesseeOptions} onPickAssessee={pickAssessee}
+          onSearchDate={setSearchDate} onServiceDate={setServiceDate}
+        />
+      )}
+
+      {tab === "Block period" && (
+        <BlockTab
+          draft={draft} result={result} editYear={editYear}
+          period={period} busyYear={busyYear}
+          syncedReturn={syncedReturn}
+          onFillYear={fillFromSync} onFillAll={fillAllFromSync}
+          onFiles={onFiles} fileRef={fileRef}
+        />
+      )}
+
+      {tab === "Tax" && <TaxTab draft={draft} result={result} edit={edit} editYear={editYear}/>}
+
+      {tab === "Review" && (
+        <ReviewTab
+          draft={draft} result={result} gaps={gaps} edit={edit}
+          onDownload={download} onExport={exportJson} onDiscard={discard}
+          onGoto={setTab}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+/* The three figures that decide everything, kept on screen on every tab. A
+   block return is a long form and the total undisclosed income is the number a
+   practitioner is steering by throughout it. */
+function SummaryBar({ draft, result }) {
+  const items = [
+    { label: "BLOCK PERIOD", value: draft.blockFrom ? `${dateOf(draft.blockFrom)} – ${dateOf(draft.blockTo)}` : "Not set", plain: true },
+    { label: "UNDISCLOSED INCOME", value: fmtINR(result.totalUndisclosed) },
+    { label: `TAX u/s 113 @ ${result.tax.rate}%`, value: fmtINR(Math.round(result.tax.aggregate)) },
+    // "Refund due" only when there genuinely is one. An empty draft nets to
+    // nil, and labelling that a refund is a promise the return does not make.
+    { label: result.refundDue > 0 ? "REFUND DUE" : "NET PAYABLE", value: fmtINR(result.refundDue > 0 ? result.refundDue : result.netPayable), emph: true },
+  ];
+  return (
+    <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, margin: "4px 0 16px"}}>
+      {items.map((it) => (
+        <div key={it.label} className="card" style={{padding: "13px 15px", background: it.emph ? "var(--p-lavender-2)" : "white"}}>
+          <div className="muted" style={{fontSize: 10, fontWeight: 700, letterSpacing: "0.08em"}}>{it.label}</div>
+          <div style={{fontSize: it.plain ? 13 : 17, fontWeight: 800, marginTop: 4, color: it.emph ? "var(--p-primary-2)" : "var(--p-text)"}}>{it.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------ Part A ------------------------------ */
+
+function DetailsTab({ draft, edit, period, assesseeOptions, onPickAssessee, onSearchDate, onServiceDate }) {
+  return (
+    <>
+      <div className="card">
+        <div className="card-head">
+          <div>
+            <div className="card-title">The assessee</div>
+            <div className="card-sub">Pick the client and Part A fills itself from their record — the PAN, the status, the address and the contact details, all as already held.</div>
+          </div>
+        </div>
+        <div className="form-grid">
+          <FormField label="Assessee" full>
+            <ComboBox
+              value={draft.assessee}
+              onChange={(v) => edit({ assessee: v })}
+              onPick={(o) => onPickAssessee(o.a)}
+              options={assesseeOptions}
+              placeholder="Search the assessee register by name or PAN…"
+              subMono
+            />
+          </FormField>
+          <FormField label="PAN" required>
+            <input value={draft.pan} onChange={(e) => edit({ pan: e.target.value.toUpperCase() })} placeholder="AAAPZ1234A"
+              style={{fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", letterSpacing: "0.04em"}}/>
+          </FormField>
+          <FormField label="Status">
+            <SelectInput value={draft.status} onChange={(v) => edit({ status: v })} options={STATUSES}/>
+          </FormField>
+          <FormField label="Date of birth / incorporation">
+            <input type="date" value={draft.dob || ""} onChange={(e) => edit({ dob: e.target.value })}/>
+          </FormField>
+          <FormField label="Aadhaar (individuals)">
+            <input value={draft.aadhaar} onChange={(e) => edit({ aadhaar: e.target.value })} placeholder="Optional"/>
+          </FormField>
+          <FormField label="Address" full>
+            <input value={draft.address} onChange={(e) => edit({ address: e.target.value })}/>
+          </FormField>
+          <FormField label="Mobile">
+            <input value={draft.mobile} onChange={(e) => edit({ mobile: e.target.value })}/>
+          </FormField>
+          <FormField label="E-mail">
+            <input value={draft.email} onChange={(e) => edit({ email: e.target.value })}/>
+          </FormField>
+          <FormField label="Residential status">
+            <SelectInput value={draft.residentialStatus} onChange={(v) => edit({ residentialStatus: v })}
+              options={["Resident", "Resident but not ordinarily resident", "Non-resident"]}/>
+          </FormField>
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">The search and the notice</div>
+            <div className="card-sub">The date of the search fixes the block period; the date the s.158BC notice was served fixes the sixty-day due date.</div>
+          </div>
+        </div>
+        <div className="form-grid">
+          <FormField label="Initiated under" required>
+            <SelectInput value={draft.searchSection} onChange={(v) => edit({ searchSection: v })} options={SEARCH_SECTIONS}/>
+          </FormField>
+          <FormField label="Date of search / requisition" required>
+            <input type="date" value={draft.searchDate || ""} onChange={(e) => onSearchDate(e.target.value)}/>
+          </FormField>
+          <FormField label="Date of last panchnama">
+            <input type="date" value={draft.lastPanchnamaDate || ""} onChange={(e) => edit({ lastPanchnamaDate: e.target.value })}/>
+          </FormField>
+          <FormField label="Return furnished under">
+            <SelectInput value={draft.returnSection} onChange={(v) => edit({ returnSection: v })} options={RETURN_SECTIONS}/>
+          </FormField>
+          <FormField label="Notice u/s 158BC dated">
+            <input type="date" value={draft.noticeDate || ""} onChange={(e) => edit({ noticeDate: e.target.value })}/>
+          </FormField>
+          <FormField label="DIN of the notice" required>
+            <input value={draft.noticeDin} onChange={(e) => edit({ noticeDin: e.target.value })} placeholder="ITBA/…"
+              style={{fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5}}/>
+          </FormField>
+          <FormField label="Date of service" required>
+            <input type="date" value={draft.serviceDate || ""} onChange={(e) => onServiceDate(e.target.value)}/>
+          </FormField>
+          <FormField label="Due date (60 days from service)">
+            <input type="date" value={draft.dueDate || ""} onChange={(e) => edit({ dueDate: e.target.value })}/>
+          </FormField>
+          <FormField label="Date this return is furnished">
+            <input type="date" value={draft.filedOn || ""} onChange={(e) => edit({ filedOn: e.target.value })}/>
+          </FormField>
+        </div>
+        <div style={{display: "flex", gap: 24, flexWrap: "wrap", marginTop: 14}}>
+          <label style={{display: "flex", alignItems: "center", gap: 10, fontSize: 13}}>
+            <Toggle checked={!!draft.auditUs44AB} onChange={(v) => edit({ auditUs44AB: v })} label="Accounts audited u/s 44AB"/>
+            Accounts audited u/s 44AB
+          </label>
+          <label style={{display: "flex", alignItems: "center", gap: 10, fontSize: 13}}>
+            <Toggle checked={!!draft.booksFound} onChange={(v) => edit({ booksFound: v })} label="Books or documents found in the search"/>
+            Books or documents found in the search
+          </label>
+        </div>
+
+        {draft.searchDate && !period.ok && (
+          <div style={{marginTop: 14, padding: "11px 13px", borderRadius: 12, background: "var(--p-coral)", color: "#B8463A", fontSize: 12.5, fontWeight: 500}}>
+            <Icon name="alert" size={14}/> {period.reason}
+          </div>
+        )}
+        {period.ok && (
+          <div style={{marginTop: 14, padding: "11px 13px", borderRadius: 12, background: "var(--p-lavender-2)", fontSize: 12.5}}>
+            Block period: <strong>{dateOf(period.from)} to {dateOf(period.to)}</strong> — the six previous years relevant to
+            A.Y. {period.years[0].ay} to A.Y. {period.years[5].ay}, and the part of P.Y. {period.searchPy} up to the date of the search (s.158B(b)).
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">Verification</div>
+            <div className="card-sub">The declaration printed at the foot of the return. Rule 12AE requires a digital signature for a company, a political party, and anyone whose accounts are audited u/s 44AB.</div>
+          </div>
+        </div>
+        <div className="form-grid">
+          <FormField label="Verified by">
+            <input value={draft.verifierName} onChange={(e) => edit({ verifierName: e.target.value })}/>
+          </FormField>
+          <FormField label="Son / daughter of">
+            <input value={draft.verifierFather} onChange={(e) => edit({ verifierFather: e.target.value })}/>
+          </FormField>
+          <FormField label="Capacity">
+            <SelectInput value={draft.verifierCapacity} onChange={(v) => edit({ verifierCapacity: v })}
+              options={["Self", "Karta", "Partner", "Director", "Principal Officer", "Trustee", "Authorised representative"]}/>
+          </FormField>
+          <FormField label="PAN of the verifier">
+            <input value={draft.verifierPan} onChange={(e) => edit({ verifierPan: e.target.value.toUpperCase() })}
+              style={{fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"}}/>
+          </FormField>
+          <FormField label="Place">
+            <input value={draft.verificationPlace} onChange={(e) => edit({ verificationPlace: e.target.value })}/>
+          </FormField>
+          <FormField label="Date">
+            <input type="date" value={draft.verificationDate || ""} onChange={(e) => edit({ verificationDate: e.target.value })}/>
+          </FormField>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* --------------------------- Parts B and C --------------------------- */
+
+/* `draft` AND `result` both, deliberately.
+ *
+ * The header of each year card reads the computed row — the totals, the floor,
+ * the credits added up. The panel inside it edits the DRAFT row, because
+ * computeItrB() coerces every blank to a number for the arithmetic, and an
+ * input bound to that shows a nil in every field nobody has filled in yet. A
+ * form full of zeroes reads as a return that has been completed. */
+function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onFillYear, onFillAll, onFiles, fileRef }) {
+  const [open, setOpen] = React.useState("");
+
+  if (!period.ok) {
+    return (
+      <div className="card">
+        <EmptyState
+          icon="calendar"
+          title="Enter the date of the search first"
+          sub={period.reason || "The block period is the six previous years before the year of the search, plus the part of that year up to the date of the search. Everything on this tab follows from that one date."}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="card">
+        <div className="card-head" style={{flexWrap: "wrap", gap: 12}}>
+          <div>
+            <div className="card-title">Income already declared</div>
+            <div className="card-sub">
+              s.158BB(1) reduces the block income by what was already disclosed. Read it out of each year's filed return rather than keying it — the figure that reduces the undisclosed income should be the one in the return.
+            </div>
+          </div>
+          <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
+            <button className="btn btn-secondary btn-sm" onClick={onFillAll} disabled={busyYear === "all"}>
+              <Icon name="refresh" size={13}/>{busyYear === "all" ? "Reading…" : "Fill from synced returns"}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
+              <Icon name="upload" size={13}/>Upload ITR JSONs
+            </button>
+            <input
+              ref={fileRef} type="file" accept="application/json,.json" multiple hidden
+              onChange={(e) => { onFiles([...e.target.files], ""); e.target.value = ""; }}
+            />
+          </div>
+        </div>
+        <div className="muted" style={{fontSize: 11.5}}>
+          Upload as many years at once as you like — each file is filed against the assessment year it states, not the row it was dropped on.
+        </div>
+      </div>
+
+      <div style={{display: "flex", flexDirection: "column", gap: 12, marginTop: 14}}>
+        {result.years.map((y) => {
+          const ret = syncedReturn(y.ay);
+          const expanded = open === y.key;
+          return (
+            <div key={y.key} className="card" style={{padding: 0, overflow: "hidden"}}>
+              <div
+                onClick={() => setOpen(expanded ? "" : y.key)}
+                style={{display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", cursor: "pointer", flexWrap: "wrap"}}
+              >
+                <div style={{minWidth: 108}}>
+                  <div style={{fontWeight: 700, fontSize: 14}}>A.Y. {y.ay}</div>
+                  <div className="muted" style={{fontSize: 11}}>
+                    P.Y. {y.py}{y.part ? ` · to ${dateOf(y.to)}` : ""}
+                  </div>
+                </div>
+                {y.part && <span className="pill pill-info" style={{fontSize: 10.5}}>Part period</span>}
+                <div style={{flex: 1, minWidth: 130}}>
+                  <div className="muted" style={{fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em"}}>DECLARED</div>
+                  <div style={{fontSize: 13.5, fontWeight: 600}}>
+                    {returned(y)}
+                    {y.declaredSource && (
+                      <span className="pill pill-muted" style={{marginLeft: 8, fontSize: 10}}>
+                        {y.declaredSource === "sync" ? "from sync" : y.declaredSource === "json" ? "from JSON" : "keyed"}
+                        {y.declaredForm ? ` · ${y.declaredForm}` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{minWidth: 130}}>
+                  <div className="muted" style={{fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em"}}>UNDISCLOSED</div>
+                  <div style={{fontSize: 13.5, fontWeight: 700, color: y.totalUndisclosed ? "var(--p-primary-2)" : "var(--p-text-3)"}}>
+                    {y.totalUndisclosed ? fmtINR(y.totalUndisclosed) : "—"}
+                  </div>
+                </div>
+                {ret?.jsonPath && !y.declaredSource && <span className="pill pill-success" style={{fontSize: 10.5}}>Return on file</span>}
+                {y.floored && <span className="pill pill-warning" style={{fontSize: 10.5}} title="Heads net to a loss; the year is carried at nil — s.158BB(4)">Loss disregarded</span>}
+                <Icon name={expanded ? "chevron-down" : "chevron-right"} size={16}/>
+              </div>
+
+              {expanded && (
+                <div style={{padding: "0 18px 18px", borderTop: "1px solid var(--p-line)"}}>
+                  <YearPanel
+                    year={draft.years.find((row) => row.key === y.key) || y}
+                    ret={ret} busy={busyYear === y.key}
+                    onFill={() => onFillYear(y)}
+                    onFiles={(files) => onFiles(files, y.ay)}
+                    editYear={editYear}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="card" style={{marginTop: 14}}>
+        <div className="card-head">
+          <div className="card-title">Block period totals</div>
+        </div>
+        <Table wide>
+          <thead>
+            <tr>
+              <th>Head of income</th>
+              {result.years.map((y) => <th key={y.key} style={{textAlign: "right"}}>{y.ay}</th>)}
+              <th style={{textAlign: "right"}}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {UNDISCLOSED_HEADS.map((h) => (
+              <tr key={h.key}>
+                <td>{h.short}</td>
+                {result.years.map((y) => (
+                  <td key={y.key} style={{textAlign: "right"}}>{y.undisclosed[h.key] ? fmtINR(y.undisclosed[h.key]) : "—"}</td>
+                ))}
+                <td style={{textAlign: "right", fontWeight: 600}}>{result.byHead[h.key] ? fmtINR(result.byHead[h.key]) : "—"}</td>
+              </tr>
+            ))}
+            <tr style={{fontWeight: 700}}>
+              <td>Total undisclosed income</td>
+              {result.years.map((y) => <td key={y.key} style={{textAlign: "right"}}>{y.totalUndisclosed ? fmtINR(y.totalUndisclosed) : "—"}</td>)}
+              <td style={{textAlign: "right"}}>{fmtINR(result.totalUndisclosed)}</td>
+            </tr>
+          </tbody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+function YearPanel({ year, ret, busy, onFill, onFiles, editYear }) {
+  const upload = React.useRef(null);
+  const set = (patch) => editYear(year.key, patch);
+  const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
+  const setCredit = (key, v) => set({ credits: { ...year.credits, [key]: v } });
+
+  return (
+    <div style={{paddingTop: 16, display: "flex", flexDirection: "column", gap: 18}}>
+      {/* ---- declared ---- */}
+      <div>
+        <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10}}>
+          <div style={{fontWeight: 700, fontSize: 12.5}}>Income declared in the return filed</div>
+          <div style={{flex: 1}}/>
+          <button className="btn btn-secondary btn-xs" onClick={onFill} disabled={busy || !ret?.jsonPath}
+            title={ret?.jsonPath ? "Read this year's declared income from the return already synced" : "No synced ITR JSON on file for this year"}>
+            <Icon name="refresh" size={11}/>{busy ? "Reading…" : "From synced return"}
+          </button>
+          <button className="btn btn-secondary btn-xs" onClick={() => upload.current?.click()}>
+            <Icon name="upload" size={11}/>Upload JSON
+          </button>
+          <input ref={upload} type="file" accept="application/json,.json" hidden
+            onChange={(e) => { onFiles([...e.target.files]); e.target.value = ""; }}/>
+        </div>
+
+        {ret && (
+          <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+            On file: {ret.form || "ITR"} · ack {ret.ackNum || "—"} · filed {dateOf(ret.filedOn)}
+            {ret.jsonPath ? "" : " · the JSON for this year hasn't been synced, so upload it instead"}
+          </div>
+        )}
+
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
+          {HEADS.map((h) => (
+            <div key={h.key} className="field">
+              <label style={{fontSize: 11}}>{h.short}</label>
+              <input value={year.declared?.[h.key] === null || year.declared?.[h.key] === undefined ? "" : year.declared[h.key]} readOnly disabled
+                style={{textAlign: "right", background: "var(--p-card-tint)", fontVariantNumeric: "tabular-nums"}}/>
+            </div>
+          ))}
+          <div className="field">
+            <label style={{fontSize: 11, fontWeight: 700}}>Total income returned</label>
+            <Amount value={year.declaredTotal} onChange={(v) => set({ declaredTotal: v, declaredSource: year.declaredSource || "manual" })}/>
+          </div>
+        </div>
+        <label style={{display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, marginTop: 12}}>
+          <Toggle checked={year.returnFiled !== false} onChange={(v) => set({ returnFiled: v })} label="A return was filed for this year"/>
+          A return was filed for this year
+        </label>
+      </div>
+
+      {/* ---- undisclosed ---- */}
+      <div>
+        <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>Undisclosed income determined on the material found</div>
+        <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+          Enter what the search brought out over and above the return, head by head. A head left blank is nil.
+        </div>
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
+          {UNDISCLOSED_HEADS.map((h) => (
+            <div key={h.key} className="field">
+              <label style={{fontSize: 11}}>{h.short}</label>
+              <Amount value={year.undisclosed[h.key]} onChange={(v) => setUndisclosed(h.key, v)}/>
+            </div>
+          ))}
+        </div>
+        <div className="form-grid" style={{marginTop: 12}}>
+          <FormField label="Manner in which the income was derived — s.158BC(1)(a)" full>
+            <textarea rows={2} value={year.manner} onChange={(e) => set({ manner: e.target.value })}
+              placeholder="e.g. Cash sales suppressed and kept out of the books."/>
+          </FormField>
+          <FormField label="Material it is based on" full>
+            <input value={year.evidence} onChange={(e) => set({ evidence: e.target.value })}
+              placeholder="e.g. Annexure A-3, pages 12–31, seized from the business premises"/>
+          </FormField>
+        </div>
+      </div>
+
+      {/* ---- credits ---- */}
+      <div>
+        <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>Taxes already paid for this year</div>
+        <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+          Only what is relatable to the undisclosed income — credit already taken in the year's own assessment cannot be claimed again here.
+        </div>
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
+          {[["tds", "TDS"], ["tcs", "TCS"], ["advance", "Advance tax"], ["selfAssessment", "Self-assessment tax"]].map(([k, label]) => (
+            <div key={k} className="field">
+              <label style={{fontSize: 11}}>{label}</label>
+              <Amount value={year.credits?.[k]} onChange={(v) => setCredit(k, v)}/>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Parts D and E ---------------------------- */
+
+function TaxTab({ draft, result, edit, editYear }) {
+  const t = result.tax;
+  const line = (label, basis, value, opts = {}) => (
+    <tr key={label} style={opts.strong ? {fontWeight: 700} : null}>
+      <td>{label}</td>
+      <td className="muted">{basis}</td>
+      <td style={{textAlign: "right", fontVariantNumeric: "tabular-nums"}}>{fmtINR(Math.round(value))}</td>
+    </tr>
+  );
+
+  return (
+    <>
+      <div className="card">
+        <div className="card-head">
+          <div>
+            <div className="card-title">Rates</div>
+            <div className="card-sub">
+              s.113 charges the undisclosed income of the block period at a flat 60%. The surcharge is whatever the Finance Act of the
+              year the search was initiated levies, which is why it is a field here and not a fixed number.
+            </div>
+          </div>
+        </div>
+        <div className="form-grid">
+          <FormField label={`Tax rate % — s.113 (default ${RATE_113})`}>
+            <Amount value={draft.taxRate} onChange={(v) => edit({ taxRate: v })} placeholder={String(RATE_113)} align="left"/>
+          </FormField>
+          <FormField label="Surcharge %">
+            <Amount value={draft.surchargeRate} onChange={(v) => edit({ surchargeRate: v })} placeholder="0" align="left"/>
+          </FormField>
+          <FormField label={`Health & education cess % (default ${RATE_CESS})`}>
+            <Amount value={draft.cessRate} onChange={(v) => edit({ cessRate: v })} placeholder={String(RATE_CESS)} align="left"/>
+          </FormField>
+          <FormField label={`Interest % per month — s.158BFA(1) (default ${RATE_158BFA})`}>
+            <Amount value={draft.interestRate} onChange={(v) => edit({ interestRate: v })} placeholder={String(RATE_158BFA)} align="left"/>
+          </FormField>
+          <FormField label="Months of delay">
+            <Amount value={draft.interestMonths} onChange={(v) => edit({ interestMonths: v })}
+              placeholder={`${t.derivedMonths} — from the dates`} align="left"/>
+          </FormField>
+        </div>
+        <div className="muted" style={{fontSize: 11.5, marginTop: 10}}>
+          {draft.dueDate && draft.filedOn
+            ? `Due ${dateOf(draft.dueDate)}, furnished ${dateOf(draft.filedOn)} — ${t.derivedMonths} month${t.derivedMonths === 1 ? "" : "s"} of delay, counting a part of a month as a whole one. Leave the field blank to use that.`
+            : "Enter the date of service and the date this return is furnished on the Details tab and the months of delay follow from them."}
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div className="card-title">Tax on the undisclosed income</div>
+        </div>
+        <Table>
+          <thead><tr><th>Particulars</th><th>Basis</th><th style={{textAlign: "right"}}>Amount</th></tr></thead>
+          <tbody>
+            {line("Total undisclosed income of the block period", "Part C", result.totalUndisclosed)}
+            {line("Rounded off", "s.288B", result.roundedUndisclosed)}
+            {line("Tax on undisclosed income", `s.113 @ ${t.rate}%`, t.amount)}
+            {line("Add: surcharge", `@ ${t.surchargeRate}%`, t.surcharge)}
+            {line("Add: health and education cess", `@ ${t.cessRate}%`, t.cess)}
+            {line("Tax, surcharge and cess", "", t.grossLiability, { strong: true })}
+            {line("Add: interest for late furnishing", `s.158BFA(1) @ ${t.interestRate}% × ${t.interestMonths}`, t.interest)}
+            {line("Aggregate liability", "", t.aggregate, { strong: true })}
+            {line("Less: credit for taxes paid", "Part E", -result.credits.total)}
+            {line(result.netPayable > 0 ? "Tax payable" : "Refund due", "", result.netPayable > 0 ? result.netPayable : result.refundDue, { strong: true })}
+          </tbody>
+        </Table>
+        <div style={{marginTop: 14, padding: "11px 13px", borderRadius: 12, background: "var(--p-amber)", color: "#8A5B10", fontSize: 12.5}}>
+          <strong>Penalty exposure — s.158BFA(2): {fmtINR(Math.round(result.penaltyExposure))}.</strong>{" "}
+          Fifty per cent of the tax on the undisclosed income. No penalty is leviable on undisclosed income declared in this return where the
+          tax on it is paid and evidence of payment is furnished with the return, so this is what is at stake in what is left out — not what is put in.
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">Taxes paid, year by year</div>
+            <div className="card-sub">The same figures as on each year's card, together — this is Part E of the return.</div>
+          </div>
+        </div>
+        <Table wide>
+          <thead>
+            <tr>
+              <th>A.Y.</th><th style={{textAlign: "right"}}>TDS</th><th style={{textAlign: "right"}}>TCS</th>
+              <th style={{textAlign: "right"}}>Advance tax</th><th style={{textAlign: "right"}}>Self-assessment tax</th>
+              <th style={{textAlign: "right"}}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.years.map((y) => (
+              <tr key={y.key}>
+                <td>{y.ay}</td>
+                {["tds", "tcs", "advance", "selfAssessment"].map((k) => (
+                  <td key={k} style={{textAlign: "right"}}>
+                    <Amount value={y.credits[k] || ""} onChange={(v) => editYear(y.key, { credits: { ...y.credits, [k]: v } })} width={100}/>
+                  </td>
+                ))}
+                <td style={{textAlign: "right", fontWeight: 600}}>{y.credits.total ? fmtINR(y.credits.total) : "—"}</td>
+              </tr>
+            ))}
+            <tr style={{fontWeight: 700}}>
+              <td>Total</td>
+              <td style={{textAlign: "right"}}>{fmtINR(result.credits.tds)}</td>
+              <td style={{textAlign: "right"}}>{fmtINR(result.credits.tcs)}</td>
+              <td style={{textAlign: "right"}}>{fmtINR(result.credits.advance)}</td>
+              <td style={{textAlign: "right"}}>{fmtINR(result.credits.selfAssessment)}</td>
+              <td style={{textAlign: "right"}}>{fmtINR(result.credits.total)}</td>
+            </tr>
+          </tbody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------- Review ------------------------------- */
+
+function ReviewTab({ draft, result, gaps, edit, onDownload, onExport, onDiscard, onGoto }) {
+  return (
+    <>
+      <div className="card">
+        <div className="card-head">
+          <div>
+            <div className="card-title">Before this is filed</div>
+            <div className="card-sub">What a reviewer would ask for. None of it stops the document being produced — it is a working paper.</div>
+          </div>
+        </div>
+        {gaps.length === 0 ? (
+          <div style={{display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, background: "var(--p-mint)", color: "#1B8C5C", fontSize: 13, fontWeight: 600}}>
+            <Icon name="check" size={15}/> Everything the form asks for is here. Check the figures against the seized material before filing.
+          </div>
+        ) : (
+          <ul style={{display: "flex", flexDirection: "column", gap: 8, margin: 0, paddingLeft: 0, listStyle: "none"}}>
+            {gaps.map((g) => (
+              <li key={g} style={{display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13}}>
+                <span style={{color: "var(--p-warning, #B07512)", marginTop: 1, flexShrink: 0}}><Icon name="alert" size={14}/></span>
+                <span>{g}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">Summarised computation of income</div>
+            <div className="card-sub">Head by head, for each previous year in the block period — this is what goes to the client with the return.</div>
+          </div>
+        </div>
+        {result.years.length === 0 ? (
+          <EmptyState icon="calendar" title="No block period yet" sub="Enter the date of the search on the Details tab."
+            action={<button className="btn btn-secondary btn-sm" onClick={() => onGoto("Details")}>Go to Details</button>}/>
+        ) : (
+          <Table wide>
+            <thead>
+              <tr>
+                <th>Head of income</th>
+                {result.years.map((y) => <th key={y.key} style={{textAlign: "right"}}>{y.ay}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colSpan={result.years.length + 1} className="muted" style={{fontWeight: 600}}>Income disclosed in the return filed</td></tr>
+              {HEADS.map((h) => (
+                <tr key={`d-${h.key}`}>
+                  <td>{h.label}</td>
+                  {result.years.map((y) => <td key={y.key} style={{textAlign: "right"}}>{money(y.declared?.[h.key])}</td>)}
+                </tr>
+              ))}
+              <tr style={{fontWeight: 600}}>
+                <td>Total income returned</td>
+                {result.years.map((y) => <td key={y.key} style={{textAlign: "right"}}>{returned(y)}</td>)}
+              </tr>
+              <tr><td colSpan={result.years.length + 1} className="muted" style={{fontWeight: 600}}>Undisclosed income determined on the material found</td></tr>
+              {UNDISCLOSED_HEADS.map((h) => (
+                <tr key={`u-${h.key}`}>
+                  <td>{h.label}</td>
+                  {result.years.map((y) => <td key={y.key} style={{textAlign: "right"}}>{y.undisclosed[h.key] ? fmtINR(y.undisclosed[h.key]) : "—"}</td>)}
+                </tr>
+              ))}
+              <tr style={{fontWeight: 700}}>
+                <td>Total income for the block assessment</td>
+                {result.years.map((y) => <td key={y.key} style={{textAlign: "right"}}>{fmtINR(y.assessedTotal)}</td>)}
+              </tr>
+            </tbody>
+          </Table>
+        )}
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">Take it away</div>
+            <div className="card-sub">The mock return and the computation come as one document, so what the client signs off is what the figures were built from.</div>
+          </div>
+        </div>
+        <div style={{display: "flex", gap: 10, flexWrap: "wrap"}}>
+          <button className="btn btn-primary btn-sm" onClick={() => onDownload("both")}>
+            <Icon name="pdf" size={13}/>Mock ITR-B + computation
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => onDownload("computation")}>
+            <Icon name="pdf" size={13}/>Computation only
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={onExport}>
+            <Icon name="download" size={13}/>Export draft as JSON
+          </button>
+          <div style={{flex: 1}}/>
+          <button className="btn btn-ghost btn-sm" onClick={onDiscard} style={{color: "var(--p-danger)"}}>
+            <Icon name="trash" size={13}/>Delete draft
+          </button>
+        </div>
+        <div className="muted" style={{fontSize: 11.5, marginTop: 12}}>
+          Nothing here is transmitted to the department. The return itself is furnished on the e-filing portal under s.158BC, verified as rule 12AE requires.
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-head">
+          <div>
+            <div className="card-title">Notes</div>
+            <div className="card-sub">Printed under the computation, where the client reads it.</div>
+          </div>
+        </div>
+        <textarea
+          rows={3}
+          value={draft.notes}
+          onChange={(e) => edit({ notes: e.target.value })}
+          placeholder="Anything that should print under the computation — how a figure was arrived at, what is still to be confirmed."
+        />
+      </div>
+    </>
+  );
+}

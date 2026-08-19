@@ -45,7 +45,7 @@ export const invoiceStatus = (inv) => {
 
 export const invoiceOutstanding = (inv) => Math.max(0, inv.amount - (inv.received || 0));
 
-const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "docRequests", "todos", "receipts", "groups", "returns"];
+const COLLECTIONS = ["assessees", "matters", "hearings", "notices", "invoices", "communications", "docRequests", "todos", "receipts", "groups", "returns", "itrbDrafts"];
 
 const AVATAR_COLORS = ["violet", "pink", "amber", "mint"];
 export const nextColor = (assessees) => AVATAR_COLORS[assessees.length % AVATAR_COLORS.length];
@@ -131,7 +131,7 @@ export function buildSampleData() {
 /* ---------------- context ---------------- */
 
 const emptyData = () => ({
-  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], docRequests: [], todos: [], receipts: [], groups: [], returns: [],
+  assessees: [], matters: [], hearings: [], notices: [], invoices: [], communications: [], docRequests: [], todos: [], receipts: [], groups: [], returns: [], itrbDrafts: [],
   profile: { ownerName: "", firmName: "" },
   invoiceSeq: 120, receiptSeq: 0,
 });
@@ -281,6 +281,12 @@ export function DataProvider({ children }) {
          card, which is a merge into `varianceReviewed` and touches nothing the
          sync owns. There is deliberately no addReturn or removeReturn. */
       updateReturn: updateIn("returns"),
+      /* ITR-B working papers (Tools → ITR-B). A block return is seven years of
+         figures behind one PAN and is built over days, so the draft is a
+         first-class record rather than something held in the page's state — it
+         has to survive a closed tab, and it is what the mock return and the
+         computation are both built from. */
+      addItrbDraft: addTo("itrbDrafts"), updateItrbDraft: updateIn("itrbDrafts"), removeItrbDraft: removeFrom("itrbDrafts"),
       addInvoice: async (rec) => {
         try {
           const invRef = doc(colRef("invoices"));

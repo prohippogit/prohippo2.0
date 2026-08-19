@@ -130,6 +130,20 @@ input, select, textarea { font-family: inherit; color: inherit; }
   border-radius: 8px; padding: 2px 7px;
 }
 .nav-item.active .nav-badge { background: var(--p-pink-2); color: #C13388; }
+/* The Beta tag on a nav link. Pushed to the right the way a count is, but
+   quieter than one: it is a label on the link, not a number to act on. When the
+   item also carries a count the tag stays put and the count follows it, so the
+   two never fight over the same edge. */
+.nav-beta {
+  margin-left: auto;
+  background: rgba(255, 209, 122, 0.24);
+  color: #FFD17A;
+  border: 1px solid rgba(255, 209, 122, 0.34);
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  border-radius: 7px; padding: 1px 6px;
+}
+.nav-beta + .nav-badge { margin-left: 6px; }
+.nav-item.active .nav-beta { background: #FAEFD6; color: #AE7414; border-color: #F0DCB4; }
 
 .sidebar-bottom {
   margin-top: auto;

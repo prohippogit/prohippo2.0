@@ -28,6 +28,7 @@
  * null, and the UI shows a dash rather than a zero somebody might mistake for a
  * declaration.
  */
+import { filedSectionFrom } from "./partA.js";
 
 // The form is the sole key under ITR — the same read src/computation/detect.js
 // makes, because the wrapper key is what every schedule hangs off.
@@ -144,6 +145,9 @@ export function readDeclared(itrJson) {
     name: text(identity, ["AssesseeName.SurNameOrOrgName", "Name", "AssesseeName"]),
     filedOn: text(filing, ["Verification.Date", "ReturnFileDt", "DateOfFiling"]),
     ackNum: text(filing, ["AcknowledgementNo", "AckNum"]),
+    // The section the return was furnished under, where the code is one we can
+    // evidence. Part A asks for it per year; partA.js holds the mapping.
+    filedSection: filedSectionFrom(itrJson),
 
     /* Head totals. ITR-1 has no business or capital-gains head at all, so those
        read null on it — which is the truth, and prints as a dash. */

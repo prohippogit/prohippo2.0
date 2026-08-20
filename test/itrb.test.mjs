@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy } from "../src/tools/itrb/blockPeriod.js";
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import { columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS } from "../src/tools/itrb/partC.js";
+import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
@@ -685,4 +686,93 @@ test("no intimation, no reading, and no figure all suggest nothing", () => {
   assert.equal(determinedFromReturn({ orders: [{ orderDate: "2024-01-01" }] }), null);
   // A read that found the row but no computed figure is not a suggestion.
   assert.equal(determinedFromReturn({ orders: [{ reading: { lines: [{ head: "Total Income" }] } }] }), null);
+});
+
+
+/* ---------------------------------------------------------------------------
+ * Part A — the per-year questions, A25 to A34.
+ * ------------------------------------------------------------------------- */
+
+test("Part A asks three different sets of questions, by row", () => {
+  const v = (slot, part, spans) => variantFor({ slot, part }, spans);
+  // Y6 to Y2 get the short set — four questions about the return and nothing more.
+  assert.equal(v("Y6", false, false), "brief");
+  assert.equal(v("Y2", false, false), "brief");
+  // Y1 always gets the full set.
+  assert.equal(v("Y1", false, false), "full");
+  assert.equal(v("Y1", false, true), "full");
+  // Y0 depends on whether it is a part period or a complete year.
+  assert.equal(v("Y0", true, false), "partYear");     // A32
+  assert.equal(v("Y0", false, true), "full");         // A33
+  // A part period is asked almost nothing — there is no return to describe.
+  assert.equal(v("Y+1", true, true), "partYear");     // A34
+});
+
+test("each variant carries the form's own field numbers", () => {
+  assert.equal(FIELD_NUMBERS.brief.pending, "(iv)");
+  assert.equal(FIELD_NUMBERS.full.declaredTotal, "(v)");
+  assert.equal(FIELD_NUMBERS.full.determined, "(vi)");
+  assert.equal(FIELD_NUMBERS.full.dueDateExpired, "(ix)");
+  assert.equal(FIELD_NUMBERS.partYear.partYearIncome, "(i)");
+});
+
+test("the section a return was filed under is read only where the code is evidenced", () => {
+  // 12 is carried by the fixture named for being belated, which is what makes
+  // the mapping evidence rather than recollection.
+  assert.equal(filedSectionFrom(fixture("itr1-salary-belated-nil-ay2022-23")), "139(4)");
+  assert.equal(filedSectionFrom(fixture("itr2-salary-hp-capgains-ay2025-26")), "139(1)");
+  // ITR-5 nests the code a level deeper, under IncomeTaxSec.
+  assert.equal(filedSectionFrom(fixture("itr5-firm-business-loss-ay2025-26")), "139(1)");
+  // An unrecognised code is left for the practitioner rather than guessed at.
+  assert.equal(filedSectionFrom({ ITR: { ITR2: { FilingStatus: { ReturnFileSec: 99 } } } }), "");
+  assert.equal(filedSectionFrom({}), "");
+  assert.equal(filedSectionFrom(null), "");
+});
+
+test("reading a return fills the section, and never overwrites a chosen one", () => {
+  const d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  const filled = withDeclared(d.years[5], readDeclared(fixture("itr2-salary-hp-capgains-ay2025-26")), "sync");
+  assert.equal(filled.partA.filedSection, "139(1)");
+  assert.equal(filled.declaredForm, "ITR-2");
+
+  const chosen = { ...d.years[5], partA: { ...d.years[5].partA, filedSection: "148" } };
+  const again = withDeclared(chosen, readDeclared(fixture("itr2-salary-hp-capgains-ay2025-26")), "sync");
+  assert.equal(again.partA.filedSection, "148");
+});
+
+test("A32(i) / A34(i) is derived from Part C, not asked for twice", () => {
+  // The form sends the break-up of this income to Part B and states the same
+  // figure in Part C's part-period columns. One number, one place.
+  const t1 = { part: true, partC: { preInitiation: 700000, postInitiation: 150000 } };
+  assert.equal(partYearIncome(t1, { spansYears: false }), 850000);
+  const t2 = { part: true, partC: { nextYearPart: 90000 } };
+  assert.equal(partYearIncome(t2, { spansYears: true }), 90000);
+  // A complete year has no part-period income at all.
+  assert.equal(partYearIncome({ part: false, partC: { preInitiation: 700000 } }, { spansYears: false }), 0);
+  assert.equal(partYearIncome(null, { spansYears: false }), 0);
+});
+
+test("Part A reports what each variant is still missing", () => {
+  // A part period is asked almost nothing, so it is never short of anything.
+  assert.deepEqual(missingFor({ slot: "Y0", part: true, partA: {} }, false), []);
+
+  const brief = missingFor({ slot: "Y6", partA: {} }, false);
+  assert.ok(brief.includes("section filed under"));
+  // The one question nothing else on the row answers.
+  assert.ok(brief.includes("whether an assessment was pending at the date of initiation"));
+
+  // A full row where no return was filed asks a different pair of questions.
+  const notFiled = missingFor({ slot: "Y1", returnFiled: false, partA: {} }, false);
+  assert.deepEqual(notFiled, ["whether the s.139(1) due date had expired"]);
+  const openDueDate = missingFor({ slot: "Y1", returnFiled: false, partA: { dueDateExpired: "No" } }, false);
+  assert.ok(openDueDate.includes("the ITR form the income will be furnished in"));
+  // Once the due date has expired the form stops asking.
+  assert.deepEqual(missingFor({ slot: "Y1", returnFiled: false, partA: { dueDateExpired: "Yes" } }, false), []);
+
+  // A complete row is complete.
+  const done = missingFor({
+    slot: "Y1", returnFiled: true, filedOn: "2025-07-28", ackNum: "123", declaredForm: "ITR-2",
+    declaredTotal: 2353890, partA: { filedSection: "139(1)" },
+  }, false);
+  assert.deepEqual(done, []);
 });

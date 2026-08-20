@@ -33,8 +33,9 @@ import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withDueDate,
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
-import { DII_ITEMS, furnishingMode, ASSESSED_UNDER } from './itrb/form';
+import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
 import { columnsFor, labelFor, appliesTo, determinedFromReturn } from './itrb/partC';
+import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -698,7 +699,7 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
                   <YearPanel
                     year={draft.years.find((row) => row.key === y.key) || y}
                     computed={y}
-                    ret={ret} busy={busyYear === y.key} spansYears={result.spansYears}
+                    ret={ret} busy={busyYear === y.key} spansYears={result.spansYears} result={result}
                     onFill={() => onFillYear(y)}
                     onFiles={(files) => onFiles(files, y.ay)}
                     editYear={editYear}
@@ -744,10 +745,19 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
   );
 }
 
-function YearPanel({ year, computed, ret, busy, spansYears, onFill, onFiles, editYear }) {
+function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFiles, editYear }) {
   const upload = React.useRef(null);
   const set = (patch) => editYear(year.key, patch);
   const setPartC = (key, v) => set({ partC: { ...year.partC, [key]: v } });
+  const setPartA = (key, v) => set({ partA: { ...year.partA, [key]: v } });
+
+  /* Which of Part A's three sets of questions this row gets, and the form's own
+     field numbers for them — so the sheet and the portal screen agree. */
+  const variant = variantFor(year, spansYears);
+  const numbers = {
+    ...FIELD_NUMBERS[variant],
+    __label: variant === "brief" ? "A26–A30" : variant === "full" ? (year.slot === "Y1" ? "A31" : "A33") : (year.slot === "Y0" ? "A32" : "A34"),
+  };
 
   /* Column [B] read off the s.143(1) intimation this practice already holds.
      Offered, never applied: it comes from a language model's reading of a PDF,
@@ -770,13 +780,14 @@ function YearPanel({ year, computed, ret, busy, spansYears, onFill, onFiles, edi
 
   return (
     <div style={{paddingTop: 16, display: "flex", flexDirection: "column", gap: 18}}>
-      {/* ---- declared ---- */}
+      {/* ---- Part A, this year on the form ---- */}
       <div>
-        <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10}}>
-          <div style={{fontWeight: 700, fontSize: 12.5}}>Income declared in the return filed</div>
+        <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4}}>
+          <div style={{fontWeight: 700, fontSize: 12.5}}>Part A — the return for this year</div>
+          <span className="pill pill-muted" style={{fontSize: 10}}>{numbers.__label}</span>
           <div style={{flex: 1}}/>
           <button className="btn btn-secondary btn-xs" onClick={onFill} disabled={busy || !ret?.jsonPath}
-            title={ret?.jsonPath ? "Read this year's declared income from the return already synced" : "No synced ITR JSON on file for this year"}>
+            title={ret?.jsonPath ? "Read this year's return details from the copy already synced" : "No synced ITR JSON on file for this year"}>
             <Icon name="refresh" size={11}/>{busy ? "Reading…" : "From synced return"}
           </button>
           <button className="btn btn-secondary btn-xs" onClick={() => upload.current?.click()}>
@@ -785,31 +796,139 @@ function YearPanel({ year, computed, ret, busy, spansYears, onFill, onFiles, edi
           <input ref={upload} type="file" accept="application/json,.json" hidden
             onChange={(e) => { onFiles([...e.target.files]); e.target.value = ""; }}/>
         </div>
-
-        {ret && (
-          <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
-            On file: {ret.form || "ITR"} · ack {ret.ackNum || "—"} · filed {dateOf(ret.filedOn)}
-            {ret.jsonPath ? "" : " · the JSON for this year hasn't been synced, so upload it instead"}
-          </div>
-        )}
-
-        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
-          {HEADS.map((h) => (
-            <div key={h.key} className="field">
-              <label style={{fontSize: 11}}>{h.short}</label>
-              <input value={year.declared?.[h.key] === null || year.declared?.[h.key] === undefined ? "" : year.declared[h.key]} readOnly disabled
-                style={{textAlign: "right", background: "var(--p-card-tint)", fontVariantNumeric: "tabular-nums"}}/>
-            </div>
-          ))}
-          <div className="field">
-            <label style={{fontSize: 11, fontWeight: 700}}>Total income returned</label>
-            <Amount value={year.declaredTotal} onChange={(v) => set({ declaredTotal: v, declaredSource: year.declaredSource || "manual" })}/>
-          </div>
+        <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+          {ret
+            ? `On file: ${ret.form || "ITR"} · ack ${ret.ackNum || "—"} · filed ${dateOf(ret.filedOn)}${ret.jsonPath ? "" : " · the JSON for this year hasn't been synced, so upload it instead"}`
+            : "The form asks a different set of questions of each part of the block; these are the ones it asks of this row."}
         </div>
-        <label style={{display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, marginTop: 12}}>
-          <Toggle checked={year.returnFiled !== false} onChange={(v) => set({ returnFiled: v })} label="A return was filed for this year"/>
-          A return was filed for this year
-        </label>
+
+        {variant === "partYear" ? (
+          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10}}>
+            <div className="field">
+              <label style={{fontSize: 11}}>{numbers.partYearIncome} Income of the period</label>
+              {/* Derived, not asked for: the form sends the break-up of this to
+                  Part B and states the same figure in Part C's part-period
+                  columns. Three places for one number is two places to disagree. */}
+              <input readOnly disabled value={fmtINR(partYearIncome(year, result))}
+                style={{textAlign: "right", background: "var(--p-card-tint)", fontVariantNumeric: "tabular-nums"}}/>
+              <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>From Part C; break it up in Part B on the portal</span>
+            </div>
+            <div className="field">
+              <label style={{fontSize: 11}}>{numbers.intlTxnValue} Aggregate value of international transactions</label>
+              <Amount value={year.intlTxnValue} onChange={(v) => set({ intlTxnValue: v })}/>
+            </div>
+            <div className="field">
+              <label style={{fontSize: 11}}>{numbers.sdtValue} Aggregate value of specified domestic transactions</label>
+              <Amount value={year.sdtValue} onChange={(v) => set({ sdtValue: v })}/>
+            </div>
+          </div>
+        ) : (
+          <>
+            {variant === "full" && (
+              <label style={{display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, marginBottom: 12}}>
+                <Toggle checked={year.returnFiled !== false} onChange={(v) => set({ returnFiled: v })} label="Return of income furnished"/>
+                {numbers.returnFiled} Have you furnished a return of income for this year?
+              </label>
+            )}
+
+            {variant === "full" && year.returnFiled === false ? (
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10}}>
+                <div className="field">
+                  <label style={{fontSize: 11}}>{numbers.dueDateExpired} Has the s.139(1) due date expired?</label>
+                  <SelectInput value={year.partA?.dueDateExpired || ""} onChange={(v) => setPartA("dueDateExpired", v)}
+                    options={["Yes", "No"]} placeholder="Select"/>
+                </div>
+                {year.partA?.dueDateExpired === "No" && (
+                  <div className="field">
+                    <label style={{fontSize: 11}}>{numbers.itrFormChosen} ITR form the income will be furnished in</label>
+                    <SelectInput value={year.partA?.itrFormChosen || ""} onChange={(v) => setPartA("itrFormChosen", v)}
+                      options={["ITR-1", "ITR-2", "ITR-3", "ITR-4", "ITR-5", "ITR-6", "ITR-7"]} placeholder="Select"/>
+                  </div>
+                )}
+                <div className="muted" style={{fontSize: 11, gridColumn: "1 / -1"}}>
+                  Where the due date has not expired, the income for the year goes in on a provisional basis and is
+                  <strong> not</strong> treated as a return under s.139(1) — it still has to be included in the return for that
+                  year when it is filed (Notes 2 and 3 to the form).
+                </div>
+              </div>
+            ) : (
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10}}>
+                <div className="field">
+                  <label style={{fontSize: 11}}>{numbers.filedOn || numbers.returnFiled} Date of filing of the last return</label>
+                  <input type="date" value={year.filedOn || ""} onChange={(e) => set({ filedOn: e.target.value })}/>
+                </div>
+                <div className="field">
+                  <label style={{fontSize: 11}}>{numbers.filedSection} Section under which filed</label>
+                  <SelectInput value={year.partA?.filedSection || ""} onChange={(v) => setPartA("filedSection", v)}
+                    options={variant === "full" ? FILED_UNDER_RECENT : FILED_UNDER} placeholder="Select"/>
+                </div>
+                {variant === "full" && (
+                  <div className="field">
+                    <label style={{fontSize: 11}}>{numbers.itrForm} Type of ITR form filed</label>
+                    <SelectInput value={year.declaredForm || ""} onChange={(v) => set({ declaredForm: v })}
+                      options={["ITR-1", "ITR-2", "ITR-3", "ITR-4", "ITR-5", "ITR-6", "ITR-7"]} placeholder="Select"/>
+                  </div>
+                )}
+                <div className="field">
+                  <label style={{fontSize: 11}}>{numbers.ackNum} Acknowledgement or receipt no.</label>
+                  <input value={year.ackNum || ""} onChange={(e) => set({ ackNum: e.target.value })}
+                    style={{fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5}}/>
+                </div>
+                {variant === "brief" && (
+                  <div className="field">
+                    <label style={{fontSize: 11}}>{numbers.pending} Assessment pending at the date of initiation?</label>
+                    <SelectInput value={year.partA?.pending || ""} onChange={(v) => setPartA("pending", v)}
+                      options={["No", ...PENDING_UNDER.map((x) => `Yes — s.${x}`)]} placeholder="Select"/>
+                  </div>
+                )}
+                {variant === "full" && (
+                  <>
+                    <div className="field">
+                      <label style={{fontSize: 11}}>{numbers.declaredTotal} Total income declared in the return</label>
+                      <Amount value={year.declaredTotal} onChange={(v) => set({ declaredTotal: v, declaredSource: year.declaredSource || "manual" })}/>
+                    </div>
+                    <div className="field">
+                      <label style={{fontSize: 11}}>{numbers.determined} Total income after processing u/s 143(1)</label>
+                      {/* The same figure as Part C's column [B]. Shown, not asked
+                          for twice: two inputs for one number is two answers. */}
+                      <input readOnly disabled
+                        value={year.partC?.determined === "" || year.partC?.determined === undefined ? "" : fmtINR(Number(year.partC.determined) || 0)}
+                        style={{textAlign: "right", background: "var(--p-card-tint)", fontVariantNumeric: "tabular-nums"}}/>
+                      <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>Entered as Part C column [B] below</span>
+                    </div>
+                    <div className="field">
+                      <label style={{fontSize: 11}}>{numbers.intlTxnValue} Aggregate value of international transactions</label>
+                      <Amount value={year.intlTxnValue} onChange={(v) => set({ intlTxnValue: v })}/>
+                    </div>
+                    <div className="field">
+                      <label style={{fontSize: 11}}>{numbers.sdtValue} Aggregate value of specified domestic transactions</label>
+                      <Amount value={year.sdtValue} onChange={(v) => set({ sdtValue: v })}/>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* What the return itself said, head by head. Not a Part A field —
+                context for the figures above, and read-only because it is what
+                the department's own JSON states. */}
+            {year.declaredSource && (
+              <div style={{marginTop: 12}}>
+                <div className="muted" style={{fontSize: 11, marginBottom: 6}}>As the return states it</div>
+                <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8}}>
+                  {HEADS.map((h) => (
+                    <div key={h.key} className="field">
+                      <label style={{fontSize: 10.5}}>{h.short}</label>
+                      <input readOnly disabled
+                        value={year.declared?.[h.key] === null || year.declared?.[h.key] === undefined ? "—" : year.declared[h.key]}
+                        style={{textAlign: "right", background: "var(--p-card-tint)", fontVariantNumeric: "tabular-nums"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* ---- undisclosed ---- */}
@@ -1168,15 +1287,24 @@ function ReviewTab({ draft, result, gaps, edit, onDownload, onExport, onDiscard,
         <div className="card-head">
           <div>
             <div className="card-title">Take it away</div>
-            <div className="card-sub">The mock return and the computation come as one document, so what the client signs off is what the figures were built from.</div>
+            <div className="card-sub">
+              Two documents doing two jobs. The <strong>transcription sheet</strong> sets every field out in the form's order under its own
+              numbering, to key from. The <strong>computation of income</strong> is the working the client signs off. Together by default,
+              so what is signed off is what was keyed.
+            </div>
           </div>
         </div>
         <div style={{display: "flex", gap: 10, flexWrap: "wrap"}}>
           <button className="btn btn-primary btn-sm" onClick={() => onDownload("both")}>
-            <Icon name="pdf" size={13}/>Mock ITR-B + computation
+            <Icon name="pdf" size={13}/>Both
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => onDownload("computation")}>
-            <Icon name="pdf" size={13}/>Computation only
+          <button className="btn btn-secondary btn-sm" onClick={() => onDownload("return")}
+            title="Every field the portal asks for, in the form's order and under its own numbering">
+            <Icon name="pdf" size={13}/>Transcription sheet
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => onDownload("computation")}
+            title="The computation of income, for the client">
+            <Icon name="pdf" size={13}/>Computation of income
           </button>
           <button className="btn btn-secondary btn-sm" onClick={onExport}>
             <Icon name="download" size={13}/>Export draft as JSON

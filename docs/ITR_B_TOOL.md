@@ -52,7 +52,7 @@ and `blockPeriod()` reports which applies as `spansYears`.
 
 | Part | What the form asks | Here |
 | --- | --- | --- |
-| A | General information, both search dates, the notice, per-year filing and assessment status | Partly — the per-year filing section, acknowledgement and pending-assessment fields are not modelled yet |
+| A | General information, both search dates, the notice, per-year filing and assessment status | Yes — including A25–A34's three per-year variants |
 | B | Break-up of Y0/Y+1 part-year income under s.158BB(1A)(c)(ii)/(iii) | Not modelled — complete it on the portal |
 | C | Undisclosed income per year, column [A], with the disclosed-income context in [B]–[H] | Yes — all columns, with the applicable table chosen automatically |
 | D-I | Head-wise break-up | Yes |
@@ -115,6 +115,42 @@ It never adds anything up and never applies a rate, so there is no arithmetic to
 get wrong against a form nobody has mapped — only a field to find or not find. A
 head a form does not have (there is no capital-gains head on ITR-1) reads `null`
 and prints as a dash, never as a nil.
+
+## Part A asks three different sets of questions
+
+A25–A34 do not ask the same things of every year, and flattening them into one
+set is how a transcription sheet stops matching the screen it is keyed into.
+`variantFor()` derives which applies:
+
+| Fields | Rows | What it asks |
+| --- | --- | --- |
+| A26–A30 | Y6 … Y2 | date of filing, section, acknowledgement, and whether an assessment was **pending** at the date of initiation |
+| A31 / A33 | Y1, and Y0 once Y0 is a complete year | the above plus the income declared, the income after s.143(1), the international and specified-domestic transaction values — or, where no return was filed, whether the due date has expired and which ITR form will be used |
+| A32 / A34 | a part period | the income of the period and the transaction values only; the break-up goes to Part B |
+
+Two figures are **derived rather than asked for twice**, because one number in
+two places is one number in two states:
+
+* **A31/A33 (vi)**, total income after processing u/s 143(1), is Part C column
+  **[B]**; the Part A field mirrors it read-only.
+* **A32/A34 (i)**, the income of a part period, is Part C's part-period columns
+  — the same figure the form ties to Part B row 6.
+
+The section a return was filed under (A(ii)) reads from the ITR JSON's
+`FilingStatus.ReturnFileSec`, but only for codes there is evidence for: 11 and
+12 appear across every fixture in the repository and 12 is carried by the one
+named for being belated, which fixes 11 → 139(1) and 12 → 139(4). An
+unrecognised code maps to nothing and the practitioner picks, because a wrong
+section against a year is a wrong answer on the form.
+
+## Two documents, two jobs
+
+* **Transcription sheet** — every field in the form's order under its own
+  numbering, to key the portal from.
+* **Computation of income** — the working the client signs off.
+
+Downloadable separately or together; together is the default, so what is signed
+off is what was keyed.
 
 ## Part C, and what its columns are not
 

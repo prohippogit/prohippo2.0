@@ -35,7 +35,7 @@ import {
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
-import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, withOrderReading, describeOrders } from './itrb/partC';
+import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, withOrderReading, describeOrders, partCOverlap } from './itrb/partC';
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
@@ -1012,6 +1012,7 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
     }
   };
   const cols = columnsFor(spansYears).filter((c) => appliesTo(c, year, spansYears));
+  const overlap = React.useMemo(() => partCOverlap(year), [year]);
   const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
   const setItem = (key, v) => set({ items: { ...year.items, [key]: v } });
   const setCredit = (key, v) => set({ credits: { ...year.credits, [key]: v } });
@@ -1277,6 +1278,28 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
                 return record produce the same empty column, and "it isn't
                 filling" is not a diagnosis. This says which one it is. */}
             <div className="muted" style={{fontSize: 10.5, marginTop: 5}}>{describeOrders(ret)}</div>
+          </div>
+        )}
+
+        {/* THE SAME INCOME IN BOTH COLUMNS.
+            [C]'s own label ends "and not covered in [B]". The two are the same
+            income at two stages — declared, then determined on processing — so
+            on a year that has been assessed it belongs in [B] and comes out of
+            [C]. Easy to arrive at without meaning to: [C] fills from the ITR
+            JSON and [B] from the order, and on a return CPC accepted as filed
+            they are the same number to the rupee. */}
+        {overlap && (
+          <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: "var(--p-amber)", color: "#8A5B10", fontSize: 12}}>
+            <Icon name="alert" size={13}/>
+            <span style={{flex: 1, minWidth: 240}}>
+              {overlap.same
+                ? <>[B] and [C] both state {fmtINR(overlap.amount)}. Column [C] is expressly “not covered in [B]”, so on a year that has been assessed the income belongs in [B] alone.</>
+                : <>[B] states {fmtINR(overlap.amount)} and [C] states {fmtINR(overlap.other)}. Column [C] is expressly “not covered in [B]” — check the two are not the same income counted twice.</>}
+            </span>
+            <button className="btn btn-secondary btn-xs"
+              onClick={() => set({ partC: { ...year.partC, returned: "", returnedSection: "" } })}>
+              Clear [C]
+            </button>
           </div>
         )}
 

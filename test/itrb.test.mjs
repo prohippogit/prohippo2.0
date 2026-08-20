@@ -17,7 +17,7 @@ import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy, stated
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import {
   columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS,
-  intimationToRead, withOrderReading, describeOrders,
+  intimationToRead, withOrderReading, describeOrders, partCOverlap,
 } from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
@@ -1967,4 +1967,45 @@ test("an uploaded order overwrites, because the practitioner chose that document
   const fromUpload = withDetermined(keyed, { amount: 460590, section: "147", uploaded: true }, { over: true });
   assert.equal(fromUpload.partC.determined, 460590);
   assert.equal(fromUpload.partC.determinedSection, "147");
+});
+
+/* ---------------------------------------------------------------------------
+ * The same income stated in both [B] and [C].
+ *
+ * [C]'s own label ends "and not covered in [B]". The two columns are the same
+ * income at two stages — declared in the return, then determined on processing
+ * — and the app now fills each from a different source, so on a return CPC
+ * accepted as filed they arrive as the same number to the rupee without anybody
+ * meaning it.
+ * ------------------------------------------------------------------------- */
+
+const partC = (b, c) => ({ ...blankYear({ ay: "2023-24" }), partC: { determined: b, returned: c } });
+
+test("both columns holding the same figure is flagged", () => {
+  const out = partCOverlap(partC(460590, 460590));
+  assert.deepEqual(out, { amount: 460590, other: 460590, same: true });
+});
+
+test("both filled but differing is flagged too, and said differently", () => {
+  // Not necessarily wrong — a year can have income in [B] and other income in
+  // [C] — but it is worth a look, because the common way to get here is one
+  // income counted twice.
+  const out = partCOverlap(partC(500000, 460590));
+  assert.equal(out.same, false);
+  assert.equal(out.amount, 500000);
+  assert.equal(out.other, 460590);
+});
+
+test("one column alone is the ordinary case and says nothing", () => {
+  assert.equal(partCOverlap(partC(460590, "")), null);
+  assert.equal(partCOverlap(partC("", 460590)), null);
+  assert.equal(partCOverlap(partC("", "")), null);
+  assert.equal(partCOverlap(blankYear({ ay: "2023-24" })), null);
+  assert.equal(partCOverlap(null), null);
+});
+
+test("nil in either column is not an overlap", () => {
+  // A year assessed at nil states 0 in [B]. That is an answer, not a clash.
+  assert.equal(partCOverlap(partC(0, 460590)), null);
+  assert.equal(partCOverlap(partC(460590, 0)), null);
 });

@@ -243,6 +243,24 @@ years' orders only by e-mail) is never re-read.
 JSON was never synced — refusing to look would leave the column blank for a
 reason that has nothing to do with it.
 
+**A reading that cannot answer the question is not an answer.** The gate used to
+skip any order carrying a `reading` at all, which made column [B] permanently
+unfillable on a real practice: a read that came back *without* the total-income
+row — what the old prompt produced on a bilingual intimation, and on the very
+common order that varied nothing — left the order looking done.
+`determinedFromReturn` then found no figure and `intimationToRead` offered
+nothing to read, and the two agreed, for ever, that there was nothing to be
+done. Every year at once, because every year had been read the same way.
+`answersColumnB` now decides, so a stale reading is re-read.
+
+**The latest order, not merely the first that answers.** A s.154 rectification
+supersedes the intimation it corrects. Taking the first answer on file handed
+back the superseded figure whenever an older intimation had been read and a
+newer rectification had not — the ordinary way round, since the older has had
+longer to be looked at. An unread order that post-dates the answer already held
+is now read in preference to it, and replaces the figure *this* put there. A
+figure keyed by hand, or read off an order the practitioner uploaded, stands.
+
 **Or hand it the order.** Reading the order off the return record is a chain
 with four links: the returns sync must have run, the order must have arrived
 with a PDF, the PDF must have been decrypted at upload (CPC locks every one with

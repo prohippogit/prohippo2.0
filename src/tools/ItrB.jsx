@@ -258,53 +258,80 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
    * named. */
   const fillDetermined = async (ay, ret) => {
     if (!ret) return { ok: false, why: `no return on file for A.Y. ${ay}` };
+    const orders = Array.isArray(ret.orders) ? ret.orders : [];
 
     let found = determinedFromReturn(ret);
     let read = false;
 
-    if (!found) {
-      const orders = Array.isArray(ret.orders) ? ret.orders : [];
-      if (!orders.length) {
-        return { ok: false, why: `no s.143(1) intimation on file for A.Y. ${ay} — run a returns sync for this assessee, or key [B] by hand` };
-      }
-      const order = intimationToRead(ret);
-      if (!order) {
-        /* Nothing left to read, and the three reasons for that are three
-           different jobs. LOCKED is the one worth spelling out: CPC encrypts
-           every intimation with the PAN and the date of birth, the sync unlocks
-           it at upload, and where the date of birth was not on the assessee's
-           record at that moment the PDF went into Storage still encrypted. It
-           stays that way until the sync runs again — adding the date of birth
-           afterwards does not reach back and unlock what is already there. */
-        const locked = orders.filter((o) => o && o.locked && o.lockReason !== "request-only");
-        const readable = orders.filter((o) => o && o.storagePath && !o.locked);
-        if (readable.length) {
-          return { ok: false, why: `the intimation for A.Y. ${ay} has been read and states no total-income row — key [B] off the order` };
-        }
-        if (locked.length) {
-          return { ok: false, why: `the intimation PDF for A.Y. ${ay} is still locked — CPC encrypts it with the PAN and the date of birth, and the date of birth was not on this assessee's record when it synced. Re-run the returns sync now that it is` };
-        }
-        return { ok: false, why: `the intimation for A.Y. ${ay} has no PDF on file — CPC sends some years' orders only by e-mail` };
-      }
+    /* THE LATEST ORDER, NOT MERELY THE FIRST ONE THAT ANSWERS.
+     *
+     * A s.154 rectification supersedes the intimation it corrects, so the
+     * income as it now stands is in the newest order. Taking the first answer
+     * on file would hand back the superseded figure whenever an older
+     * intimation had been read and a newer rectification had not — which is the
+     * ordinary way round, because the older one has had longer to be looked at.
+     * So an unread order that post-dates the answer we already have is read in
+     * preference to it. */
+    const candidate = intimationToRead(ret);
+    const supersedes = Boolean(candidate && found
+      && String(candidate.orderDate || "") > String(found.orderDate || ""));
+
+    if (candidate && (!found || supersedes)) {
       try {
         const res = await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
-          returnId: ret.id, commRefNo: order.commRefNo,
+          returnId: ret.id, commRefNo: candidate.commRefNo,
         });
         const reading = res?.data?.reading;
-        if (!reading) return { ok: false, why: `the intimation for A.Y. ${ay} could not be read` };
-        read = true;
-        found = determinedFromReturn(withOrderReading(ret, order.commRefNo, reading));
-        if (!found) {
-          return { ok: false, why: `the intimation for A.Y. ${ay} was read but states no total-income row — key [B] off the order` };
+        if (reading) {
+          read = true;
+          // A newer order that turns out to state no income leaves the figure
+          // already on file standing, rather than throwing it away.
+          const after = determinedFromReturn(withOrderReading(ret, candidate.commRefNo, reading));
+          if (after) found = after;
         }
       } catch (e) {
         console.warn("itr-b: couldn't read the intimation for", ay, e);
-        // Not fatal to the fill: the figures out of the JSON are already in.
-        return { ok: false, why: `the intimation for A.Y. ${ay} couldn't be read — ${String(e?.message || e).slice(0, 90)}` };
+        if (!found) return { ok: false, why: `the intimation for A.Y. ${ay} couldn't be read — ${String(e?.message || e).slice(0, 90)}` };
       }
     }
 
-    setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === ay ? withDetermined(y, found) : y)) }));
+    /* Still nothing, and the reasons are four different jobs. LOCKED is the one
+       worth spelling out: CPC encrypts every intimation with the PAN and the
+       date of birth, the sync unlocks it AT UPLOAD, and where the date of birth
+       was not on the assessee's record at that moment the PDF went into Storage
+       still encrypted. It stays that way until the sync runs again — adding the
+       date of birth afterwards does not reach back. */
+    if (!found) {
+      if (!orders.length) {
+        return { ok: false, why: `no s.143(1) intimation on file for A.Y. ${ay} — run a returns sync for this assessee, or key [B] by hand` };
+      }
+      if (read) {
+        return { ok: false, why: `the intimation for A.Y. ${ay} was read but states no total-income row — key [B] off the order` };
+      }
+      const locked = orders.filter((o) => o && o.locked && o.lockReason !== "request-only");
+      const readable = orders.filter((o) => o && o.storagePath && !o.locked);
+      if (readable.length) {
+        return { ok: false, why: `the intimation for A.Y. ${ay} has been read and states no total-income row — key [B] off the order` };
+      }
+      if (locked.length) {
+        return { ok: false, why: `the intimation PDF for A.Y. ${ay} is still locked — CPC encrypts it with the PAN and the date of birth, and the date of birth was not on this assessee's record when it synced. Re-run the returns sync now that it is` };
+      }
+      return { ok: false, why: `the intimation for A.Y. ${ay} has no PDF on file — CPC sends some years' orders only by e-mail` };
+    }
+
+    setDraft((d) => ({
+      ...d,
+      years: d.years.map((y) => {
+        if (y.ay !== ay) return y;
+        /* A newer order replaces the figure THIS put there, and only that. A
+           figure keyed by hand, or read off an order the practitioner uploaded,
+           stands — they chose it. */
+        const prev = y.partC?.determinedFrom;
+        const over = Boolean(read && prev && !prev.uploaded
+          && String(found.orderDate || "") > String(prev.orderDate || ""));
+        return withDetermined(y, found, { over });
+      }),
+    }));
     setDirty(true);
     return { ok: true, ...found, read };
   };

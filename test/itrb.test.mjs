@@ -17,7 +17,7 @@ import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy, stated
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import {
   columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS,
-  intimationToRead, withOrderReading, describeOrders, partCOverlap,
+  intimationToRead, withOrderReading, describeOrders, partCOverlap, answersColumnB,
 } from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
@@ -1937,9 +1937,14 @@ test("the record's state is printed, so the four empty-column cases are told apa
     describeOrders({ orders: [order({ locked: true }), order({ commRefNo: "B", storagePath: "" })] }),
     "2 orders on file · 1 with a PDF here · 1 still locked"
   );
+  // "Read" and "answers [B]" are different facts, and the line says which.
   assert.equal(
     describeOrders({ orders: [order({ reading: reading(1) })] }),
-    "1 order on file · 1 with a PDF here · 1 already read"
+    "1 order on file · 1 with a PDF here · 1 already read, 1 stating the income"
+  );
+  assert.equal(
+    describeOrders({ orders: [order({ reading: { lines: [{ head: "Gross Total Income", asComputed: 5 }] } })] }),
+    "1 order on file · 1 with a PDF here · 1 already read, none stating the income"
   );
 });
 
@@ -2008,4 +2013,53 @@ test("nil in either column is not an overlap", () => {
   // A year assessed at nil states 0 in [B]. That is an answer, not a clash.
   assert.equal(partCOverlap(partC(0, 460590)), null);
   assert.equal(partCOverlap(partC(460590, 0)), null);
+});
+
+/* ---------------------------------------------------------------------------
+ * A reading that cannot answer the question is not an answer.
+ *
+ * The gate used to skip any order carrying a `reading` at all. So a read that
+ * came back WITHOUT the total-income row — which is what the old prompt
+ * produced on a bilingual intimation, and on the very common order that varied
+ * nothing — left the order looking done. determinedFromReturn then found no
+ * figure and intimationToRead offered nothing to read, and the two of them
+ * agreed, for ever, that there was nothing to be done. Every year at once.
+ * ------------------------------------------------------------------------- */
+
+test("an order read without the income row is offered for re-reading", () => {
+  const stale = { orders: [order({ reading: { lines: [
+    { head: "Gross Total Income [10=(8-9)]", asReturned: 504236, asComputed: 504236 },
+  ] } })] };
+  assert.equal(determinedFromReturn(stale), null);          // it cannot answer
+  assert.equal(intimationToRead(stale)?.commRefNo, "CPC/2021/A1/123");   // so it is read again
+  assert.equal(answersColumnB(stale.orders[0]), false);
+});
+
+test("an order that does answer is never read a second time", () => {
+  const done = { orders: [order({ reading: reading(460590) })] };
+  assert.equal(answersColumnB(done.orders[0]), true);
+  assert.equal(intimationToRead(done), null);
+  assert.equal(determinedFromReturn(done).amount, 460590);
+});
+
+test("a row present but with no figure in CPC's column is not an answer", () => {
+  const empty = { orders: [order({ reading: { lines: [{ head: "Total Income", asReturned: 460590, asComputed: null }] } })] };
+  assert.equal(answersColumnB(empty.orders[0]), false);
+  assert.equal(intimationToRead(empty)?.commRefNo, "CPC/2021/A1/123");
+});
+
+test("the newest order is the one offered, read or not", () => {
+  // A s.154 rectification supersedes the intimation it corrects. Where the
+  // older one has been read and the newer has not — the ordinary way round,
+  // because the older has had longer to be looked at — the newer is the one to
+  // read, and the caller compares the dates before taking the older answer.
+  const ret = { orders: [
+    order({ commRefNo: "ORIG", orderDate: "2023-08-09", reading: reading(460590) }),
+    order({ commRefNo: "RECT", orderDate: "2024-02-14" }),
+  ] };
+  assert.equal(intimationToRead(ret).commRefNo, "RECT");
+  assert.equal(determinedFromReturn(ret).orderDate, "2023-08-09");   // what stands until it is read
+  const after = determinedFromReturn(withOrderReading(ret, "RECT", reading(431200)));
+  assert.equal(after.amount, 431200);
+  assert.equal(after.orderDate, "2024-02-14");
 });

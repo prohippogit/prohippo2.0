@@ -70,17 +70,28 @@ export function blankYear(period) {
     ackNum: "",
     filedOn: "",
     returnFiled: true,
+    /* Part A's per-year questions that nothing else on the row answers. The
+       rest of what A26-A34 ask for is already here — the date of filing, the
+       acknowledgement, the form, the income declared, and (as Part C's column
+       [B]) the income after processing u/s 143(1) — and is read from there
+       rather than stored twice. */
+    partA: {
+      filedSection: "",      // (ii) — the section the return was furnished under
+      pending: "",           // (iv) — "No", or the section an assessment was pending under
+      dueDateExpired: "",    // (ix) — where no return was filed
+      itrFormChosen: "",     // (x)  — and the due date has not expired
+    },
+    /* A31/A33 (vii) and (viii) for a full year, A32/A34 (ii) and (iii) for a
+       part period: the aggregate VALUE of international and specified domestic
+       transactions. One pair of fields, because it is one question asked of
+       whatever period the row covers — only the form's numbering differs. */
+    intlTxnValue: "",
+    sdtValue: "",
     undisclosed: blankUndisclosed(),
     /* Part D-II — the same undisclosed income, broken up item-wise instead of
        head-wise. The form requires the two to agree; computeItrB() checks. */
     items: Object.fromEntries(DII_ITEMS.map((i) => [i.key, ""])),
     itemRemarks: {},
-    /* A32/A34 (ii) and (iii) — the aggregate VALUE of international and
-       specified domestic transactions in a part period. Disclosed on the form,
-       but deliberately not part of the block income: s.158BB(3) and Note 4 put
-       undisclosed income on that account outside the block return entirely. */
-    intlTxnValue: "",
-    sdtValue: "",
     manner: "",           // s.158BC(1)(a) — the manner in which the income was derived
     evidence: "",         // the seized material it is derived from
     /* Credits, split the way the form splits them:
@@ -306,6 +317,13 @@ export function withDeclared(year, reading, source = "json") {
     ackNum: reading.ackNum || year.ackNum,
     filedOn: reading.filedOn || year.filedOn,
     returnFiled: true,
+    /* A26-A31(ii). Read from the return's own filing-status code where that
+       code is one we have evidence for, left blank where it is not — see
+       partA.js. Never overwritten once the practitioner has set it. */
+    partA: {
+      ...year.partA,
+      filedSection: year.partA?.filedSection || reading.filedSection || "",
+    },
   };
 }
 

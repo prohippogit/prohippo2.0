@@ -30,6 +30,7 @@ import { UNDISCLOSED_HEADS, RATE_PENALTY } from "./compute.js";
 import { HEADS } from "./declared.js";
 import { DII_ITEMS, VERIFICATION_TEXT, furnishingMode } from "./form.js";
 import { columnsFor, labelFor, appliesTo, partBColumns } from "./partC.js";
+import { variantFor, partYearIncome } from "./partA.js";
 
 const L = 14, R = 196, W = R - L, PAGE_H = 297, FOOT = 20;
 
@@ -227,6 +228,82 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
       { label: "BOOKS / DOCUMENTS FOUND IN SEARCH", value: draft.booksFound ? "Yes" : "No" },
       { label: "MUST BE FURNISHED UNDER (RULE 12AE(2))", value: furnishingMode({ status: draft.status, auditUs44AB: draft.auditUs44AB, politicalParty: draft.politicalParty }).short },
     ]);
+
+    /* A25-A34 — the return, year by year.
+     *
+     * Three shapes, because the form asks three different sets of questions,
+     * and a transcription sheet that flattens them into one is a sheet whose
+     * rows stop matching the screen being keyed. Printed as one table with the
+     * columns the widest variant needs; a row that is not asked a question
+     * prints a middle dot rather than a blank, so "not asked" and "not yet
+     * answered" stay distinguishable. */
+    partHead(ctx, p, accent, "A25", "Returns previously filed for the years in the block period",
+      "A26–A30 for Y6 to Y2, A31/A33 in full for Y1 and a complete Y0, A32/A34 for a part period");
+    table(ctx, p, accent,
+      [
+        { label: "ROW", w: 16 },
+        { label: "FIELDS", w: 20 },
+        { label: "FILED ON", w: 24 },
+        { label: "SECTION", w: 30 },
+        { label: "FORM", w: 18 },
+        { label: "ACKNOWLEDGEMENT", w: 34 },
+        { label: "PENDING / DUE DATE", w: 40, align: "right" },
+      ],
+      result.years.map((y) => {
+        const v = variantFor(y, result.spansYears);
+        const a = y.partA || {};
+        const label = v === "brief" ? "A26–A30" : v === "full" ? (y.slot === "Y1" ? "A31" : "A33") : (y.slot === "Y0" ? "A32" : "A34");
+        if (v === "partYear") return [y.slot, label, "·", "·", "·", "·", "·"];
+        if (v === "full" && y.returnFiled === false) {
+          return [y.slot, label, "Not furnished", "·", a.itrFormChosen || "·", "·",
+            a.dueDateExpired ? `Due date expired: ${a.dueDateExpired}` : "—"];
+        }
+        return [
+          y.slot, label,
+          fmtDate(y.filedOn) || "—",
+          a.filedSection ? `s.${a.filedSection}`.replace("s.139(1) —", "s.139(1)").replace("s.139(4) —", "s.139(4)") : "—",
+          v === "full" ? (y.declaredForm || "—") : "·",
+          y.ackNum || "—",
+          v === "brief" ? (a.pending || "—") : "·",
+        ];
+      }),
+      { size: 6.8, pad: 2 }
+    );
+
+    /* The full-variant rows carry four money fields the brief ones do not. A
+       second short table rather than four more columns above: at eight columns
+       the acknowledgement number starts to clip, and an acknowledgement that
+       has lost its last three digits is worse than useless. */
+    const fullRows = result.years.filter((y) => variantFor(y, result.spansYears) === "full");
+    const partRows2 = result.years.filter((y) => variantFor(y, result.spansYears) === "partYear");
+    if (fullRows.length || partRows2.length) {
+      p.need(12);
+      table(ctx, p, accent,
+        [
+          { label: "ROW", w: 16 },
+          { label: "", w: 46 },
+          { label: "INCOME DECLARED", w: 40, align: "right" },
+          { label: "AFTER s.143(1)", w: 30, align: "right" },
+          { label: "INTL. TXNS", w: 25, align: "right" },
+          { label: "SPEC. DOM. TXNS", w: 25, align: "right" },
+        ],
+        [
+          ...fullRows.map((y) => [
+            y.slot, "Return furnished for the year",
+            amt(y.declaredTotal, { zero: "Nil" }), amt(y.partC.determined), amt(y.intlTxnValue), amt(y.sdtValue),
+          ]),
+          ...partRows2.map((y) => [
+            y.slot, "Part period — break-up in Part B",
+            amt(partYearIncome(y, result), { zero: "Nil" }), "·", amt(y.intlTxnValue), amt(y.sdtValue),
+          ]),
+        ],
+        { size: 6.8, pad: 2 }
+      );
+    }
+    p.need(8);
+    text("A middle dot marks a field the form does not ask of that row. The income of a part period is stated here and broken up in Part B.",
+      L, p.y, { size: 6.8, weight: "medium", color: MUTED });
+    p.y += 8;
 
     /* ---------------- PART B — TOTAL INCOME OF THE BLOCK PERIOD ---------------- */
     partHead(ctx, p, accent, "C", "Computation of undisclosed income",
@@ -659,7 +736,9 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
 /** Filename a practitioner would have chosen. */
 export const itrbFilename = (draft, sections = "both") => {
   const who = (draft.assessee || draft.pan || "ITR-B").replace(/[\\/:*?"<>|]+/g, "").trim();
-  const what = sections === "computation" ? "Computation" : "ITR-B (mock)";
+  const what = sections === "computation"
+    ? "Computation of income"
+    : sections === "return" ? "ITR-B transcription sheet" : "ITR-B (mock) and computation";
   const period = draft.searchDate ? ` — search ${draft.searchDate}` : "";
   return `${what} — ${who}${period}.pdf`;
 };

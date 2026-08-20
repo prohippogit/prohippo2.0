@@ -105,12 +105,20 @@ export function blankYear(period) {
        Kept as one object because they are keyed against one year, but never
        presented as one list: the "not claimed earlier" condition applies to
        H alone, and a practitioner who cannot see the split cannot apply it. */
+    /* Part G — challans for which NO credit was claimed in the returns filed
+       earlier. Empty by default and never filled from a return, because a
+       figure in a return's tax-paid schedule is precisely a credit that WAS
+       claimed there. See withDeclared. */
     credits: { tds: "", tcs: "", advance: "", selfAssessment: "" },
+    /* Part H, in the form's own columns: (4) the credit available, (5) what the
+       returns filed u/s 139 already claimed, and (6) — derived, never keyed —
+       the difference. See credits.js. */
+    partH: { tan: "", available: "", claimedEarlier: "" },
     /* What the return for this year CLAIMED by way of TDS and TCS. Not a form
        field — Part H asks for the opposite, the credit not claimed anywhere —
        so this is carried only to be shown beside those boxes as the figure to
        subtract from. See withDeclared. */
-    claimed: { tds: null, tcs: null, ay: "" },
+    claimed: { tds: null, tcs: null, advance: null, selfAssessment: null, ay: "" },
   };
 }
 
@@ -358,16 +366,18 @@ export function withDeclaredFromOrder(year, returned) {
       returned: total === null ? year.partC?.returned : total,
       returnedSection: year.partC?.returnedSection || "139(1)",
     },
-    credits: {
-      ...year.credits,
-      advance: fillMoney(year.credits?.advance, money(returned.advanceTax)),
-      selfAssessment: fillMoney(year.credits?.selfAssessment, money(returned.selfAssessmentTax)),
-      tds: fillMoney(year.credits?.tds, money(returned.tds)),
-      tcs: fillMoney(year.credits?.tcs, money(returned.tcs)),
+    // As above: what the return claimed is the test both parts apply, not a
+    // figure to copy into either.
+    credits: { ...year.credits },
+    partH: {
+      ...year.partH,
+      claimedEarlier: fillMoney(year.partH?.claimedEarlier, sumMoney(money(returned.tds), money(returned.tcs))),
     },
     claimed: {
       tds: money(returned.tds) ?? year.claimed?.tds ?? null,
       tcs: money(returned.tcs) ?? year.claimed?.tcs ?? null,
+      advance: money(returned.advanceTax) ?? year.claimed?.advance ?? null,
+      selfAssessment: money(returned.selfAssessmentTax) ?? year.claimed?.selfAssessment ?? null,
       ay: year.ay || "",
     },
   };
@@ -447,6 +457,16 @@ export function withFiledParticulars(year, ret, { over = false } = {}) {
 /* A money field the practitioner has not touched takes the read; one they have
    keeps what they keyed. A read of nil is still a read — nil advance tax is an
    answer, and leaving the box empty would make it look unanswered. */
+/* Two figures the form asks for as one. Part H's columns cover TDS and TCS
+   together — "Total TDS/TCS credit available" — so a year's two are summed, and
+   a year that states neither states nothing rather than nil. */
+function sumMoney(a, b) {
+  const x = a === null || a === undefined || a === "" ? null : Number(a);
+  const y = b === null || b === undefined || b === "" ? null : Number(b);
+  if (x === null && y === null) return null;
+  return (Number.isFinite(x) ? x : 0) + (Number.isFinite(y) ? y : 0);
+}
+
 function fillMoney(current, incoming) {
   if (current !== "" && current !== null && current !== undefined) return current;
   return incoming === null || incoming === undefined ? current : incoming;
@@ -483,35 +503,38 @@ export function withDeclared(year, reading, source = "json") {
       returned: total === null || total === undefined ? year.partC?.returned : total,
       returnedSection: year.partC?.returnedSection || "139(1)",
     },
-    /* ALL FOUR CREDITS, FILLED — AND PART H CARRIES A WARNING.
+    /* WHAT THE RETURN CLAIMED IS THE DISQUALIFIER, NOT THE ANSWER.
      *
-     * Part G asks for the advance tax and self-assessment tax paid for the
-     * year. The return states both, and they go in without qualification.
+     * Both parts ask a narrower question than "what tax was paid for this
+     * year", and the narrowing is the same in each:
      *
-     * PART H IS DIFFERENT AND THE SCREEN SAYS SO. It asks for TDS and TCS "not
-     * claimed in any earlier return", and what the return states is the credit
-     * it DID claim — so the figure that lands there is a STARTING POINT to
-     * reduce, not an answer. It was left blank at first for exactly that
-     * reason; it is filled now because the practitioner asked for it, on the
-     * footing that they are the one who knows what credit has already been
-     * allowed. What the app owes them in return is that the caveat is never out
-     * of sight: `claimed` is carried alongside and printed under the box, and
-     * the panel says in as many words that the figure has to be reduced by
-     * whatever was already given credit. A block return's credits are verified
-     * by the officer under rule 12AE(4), so an unreduced figure is caught — but
-     * it is caught late, and by somebody else.
+     *   Part G  "…FOR WHICH NO CREDIT HAS BEEN CLAIMED IN THE RETURNS FILED
+     *            EARLIER"
+     *   Part H  column (5) "Credit for TDS/TCS claimed in all the return(s)
+     *            filed u/s 139", which column (6) is net of.
+     *
+     * Every figure in the return's own tax-paid schedule is, by definition, a
+     * credit claimed in that return — and where it produced a refund the money
+     * has already been received. Copying it into Part G or Part H would take it
+     * off the block liability a second time, in a return the Assessing Officer
+     * verifies under rule 12AE(4).
+     *
+     * So it is carried, and it is carried as the TEST. `claimed` holds what the
+     * return took credit for; Part G starts empty and Part H's column (5) fills
+     * from it. Column (4) — the credit AVAILABLE, which may exceed what was
+     * claimed — is the practitioner's to state, because no return says it.
      *
      * Nothing already keyed is overwritten. */
-    credits: {
-      ...year.credits,
-      advance: fillMoney(year.credits?.advance, reading.advanceTax),
-      selfAssessment: fillMoney(year.credits?.selfAssessment, reading.selfAssessmentTax),
-      tds: fillMoney(year.credits?.tds, reading.tds),
-      tcs: fillMoney(year.credits?.tcs, reading.tcs),
+    credits: { ...year.credits },
+    partH: {
+      ...year.partH,
+      claimedEarlier: fillMoney(year.partH?.claimedEarlier, sumMoney(reading.tds, reading.tcs)),
     },
     claimed: {
       tds: reading.tds ?? year.claimed?.tds ?? null,
       tcs: reading.tcs ?? year.claimed?.tcs ?? null,
+      advance: reading.advanceTax ?? year.claimed?.advance ?? null,
+      selfAssessment: reading.selfAssessmentTax ?? year.claimed?.selfAssessment ?? null,
       ay: reading.ay || year.ay || "",
     },
     declaredSource: source,

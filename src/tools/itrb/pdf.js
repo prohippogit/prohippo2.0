@@ -634,24 +634,37 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
       ]
     );
 
+    /* Part H in the form's own columns. Printing only the net would hide the
+       working the portal asks for — and the working is the point: (6) is (4)
+       less (5), and a credit the earlier return already claimed, very often
+       already refunded, is what (5) takes out. */
     partHead(ctx, p, accent, "H", "TDS and TCS not claimed earlier",
       "Credit sought only where no credit has been claimed in any return filed u/s 139, or no return was filed");
     table(ctx, p, accent,
       [
-        { label: "ASSESSMENT YEAR", w: 62 },
-        { label: "TDS", w: 40, align: "right" },
-        { label: "TCS", w: 40, align: "right" },
-        { label: "TOTAL", w: 40, align: "right" },
+        { label: "ASSESSMENT YEAR", w: 40 },
+        { label: "TAN", w: 34 },
+        { label: "(4) CREDIT AVAILABLE", w: 36, align: "right" },
+        { label: "(5) CLAIMED U/S 139", w: 36, align: "right" },
+        { label: "(6) CLAIMED HERE", w: 36, align: "right" },
       ],
       [
-        ...result.years.map((y) => [y.ay, amt(y.credits.tds), amt(y.credits.tcs), amt(y.credits.partH, { zero: "—" })]),
-        { 0: "TOTAL — PART H", 1: amt(result.credits.tds), 2: amt(result.credits.tcs), 3: amt(result.credits.partH, { zero: "Nil" }), _tone: "total" },
+        ...result.years.map((y) => [
+          y.ay, y.credits.tan || "—",
+          amt(y.credits.available), amt(y.credits.claimedEarlier),
+          amt(y.credits.partH, { zero: "—" }),
+        ]),
+        {
+          0: "TOTAL — PART H", 1: "",
+          2: amt(result.credits.available), 3: amt(result.credits.claimedEarlier),
+          4: amt(result.credits.partH, { zero: "Nil" }), _tone: "total",
+        },
       ]
     );
     p.need(8);
-    text("The portal asks for these by challan and by deductor — BSR code, date and serial number in Part G; TAN of the deductor with the credit available, already claimed and now claimed in Part H. Have those to hand.",
+    text("Column (6) is (4) less (5) and is the only figure that reduces the tax: a credit the earlier return already claimed — and where it produced a refund, already received — cannot be taken twice. Part G is confined the same way, to challans no earlier return claimed credit for. The portal asks for Part G by challan: BSR code, date of deposit and serial number.",
       L, p.y, { size: 6.8, weight: "medium", color: MUTED });
-    p.y += 7;
+    p.y += 10;
 
     /* ---- the closing position ---- */
     p.need(22);

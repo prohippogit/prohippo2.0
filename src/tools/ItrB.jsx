@@ -40,6 +40,7 @@ import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
+import { partHRow, partGRow } from './itrb/credits';
 import { findBlockProceedings, fieldsFromNotices, describeScan, readingOrder } from './itrb/findProceeding';
 import { checkUpload, uploadPath, shortName, MAX_UPLOADS } from './itrb/uploads';
 
@@ -1118,6 +1119,9 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
   const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
   const setItem = (key, v) => set({ items: { ...year.items, [key]: v } });
   const setCredit = (key, v) => set({ credits: { ...year.credits, [key]: v } });
+  const setPartH = (key, v) => set({ partH: { ...year.partH, [key]: v } });
+  const g = partGRow(year);
+  const h = partHRow(year);
 
   /* Part D-II rows 11 and 12 are marked on the form "to be filled only in case
      Y0 is a complete year". For a part period s.158BB(3) puts that income
@@ -1499,40 +1503,79 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
       <div>
         <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>Taxes already paid for this year</div>
         <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
-          Advance tax and self-assessment tax paid earlier go to <strong>Part G</strong>; TDS and TCS <em>not claimed in any
-          earlier return</em> go to <strong>Part H</strong>. Rule 12AE(4): every credit here except self-assessment tax for
-          the block period itself is allowed only on the Assessing Officer&apos;s verification and satisfaction.
-          {" "}All four fill from the return. <strong>Part H needs cutting down</strong>: what the return states is the credit
-          it <em>did</em> claim, so the figure that lands there is a starting point, not an answer — reduce it by whatever has
-          already been allowed.
+          Both parts ask a narrower question than &ldquo;what tax was paid&rdquo;. <strong>Part G</strong> takes advance tax and
+          self-assessment tax <em>for which no credit has been claimed in the returns filed earlier</em>; <strong>Part H</strong>{" "}
+          takes TDS and TCS net of what those returns already claimed. A credit already allowed — and very often already
+          refunded — cannot come off this liability a second time. Rule 12AE(4): the Assessing Officer verifies every one of them.
         </div>
-        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
-          {[["advance", "Advance tax — Part G"], ["selfAssessment", "Self-assessment tax — Part G"], ["tds", "TDS — Part H"], ["tcs", "TCS — Part H"]].map(([k, label]) => (
+
+        {/* PART G — challans, and the test its heading applies.
+            Deliberately empty until somebody asserts a challan. What the return
+            claimed is shown beside it as the DISQUALIFIER: a challan covered by
+            that figure does not belong here at all. */}
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10}}>
+          {[["advance", "Advance tax — Part G"], ["selfAssessment", "Self-assessment tax — Part G"]].map(([k, label]) => (
             <div key={k} className="field">
               <label style={{fontSize: 11}}>{label}</label>
               <Amount value={year.credits?.[k]} onChange={(v) => setCredit(k, v)}/>
-              {/* PART H IS FILLED WITH A FIGURE THAT NEEDS REDUCING.
-                  It asks for credit "not claimed in any earlier return", and
-                  what the return states is the credit it DID claim — so this
-                  box starts at the return's figure and has to come down by
-                  whatever was already allowed. Said in amber, under the box,
-                  every time: the officer catches an unreduced figure under rule
-                  12AE(4), but late, and by somebody else. */}
-              {(k === "tds" || k === "tcs") && year.claimed?.[k] !== null && year.claimed?.[k] !== undefined && (
-                <span style={{fontSize: 10.5, marginTop: 4, color: "#8A5B10"}}>
-                  {fmtINR(year.claimed[k])} was claimed in the return — reduce this by whatever has already been allowed
-                </span>
-              )}
-              {/* Part G IS filled, and says where from. The check it cannot make
-                  for anybody: whether that payment has already been given credit
-                  in the regular assessment for the year. */}
-              {(k === "advance" || k === "selfAssessment") && year.declaredSource && year.credits?.[k] !== "" && (
-                <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>
-                  From the return for A.Y. {year.ay} — check it has not already been credited there
+              {g.claimedInReturn?.[k] !== null && g.claimedInReturn?.[k] !== undefined && (
+                <span style={{fontSize: 10.5, marginTop: 4, color: g.claimedInReturn[k] ? "#8A5B10" : "var(--p-text-3)"}}>
+                  {g.claimedInReturn[k]
+                    ? <>The return for A.Y. {year.ay} claimed {fmtINR(g.claimedInReturn[k])} — that much is <strong>not</strong> for Part G</>
+                    : <>The return for A.Y. {year.ay} claimed none, so a challan paid for this year belongs here</>}
                 </span>
               )}
             </div>
           ))}
+        </div>
+
+        {/* PART H — the form's own columns (3) to (6). */}
+        <div style={{marginTop: 14}}>
+          <div style={{display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 6}}>
+            <div style={{fontWeight: 700, fontSize: 12.5}}>Part H — TDS and TCS</div>
+            <span className="pill pill-muted" style={{fontSize: 10}}>columns (3) to (6)</span>
+          </div>
+          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10}}>
+            <div className="field">
+              <label style={{fontSize: 11}}>(3) TAN of the deductor</label>
+              <input value={year.partH?.tan || ""} onChange={(e) => setPartH("tan", e.target.value.toUpperCase())}
+                placeholder="Blank for a consolidated row"
+                style={{fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5}}/>
+            </div>
+            <div className="field">
+              <label style={{fontSize: 11}}>(4) Total TDS/TCS credit available</label>
+              <Amount value={year.partH?.available} onChange={(v) => setPartH("available", v)}/>
+              <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>From 26AS or the AIS — not from the return</span>
+            </div>
+            <div className="field">
+              <label style={{fontSize: 11}}>(5) Claimed in the returns filed u/s 139</label>
+              <Amount value={year.partH?.claimedEarlier} onChange={(v) => setPartH("claimedEarlier", v)}/>
+              <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>
+                {h.claimedEarlier !== null ? "Filled from the return read for this year" : "What the earlier return already took credit for"}
+              </span>
+            </div>
+            <div className="field">
+              <label style={{fontSize: 11}}>(6) Claimed in this return</label>
+              {/* Derived, never keyed. Two boxes that can disagree with their
+                  own difference is a return contradicting itself on its face. */}
+              <input readOnly disabled value={h.entered ? fmtINR(h.claimedNow) : ""}
+                style={{textAlign: "right", background: "var(--p-card-tint)", fontVariantNumeric: "tabular-nums"}}/>
+              <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>(4) less (5) — this is what reduces the tax</span>
+            </div>
+          </div>
+          {h.over && (
+            <div style={{marginTop: 8, padding: "8px 12px", borderRadius: 10, background: "var(--p-amber)", color: "#8A5B10", fontSize: 12}}>
+              Column (5) is more than column (4): {fmtINR(h.claimedEarlier)} claimed against {fmtINR(h.available)} available.
+              One of the two is wrong — credit cannot be claimed beyond what was deducted.
+            </div>
+          )}
+          {h.entered && h.claimedNow === 0 && !h.over && (
+            <div className="muted" style={{fontSize: 11, marginTop: 8}}>
+              Nothing left to claim for this year — the earlier return took the whole credit, and where that produced a refund
+              the money has already been received. If credit was claimed there but <em>disallowed</em> on a 26AS mismatch, this
+              return cannot recover it: that is a rectification of A.Y. {year.ay} under s.154.
+            </div>
+          )}
         </div>
       </div>
     </div>

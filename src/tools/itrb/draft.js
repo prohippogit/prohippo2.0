@@ -16,6 +16,7 @@
  */
 import { blockPeriod, dueDateFor } from "./blockPeriod.js";
 import { DII_ITEMS } from "./form.js";
+import { PART_C_COLUMNS } from "./partC.js";
 export { STATUSES, EMPLOYMENT_NATURE, FILED_UNDER, PENDING_UNDER } from "./form.js";
 import { UNDISCLOSED_HEADS } from "./compute.js";
 import { HEADS, declaredTotal } from "./declared.js";
@@ -56,6 +57,14 @@ export function blankYear(period) {
        has since determined something else. */
     declared: blankDeclared(),
     declaredTotal: "",
+    /* Part C's context columns [B] to [H] — the income already determined,
+       assessed or declared for the year. None of it is added to or taken off
+       the undisclosed income in column [A]; the form states it so the officer
+       can see what the block income sits on top of. Sections travel with the
+       two columns that carry them. */
+    partC: Object.fromEntries(PART_C_COLUMNS.flatMap((c) => (
+      c.hasSection ? [[c.key, ""], [`${c.key}Section`, ""]] : [[c.key, ""]]
+    ))),
     declaredSource: "",   // "json" | "sync" | "manual" | ""
     declaredForm: "",
     ackNum: "",
@@ -282,6 +291,16 @@ export function withDeclared(year, reading, source = "json") {
     ...year,
     declared,
     declaredTotal: total === null || total === undefined ? year.declaredTotal : total,
+    /* Column [C] is this same figure — "total income declared in the return
+       filed u/s 139(1)". Filled alongside rather than derived at print time,
+       because the form lets it differ: [C] is expressly "not covered in [B]",
+       so a year whose income has since been assessed belongs in [B] and the
+       practitioner takes it out of [C] by hand. */
+    partC: {
+      ...year.partC,
+      returned: total === null || total === undefined ? year.partC?.returned : total,
+      returnedSection: year.partC?.returnedSection || "139(1)",
+    },
     declaredSource: source,
     declaredForm: reading.formLabel || year.declaredForm,
     ackNum: reading.ackNum || year.ackNum,
@@ -324,6 +343,13 @@ export function readiness(draft, result) {
       `Undisclosed income is shown against International or Specified Domestic Transactions for ${result.misplaced158BB3.join(", ")}, `
       + "which is a part period. s.158BB(3) puts that income outside the block return — it is assessed under the ordinary "
       + "provisions instead, so it should come out of Part D-II here (Note 4 to the form)."
+    );
+  }
+  if (result && result.misplacedPartC && result.misplacedPartC.length) {
+    const named = result.misplacedPartC.map((m) => `[${m.letter}] against ${m.slot}`).join(", ");
+    gaps.push(
+      `Part C has figures in columns that do not belong to those rows — ${named}. Columns [E] to [H] each describe one period `
+      + "of the block, and a figure against any other year has nowhere to go on the form."
     );
   }
   if (result && result.itemsEntered && !result.itemsTie) {

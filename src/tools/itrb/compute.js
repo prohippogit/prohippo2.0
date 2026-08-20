@@ -46,6 +46,7 @@
  */
 import { HEADS } from "./declared.js";
 import { DII_ITEMS } from "./form.js";
+import { PART_C_COLUMNS, appliesTo, partBColumns } from "./partC.js";
 import { monthsOfDelay } from "./blockPeriod.js";
 
 /** Tax on undisclosed income of the block period — s.113. */
@@ -92,6 +93,8 @@ export const round288B = (amount) => {
 export function computeItrB(draft) {
   const d = draft || {};
   const rows = Array.isArray(d.years) ? d.years : [];
+  // Which of Part C's two mutually exclusive tables applies.
+  const spansYears = Boolean(d.blockSpansYears);
 
   const years = rows.map((row) => {
     const undisclosed = {};
@@ -116,6 +119,20 @@ export function computeItrB(draft) {
       const v = n(row.items && row.items[it.key]);
       items[it.key] = v;
       itemTotal += v;
+    }
+
+    /* Part C's context columns. Normalised to numbers for totalling, and each
+       one marked with whether it may be filled against this row at all — a
+       period column belongs to one row, and a figure keyed against any other
+       is an error in the return rather than something to add up. */
+    const partC = {};
+    for (const c of PART_C_COLUMNS) {
+      const ok = appliesTo(c, row, spansYears);
+      partC[c.key] = ok ? n(row.partC && row.partC[c.key]) : 0;
+      partC[`${c.key}Applies`] = ok;
+      if (c.hasSection) partC[`${c.key}Section`] = (row.partC && row.partC[`${c.key}Section`]) || "";
+      // Keyed where it cannot go: reported, never quietly dropped.
+      if (!ok && n(row.partC && row.partC[c.key]) !== 0) partC[`${c.key}Misplaced`] = true;
     }
 
     const declaredTotal = n(row.declaredTotal);
@@ -162,6 +179,7 @@ export function computeItrB(draft) {
       grossUndisclosed: gross,
       totalUndisclosed: total,
       floored,
+      partC,
       declaredTotal,
       // The year's total income for the block assessment: what was declared,
       // plus what the search brought out. Stated in Part B of the form.
@@ -186,6 +204,20 @@ export function computeItrB(draft) {
     byItem[it.key] = years.reduce((sum, y) => sum + (y.floored ? 0 : n(y.items[it.key])), 0);
   }
   const totalByItem = DII_ITEMS.reduce((sum, it) => sum + byItem[it.key], 0);
+
+  /* Part C's column totals, and the one cross-check the form spells out: the
+     part-period columns ([F]+[G], or [H] once the search runs into a later
+     previous year) "should be equal to value from row 6 of PART-B". Part B is
+     not modelled here, so the figure is carried out for the practitioner to
+     take to it rather than checked against something we do not hold. */
+  const byPartCColumn = {};
+  for (const c of PART_C_COLUMNS) {
+    byPartCColumn[c.key] = years.reduce((sum, y) => sum + n(y.partC[c.key]), 0);
+  }
+  const partBTotal = partBColumns(spansYears).reduce((sum, k) => sum + byPartCColumn[k], 0);
+  const misplacedPartC = years.flatMap((y) => PART_C_COLUMNS
+    .filter((c) => y.partC[`${c.key}Misplaced`])
+    .map((c) => ({ ay: y.ay, slot: y.slot, letter: c.letter })));
 
   const totalUndisclosed = years.reduce((sum, y) => sum + y.totalUndisclosed, 0);
   const totalDeclared = years.reduce((sum, y) => sum + y.declaredTotal, 0);
@@ -252,6 +284,12 @@ export function computeItrB(draft) {
     credits,
     blockTaxPaid,
     blockTaxPaidTotal,
+    spansYears,
+    byPartCColumn,
+    /* What Part B's row 6 must come to. Named for what it is FOR, because that
+       is the only reason the figure exists. */
+    partBTotal,
+    misplacedPartC,
     byItem,
     totalByItem,
     /* Whether Part D-II was filled at all, and whether it ties to Part D-I.

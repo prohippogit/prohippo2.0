@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 
 import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy } from "../src/tools/itrb/blockPeriod.js";
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
+import { columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS } from "../src/tools/itrb/partC.js";
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
@@ -551,4 +552,137 @@ test("the due date honours the period the notice actually allowed", () => {
   assert.equal(withDueDate({ ...blankDraft(), serviceDate: "2026-01-10" }).dueDate, "2026-03-11");
   // The fifth proviso to s.158BC(1)(a) allows a further thirty days.
   assert.equal(withDueDate({ ...blankDraft(), serviceDate: "2026-01-10", dueDateDays: 90 }).dueDate, "2026-04-10");
+});
+
+
+/* ---------------------------------------------------------------------------
+ * Part C, columns [B] to [H] — the income already on record.
+ * ------------------------------------------------------------------------- */
+
+test("the second Part C table has one more column than the first", () => {
+  assert.deepEqual(columnsFor(false).map((c) => c.letter), ["B", "C", "D", "E", "F", "G"]);
+  assert.deepEqual(columnsFor(true).map((c) => c.letter), ["B", "C", "D", "E", "F", "G", "H"]);
+});
+
+test("column [G] means different periods in the two tables", () => {
+  const g = PART_C_COLUMNS.find((c) => c.key === "postInitiation");
+  // Table 1 runs to the execution of the last authorisation…
+  assert.match(labelFor(g, false), /to the date of execution of the last of the authorisations/);
+  // …table 2 stops at 31 March, because Y+1 picks the rest up.
+  assert.match(labelFor(g, true), /to 31 March of the previous year/);
+});
+
+test("each period column belongs to exactly one row", () => {
+  const letters = (slot, spans) =>
+    columnsFor(spans).filter((c) => appliesTo(c, { slot }, spans)).map((c) => c.letter).join("");
+
+  // [B], [C] and [D] are about the year and apply throughout.
+  assert.equal(letters("Y6", false), "BCD");
+  assert.equal(letters("Y4", true), "BCD");
+  // [E] is the year that had ended with its return not yet due.
+  assert.equal(letters("Y1", false), "BCDE");
+  // [F] and [G] carve up Y0…
+  assert.equal(letters("Y0", false), "BCDFG");
+  // …and once Y0 is a complete year it takes [E] as well (Note 3).
+  assert.equal(letters("Y0", true), "BCDEFG");
+  // [H] is the Y+1 part period, and exists only in the second table.
+  assert.equal(letters("Y+1", true), "BCDH");
+  assert.equal(letters("Y+1", false), "BCD");
+});
+
+test("the columns Part B must tie to depend on which table applies", () => {
+  // Table 1: Part B breaks up Y0's part period, which is [F] plus [G].
+  assert.deepEqual(partBColumns(false), ["preInitiation", "postInitiation"]);
+  // Table 2: Y0 is complete, so the part year is Y+1 — column [H] alone.
+  assert.deepEqual(partBColumns(true), ["nextYearPart"]);
+});
+
+test("Part C's column totals carry across the block, and name Part B's figure", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2026-03-15", lastAuthDate: "2026-04-05" });
+  d.years[5].partC.determined = 2400000;      // Y1
+  d.years[6].partC.preInitiation = 700000;    // Y0 [F]
+  d.years[6].partC.postInitiation = 150000;   // Y0 [G]
+  d.years[7].partC.nextYearPart = 90000;      // Y+1 [H]
+  const r = computeItrB(d);
+  assert.equal(r.spansYears, true);
+  assert.equal(r.byPartCColumn.determined, 2400000);
+  assert.equal(r.byPartCColumn.preInitiation, 700000);
+  // Table 2 ties Part B to [H] alone — NOT to [F] + [G], which describe Y0 and
+  // in this table Y0 is a complete year that Part B does not cover.
+  assert.equal(r.partBTotal, 90000);
+
+  // The same figures under table 1 tie [F] + [G] instead.
+  let one = withBlockPeriod(blankDraft(), { searchDate: "2025-07-01", lastAuthDate: "2025-07-31" });
+  one.years[6].partC.preInitiation = 700000;
+  one.years[6].partC.postInitiation = 150000;
+  assert.equal(computeItrB(one).partBTotal, 850000);
+});
+
+test("a figure keyed into a column that cannot hold it is reported, not totalled", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  d.years[0].partC.preInitiation = 50000;   // [F] against Y6 — nowhere to go
+  const r = computeItrB(d);
+  assert.deepEqual(r.misplacedPartC, [{ ay: "2020-21", slot: "Y6", letter: "F" }]);
+  // It is excluded from the total rather than silently carried into it.
+  assert.equal(r.byPartCColumn.preInitiation, 0);
+  assert.ok(readiness(d, r).some((g) => /do not belong to those rows/.test(g)));
+});
+
+test("Part C's columns never touch the tax — they are context, not arithmetic", () => {
+  // The pre-Finance-Act-2025 scheme deducted disclosed income from total income.
+  // The substituted s.158BB taxes column [A] alone, and this is the guard.
+  const bare = computeItrB(draftWith([{ undisclosed: { deemed: 1000000 } }]));
+  const withContext = computeItrB(draftWith([{
+    undisclosed: { deemed: 1000000 },
+    partC: { determined: 5000000, returned: 4000000, tdsOnly: 250000 },
+  }]));
+  assert.equal(withContext.totalUndisclosed, bare.totalUndisclosed);
+  assert.equal(withContext.tax.amount, bare.tax.amount);
+  assert.equal(withContext.netPayable, bare.netPayable);
+});
+
+test("column [C] fills from the return the practice already holds", () => {
+  const d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  const row = d.years.find((y) => y.ay === "2025-26");
+  const filled = withDeclared(row, readDeclared(fixture("itr2-salary-hp-capgains-ay2025-26")), "sync");
+  assert.equal(filled.partC.returned, 2353890);
+  assert.equal(filled.partC.returned, filled.declaredTotal);
+  assert.equal(filled.partC.returnedSection, "139(1)");
+});
+
+test("column [B] is suggested from the intimation, latest order first", () => {
+  const ret = { orders: [
+    { orderDate: "2023-02-01", section: "143(1)", commRefNo: "C1",
+      reading: { lines: [{ head: "Total Income", asReturned: 500000, asComputed: 560000 }] } },
+    { orderDate: "2024-05-01", section: "154", commRefNo: "C2",
+      reading: { lines: [{ head: "Total Income", asComputed: 545000 }] } },
+  ] };
+  const s = determinedFromReturn(ret);
+  // A s.154 order supersedes the s.143(1) it rectifies.
+  assert.equal(s.amount, 545000);
+  assert.equal(s.commRefNo, "C2");
+  // Reported under s.143(1) all the same: column [B] has no entry for s.154,
+  // and a rectified figure is still the income determined under s.143(1).
+  assert.equal(s.section, "143(1)");
+});
+
+test("column [B] takes CPC's figure, and never the gross total income", () => {
+  // The two sit adjacent in every intimation and differ by the Chapter VI-A
+  // deductions, so picking the wrong one overstates [B] by exactly that much.
+  const ret = { orders: [{ orderDate: "2024-01-01", reading: { lines: [
+    { head: "Gross Total Income", asComputed: 3000000 },
+    { head: "Tax on Total Income", asComputed: 780000 },
+    { head: "Total Income", asReturned: 2200000, asComputed: 2400000 },
+  ] } }] };
+  const s = determinedFromReturn(ret);
+  assert.equal(s.amount, 2400000);          // CPC's column, not the taxpayer's
+  assert.equal(s.head, "Total Income");
+});
+
+test("no intimation, no reading, and no figure all suggest nothing", () => {
+  assert.equal(determinedFromReturn(null), null);
+  assert.equal(determinedFromReturn({}), null);
+  assert.equal(determinedFromReturn({ orders: [{ orderDate: "2024-01-01" }] }), null);
+  // A read that found the row but no computed figure is not a suggestion.
+  assert.equal(determinedFromReturn({ orders: [{ reading: { lines: [{ head: "Total Income" }] } }] }), null);
 });

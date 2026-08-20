@@ -29,6 +29,7 @@ import {
 import { UNDISCLOSED_HEADS, RATE_PENALTY } from "./compute.js";
 import { HEADS } from "./declared.js";
 import { DII_ITEMS, VERIFICATION_TEXT, furnishingMode } from "./form.js";
+import { columnsFor, labelFor, appliesTo, partBColumns } from "./partC.js";
 
 const L = 14, R = 196, W = R - L, PAGE_H = 297, FOOT = 20;
 
@@ -253,7 +254,7 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
           amt(y.assessedTotal, { zero: "Nil" }),
         ]),
         {
-          0: "", 1: "TOTAL — BLOCK PERIOD", 2: "", 3: "",
+          0: "", 1: "TOTAL", 2: "", 3: "",
           4: amt(result.totalDeclared, { zero: "Nil" }),
           5: amt(result.totalUndisclosed, { zero: "Nil" }),
           6: amt(result.totalDeclared + result.totalUndisclosed, { zero: "Nil" }),
@@ -267,9 +268,84 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
       : `Y0 is the part period ending ${fmtDate(result.years[result.years.length - 1].to)}, the date the last authorisation was executed — the form's first Part C table applies (s.158B(b), Note 1).`,
       L, p.y, { size: 6.8, weight: "medium", color: MUTED });
     p.y += 6;
-    text("Columns [B] to [H] of Part C — income already determined, assessed or declared — are not reproduced here and must be completed on the portal.",
-      L, p.y, { size: 6.8, weight: "medium", color: MUTED });
+    p.y += 3;
+
+    /* Part C's context columns, as the form's own table.
+     *
+     * Set landscape-tight rather than split across two tables: the whole point
+     * of these columns is that a reader can run an eye across one year and see
+     * the undisclosed income beside everything already on record for it, and a
+     * second table on another page loses exactly that. */
+    const cCols = columnsFor(result.spansYears);
+    /* Headed by the bare letter. The legend printed directly beneath says what
+       each one is, and an abbreviated heading in a 20mm column says neither —
+       it clips to "[E] YEAR EN…", which tells a reader less than "[E]" does. */
+    const cw = (W - 20) / (cCols.length + 1);
+    text("PART C — COLUMNS [B] TO [H]: INCOME ALREADY DETERMINED, ASSESSED OR DECLARED",
+      L, p.y + 3, { size: 6.6, weight: "semibold", color: accent, spacing: 0.3 });
+    p.y += 8;
+    table(ctx, p, accent,
+      [
+        { label: "ROW", w: 20 },
+        { label: "[A]", w: cw, align: "right" },
+        ...cCols.map((c) => ({ label: `[${c.letter}]`, w: cw, align: "right" })),
+      ],
+      [
+        ...result.years.map((y) => [
+          y.slot || "",
+          amt(y.totalUndisclosed, { zero: "Nil" }),
+          ...cCols.map((c) => (appliesTo(c, y, result.spansYears) ? amt(y.partC[c.key]) : "·")),
+        ]),
+        {
+          0: "TOTAL",
+          1: amt(result.totalUndisclosed, { zero: "Nil" }),
+          ...Object.fromEntries(cCols.map((c, i) => [i + 2, amt(result.byPartCColumn[c.key])])),
+          _tone: "total",
+        },
+      ],
+      { size: 6.6, pad: 1.6 }
+    );
+    p.y += 1;
+    // The sections travel with columns [B] and [C], and are printed beneath
+    // rather than as sub-columns: at this width a section would cost a figure.
+    const withSections = result.years.filter((y) => y.partC.determinedSection || y.partC.returnedSection);
+    if (withSections.length) {
+      p.need(6 + withSections.length * 3.6);
+      withSections.forEach((y) => {
+        const bits = [
+          y.partC.determinedSection ? `[B] s.${y.partC.determinedSection}` : "",
+          y.partC.returnedSection ? `[C] s.${y.partC.returnedSection}` : "",
+        ].filter(Boolean).join("   ·   ");
+        text(`${y.slot}  ${bits}`, L, p.y, { size: 6.6, color: MUTED });
+        p.y += 3.6;
+      });
+      p.y += 3;
+    }
+    // The one cross-check the form spells out for these columns.
+    p.need(8);
+    text(`Total of ${partBColumns(result.spansYears).map((k) => `[${cCols.find((c) => c.key === k).letter}]`).join(" and ")} is ${amt(result.partBTotal, { zero: "Nil" })} — the form requires this to equal row 6 of Part B, which is completed on the portal.`,
+      L, p.y, { size: 6.8, weight: "semibold", color: BODY });
     p.y += 6;
+    if (result.misplacedPartC.length) {
+      p.need(8);
+      text(`Figures sit in columns that do not belong to their rows: ${result.misplacedPartC.map((m) => `[${m.letter}] against ${m.slot}`).join(", ")}.`,
+        L, p.y, { size: 6.8, weight: "semibold", color: [193, 51, 120] });
+      p.y += 6;
+    }
+    /* What each letter means, once, under the table. The headers above are
+       abbreviated to three or four words to fit eight columns across the page,
+       and an abbreviation is only readable to somebody who already knows what
+       it stands for — which is precisely not the person checking this. */
+    p.need(10);
+    text("WHAT THE COLUMNS ARE", L, p.y + 3, { size: 6.4, weight: "semibold", color: accent, spacing: 0.3 });
+    p.y += 7;
+    cCols.forEach((c) => {
+      const lines = wrap(`[${c.letter}]  ${labelFor(c, result.spansYears)}  {s.${c.ref}}`, W - 4, 6.4, "regular");
+      p.need(lines.length * 3 + 2);
+      lines.forEach((ln) => { text(ln, L, p.y, { size: 6.4, color: MUTED }); p.y += 3; });
+      p.y += 1;
+    });
+    p.y += 3;
     if (result.years.some((y) => y.floored)) {
       p.need(8);
       text("A year whose heads net to a loss is carried at nil: no loss is set off against the undisclosed income of the block period — s.158BB(4).",

@@ -53,7 +53,7 @@ and `blockPeriod()` reports which applies as `spansYears`.
 | Part | What the form asks | Here |
 | --- | --- | --- |
 | A | General information, both search dates, the notice, per-year filing and assessment status | Yes — including A25–A34's three per-year variants |
-| B | Break-up of Y0/Y+1 part-year income under s.158BB(1A)(c)(ii)/(iii) | Not modelled — complete it on the portal |
+| B | Break-up of Y0/Y+1 part-year income under s.158BB(1A)(c)(ii)/(iii) | Yes, on the one row it belongs to |
 | C | Undisclosed income per year, column [A], with the disclosed-income context in [B]–[H] | Yes — all columns, with the applicable table chosen automatically |
 | D-I | Head-wise break-up | Yes |
 | D-II | Item-wise break-up, fourteen rows, tied to D-I | Yes |
@@ -63,8 +63,11 @@ and `blockPeriod()` reports which applies as `spansYears`.
 | H | TDS/TCS not claimed earlier | Yes, per year |
 | Verification | The form's declaration | Yes, verbatim |
 
-What is not modelled is stated on the working paper itself, so nobody assumes a
-blank part means a nil.
+**Every part of the form is now modelled.** The Review tab reports where each one
+stands — done, partly, or not started — because a hole nobody can see is the
+failure mode a transcription sheet has that a computation does not: a
+computation is visibly wrong when a figure is missing, and a sheet just looks
+finished.
 
 ## The statutory shape
 
@@ -115,6 +118,27 @@ It never adds anything up and never applies a rate, so there is no arithmetic to
 get wrong against a form nobody has mapped — only a field to find or not find. A
 head a form does not have (there is no capital-gains head on ITR-1) reads `null`
 and prints as a dash, never as a nil.
+
+## Part B belongs to one row
+
+Whichever of the block period is the **part** year: Y0 where the search began
+and ended in the same previous year, Y+1 where the last authorisation was
+executed later. It is not a per-year schedule, and asking it of seven rows would
+be asking it six times too often.
+
+Two things it does that the other schedules do not:
+
+* **The subtotals are computed, never typed** (3v, 4av, 4biv, 4c, 4e, 5d, 6).
+  The form prints their formulae; a sheet whose totals can be keyed
+  independently is a sheet that can disagree with itself.
+* **"Enter nil if loss" is applied**, on the nine rows that carry it. It is not
+  a rounding convention — it is what stops a head that lost money in the part
+  period sheltering income in another head of the same period. Every row it
+  bites on is named with the figure that was disregarded, because a number
+  silently replaced by nil is a number nobody can reconcile.
+
+Row 6 is checked against Part C's part-period columns, which is the tie the form
+itself asks for.
 
 ## Part A asks three different sets of questions
 

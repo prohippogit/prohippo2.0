@@ -36,6 +36,8 @@ import {
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
 import { columnsFor, labelFor, appliesTo, determinedFromReturn } from './itrb/partC';
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
+import { PART_B_ROWS, computePartB } from './itrb/partB';
+import { completeness, summarise, STATUS } from './itrb/completeness';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -754,6 +756,8 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
   /* Which of Part A's three sets of questions this row gets, and the form's own
      field numbers for them — so the sheet and the portal screen agree. */
   const variant = variantFor(year, spansYears);
+  // Part B is asked of the part period and of nothing else.
+  const isPartBRow = result?.partBRow?.key === year.key;
   const numbers = {
     ...FIELD_NUMBERS[variant],
     __label: variant === "brief" ? "A26–A30" : variant === "full" ? (year.slot === "Y1" ? "A31" : "A33") : (year.slot === "Y0" ? "A32" : "A34"),
@@ -957,6 +961,9 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
         </div>
       </div>
 
+      {/* ---- Part B, on the one row it belongs to ---- */}
+      {isPartBRow && <PartBSchedule year={year} result={result} set={set}/>}
+
       {/* ---- Part C, columns [B] to [H] ---- */}
       <div>
         <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>Part C — income already on record</div>
@@ -1092,6 +1099,122 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
   );
 }
 
+/* Where each part of the form stands.
+ *
+ * The flat list below this one says what is WRONG with a draft. This says what
+ * is BLANK, and says it per part, because that is how somebody keying the
+ * portal works — down the form, one part at a time, needing to know which parts
+ * they can leave. A hole nobody can see is the failure mode a transcription
+ * sheet has and a computation does not: a computation is visibly wrong when a
+ * figure is missing, and a sheet just looks finished. */
+function PartsPanel({ draft, result }) {
+  const parts = React.useMemo(() => completeness(draft, result), [draft, result]);
+  const { done, total, complete } = summarise(parts);
+  const tone = {
+    [STATUS.DONE]: { bg: "var(--p-mint)", fg: "#1B8C5C", label: "Done" },
+    [STATUS.PARTIAL]: { bg: "var(--p-amber)", fg: "#8A5B10", label: "Partly" },
+    [STATUS.EMPTY]: { bg: "var(--p-card-tint)", fg: "var(--p-text-3)", label: "Not started" },
+    [STATUS.NA]: { bg: "var(--p-card-tint)", fg: "var(--p-text-3)", label: "N/A" },
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <div className="card-title">Where the form stands</div>
+          <div className="card-sub">
+            {complete
+              ? "Every part has something in it. Check the figures against the seized material before filing."
+              : `${done} of ${total} parts complete. Nothing here stops the documents being produced.`}
+          </div>
+        </div>
+      </div>
+      <div style={{display: "flex", flexDirection: "column", gap: 8}}>
+        {parts.map((p) => {
+          const t = tone[p.status];
+          return (
+            <div key={p.id} style={{display: "flex", alignItems: "flex-start", gap: 12, padding: "9px 12px", borderRadius: 10, border: "1px solid var(--p-line)"}}>
+              <span className="pill" style={{background: t.bg, color: t.fg, fontSize: 10.5, flexShrink: 0, minWidth: 74, justifyContent: "center"}}>{t.label}</span>
+              <div style={{flex: 1, minWidth: 0}}>
+                <div style={{fontSize: 12.5, fontWeight: 600}}>{p.title}</div>
+                {p.detail && <div className="muted" style={{fontSize: 11.5, marginTop: 2}}>{p.detail}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Part B — the part period's income, head by head.
+ *
+ * Its own component because it is the only schedule in the form with a nesting
+ * of its own: seventeen figures under five heads with seven subtotals between
+ * them, and the subtotals are computed rather than typed because the form
+ * prints their formulae and a sheet whose totals can be keyed independently is
+ * a sheet that can disagree with itself. */
+function PartBSchedule({ year, result, set }) {
+  const worked = React.useMemo(() => computePartB(year.partB || {}), [year.partB]);
+  const tie = result?.partBTie;
+
+  return (
+    <div>
+      <div style={{display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4}}>
+        <div style={{fontWeight: 700, fontSize: 12.5}}>Part B — break-up of this part period&apos;s income</div>
+        <span className="pill pill-muted" style={{fontSize: 10}}>s.158BB(1A)(c)(ii) and (iii)</span>
+        {tie?.entered && (
+          <span className={`pill ${tie.ties ? "pill-success" : "pill-danger"}`} style={{fontSize: 10.5}}>
+            {tie.ties ? "Ties to Part C" : `Row 6 is ${fmtINR(tie.partBTotal)} against Part C's ${fmtINR(tie.partCTotal)}`}
+          </span>
+        )}
+      </div>
+      <div className="muted" style={{fontSize: 11.5, marginBottom: 12}}>
+        Only this row is asked for it — the part period is the one stretch of the block the return breaks up head by head.
+        Subtotals are worked out here; the form prints their formulae, so they are not yours to key.
+      </div>
+
+      <div style={{display: "flex", flexDirection: "column", gap: 2}}>
+        {PART_B_ROWS.map((row) => {
+          if (row.heading) {
+            return (
+              <div key={row.no} style={{fontWeight: 700, fontSize: 11.5, marginTop: 10, marginBottom: 2, paddingLeft: (row.indent || 0) * 16}}>
+                {row.no}. {row.heading}
+              </div>
+            );
+          }
+          const computed = Boolean(row.of);
+          return (
+            <div key={row.no} style={{display: "flex", alignItems: "center", gap: 10, paddingLeft: (row.indent || 0) * 16}}>
+              <div style={{flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: computed || row.grand ? 700 : 400, color: computed ? "var(--p-text)" : "var(--p-text-2)"}}>
+                <span className="muted" style={{marginRight: 6, fontVariantNumeric: "tabular-nums"}}>{row.no}</span>
+                {row.label}
+                {row.nilIfLoss && <span className="muted" style={{fontSize: 10.5}}> · enter nil if loss</span>}
+              </div>
+              <div style={{width: 150, flexShrink: 0}}>
+                {computed ? (
+                  <input readOnly disabled value={fmtINR(worked.rows[row.key] || 0)}
+                    style={{textAlign: "right", background: row.grand ? "var(--p-lavender-2)" : "var(--p-card-tint)", fontWeight: 700, fontVariantNumeric: "tabular-nums"}}/>
+                ) : (
+                  <Amount value={year.partB?.[row.key]} onChange={(v) => set({ partB: { ...year.partB, [row.key]: v } })}/>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {worked.floored.length > 0 && (
+        <div style={{marginTop: 12, padding: "10px 13px", borderRadius: 10, background: "var(--p-amber)", color: "#8A5B10", fontSize: 11.5}}>
+          Carried at nil because the form says so on {worked.floored.length === 1 ? "that row" : "those rows"}:{" "}
+          {worked.floored.map((f) => `${f.no} (${fmtINR(f.was)})`).join(", ")}. A head that lost money in the part period cannot
+          shelter income in another head of the same period.
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------------------- Parts D and E ---------------------------- */
 
 function TaxTab({ draft, result, edit, editYear }) {
@@ -1214,7 +1337,9 @@ function TaxTab({ draft, result, edit, editYear }) {
 function ReviewTab({ draft, result, gaps, edit, onDownload, onExport, onDiscard, onGoto }) {
   return (
     <>
-      <div className="card">
+      <PartsPanel draft={draft} result={result}/>
+
+      <div className="card" style={{marginTop: 16}}>
         <div className="card-head">
           <div>
             <div className="card-title">Before this is filed</div>

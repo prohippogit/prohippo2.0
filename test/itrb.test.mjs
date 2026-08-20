@@ -17,6 +17,8 @@ import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy } from 
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import { columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS } from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
+import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
+import { completeness, summarise, STATUS } from "../src/tools/itrb/completeness.js";
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
@@ -775,4 +777,174 @@ test("Part A reports what each variant is still missing", () => {
     declaredTotal: 2353890, partA: { filedSection: "139(1)" },
   }, false);
   assert.deepEqual(done, []);
+});
+
+
+/* ---------------------------------------------------------------------------
+ * Part B — the part period's income, head by head.
+ * ------------------------------------------------------------------------- */
+
+test("Part B belongs to the part period, and to nothing else", () => {
+  // Same-year search: Y0 is the part period.
+  const t1 = [{ slot: "Y1" }, { slot: "Y0", part: true }];
+  assert.equal(partBYear(t1, false).slot, "Y0");
+  // Search running into a later previous year: Y0 is complete, Y+1 is the part.
+  const t2 = [{ slot: "Y0", part: false }, { slot: "Y+1", part: true }];
+  assert.equal(partBYear(t2, true).slot, "Y+1");
+  assert.equal(partBYear([], false), null);
+  assert.equal(partBYear(null, false), null);
+});
+
+test("the subtotals are computed, following the form's own formulae", () => {
+  const { rows, total } = computePartB({
+    salaries: 300000, bpNonSpec: 450000, bpSpecialRate: 25000,
+    stcg20: 120000, stcg30: 30000, ltcg125: 200000, cg115BBH: 60000,
+    osNormal: 40000, osSpecial: 10000,
+  });
+  assert.equal(rows.bpTotal, 475000);        // 3v = 3i + 3ii + 3iii + 3iv
+  assert.equal(rows.stcgTotal, 150000);      // 4av
+  assert.equal(rows.ltcgTotal, 200000);      // 4biv
+  assert.equal(rows.cgSum, 350000);          // 4c = 4av + 4biv
+  assert.equal(rows.cgTotal, 410000);        // 4e = 4c + 4d
+  assert.equal(rows.osTotal, 50000);         // 5d
+  // 6 = 1 + 2 + 3v + 4e + 5d
+  assert.equal(total, 300000 + 0 + 475000 + 410000 + 50000);
+});
+
+test("\"enter nil if loss\" is applied, and every row it bites on is named", () => {
+  // Not a rounding convention: it is what stops a head that lost money in the
+  // part period sheltering income in another head of the same period.
+  const { rows, total, floored } = computePartB({
+    salaries: 300000, houseProperty: -80000, bpNonSpec: 450000, bpSpeculative: -50000,
+    osNormal: 40000, osRaceHorses: -15000,
+  });
+  assert.equal(rows.houseProperty, 0);
+  assert.equal(rows.bpSpeculative, 0);
+  assert.equal(rows.osRaceHorses, 0);
+  // The losses do not reduce the heads they sit beside.
+  assert.equal(rows.bpTotal, 450000);
+  assert.equal(rows.osTotal, 40000);
+  assert.equal(total, 790000);
+  assert.deepEqual(floored.map((f) => f.no), ["2", "3ii", "5c"]);
+  // And the figure that was disregarded is reported, so it can be reconciled.
+  assert.equal(floored[0].was, -80000);
+});
+
+test("a subtotal that nets to a loss is floored too, not just the leaves", () => {
+  // 4av, 4biv and 4c all carry the instruction in the form.
+  const { rows } = computePartB({ stcg20: 100000, stcg30: -250000, ltcg125: 40000 });
+  assert.equal(rows.stcgTotal, 0);           // 4av netted to a loss
+  assert.equal(rows.ltcgTotal, 40000);
+  assert.equal(rows.cgSum, 40000);           // 4c sees the floored 4av, not the loss
+});
+
+test("Part B's shape is the form's shape", () => {
+  assert.equal(PART_B_ROWS.filter((r) => r.heading).length, 5);
+  assert.equal(PART_B_ROWS.filter((r) => r.of).length, 7);
+  assert.equal(PART_B_LEAVES.length, 17);
+  // Row 6 sums the five heads, not the seventeen leaves.
+  const six = PART_B_ROWS.find((r) => r.no === "6");
+  assert.deepEqual(six.of, ["salaries", "houseProperty", "bpTotal", "cgTotal", "osTotal"]);
+  // The nine rows the form marks "enter nil if loss".
+  assert.deepEqual(PART_B_ROWS.filter((r) => r.nilIfLoss).map((r) => r.no),
+    ["2", "3i", "3ii", "3iii", "4av", "4biv", "4c", "5a", "5c"]);
+});
+
+test("Part B and Part C must agree about the same period", () => {
+  assert.equal(tiesToPartC(850000, 850000).ties, true);
+  assert.equal(tiesToPartC(850000, 900000).ties, false);
+  // Untouched is not a discrepancy — plenty of drafts never reach Part B.
+  assert.deepEqual(tiesToPartC(0, 0), { entered: false, ties: true, partBTotal: 0, partCTotal: 0 });
+});
+
+test("the tie runs end to end, and readiness reports it", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2026-03-15", lastAuthDate: "2026-04-05" });
+  d.years[7].partB.salaries = 300000;
+  d.years[7].partB.bpNonSpec = 450000;
+  d.years[7].partC.nextYearPart = 670000;    // deliberately short of Part B's 750000
+
+  let r = computeItrB(d);
+  assert.equal(r.partBRow.slot, "Y+1");
+  assert.equal(r.partB.total, 750000);
+  assert.equal(r.partBTie.ties, false);
+  assert.ok(readiness(d, r).some((g) => /Part B's row 6/.test(g)));
+
+  d.years[7].partC.nextYearPart = 750000;
+  r = computeItrB(d);
+  assert.equal(r.partBTie.ties, true);
+  assert.equal(readiness(d, r).some((g) => /Part B's row 6/.test(g)), false);
+});
+
+test("Part B never touches the tax — the part period's income is disclosed income", () => {
+  const base = computeItrB(draftWith([{ undisclosed: { deemed: 1000000 } }]));
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  d.years[2].undisclosed.deemed = 1000000;
+  d.years[6].partB.salaries = 5000000;
+  const r = computeItrB(d);
+  assert.equal(r.totalUndisclosed, base.totalUndisclosed);
+  assert.equal(r.tax.amount, base.tax.amount);
+});
+
+
+/* ---------------------------------------------------------------------------
+ * Where the form stands, part by part.
+ * ------------------------------------------------------------------------- */
+
+const partsOf = (d) => {
+  const map = {};
+  for (const p of completeness(d, computeItrB(d))) map[p.id] = p;
+  return map;
+};
+
+test("an untouched draft is empty everywhere, and Part B does not apply yet", () => {
+  const p = partsOf(blankDraft());
+  assert.equal(p.A.status, STATUS.EMPTY);
+  assert.equal(p.C.status, STATUS.EMPTY);
+  // No block period means no part period means nothing for Part B to describe.
+  assert.equal(p.B.status, STATUS.NA);
+  const { done, total, complete } = summarise(completeness(blankDraft(), computeItrB(blankDraft())));
+  assert.equal(done, 0);
+  assert.equal(complete, false);
+  // The N/A part is not counted against the draft.
+  assert.equal(total, 7);
+});
+
+test("each part reports on itself, not on the draft as a whole", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  d.pan = "ABCPS1234F"; d.assessee = "R Shah"; d.noticeDin = "ITBA/1";
+  d.serviceDate = "2026-01-10"; d.dueDate = "2026-03-11";
+  d.years[2].undisclosed.deemed = 1500000;
+  d.years[2].items.money = 1500000;
+
+  const p = partsOf(d);
+  assert.equal(p.A.status, STATUS.DONE);
+  // Column [A] is in but the context columns are not, which is exactly the
+  // hole this panel exists to show: the sheet looks finished without them.
+  assert.equal(p.C.status, STATUS.PARTIAL);
+  assert.match(p.C.detail, /columns \[B\] to \[H\] are still blank/);
+  assert.equal(p.D.status, STATUS.DONE);      // D-I in, D-II ties
+  assert.equal(p.E.status, STATUS.DONE);      // computed off Part C
+  // The per-year half of Part A is a different question from the general half.
+  assert.equal(p.A25.status, STATUS.PARTIAL);
+  assert.match(p.A25.detail, /Y6 wants the/);
+  // Part B now applies, and has not been started.
+  assert.equal(p.B.status, STATUS.EMPTY);
+  assert.equal(p.V.status, STATUS.EMPTY);
+});
+
+test("a part that does not tie reads as partly done, and says by how much", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  d.years[2].undisclosed.deemed = 1500000;
+  d.years[2].items.money = 1200000;           // Part D-II short of Part D-I
+  const p = partsOf(d);
+  assert.equal(p.D.status, STATUS.PARTIAL);
+  assert.match(p.D.detail, /12,00,000 against Part D-I's 15,00,000/);
+});
+
+test("nothing claimed under Parts F, G and H is a legitimate answer", () => {
+  let d = withBlockPeriod(blankDraft(), { searchDate: "2025-11-15" });
+  d.years[2].undisclosed.deemed = 1500000;
+  assert.match(partsOf(d).FGH.detail, /the form does not require a figure/);
+  d.years[2].credits.tds = 45000;
+  assert.equal(partsOf(d).FGH.status, STATUS.DONE);
 });

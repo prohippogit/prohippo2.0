@@ -243,6 +243,14 @@ years' orders only by e-mail) is never re-read.
 JSON was never synced — refusing to look would leave the column blank for a
 reason that has nothing to do with it.
 
+**It always says why it found nothing.** The first version returned null on four
+different failures — no order on file, no PDF on the order, the read throwing,
+the order carrying no total-income row — and the practitioner saw an empty box
+and no explanation, which is indistinguishable from the feature not working.
+Each is a different next step (run a returns sync, fetch the order by e-mail, try
+again, key it by hand), so each is named, in the notification, per year — even
+when other years in the same press filled.
+
 `withDetermined` records `partC.determinedFrom` — the order's date, its CPC
 reference and the row the figure was taken from — and the panel prints all
 three, because this is the one figure on the screen that came out of a model
@@ -261,12 +269,17 @@ from and the one check the app cannot make for anybody — whether that payment
 has already been given credit in the regular assessment for the year.
 
 **Part H** asks for TDS and TCS *"not claimed in any earlier return"*. What the
-return states is the precise opposite: the credit it **did** claim. Writing it
-into Part H would put a practitioner one press away from claiming the same TDS
-twice, in a return the Assessing Officer verifies under rule 12AE(4). So it is
-carried on the year as `claimed` and shown under each Part H box — "₹55,703
-claimed in the return — enter only what was not" — which is the figure they need
-in front of them to work out what is left.
+return states is the precise opposite: the credit it **did** claim. So the figure
+that lands there is a *starting point to reduce*, not an answer.
+
+It was left blank at first for that reason, and is filled now because the
+practitioner asked for it — on the footing that they are the one who knows what
+credit has already been allowed. What the app owes them in return is that the
+caveat is never out of sight: `claimed` is carried alongside, the panel says in
+as many words that Part H needs cutting down, and each box prints in amber
+"₹55,703 was claimed in the return — reduce this by whatever has already been
+allowed". A reduced figure is never reset by a later fill. An unreduced one is
+caught by the officer under rule 12AE(4) — but late, and by somebody else.
 
 A figure already keyed is never replaced. A read of **nil** still fills: nil
 advance tax is an answer, and an empty box makes an answered question look

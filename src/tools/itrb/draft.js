@@ -417,24 +417,31 @@ export function withDeclared(year, reading, source = "json") {
       returned: total === null || total === undefined ? year.partC?.returned : total,
       returnedSection: year.partC?.returnedSection || "139(1)",
     },
-    /* PART G, FILLED. PART H, NOT.
+    /* ALL FOUR CREDITS, FILLED — AND PART H CARRIES A WARNING.
      *
-     * The form draws a line here that the two figures either side of it do not
-     * make obvious. Part G asks for the advance tax and self-assessment tax
-     * paid for the year — the return states both, and they go in.
+     * Part G asks for the advance tax and self-assessment tax paid for the
+     * year. The return states both, and they go in without qualification.
      *
-     * Part H asks for TDS and TCS "not claimed in any earlier return". What the
-     * return states is exactly the opposite: the credit it DID claim. Writing
-     * it into Part H would put the practitioner one press away from claiming
-     * the same credit twice, in a return the officer verifies under rule
-     * 12AE(4). So those two are carried as `claimed` — shown beside the boxes,
-     * for the practitioner to subtract from — and the boxes stay theirs.
+     * PART H IS DIFFERENT AND THE SCREEN SAYS SO. It asks for TDS and TCS "not
+     * claimed in any earlier return", and what the return states is the credit
+     * it DID claim — so the figure that lands there is a STARTING POINT to
+     * reduce, not an answer. It was left blank at first for exactly that
+     * reason; it is filled now because the practitioner asked for it, on the
+     * footing that they are the one who knows what credit has already been
+     * allowed. What the app owes them in return is that the caveat is never out
+     * of sight: `claimed` is carried alongside and printed under the box, and
+     * the panel says in as many words that the figure has to be reduced by
+     * whatever was already given credit. A block return's credits are verified
+     * by the officer under rule 12AE(4), so an unreduced figure is caught — but
+     * it is caught late, and by somebody else.
      *
-     * Nothing already keyed is overwritten either way. */
+     * Nothing already keyed is overwritten. */
     credits: {
       ...year.credits,
       advance: fillMoney(year.credits?.advance, reading.advanceTax),
       selfAssessment: fillMoney(year.credits?.selfAssessment, reading.selfAssessmentTax),
+      tds: fillMoney(year.credits?.tds, reading.tds),
+      tcs: fillMoney(year.credits?.tcs, reading.tcs),
     },
     claimed: {
       tds: reading.tds ?? year.claimed?.tds ?? null,

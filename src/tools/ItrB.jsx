@@ -249,35 +249,61 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
    * this reads it — one order, the newest, once, on a press the practitioner
    * made.
    *
-   * Returns what it found, so the caller can say so in one sentence rather than
-   * leaving a figure to appear silently in a column nobody was looking at. */
+   * IT ALWAYS SAYS WHY IT FOUND NOTHING. The first version returned null on
+   * four different failures — no order on file, no PDF on the order, the read
+   * throwing, the order carrying no total-income row — and the practitioner saw
+   * an empty box and no explanation, which is indistinguishable from the
+   * feature not working. Each of those is a different next step: run a returns
+   * sync, fetch the order by e-mail, try again, or key it by hand. So each is
+   * named. */
   const fillDetermined = async (ay, ret) => {
-    if (!ret) return null;
+    if (!ret) return { ok: false, why: `no return on file for A.Y. ${ay}` };
+
     let found = determinedFromReturn(ret);
     let read = false;
 
     if (!found) {
+      const orders = Array.isArray(ret.orders) ? ret.orders : [];
+      if (!orders.length) {
+        return { ok: false, why: `no s.143(1) intimation on file for A.Y. ${ay} — run a returns sync for this assessee, or key [B] by hand` };
+      }
       const order = intimationToRead(ret);
-      if (!order) return null;
+      if (!order) {
+        // Every order is either already read (and had no total-income row) or
+        // has no PDF here at all. CPC sends some years' orders only by e-mail.
+        const readable = orders.filter((o) => o && o.storagePath && !o.locked);
+        return { ok: false, why: readable.length
+          ? `the intimation for A.Y. ${ay} has been read and states no total-income row — key [B] off the order`
+          : `the intimation for A.Y. ${ay} has no PDF on file — CPC sends some years' orders only by e-mail` };
+      }
       try {
         const res = await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
           returnId: ret.id, commRefNo: order.commRefNo,
         });
         const reading = res?.data?.reading;
-        if (!reading) return null;
+        if (!reading) return { ok: false, why: `the intimation for A.Y. ${ay} could not be read` };
         read = true;
         found = determinedFromReturn(withOrderReading(ret, order.commRefNo, reading));
+        if (!found) {
+          return { ok: false, why: `the intimation for A.Y. ${ay} was read but states no total-income row — key [B] off the order` };
+        }
       } catch (e) {
-        // Not fatal to the fill. The figures out of the JSON are already in;
-        // this column simply stays for the practitioner, which is where it was.
         console.warn("itr-b: couldn't read the intimation for", ay, e);
-        return null;
+        // Not fatal to the fill: the figures out of the JSON are already in.
+        return { ok: false, why: `the intimation for A.Y. ${ay} couldn't be read — ${String(e?.message || e).slice(0, 90)}` };
       }
     }
-    if (!found) return null;
+
     setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === ay ? withDetermined(y, found) : y)) }));
     setDirty(true);
-    return { ...found, read };
+    return { ok: true, ...found, read };
+  };
+
+  /** One sentence about column [B], for the notification after a fill. */
+  const saidAboutB = (out) => {
+    if (!out) return "";
+    if (!out.ok) return ` Column [B] is still yours: ${out.why}.`;
+    return ` Column [B] is ${fmtINR(out.amount)}, ${out.read ? "read off" : "from"} the intimation${out.orderDate ? ` dated ${dateOf(out.orderDate)}` : ""}.`;
   };
 
   const fillFromSync = async (year) => {
@@ -298,9 +324,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       setBusyYear(year.key);
       const only = await fillDetermined(year.ay, ret);
       setBusyYear("");
-      notify(`A.Y. ${year.ay}: filing particulars filled.${only
-        ? ` Column [B] is ${fmtINR(only.amount)}, ${only.read ? "read off" : "from"} the intimation${only.orderDate ? ` dated ${dateOf(only.orderDate)}` : ""}.`
-        : ""} The ITR JSON hasn't been synced, so upload it for the declared income.`);
+      notify(`A.Y. ${year.ay}: filing particulars filled.${saidAboutB(only)} The ITR JSON hasn't been synced, so upload it for the declared income.`);
       return;
     }
 
@@ -309,9 +333,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       const json = await readStoredJson(ret.jsonPath);
       if (applyReading(readDeclared(json), "sync", year.ay, ret)) {
         const determined = await fillDetermined(year.ay, ret);
-        notify(`A.Y. ${year.ay} filled from the return on file.${determined
-          ? ` Column [B] is ${fmtINR(determined.amount)}, ${determined.read ? "read off" : "from"} the intimation${determined.orderDate ? ` dated ${dateOf(determined.orderDate)}` : ""}.`
-          : ""}`);
+        notify(`A.Y. ${year.ay} filled from the return on file.${saidAboutB(determined)}`, determined?.ok === false ? "info" : "check");
       }
     } catch (e) {
       console.error("itr-b: sync fill", e);
@@ -334,6 +356,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
     let read = 0;
     let columnB = 0;
     let intimationsRead = 0;
+    const noB = [];
     const particularsOnly = [];
     for (const y of todo) {
       const ret = syncedReturn(y.ay);
@@ -352,7 +375,8 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       // Column [B] comes from the intimation, not the JSON, so it is looked for
       // on every year with a return — including those with no JSON synced.
       const determined = await fillDetermined(y.ay, ret);
-      if (determined) { columnB += 1; if (determined.read) intimationsRead += 1; }
+      if (determined?.ok) { columnB += 1; if (determined.read) intimationsRead += 1; }
+      else if (determined?.why) noB.push(determined.why);
     }
     setBusyYear("");
 
@@ -362,6 +386,11 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       columnB
         ? `Column [B] filled for ${columnB} year${columnB === 1 ? "" : "s"}${intimationsRead ? `, reading ${intimationsRead} intimation${intimationsRead === 1 ? "" : "s"} to do it` : ""}.`
         : "",
+      /* Named rather than counted, and named even when other years DID fill:
+         each of these needs a different next step — run a returns sync, fetch
+         the order by e-mail, key it by hand — and a bare count of successes
+         leaves the years that failed looking like years nobody looked at. */
+      noB.length ? `Column [B] not filled where ${[...new Set(noB)].slice(0, 2).join("; and where ")}.` : "",
       particularsOnly.length
         ? `A.Y. ${particularsOnly.join(", ")}: acknowledgement and date only — no ITR JSON synced, so upload ${particularsOnly.length === 1 ? "it" : "them"} for the declared income.`
         : "",
@@ -1230,25 +1259,25 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
           Advance tax and self-assessment tax paid earlier go to <strong>Part G</strong>; TDS and TCS <em>not claimed in any
           earlier return</em> go to <strong>Part H</strong>. Rule 12AE(4): every credit here except self-assessment tax for
           the block period itself is allowed only on the Assessing Officer&apos;s verification and satisfaction.
-          {" "}Part G fills from the return; Part H cannot, because the return states the credit it <em>did</em> claim —
-          what it claimed is shown under each box to subtract from.
+          {" "}All four fill from the return. <strong>Part H needs cutting down</strong>: what the return states is the credit
+          it <em>did</em> claim, so the figure that lands there is a starting point, not an answer — reduce it by whatever has
+          already been allowed.
         </div>
         <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
           {[["advance", "Advance tax — Part G"], ["selfAssessment", "Self-assessment tax — Part G"], ["tds", "TDS — Part H"], ["tcs", "TCS — Part H"]].map(([k, label]) => (
             <div key={k} className="field">
               <label style={{fontSize: 11}}>{label}</label>
               <Amount value={year.credits?.[k]} onChange={(v) => setCredit(k, v)}/>
-              {/* WHAT THE RETURN CLAIMED, SHOWN AND NOT WRITTEN.
-                  Part G's two boxes fill from the return, because the form asks
-                  for the payments and the return states them. Part H's do not:
-                  it asks for credit "not claimed in any earlier return", and
-                  what the return states is precisely the credit it DID claim.
-                  Filling it would put somebody one press from claiming the same
-                  TDS twice in a return the officer verifies under rule 12AE(4).
-                  So the figure is put where they can subtract from it. */}
+              {/* PART H IS FILLED WITH A FIGURE THAT NEEDS REDUCING.
+                  It asks for credit "not claimed in any earlier return", and
+                  what the return states is the credit it DID claim — so this
+                  box starts at the return's figure and has to come down by
+                  whatever was already allowed. Said in amber, under the box,
+                  every time: the officer catches an unreduced figure under rule
+                  12AE(4), but late, and by somebody else. */}
               {(k === "tds" || k === "tcs") && year.claimed?.[k] !== null && year.claimed?.[k] !== undefined && (
-                <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>
-                  {fmtINR(year.claimed[k])} claimed in the return — enter only what was not
+                <span style={{fontSize: 10.5, marginTop: 4, color: "#8A5B10"}}>
+                  {fmtINR(year.claimed[k])} was claimed in the return — reduce this by whatever has already been allowed
                 </span>
               )}
               {/* Part G IS filled, and says where from. The check it cannot make

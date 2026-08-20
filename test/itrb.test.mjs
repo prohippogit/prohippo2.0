@@ -1743,28 +1743,32 @@ test("ITR-1 keeps them a level up, and is read all the same", () => {
   assert.equal(d.taxesPaid, 34555);
 });
 
-test("Part G fills from the return; Part H does not", () => {
+test("all four credits fill from the return, and Part H says what it still needs", () => {
   const d = readDeclared(fixture("itr3-partner-salary-agri-ay2025-26"));
   const y = withDeclared(blankYear({ ay: "2025-26" }), d, "sync");
 
   assert.equal(y.credits.advance, 250000);            // Part G — the form asks for the payment
   assert.equal(y.credits.selfAssessment, 67250);
 
-  // Part H asks for credit NOT claimed in any earlier return. Writing what the
-  // return claimed into it would put somebody one press from claiming the same
-  // TDS twice, in a return the officer verifies under rule 12AE(4).
-  assert.equal(y.credits.tds, "");
-  assert.equal(y.credits.tcs, "");
-  // It is carried instead, to be shown beside the box as the figure to subtract.
+  /* Part H asks for credit NOT claimed in any earlier return, and what the
+     return states is the credit it DID claim. The figure lands there as a
+     starting point to reduce — which is only safe because `claimed` is carried
+     alongside it and the panel prints the caveat under the box every time. */
+  assert.equal(y.credits.tds, 55703);
+  assert.equal(y.credits.tcs, 0);
   assert.equal(y.claimed.tds, 55703);
   assert.equal(y.claimed.tcs, 0);
 });
 
 test("a figure the practitioner has keyed is never replaced by the return's", () => {
-  const edited = { ...blankYear({ ay: "2025-26" }), credits: { tds: "", tcs: "", advance: 999, selfAssessment: "" } };
+  // Part H above all: a practitioner who has worked out what credit is left
+  // must not have it reset to the full amount claimed on the next fill.
+  const edited = { ...blankYear({ ay: "2025-26" }), credits: { tds: 12000, tcs: "", advance: 999, selfAssessment: "" } };
   const y = withDeclared(edited, readDeclared(fixture("itr3-partner-salary-agri-ay2025-26")), "sync");
   assert.equal(y.credits.advance, 999);
-  assert.equal(y.credits.selfAssessment, 67250);      // the one they left alone still fills
+  assert.equal(y.credits.tds, 12000);                 // their reduced figure stands
+  assert.equal(y.credits.selfAssessment, 67250);      // the ones they left alone still fill
+  assert.equal(y.credits.tcs, 0);
 });
 
 test("nil is an answer, and fills; absent is not, and does not", () => {
@@ -1794,7 +1798,7 @@ test("what is entered in Parts G and H reaches the tax computation", () => {
   const res = computeItrB(filled);
   const row = res.years.find((r) => r.key === y.key);
   assert.equal(row.credits.partG, 317250);            // advance + self-assessment
-  assert.equal(row.credits.partH, 50000);             // only what was entered as unclaimed
+  assert.equal(row.credits.partH, 50000);             // whatever stands in Part H after reducing
 });
 
 /* ---------------------------------------------------------------------------

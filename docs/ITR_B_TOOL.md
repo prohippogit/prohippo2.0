@@ -218,6 +218,28 @@ under s.143(1) regardless, because column [B]'s list of sections has no entry
 for s.154. "Gross total income" is excluded explicitly: it sits next to total
 income in every intimation and differs by the Chapter VI-A deductions.
 
+### The acknowledgement number and the date of filing
+
+These two are **not in the ITR JSON**. The JSON is the return as *prepared*;
+both are stamped by the portal at the moment of submission and live in the
+returns record the sync writes. So the year panel was printing "On file: ITR-2 ·
+ack 946927300190122 · filed 19 Jan 2022" directly above two empty boxes asking
+for exactly those two things — the app holding a fact, showing it, and still
+making somebody key it.
+
+`withFiledParticulars(year, ret)` fills them from the record, alongside
+`withDeclared(year, reading)` which fills the figures from the file. Two calls
+because they answer different questions and neither source has the other's
+answers. The record wins where both have a value — it is the portal's own, and
+the JSON's is whatever the preparation software wrote — but neither ever
+overwrites what the practitioner has typed, because they may be correcting a
+record that is wrong.
+
+**A record with no JSON behind it still answers half the questions.** *From
+synced return* used to refuse those years outright ("No synced ITR JSON on file
+for A.Y. …") and leave both boxes blank beside a line stating both facts. It now
+fills the particulars and says what is still missing.
+
 ## Finding the proceeding the practice already holds
 
 A search case does not arrive here as an ITR-B draft. It arrives as a proceeding

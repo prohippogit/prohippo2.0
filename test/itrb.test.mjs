@@ -17,7 +17,7 @@ import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy, stated
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import {
   columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS,
-  intimationToRead, withOrderReading,
+  intimationToRead, withOrderReading, describeOrders,
 } from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
@@ -1861,6 +1861,7 @@ test("column [B] is written with the order it came from, so it can be checked", 
   assert.equal(y.partC.determinedSection, "143(1)");
   assert.deepEqual(y.partC.determinedFrom, {
     orderDate: "2022-08-12", commRefNo: "CPC/2021/A1/123", head: "Total Income",
+    quote: "", uploaded: false,
   });
 });
 
@@ -1917,4 +1918,53 @@ test("a s.154 rectification supersedes the intimation it corrects", () => {
   assert.equal(found.amount, 241300);
   assert.equal(found.commRefNo, "RECT");
   assert.equal(found.section, "143(1)");
+});
+
+/* ---------------------------------------------------------------------------
+ * An order the practitioner uploads, and the record's own state made visible.
+ *
+ * Reading the order off the return record is a chain with four links: the sync
+ * must have run, the order must have arrived with a PDF, the PDF must have been
+ * decrypted at upload, and the reading must find the row. Any of the four can
+ * be missing, and all four produce the same empty column.
+ * ------------------------------------------------------------------------- */
+
+test("the record's state is printed, so the four empty-column cases are told apart", () => {
+  assert.equal(describeOrders(null), "No return on file for this year.");
+  assert.equal(describeOrders({ orders: [] }), "No order or intimation on this year's return record.");
+  assert.equal(describeOrders({ orders: [order()] }), "1 order on file · 1 with a PDF here");
+  assert.equal(
+    describeOrders({ orders: [order({ locked: true }), order({ commRefNo: "B", storagePath: "" })] }),
+    "2 orders on file · 1 with a PDF here · 1 still locked"
+  );
+  assert.equal(
+    describeOrders({ orders: [order({ reading: reading(1) })] }),
+    "1 order on file · 1 with a PDF here · 1 already read"
+  );
+});
+
+test("an uploaded order takes the section the document states, not always 143(1)", () => {
+  // The record-based path can only ever answer 143(1) — it is pointed at CPC
+  // intimations. Column [B]'s own list runs to eight sections, and a scrutiny
+  // order under s.143(3) belongs in it just as much.
+  const y = withDetermined(blankYear({ ay: "2021-22" }),
+    { amount: 812340, section: "143(3)", orderDate: "2024-03-28", head: "Total assessed income", quote: "Total income assessed at Rs. 8,12,340", uploaded: true },
+    { over: true });
+  assert.equal(y.partC.determined, 812340);
+  assert.equal(y.partC.determinedSection, "143(3)");
+  assert.equal(y.partC.determinedFrom.uploaded, true);
+  assert.equal(y.partC.determinedFrom.quote, "Total income assessed at Rs. 8,12,340");
+});
+
+test("an uploaded order overwrites, because the practitioner chose that document", () => {
+  // The record path never overwrites — a figure already there was keyed by
+  // somebody who read the order. Handing the app a specific PDF is a different
+  // act: it is an instruction about THIS document.
+  const keyed = { ...blankYear({ ay: "2021-22" }), partC: { determined: 999999, determinedSection: "143(1)" } };
+  const fromRecord = withDetermined(keyed, { amount: 460590, section: "143(1)" });
+  assert.equal(fromRecord.partC.determined, 999999);
+
+  const fromUpload = withDetermined(keyed, { amount: 460590, section: "147", uploaded: true }, { over: true });
+  assert.equal(fromUpload.partC.determined, 460590);
+  assert.equal(fromUpload.partC.determinedSection, "147");
 });

@@ -324,22 +324,27 @@ export function fromNotice(draft, notice, assessee) {
  * Never overwrites a figure already there. [B] is a transcription of what is
  * already on record, so a practitioner who has keyed it has read the order.
  */
-export function withDetermined(year, found) {
+export function withDetermined(year, found, { over = false } = {}) {
   if (!year || !found || typeof found.amount !== "number") return year;
   const current = year.partC?.determined;
-  if (current !== "" && current !== null && current !== undefined) return year;
+  if (!over && current !== "" && current !== null && current !== undefined) return year;
   return {
     ...year,
     partC: {
       ...year.partC,
       determined: found.amount,
-      // Always 143(1) — see determinedFromReturn in partC.js. A rectification
-      // corrects that determination rather than making a fresh one.
-      determinedSection: year.partC?.determinedSection || found.section || "143(1)",
+      /* The section comes from the document where the document says it — an
+         order under s.143(3) or s.147 is as much a determination as a CPC
+         intimation, and column [B]'s own list runs to eight of them. Only the
+         record-based path is fixed at 143(1), because a rectification corrects
+         that determination rather than making a fresh one. */
+      determinedSection: (over ? found.section : (year.partC?.determinedSection || found.section)) || "143(1)",
       determinedFrom: {
         orderDate: found.orderDate || "",
         commRefNo: found.commRefNo || "",
         head: found.head || "",
+        quote: found.quote || "",
+        uploaded: Boolean(found.uploaded),
       },
     },
   };

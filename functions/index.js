@@ -1043,6 +1043,163 @@ exports.readBlockSearchDates = onCall(
   }
 );
 
+/* ---------- the income already determined, off the order itself --------------
+ *
+ * Column [B] of Form ITR-B is the total income "determined or assessed" for a
+ * year, and the section it was determined under. That figure is printed in the
+ * order and stated in no record the portal hands over as data.
+ *
+ * WHY THIS EXISTS ALONGSIDE readIntimationOrder. That one reads an order the
+ * returns sync has already put on a return record, which is a chain with four
+ * links: the sync must have run, the order must have come with a PDF, the PDF
+ * must have been decrypted at upload (CPC locks every one with the PAN and the
+ * date of birth), and the reading must find the row. On a real practice any of
+ * the four can be missing, and the practitioner is left looking at an empty
+ * column holding the very document that answers it.
+ *
+ * So this reads the document they hand it. No record, no sync, no unlock — the
+ * PDF goes to the model and the figure comes back with the row it was read from
+ * and the sentence around it.
+ *
+ * IT IS NOT ONLY FOR CPC INTIMATIONS. Column [B]'s own list of sections runs
+ * 143(1), 143(3), 144, 147, 153A, 153C, 158BC(1)(c) and 245D, so an assessment
+ * order under any of them belongs here. readIntimationOrder can only ever
+ * answer 143(1), because that is all it is pointed at.
+ * ---------------------------------------------------------------------------- */
+
+const DETERMINED_PROMPT = `You are a chartered accountant reading ONE Indian income-tax order or intimation for ONE assessment year. Your only job is to state the TOTAL INCOME the department finally determined or assessed, and the section it was determined under.
+
+- "totalIncome": the total income as determined by the department, in rupees, as a plain number without separators. This is the DEPARTMENT's figure, not the assessee's. In a CPC intimation u/s 143(1) the table has two money columns — "As provided by Taxpayer" and "As Computed u/s 143(1)" — and you want the SECOND. The row is the one labelled "Total Income", however it is numbered or annotated: "Total Income [13=(10-12)]" is that row. It is NOT "Gross Total Income", NOT "Total of head wise income", NOT "Aggregate Income", and NOT the heading "TOTAL INCOME TAX LIABILITY", which is about tax and not income. Return null if the document states no such figure.
+
+- "asReturned": the same row's figure in the assessee's own column, if the document prints one. null otherwise.
+
+- "section": the section the income was determined under, exactly one of "143(1)", "143(3)", "144", "147", "153A", "153C", "158BC(1)(c)", "245D". An intimation from CPC is 143(1). A scrutiny assessment order is 143(3) — and where it recites that it is passed under section 147 read with 143(3), answer "147". A best-judgment order is 144. Return null if the document does not say.
+
+- "orderDate": the date the order or intimation was passed, as YYYY-MM-DD. In a CPC intimation this is printed as "Intimation Order Date".
+- "ay": the assessment year as printed, e.g. "2023-24".
+- "pan": the PAN of the assessee the order is addressed to.
+- "head": the row label exactly as printed, so the figure can be checked against the page.
+- "quote": the line the figure was taken from, verbatim and under 200 characters.
+
+AN ORDER THAT CHANGED NOTHING IS THE COMMON CASE. Most returns are processed exactly as filed, so both money columns agree on every row. That is not a reason to return null: the order still determined an income, and it is the figure in the department's column. Read it out.
+
+MANY OF THESE DOCUMENTS ARE BILINGUAL. CPC prints the whole intimation in Hindi and then repeats it in English in the same PDF. Read the English pages and report the row label as printed there.
+
+DATES: return every date as YYYY-MM-DD. Indian documents write DD/MM/YYYY — read them day first. "09/08/2023" is 9 August 2023.
+
+Never guess. Return null for anything the document does not state.`;
+
+const DETERMINED_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    totalIncome: { type: "NUMBER", nullable: true },
+    asReturned: { type: "NUMBER", nullable: true },
+    section: { type: "STRING", nullable: true },
+    orderDate: { type: "STRING", nullable: true },
+    ay: { type: "STRING", nullable: true },
+    pan: { type: "STRING", nullable: true },
+    head: { type: "STRING", nullable: true },
+    quote: { type: "STRING", nullable: true },
+  },
+};
+
+async function callGeminiDetermined(model, apiKey, files, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const body = {
+      contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: DETERMINED_PROMPT }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: DETERMINED_SCHEMA, temperature: 0 },
+    };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    usage = json?.usageMetadata;
+    const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+    let out;
+    try { out = JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
+    ok = true;
+    return out;
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      feature: "readDeterminedIncome",
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
+  }
+}
+
+/* Read column [B] off an order the practitioner uploaded.
+ *
+ * Same upload folder and same prefix check as readBlockSearchDates: the path
+ * comes from the client and is a request to read a file, so it is checked
+ * rather than trusted. Nothing is cached — there is no record to cache it
+ * against, and the practitioner is standing there waiting for it. */
+exports.readDeterminedIncome = onCall(
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 180, memory: "1GiB", maxInstances: 5 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+
+    const prefix = `users/${uid}/itrb/`;
+    const uploads = (Array.isArray(request.data?.uploads) ? request.data.uploads : [])
+      .filter((u) => u && typeof u.storagePath === "string"
+        && u.storagePath.startsWith(prefix) && !u.storagePath.includes("..") && u.storagePath.length < 300)
+      .map((u) => ({ path: u.storagePath, name: String(u.name || "").slice(0, 120) || u.storagePath.split("/").pop() }))
+      .slice(0, 4);
+    if (!uploads.length) throw new HttpsError("invalid-argument", "Give it an order to read.");
+
+    const sources = [];
+    for (const u of uploads) {
+      try {
+        const [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(u.path).download();
+        sources.push({ notice: "Uploaded by you", name: u.name, buf });
+      } catch {
+        sources.push({ notice: "Uploaded by you", name: u.name, error: "not in storage" });
+      }
+    }
+
+    const { files, manifest } = collectDocuments(sources, { maxTotalBytes: MAX_TOTAL_BYTES });
+    if (!files.length) return { ok: false, reason: "nothing-readable", manifest, message: "That file could not be opened as a document." };
+
+    const out = await callGeminiDetermined(PRIMARY_MODEL, geminiApiKey.value(), files, { uid });
+    const r = out && typeof out === "object" ? out : {};
+    const SECTIONS = ["143(1)", "143(3)", "144", "147", "153A", "153C", "158BC(1)(c)", "245D"];
+    const amount = Number(r.totalIncome);
+
+    return {
+      ok: Number.isFinite(amount),
+      manifest,
+      determined: {
+        amount: Number.isFinite(amount) ? Math.round(amount) : null,
+        asReturned: Number.isFinite(Number(r.asReturned)) ? Math.round(Number(r.asReturned)) : null,
+        section: SECTIONS.includes(String(r.section || "").replace(/\s/g, "")) ? String(r.section).replace(/\s/g, "") : "",
+        orderDate: normDate(r.orderDate) || "",
+        ay: /^\d{4}-\d{2}$/.test(String(r.ay || "").trim()) ? String(r.ay).trim() : "",
+        pan: /^[A-Z]{5}\d{4}[A-Z]$/i.test(String(r.pan || "").trim()) ? String(r.pan).trim().toUpperCase() : "",
+        head: String(r.head || "").slice(0, 120),
+        quote: String(r.quote || "").slice(0, 200),
+      },
+      message: Number.isFinite(amount) ? "" : "That document does not state a total income determined in a form that could be read.",
+    };
+  }
+);
+
 /* ---------- documents called for ----------------------------------------------
  * Notices that arrive through the portal sync are written with `documents: []`
  * (see ingestPortalNotice above) — the portal's JSON carries no such list, it is

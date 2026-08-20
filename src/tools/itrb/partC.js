@@ -210,3 +210,26 @@ export function withOrderReading(ret, commRefNo, reading) {
     orders: (ret.orders || []).map((o) => (o && String(o.commRefNo) === String(commRefNo) ? { ...o, reading } : o)),
   };
 }
+
+/* What the record actually holds about this year's orders, in one line.
+ *
+ * "It isn't filling" is not a diagnosis, and four different states of the
+ * record produce the same empty column. This prints the state itself — how many
+ * orders, how many with a PDF here, how many locked, how many already read —
+ * so the practitioner can see which of the four they are in without anybody
+ * having to guess on their behalf.
+ */
+export function describeOrders(ret) {
+  const orders = Array.isArray(ret?.orders) ? ret.orders : [];
+  if (!ret) return "No return on file for this year.";
+  if (!orders.length) return "No order or intimation on this year's return record.";
+  const withPdf = orders.filter((o) => o && o.storagePath).length;
+  const locked = orders.filter((o) => o && o.locked).length;
+  const readAlready = orders.filter((o) => o && o.reading && Array.isArray(o.reading.lines)).length;
+  return [
+    `${orders.length} order${orders.length === 1 ? "" : "s"} on file`,
+    `${withPdf} with a PDF here`,
+    locked ? `${locked} still locked` : "",
+    readAlready ? `${readAlready} already read` : "",
+  ].filter(Boolean).join(" · ");
+}

@@ -35,7 +35,7 @@ import {
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
-import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, withOrderReading } from './itrb/partC';
+import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, withOrderReading, describeOrders } from './itrb/partC';
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
@@ -945,10 +945,71 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
    * the one place that has to explain itself is the column — and the one place
    * to retry from is beside it. */
   const [bRead, setBRead] = React.useState({ busy: false, why: "" });
+  const orderUpload = React.useRef(null);
+
   const readIntimation = async () => {
     setBRead({ busy: true, why: "" });
-    const out = await onReadIntimation();
-    setBRead({ busy: false, why: out?.ok ? "" : (out?.why || "nothing came back") });
+    try {
+      const out = await onReadIntimation();
+      setBRead({ busy: false, why: out?.ok ? "" : (out?.why || "nothing came back") });
+    } catch (e) {
+      // A throw here used to leave the button reading "Reading…" for ever and
+      // said nothing at all. Whatever went wrong, it is shown.
+      console.error("itr-b: column [B] read", e);
+      setBRead({ busy: false, why: `it failed — ${String(e?.message || e).slice(0, 120)}` });
+    }
+  };
+
+  /* THE ORDER THE PRACTITIONER HAS IN THEIR HAND.
+   *
+   * Reading the order off the return record is a chain with four links: the
+   * returns sync must have run, the order must have arrived with a PDF, the PDF
+   * must have been decrypted at upload — CPC locks every one with the PAN and
+   * the date of birth — and the reading must find the row. Any of the four can
+   * be missing on a real practice, and the practitioner is then looking at an
+   * empty column while holding the very document that answers it.
+   *
+   * This takes that document. No record, no sync, no unlock. It also answers
+   * for an assessment order under s.143(3), s.144 or s.147, which the
+   * record-based path never could — it is pointed at CPC intimations and
+   * nothing else, while column [B]'s own list of sections runs to eight. */
+  const uploadOrder = async (fileList) => {
+    const file = Array.from(fileList || [])[0];
+    if (!file) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setBRead({ busy: false, why: "you are signed out — sign in again" }); return; }
+
+    let head;
+    try { head = new Uint8Array(await file.slice(0, 8).arrayBuffer()); } catch { head = new Uint8Array(); }
+    const check = checkUpload(file, head, 0);
+    if (!check.ok) { setBRead({ busy: false, why: check.reason }); return; }
+
+    setBRead({ busy: true, why: "" });
+    try {
+      const path = uploadPath(uid, crypto.randomUUID());
+      await uploadBytes(storageRef(storage, path), file, { contentType: "application/pdf" });
+      const res = await httpsCallable(functions, "readDeterminedIncome", { timeout: 180000 })({
+        uploads: [{ name: file.name, storagePath: path }],
+      });
+      const out = res?.data;
+      if (!out?.ok || typeof out.determined?.amount !== "number") {
+        setBRead({ busy: false, why: out?.message || "that document does not state a total income determined" });
+        return;
+      }
+      const d = out.determined;
+      // The year is decided by what the ORDER says, never by the row it was
+      // dropped on — the same rule the ITR JSON upload follows, and for the
+      // same reason: seven orders downloaded in one go all look alike.
+      if (d.ay && d.ay !== year.ay) {
+        setBRead({ busy: false, why: `that order is for A.Y. ${d.ay}, not A.Y. ${year.ay}` });
+        return;
+      }
+      set({ partC: withDetermined(year, { ...d, uploaded: true }, { over: true }).partC });
+      setBRead({ busy: false, why: "" });
+    } catch (e) {
+      console.error("itr-b: upload order", e);
+      setBRead({ busy: false, why: `it failed — ${String(e?.message || e).slice(0, 120)}` });
+    }
   };
   const cols = columnsFor(spansYears).filter((c) => appliesTo(c, year, spansYears));
   const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
@@ -1166,9 +1227,12 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
           <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: "var(--p-mint)", color: "#1B8C5C", fontSize: 12}}>
             <Icon name="check" size={13}/>
             <span>
-              Column [B] read off the intimation
+              Column [B] read off the {year.partC.determinedFrom.uploaded ? "order you uploaded" : "intimation on file"}
               {year.partC.determinedFrom.orderDate ? ` dated ${dateOf(year.partC.determinedFrom.orderDate)}` : ""}
               {year.partC.determinedFrom.head ? `, against “${year.partC.determinedFrom.head}”` : ""} — check it against the order.
+              {year.partC.determinedFrom.quote
+                ? <div style={{fontSize: 11, fontStyle: "italic", marginTop: 2, opacity: 0.85}}>“{year.partC.determinedFrom.quote}”</div>
+                : null}
             </span>
           </div>
         ) : suggestion ? (
@@ -1192,17 +1256,27 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
              the same — what happened to the intimation? — and the answer has to
              be here rather than in a notification that has already gone. */
           <div style={{marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: bRead.why ? "var(--p-amber)" : "var(--p-card-tint)", fontSize: 12}}>
-            <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
+            <div style={{display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap"}}>
               <span style={{flex: 1, minWidth: 220, color: bRead.why ? "#8A5B10" : "var(--p-text-2)"}}>
                 {bRead.why
                   ? <>Column [B] is still yours — {bRead.why}.</>
-                  : <>Column [B] is the income CPC determined. It is printed in the s.143(1) intimation and in no record, so it has to be read off the order.</>}
+                  : <>Column [B] is the income the department determined. It is printed in the order and in no record, so it has to be read off the document.</>}
               </span>
               <button className="btn btn-secondary btn-xs" onClick={readIntimation} disabled={bRead.busy || !ret}
-                title={ret ? "Read this year's intimation and fill column [B]" : "No return on file for this year"}>
-                <Icon name="sparkle" size={11}/>{bRead.busy ? "Reading…" : "Read the intimation"}
+                title={ret ? "Read the intimation already on this year's return record" : "No return on file for this year"}>
+                <Icon name="sparkle" size={11}/>{bRead.busy ? "Reading…" : "Read the one on file"}
               </button>
+              <button className="btn btn-secondary btn-xs" onClick={() => orderUpload.current?.click()} disabled={bRead.busy}
+                title="Upload the intimation or assessment order and read column [B] off it">
+                <Icon name="upload" size={11}/>Upload the order
+              </button>
+              <input ref={orderUpload} type="file" accept="application/pdf,.pdf" hidden
+                onChange={(e) => { uploadOrder(e.target.files); e.target.value = ""; }}/>
             </div>
+            {/* THE STATE OF THE RECORD, PRINTED. Four different states of the
+                return record produce the same empty column, and "it isn't
+                filling" is not a diagnosis. This says which one it is. */}
+            <div className="muted" style={{fontSize: 10.5, marginTop: 5}}>{describeOrders(ret)}</div>
           </div>
         )}
 

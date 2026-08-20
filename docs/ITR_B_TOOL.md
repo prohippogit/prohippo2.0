@@ -243,6 +243,31 @@ years' orders only by e-mail) is never re-read.
 JSON was never synced — refusing to look would leave the column blank for a
 reason that has nothing to do with it.
 
+**Or hand it the order.** Reading the order off the return record is a chain
+with four links: the returns sync must have run, the order must have arrived
+with a PDF, the PDF must have been decrypted at upload (CPC locks every one with
+the PAN and the date of birth), and the reading must find the row. Any of the
+four can be missing on a real practice, and the practitioner is then looking at
+an empty column while holding the very document that answers it.
+
+**Upload the order** takes that document — `readDeterminedIncome` in
+`functions/index.js`, same upload folder and same prefix check as
+`readBlockSearchDates`. No record, no sync, no unlock. It also answers for an
+assessment order under s.143(3), s.144 or s.147, which the record path never
+could: that one is pointed at CPC intimations and can only ever return 143(1),
+while column [B]'s own list of sections runs to eight. The section comes back
+from the document and selects itself, and the figure arrives with the row label
+and the line it was read from.
+
+An uploaded order **overwrites** what is in [B]; the record path never does. The
+difference is deliberate — a figure already there was keyed by somebody who read
+the order, but handing the app a specific PDF is an instruction about *this*
+document.
+
+**The record's own state is printed** under the buttons —
+"1 order on file · 1 with a PDF here · 1 still locked" — because four different
+states produce the same empty column and "it isn't filling" is not a diagnosis.
+
 **Its own button, beside the column.** The read was only ever reachable through
 the whole-year fill, and when it failed it said so in a notification that had
 gone by the time anybody looked at the column. So the panel carries **Read the

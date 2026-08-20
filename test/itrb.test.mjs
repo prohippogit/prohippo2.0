@@ -1872,6 +1872,30 @@ test("a figure already in column [B] stands — whoever put it there read the or
   assert.equal(y.partC.determinedFrom, undefined);          // and it is not claimed to be a read
 });
 
+test("the real order's own label for the row is matched", () => {
+  // From a live intimation: CPC numbers the row and prints the formula in it.
+  // A stricter match on "Total Income" alone would miss every one of them.
+  const real = { lines: [
+    { head: "Total of head wise income [6=(1+2+3+4)]", asReturned: 504236, asComputed: 504236 },
+    { head: "Gross Total Income [10=(8-9)]", asReturned: 504236, asComputed: 504236 },
+    { head: "Total Income [13=(10-12)]", asReturned: 460590, asComputed: 460590 },
+    { head: "TOTAL INCOME TAX LIABILITY", asReturned: 0, asComputed: 0 },
+  ] };
+  const found = determinedFromReturn(withOrderReading({ orders: [order()] }, "CPC/2021/A1/123", real));
+  assert.equal(found.amount, 460590);
+  assert.equal(found.head, "Total Income [13=(10-12)]");
+  // Not the gross, not the head-wise total, and not the tax-liability heading
+  // that also contains the words "total income".
+});
+
+test("an order that changed nothing still answers column [B]", () => {
+  // The common case: the return processed exactly as filed, so both columns
+  // agree on every row. [B] is still the figure CPC determined.
+  const agreed = { lines: [{ head: "Total Income [13=(10-12)]", asReturned: 460590, asComputed: 460590 }] };
+  const found = determinedFromReturn(withOrderReading({ orders: [order()] }, "CPC/2021/A1/123", agreed));
+  assert.equal(found.amount, 460590);
+});
+
 test("nothing found means nothing written", () => {
   const year = blankYear({ ay: "2021-22" });
   assert.deepEqual(withDetermined(year, null), year);

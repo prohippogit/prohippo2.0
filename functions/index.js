@@ -1154,6 +1154,10 @@ The document contains a table comparing the figures the taxpayer put in the retu
 
 Return, in "lines", one entry for EVERY row where the two columns differ, PLUS the main totals even where they agree (gross total income, total income, tax on total income, and each interest head under 234A/234B/234C). For each: "head" exactly as printed, "asReturned", "asComputed", and "remark" if CPC printed a reason or remark against that row.
 
+AN ORDER THAT CHANGED NOTHING IS THE COMMON CASE, AND STILL HAS TO BE REPORTED. Most returns are processed exactly as filed, so every row of the table agrees and none of them "differs". Return the main totals anyway — above all the row labelled "Total Income", however it is numbered or annotated ("Total Income [13=(10-12)]" is that row). An order that varied nothing still states the income determined under section 143(1), and that figure is the point of reading it. Returning an empty list because nothing changed is wrong.
+
+THE ORDER MAY BE BILINGUAL. CPC prints the whole intimation in Hindi and then repeats it in English in the same PDF. Read the English pages and report the heads as printed there.
+
 A CELL PRINTED AS 0, "0", "-", "Nil" or "NA" IS THE NUMBER ZERO. Report it as 0, never as null. Use null ONLY where the row has no figure in that column at all. This matters: a row moving from 0 to 6,538 is the whole finding, and reporting the 0 as null hides it.
 
 Then read the order's own closing position, as separate POSITIVE amounts:

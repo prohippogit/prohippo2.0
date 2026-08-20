@@ -243,6 +243,19 @@ years' orders only by e-mail) is never re-read.
 JSON was never synced — refusing to look would leave the column blank for a
 reason that has nothing to do with it.
 
+**Its own button, beside the column.** The read was only ever reachable through
+the whole-year fill, and when it failed it said so in a notification that had
+gone by the time anybody looked at the column. So the panel carries **Read the
+intimation** in the Part C block, and prints the reason there in amber when it
+comes back empty. The three reasons are three different jobs:
+
+| What the record holds | What to do |
+|---|---|
+| no orders at all | run a returns sync for the assessee |
+| an order still **locked** | CPC encrypts every intimation with the PAN and the date of birth; the sync unlocks it *at upload*, so where the date of birth was missing at that moment the PDF is in Storage still encrypted. Adding the date of birth afterwards does not reach back — re-run the returns sync. |
+| `storagePath` empty | CPC sends some years' orders only by e-mail; there is no PDF here to read |
+| read, but no total-income row | key [B] off the order |
+
 **It always says why it found nothing.** The first version returned null on four
 different failures — no order on file, no PDF on the order, the read throwing,
 the order carrying no total-income row — and the practitioner saw an empty box

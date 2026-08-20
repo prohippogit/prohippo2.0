@@ -269,12 +269,22 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       }
       const order = intimationToRead(ret);
       if (!order) {
-        // Every order is either already read (and had no total-income row) or
-        // has no PDF here at all. CPC sends some years' orders only by e-mail.
+        /* Nothing left to read, and the three reasons for that are three
+           different jobs. LOCKED is the one worth spelling out: CPC encrypts
+           every intimation with the PAN and the date of birth, the sync unlocks
+           it at upload, and where the date of birth was not on the assessee's
+           record at that moment the PDF went into Storage still encrypted. It
+           stays that way until the sync runs again — adding the date of birth
+           afterwards does not reach back and unlock what is already there. */
+        const locked = orders.filter((o) => o && o.locked && o.lockReason !== "request-only");
         const readable = orders.filter((o) => o && o.storagePath && !o.locked);
-        return { ok: false, why: readable.length
-          ? `the intimation for A.Y. ${ay} has been read and states no total-income row — key [B] off the order`
-          : `the intimation for A.Y. ${ay} has no PDF on file — CPC sends some years' orders only by e-mail` };
+        if (readable.length) {
+          return { ok: false, why: `the intimation for A.Y. ${ay} has been read and states no total-income row — key [B] off the order` };
+        }
+        if (locked.length) {
+          return { ok: false, why: `the intimation PDF for A.Y. ${ay} is still locked — CPC encrypts it with the PAN and the date of birth, and the date of birth was not on this assessee's record when it synced. Re-run the returns sync now that it is` };
+        }
+        return { ok: false, why: `the intimation for A.Y. ${ay} has no PDF on file — CPC sends some years' orders only by e-mail` };
       }
       try {
         const res = await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
@@ -533,7 +543,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
           draft={draft} result={result} editYear={editYear}
           period={period} busyYear={busyYear}
           syncedReturn={syncedReturn}
-          onFillYear={fillFromSync} onFillAll={fillAllFromSync}
+          onFillYear={fillFromSync} onFillAll={fillAllFromSync} onReadIntimation={fillDetermined}
           onFiles={onFiles} fileRef={fileRef}
         />
       )}
@@ -761,7 +771,7 @@ function DetailsTab({ draft, edit, period, furnishing, assesseeOptions, onPickAs
  * computeItrB() coerces every blank to a number for the arithmetic, and an
  * input bound to that shows a nil in every field nobody has filled in yet. A
  * form full of zeroes reads as a return that has been completed. */
-function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onFillYear, onFillAll, onFiles, fileRef }) {
+function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onFillYear, onFillAll, onReadIntimation, onFiles, fileRef }) {
   const [open, setOpen] = React.useState("");
 
   if (!period.ok) {
@@ -859,6 +869,7 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
                     computed={y}
                     ret={ret} busy={busyYear === y.key} spansYears={result.spansYears} result={result}
                     onFill={() => onFillYear(y)}
+                    onReadIntimation={() => onReadIntimation(y.ay, ret)}
                     onFiles={(files) => onFiles(files, y.ay)}
                     editYear={editYear}
                   />
@@ -903,7 +914,7 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
   );
 }
 
-function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFiles, editYear }) {
+function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onReadIntimation, onFiles, editYear }) {
   const upload = React.useRef(null);
   const set = (patch) => editYear(year.key, patch);
   const setPartC = (key, v) => set({ partC: { ...year.partC, [key]: v } });
@@ -925,6 +936,20 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
      itself produced. That difference should be visible, so this one waits to
      be accepted. */
   const suggestion = React.useMemo(() => determinedFromReturn(ret), [ret]);
+
+  /* Column [B]'s own read, on its own button.
+   *
+   * It was only ever reachable through the whole-year fill, and when it failed
+   * it said so in a notification that had gone by the time anybody looked at
+   * the column. The figure is printed in the intimation and nowhere else, so
+   * the one place that has to explain itself is the column — and the one place
+   * to retry from is beside it. */
+  const [bRead, setBRead] = React.useState({ busy: false, why: "" });
+  const readIntimation = async () => {
+    setBRead({ busy: true, why: "" });
+    const out = await onReadIntimation();
+    setBRead({ busy: false, why: out?.ok ? "" : (out?.why || "nothing came back") });
+  };
   const cols = columnsFor(spansYears).filter((c) => appliesTo(c, year, spansYears));
   const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
   const setItem = (key, v) => set({ items: { ...year.items, [key]: v } });
@@ -1146,7 +1171,7 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
               {year.partC.determinedFrom.head ? `, against “${year.partC.determinedFrom.head}”` : ""} — check it against the order.
             </span>
           </div>
-        ) : suggestion && (
+        ) : suggestion ? (
           <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: "var(--p-lavender-2)", fontSize: 12}}>
             <Icon name="sparkle" size={13}/>
             <span>
@@ -1159,6 +1184,25 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
             >
               Use for column [B]
             </button>
+          </div>
+        ) : (
+          /* NOT FILLED, AND SAYING SO WHERE THE COLUMN IS.
+             [B] is the income CPC determined. It is printed in the intimation
+             and stated in no record, so when it is blank the question is always
+             the same — what happened to the intimation? — and the answer has to
+             be here rather than in a notification that has already gone. */
+          <div style={{marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: bRead.why ? "var(--p-amber)" : "var(--p-card-tint)", fontSize: 12}}>
+            <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
+              <span style={{flex: 1, minWidth: 220, color: bRead.why ? "#8A5B10" : "var(--p-text-2)"}}>
+                {bRead.why
+                  ? <>Column [B] is still yours — {bRead.why}.</>
+                  : <>Column [B] is the income CPC determined. It is printed in the s.143(1) intimation and in no record, so it has to be read off the order.</>}
+              </span>
+              <button className="btn btn-secondary btn-xs" onClick={readIntimation} disabled={bRead.busy || !ret}
+                title={ret ? "Read this year's intimation and fill column [B]" : "No return on file for this year"}>
+                <Icon name="sparkle" size={11}/>{bRead.busy ? "Reading…" : "Read the intimation"}
+              </button>
+            </div>
           </div>
         )}
 

@@ -34,6 +34,7 @@ import { parseItrXml, looksLikeItrXml } from "../src/tools/itrb/itrXml.js";
 import { checkUpload, looksLikePdf, uploadPath, shortName, MAX_UPLOADS, MAX_UPLOAD_BYTES } from "../src/tools/itrb/uploads.js";
 import { documentKind, documentExt, sniffExtension, retypeFilename } from "../src/downloadNames.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
+import { partHRow, partGRow, creditsFor } from "../src/tools/itrb/credits.js";
 import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
   withDeclared, withDeclaredFromOrder, withFiledParticulars, withDetermined, isoDate, withDueDate, readiness, blankYear,
@@ -251,7 +252,10 @@ test("credits are totalled per year and across the block, and net off the liabil
   ]));
   assert.equal(r.years[0].credits.total, 125000);
   assert.equal(r.credits.total, 150000);
-  assert.equal(r.credits.tds, 25000);
+  // Part H's column (6). Nothing here says the credit was claimed in an earlier
+  // return, so all of it is claimed now — the practitioner asserted it.
+  assert.equal(r.credits.partH, 30000);
+  assert.equal(r.credits.partG, 120000);
   // 15,00,000 × 60% = 9,00,000; cess 36,000; less 1,50,000 of credit.
   assert.equal(r.netPayable, 786000);
   assert.equal(r.refundDue, 0);
@@ -1744,43 +1748,47 @@ test("ITR-1 keeps them a level up, and is read all the same", () => {
   assert.equal(d.taxesPaid, 34555);
 });
 
-test("all four credits fill from the return, and Part H says what it still needs", () => {
+test("what the return claimed is the disqualifier, not the answer", () => {
   const d = readDeclared(fixture("itr3-partner-salary-agri-ay2025-26"));
   const y = withDeclared(blankYear({ ay: "2025-26" }), d, "sync");
 
-  assert.equal(y.credits.advance, 250000);            // Part G — the form asks for the payment
-  assert.equal(y.credits.selfAssessment, 67250);
+  /* Part G asks for challans "for which NO credit has been claimed in the
+     returns filed earlier". Every figure in the return's own tax-paid schedule
+     is by definition a credit claimed there, so nothing is copied across. */
+  assert.equal(y.credits.advance, "");
+  assert.equal(y.credits.selfAssessment, "");
+  assert.equal(y.claimed.advance, 250000);            // carried as the test
+  assert.equal(y.claimed.selfAssessment, 67250);
 
-  /* Part H asks for credit NOT claimed in any earlier return, and what the
-     return states is the credit it DID claim. The figure lands there as a
-     starting point to reduce — which is only safe because `claimed` is carried
-     alongside it and the panel prints the caveat under the box every time. */
-  assert.equal(y.credits.tds, 55703);
-  assert.equal(y.credits.tcs, 0);
-  assert.equal(y.claimed.tds, 55703);
-  assert.equal(y.claimed.tcs, 0);
+  // Part H column (5) is exactly that question for TDS/TCS, and does fill.
+  assert.equal(y.partH.claimedEarlier, 55703);        // 55,703 TDS + nil TCS
+  assert.equal(y.partH.available, "");                // (4) is the practitioner's
+  assert.equal(partHRow(y).claimedNow, 0);            // (6) — nothing left to claim
 });
 
 test("a figure the practitioner has keyed is never replaced by the return's", () => {
-  // Part H above all: a practitioner who has worked out what credit is left
-  // must not have it reset to the full amount claimed on the next fill.
-  const edited = { ...blankYear({ ay: "2025-26" }), credits: { tds: 12000, tcs: "", advance: 999, selfAssessment: "" } };
+  const edited = {
+    ...blankYear({ ay: "2025-26" }),
+    credits: { tds: "", tcs: "", advance: 999, selfAssessment: "" },
+    partH: { tan: "", available: 80000, claimedEarlier: 12000 },
+  };
   const y = withDeclared(edited, readDeclared(fixture("itr3-partner-salary-agri-ay2025-26")), "sync");
-  assert.equal(y.credits.advance, 999);
-  assert.equal(y.credits.tds, 12000);                 // their reduced figure stands
-  assert.equal(y.credits.selfAssessment, 67250);      // the ones they left alone still fill
-  assert.equal(y.credits.tcs, 0);
+  assert.equal(y.credits.advance, 999);               // their Part G challan stands
+  assert.equal(y.partH.available, 80000);
+  assert.equal(y.partH.claimedEarlier, 12000);        // their column (5) stands
+  assert.equal(partHRow(y).claimedNow, 68000);
 });
 
-test("nil is an answer, and fills; absent is not, and does not", () => {
-  // A year with no advance tax says so with a zero. Leaving the box empty would
-  // make an answered question look unanswered.
+test("nil is an answer, and absent is not", () => {
+  // A year with no advance tax says so with a zero, and that zero is what the
+  // return CLAIMED — the disqualifier, still not a Part G figure.
   const nil = withDeclared(blankYear({ ay: "2024-25" }), readDeclared(fixture("itr1-80ggc-tds-refund-ay2024-25")), "sync");
-  assert.equal(nil.credits.advance, 0);
-  assert.equal(nil.credits.selfAssessment, 0);
+  assert.equal(nil.claimed.advance, 0);
+  assert.equal(nil.claimed.selfAssessment, 0);
+  assert.equal(nil.partH.claimedEarlier, 34555);      // 34,555 TDS claimed in that return
 
   const silent = withDeclared(blankYear({ ay: "2024-25" }), { ay: "2024-25" }, "json");
-  assert.equal(silent.credits.advance, "");           // the reading says nothing, so nor does the box
+  assert.equal(silent.partH.claimedEarlier, "");      // the reading says nothing, so nor does the column
   assert.equal(silent.claimed.tds, null);
 });
 
@@ -2193,7 +2201,8 @@ test("the whole year fills from an XML the way it does from a JSON", () => {
   assert.equal(y.declaredTotal, 382060);
   assert.equal(y.partC.returned, 382060);
   assert.equal(y.declared.otherSources, 387819);
-  assert.equal(y.credits.tds, 19500);
+  assert.equal(y.partH.claimedEarlier, 19500);        // what that return claimed
+  assert.equal(y.credits.tds, "");                    // Part G/H stay the practitioner's
   assert.equal(y.declaredSource, "xml");
   assert.equal(y.partA.filedSection, "139(1)");
 });
@@ -2257,7 +2266,7 @@ test("the declared income can be taken off the intimation where there is no retu
   assert.equal(y.declaredTotal, 382060);
   assert.equal(y.declared.otherSources, 387819);
   assert.equal(y.partC.returned, 382060);
-  assert.equal(y.credits.tds, 19500);
+  assert.equal(y.partH.claimedEarlier, 19500);
   assert.equal(y.returnFiled, true);
   // Marked, so the screen can say which of the three sources it was.
   assert.equal(y.declaredSource, "intimation");
@@ -2289,5 +2298,93 @@ test("a head the order did not print is not a declared nil", () => {
   assert.equal("salary" in y.declared && y.declared.salary === 0, false);
   assert.equal(y.declared.houseProperty, 0);          // a printed nil IS nil
   assert.equal(y.declaredTotal, 382060);
-  assert.equal(y.credits.tds, "");                    // unprinted, so left alone
+  assert.equal(y.partH.claimedEarlier, "");           // unprinted, so left alone
+});
+
+/* ---------------------------------------------------------------------------
+ * Parts G and H — and the credit that was already refunded.
+ *
+ * The form has no refund column and does not need one. A refund received is
+ * proof the credit was CLAIMED, and a claimed credit is what both parts
+ * exclude — Part G by its heading ("for which no credit has been claimed in the
+ * returns filed earlier"), Part H by column (5). Refund is the consequence; the
+ * claim is the test.
+ * ------------------------------------------------------------------------- */
+
+test("Part H is the form's arithmetic: (6) is (4) less (5)", () => {
+  const y = { ...blankYear({ ay: "2021-22" }), partH: { tan: "MUMB12345A", available: 80000, claimedEarlier: 19500 } };
+  const h = partHRow(y);
+  assert.equal(h.available, 80000);
+  assert.equal(h.claimedEarlier, 19500);
+  assert.equal(h.claimedNow, 60500);
+  assert.equal(h.tan, "MUMB12345A");
+  assert.equal(h.over, false);
+});
+
+test("a credit the earlier return took in full leaves nothing to claim here", () => {
+  // The refunded case, which is the ordinary one: TDS of 19,500 deducted,
+  // 19,500 claimed in the return for that year, the refund long since received.
+  const y = { ...blankYear({ ay: "2020-21" }), partH: { available: 19500, claimedEarlier: 19500 } };
+  assert.equal(partHRow(y).claimedNow, 0);
+  assert.equal(creditsFor(y).partH, 0);
+});
+
+test("column (5) larger than column (4) is a transcription error, not a negative credit", () => {
+  const y = { ...blankYear({ ay: "2021-22" }), partH: { available: 1000, claimedEarlier: 5000 } };
+  const h = partHRow(y);
+  assert.equal(h.over, true);
+  assert.equal(h.claimedNow, 0);          // floored; it never lends a negative to the block
+});
+
+test("an older draft answers the new columns without a migration", () => {
+  // Written before Part H had three columns: a single credits.tds filled from
+  // the return, with what the return claimed alongside. Those ARE columns (4)
+  // and (5), so the old draft answers correctly — and on the ordinary year the
+  // two are equal and the credit claimed now comes out at nil.
+  const old = { ...blankYear({ ay: "2020-21" }), credits: { tds: 19500, tcs: 0, advance: "", selfAssessment: "" },
+    claimed: { tds: 19500, tcs: 0 }, partH: undefined };
+  const h = partHRow(old);
+  assert.equal(h.available, 19500);
+  assert.equal(h.claimedEarlier, 19500);
+  assert.equal(h.claimedNow, 0);
+
+  // And one keyed by hand, with nothing saying it was claimed earlier, stands.
+  const asserted = { ...blankYear({ ay: "2021-22" }), credits: { tds: 25000, tcs: "" }, partH: undefined };
+  assert.equal(partHRow(asserted).claimedNow, 25000);
+});
+
+test("Part G starts empty and carries the return's figure as the disqualifier", () => {
+  const y = { ...blankYear({ ay: "2021-22" }), claimed: { advance: 250000, selfAssessment: 67250 } };
+  const g = partGRow(y);
+  assert.equal(g.total, 0);
+  assert.equal(g.entered, false);
+  assert.equal(g.claimedInReturn.advance, 250000);
+  assert.equal(g.claimedInReturn.selfAssessment, 67250);
+
+  // A challan the practitioner does assert goes in, and only that.
+  const asserted = { ...y, credits: { ...y.credits, advance: 40000 } };
+  assert.equal(partGRow(asserted).total, 40000);
+  assert.equal(creditsFor(asserted).partG, 40000);
+});
+
+test("only what is left of the credit reaches the tax computation", () => {
+  // The whole point: a credit already allowed, and very often already refunded,
+  // must not come off the block liability a second time.
+  const draft = withBlockPeriod({ ...blankDraft(), pan: "AAAPZ1007A" },
+    { searchDate: "2025-08-23", lastAuthDate: "2025-08-23" });
+  const target = draft.years.find((y) => y.ay === "2021-22");
+  const build = (partH) => computeItrB({
+    ...draft,
+    years: draft.years.map((y) => (y.key === target.key
+      ? { ...y, undisclosed: { ...y.undisclosed, deemed: 1000000 }, partH, credits: { advance: "", selfAssessment: "", tds: "", tcs: "" } }
+      : y)),
+  });
+
+  const taken = build({ available: 80000, claimedEarlier: 80000 });
+  assert.equal(taken.credits.partH, 0);
+
+  const left = build({ available: 80000, claimedEarlier: 19500 });
+  assert.equal(left.credits.partH, 60500);
+  // And the block's bottom line moves by exactly that, and no more.
+  assert.equal(taken.netPayable - left.netPayable, 60500);
 });

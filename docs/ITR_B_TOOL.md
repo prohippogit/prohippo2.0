@@ -391,7 +391,49 @@ and does the lot. Only where the two are **equal**: a year where they differ may
 genuinely have income in both columns, and keeps its own warning and its own
 decision.
 
-### Taxes already paid — Part G fills, Part H does not
+### Parts G and H — and the credit already refunded
+
+**There is no refund column in the form, and it does not need one.** A refund
+received is proof the credit was *claimed*, and a claimed credit is what both
+parts exclude — Part G by its heading, Part H by column (5). Refund is the
+consequence; the claim is the test.
+
+The gazette's own words:
+
+> **Part G** — Details of payments of tax (advance tax/self-assessment tax)
+> **for which no credit has been claimed in the returns filed earlier**
+
+> **Part H** — (4) Total TDS/TCS credit available · (5) Credit for TDS/TCS
+> claimed in all the return(s) filed u/s 139 · (6) Amount of TDS/TCS credit
+> claimed in the current return
+
+So Part H is **three figures, not one**, and (6) is derived — (4) less (5),
+floored at nil. It is never a field: two boxes that can disagree with their own
+difference is a return contradicting itself on its face. Column (5) exceeding
+(4) is flagged as a transcription error rather than allowed to lend a negative
+to the block.
+
+**Part G starts empty and is never filled from a return.** Every figure in a
+return's own tax-paid schedule *is* a credit claimed in that return — precisely
+what the heading excludes. What the return claimed is carried as `claimed` and
+printed beside the box as the **disqualifier**: "The return for A.Y. 2021-22
+claimed ₹2,50,000 — that much is *not* for Part G." Only a challan never
+claimed — paid but omitted, or paid for a year no return was filed — belongs
+there.
+
+`credits.js` holds both, pure. `partHRow` reads an **older draft** too: drafts
+written before the three columns carry a single `credits.tds`/`credits.tcs` from
+the return with `claimed` alongside, and those *are* columns (4) and (5) — so an
+old draft answers the new question without a migration step, and answers it
+correctly, since on the ordinary year the two are equal and (6) comes out nil.
+
+**One trap the form leaves open.** Credit *claimed* in the earlier return but
+**disallowed** on a 26AS mismatch still counts under column (5), so Part H
+yields nil even though the client never received it. This return cannot recover
+it; that is a rectification of the earlier year under s.154, and the panel says
+so.
+
+### Superseded: Part G fills, Part H does not
 
 The return states all four figures, and they are all read
 (`advanceTax`, `selfAssessmentTax`, `tds`, `tcs` in `declared.js`). Only two of

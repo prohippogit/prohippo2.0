@@ -49,6 +49,7 @@ import { DII_ITEMS } from "./form.js";
 import { PART_C_COLUMNS, appliesTo, partBColumns } from "./partC.js";
 import { computePartB, partBYear, tiesToPartC } from "./partB.js";
 import { monthsOfDelay } from "./blockPeriod.js";
+import { creditsFor } from "./credits.js";
 
 /** Tax on undisclosed income of the block period — s.113. */
 export const RATE_113 = 60;
@@ -140,14 +141,21 @@ export function computeItrB(draft) {
     /* Credits, split as Parts G and H split them. `total` stays for the
        arithmetic, but nothing prints it without saying which part it came
        from — the "not claimed earlier" condition is on H alone. */
+    const { g, h } = creditsFor(row);
     const credits = {
-      tds: n(row.credits && row.credits.tds),
-      tcs: n(row.credits && row.credits.tcs),
-      advance: n(row.credits && row.credits.advance),
-      selfAssessment: n(row.credits && row.credits.selfAssessment),
+      advance: g.advance ?? 0,
+      selfAssessment: g.selfAssessment ?? 0,
+      /* Part H's column (6), DERIVED: the credit available less what the
+         returns filed u/s 139 already claimed. Never the credit available —
+         a credit already allowed in the earlier year, and very often already
+         refunded, would otherwise come off this liability a second time. */
+      available: h.available ?? 0,
+      claimedEarlier: h.claimedEarlier ?? 0,
+      tan: h.tan,
+      overClaimed: h.over,
     };
-    credits.partG = credits.advance + credits.selfAssessment;
-    credits.partH = credits.tds + credits.tcs;
+    credits.partG = g.total;
+    credits.partH = h.claimedNow;
     credits.total = credits.partG + credits.partH;
 
     return {
@@ -256,15 +264,18 @@ export function computeItrB(draft) {
 
   const credits = years.reduce(
     (acc, y) => ({
-      tds: acc.tds + y.credits.tds,
-      tcs: acc.tcs + y.credits.tcs,
       advance: acc.advance + y.credits.advance,
       selfAssessment: acc.selfAssessment + y.credits.selfAssessment,
+      available: acc.available + y.credits.available,
+      claimedEarlier: acc.claimedEarlier + y.credits.claimedEarlier,
+      partH: acc.partH + y.credits.partH,
     }),
-    { tds: 0, tcs: 0, advance: 0, selfAssessment: 0 }
+    { advance: 0, selfAssessment: 0, available: 0, claimedEarlier: 0, partH: 0 }
   );
   credits.partG = credits.advance + credits.selfAssessment;
-  credits.partH = credits.tds + credits.tcs;
+  // Summed from the years' own column (6), not recomputed from the totals: a
+  // year that claimed more earlier than it had available must not lend its
+  // negative to a year that did not.
   credits.total = credits.partG + credits.partH;
 
   /* Part F — tax actually paid against THIS block return, by challan. Not a

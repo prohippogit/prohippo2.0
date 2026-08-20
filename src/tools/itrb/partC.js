@@ -177,3 +177,36 @@ export function determinedFromReturn(ret) {
   }
   return null;
 }
+
+/* The intimation whose PDF should be read to answer column [B], or null.
+ *
+ * Column [B] is "total income determined or assessed" — the figure CPC arrived
+ * at, which is printed in the s.143(1) intimation and in no record the portal
+ * hands over as data. determinedFromReturn above can only find it once that PDF
+ * has been read; on a practice that has never opened the Intimations screen for
+ * a year, nothing has.
+ *
+ * ONE ORDER, THE NEWEST. Each read costs money, so this returns a single
+ * candidate rather than a list: the most recent order with a readable PDF and
+ * no reading yet. A s.154 rectification supersedes the s.143(1) it corrects, so
+ * the newest is the one that states the income as it now stands — and if it
+ * turns out to carry no total-income line, determinedFromReturn falls through
+ * to whatever older order has already been read, and the practitioner can press
+ * again for the next one.
+ */
+export function intimationToRead(ret) {
+  const orders = Array.isArray(ret?.orders) ? ret.orders : [];
+  return orders
+    .filter((o) => o && o.storagePath && !o.locked && !(o.reading && Array.isArray(o.reading.lines)))
+    .slice()
+    .sort((a, b) => String(b.orderDate || "").localeCompare(String(a.orderDate || "")))[0] || null;
+}
+
+/** The same return with one order's freshly-read `reading` merged in. */
+export function withOrderReading(ret, commRefNo, reading) {
+  if (!ret || !reading) return ret;
+  return {
+    ...ret,
+    orders: (ret.orders || []).map((o) => (o && String(o.commRefNo) === String(commRefNo) ? { ...o, reading } : o)),
+  };
+}

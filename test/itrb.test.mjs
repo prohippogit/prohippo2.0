@@ -15,7 +15,10 @@ import { readFileSync } from "node:fs";
 
 import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy, statedPeriodAgrees } from "../src/tools/itrb/blockPeriod.js";
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
-import { columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS } from "../src/tools/itrb/partC.js";
+import {
+  columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS,
+  intimationToRead, withOrderReading,
+} from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
 import { completeness, summarise, STATUS } from "../src/tools/itrb/completeness.js";
@@ -32,7 +35,7 @@ import { documentKind, documentExt, sniffExtension, retypeFilename } from "../sr
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
-  withDeclared, withFiledParticulars, isoDate, withDueDate, readiness, blankYear,
+  withDeclared, withFiledParticulars, withDetermined, isoDate, withDueDate, readiness, blankYear,
 } from "../src/tools/itrb/draft.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -1792,4 +1795,98 @@ test("what is entered in Parts G and H reaches the tax computation", () => {
   const row = res.years.find((r) => r.key === y.key);
   assert.equal(row.credits.partG, 317250);            // advance + self-assessment
   assert.equal(row.credits.partH, 50000);             // only what was entered as unclaimed
+});
+
+/* ---------------------------------------------------------------------------
+ * Column [B], off the intimation.
+ *
+ * The one figure on the year panel that comes from a PDF rather than from data.
+ * The portal hands over the return as a JSON and its own record of the filing;
+ * the income CPC DETERMINED is printed in the s.143(1) intimation and stated in
+ * no record at all. So the fill has to find the order, and where nobody has
+ * read it yet, read it.
+ * ------------------------------------------------------------------------- */
+
+const order = (over = {}) => ({
+  commRefNo: "CPC/2021/A1/123", orderDate: "2022-08-12", section: "143(1)",
+  storagePath: "p/intimation.pdf", locked: false, ...over,
+});
+const reading = (total) => ({ lines: [
+  { head: "Gross Total Income", asReturned: total + 50000, asComputed: total + 50000 },
+  { head: "Total Income", asReturned: 215680, asComputed: total },
+] });
+
+test("the newest unread order with a PDF is the one to read", () => {
+  const ret = { orders: [
+    order({ commRefNo: "OLD", orderDate: "2022-08-12" }),
+    order({ commRefNo: "NEW", orderDate: "2023-03-01" }),
+  ] };
+  assert.equal(intimationToRead(ret).commRefNo, "NEW");
+});
+
+test("an order already read, locked, or without a PDF is not read again", () => {
+  // Each read costs money. An order CPC only sends by e-mail has no PDF here at
+  // all, and one already read has its answer on file.
+  assert.equal(intimationToRead({ orders: [order({ reading: reading(300000) })] }), null);
+  assert.equal(intimationToRead({ orders: [order({ locked: true })] }), null);
+  assert.equal(intimationToRead({ orders: [order({ storagePath: "" })] }), null);
+  assert.equal(intimationToRead({ orders: [] }), null);
+  assert.equal(intimationToRead(null), null);
+});
+
+test("a freshly-read order merges into the return and answers column [B]", () => {
+  // What the fill does after the callable returns: no waiting on Firestore to
+  // come back round, the reading is used where it is.
+  const ret = { orders: [order()] };
+  assert.equal(determinedFromReturn(ret), null);            // nothing read yet
+
+  const merged = withOrderReading(ret, "CPC/2021/A1/123", reading(268430));
+  const found = determinedFromReturn(merged);
+  assert.equal(found.amount, 268430);
+  assert.equal(found.section, "143(1)");
+  assert.equal(found.orderDate, "2022-08-12");
+  assert.equal(found.head, "Total Income");
+  // The original is untouched — the merge is a copy, not a mutation.
+  assert.equal(determinedFromReturn(ret), null);
+});
+
+test("column [B] is written with the order it came from, so it can be checked", () => {
+  const found = determinedFromReturn(withOrderReading({ orders: [order()] }, "CPC/2021/A1/123", reading(268430)));
+  const y = withDetermined(blankYear({ ay: "2021-22" }), found);
+  assert.equal(y.partC.determined, 268430);
+  assert.equal(y.partC.determinedSection, "143(1)");
+  assert.deepEqual(y.partC.determinedFrom, {
+    orderDate: "2022-08-12", commRefNo: "CPC/2021/A1/123", head: "Total Income",
+  });
+});
+
+test("a figure already in column [B] stands — whoever put it there read the order", () => {
+  const keyed = { ...blankYear({ ay: "2021-22" }), partC: { determined: 999999 } };
+  const found = determinedFromReturn(withOrderReading({ orders: [order()] }, "CPC/2021/A1/123", reading(268430)));
+  const y = withDetermined(keyed, found);
+  assert.equal(y.partC.determined, 999999);
+  assert.equal(y.partC.determinedFrom, undefined);          // and it is not claimed to be a read
+});
+
+test("nothing found means nothing written", () => {
+  const year = blankYear({ ay: "2021-22" });
+  assert.deepEqual(withDetermined(year, null), year);
+  assert.deepEqual(withDetermined(year, { amount: null }), year);
+  // A reading with no total-income row is not an answer either.
+  assert.equal(determinedFromReturn(withOrderReading({ orders: [order()] }, "CPC/2021/A1/123",
+    { lines: [{ head: "Gross Total Income", asComputed: 500000 }] })), null);
+});
+
+test("a s.154 rectification supersedes the intimation it corrects", () => {
+  // Both read. The later order states the income as it now stands, and column
+  // [B]'s section stays 143(1) — a rectification corrects that determination
+  // rather than making a fresh one, and [B]'s own list has no entry for s.154.
+  const ret = { orders: [
+    order({ commRefNo: "ORIG", orderDate: "2022-08-12", reading: reading(268430) }),
+    order({ commRefNo: "RECT", orderDate: "2023-03-01", section: "154", reading: reading(241300) }),
+  ] };
+  const found = determinedFromReturn(ret);
+  assert.equal(found.amount, 241300);
+  assert.equal(found.commRefNo, "RECT");
+  assert.equal(found.section, "143(1)");
 });

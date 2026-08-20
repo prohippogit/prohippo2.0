@@ -218,6 +218,37 @@ under s.143(1) regardless, because column [B]'s list of sections has no entry
 for s.154. "Gross total income" is excluded explicitly: it sits next to total
 income in every intimation and differs by the Chapter VI-A deductions.
 
+### Column [B] comes from the intimation, not the return
+
+Column [B] is the total income **determined or assessed** — the figure CPC
+arrived at. It is printed in the s.143(1) intimation and stated in no record the
+portal hands over as data, so unlike everything else on the year panel it can
+only come from reading a PDF.
+
+`determinedFromReturn` (partC.js) finds it once that PDF has been read, taking
+the total-income row from the newest order — a s.154 rectification supersedes
+the intimation it corrects, and the section stays 143(1) either way, because a
+rectification corrects that determination rather than making a fresh one and
+[B]'s own list has no entry for s.154.
+
+On a practice that has never opened the Intimations screen for a year, nothing
+has been read. So **From synced return** now reads it: `intimationToRead` picks
+**one** order — the newest with a readable PDF and no reading yet — and the fill
+calls `readIntimationOrder` on it, merges the result with `withOrderReading` and
+writes [B] through `withDetermined`. One paid read per year, on a press the
+practitioner made. An order already read, locked, or with no PDF (CPC sends some
+years' orders only by e-mail) is never re-read.
+
+[B] does **not** come from the ITR JSON, so it is filled even for a year whose
+JSON was never synced — refusing to look would leave the column blank for a
+reason that has nothing to do with it.
+
+`withDetermined` records `partC.determinedFrom` — the order's date, its CPC
+reference and the row the figure was taken from — and the panel prints all
+three, because this is the one figure on the screen that came out of a model
+reading a document rather than out of the department's own data. A figure
+already in [B] stands: whoever keyed it read the order.
+
 ### Taxes already paid — Part G fills, Part H does not
 
 The return states all four figures, and they are all read

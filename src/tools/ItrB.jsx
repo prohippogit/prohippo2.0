@@ -31,11 +31,11 @@ import { readDeclared } from './itrb/declared';
 import { computeItrB, UNDISCLOSED_HEADS, RATE_113, RATE_CESS, RATE_158BFA } from './itrb/compute';
 import { HEADS } from './itrb/declared';
 import {
-  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withFiledParticulars, withDueDate,
+  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withFiledParticulars, withDetermined, withDueDate,
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
-import { columnsFor, labelFor, appliesTo, determinedFromReturn } from './itrb/partC';
+import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, withOrderReading } from './itrb/partC';
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
@@ -239,6 +239,47 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
     return true;
   };
 
+  /* Part C column [B], off the s.143(1) intimation.
+   *
+   * The rest of this screen fills from data the department produced — the ITR
+   * JSON, the portal's record of the return. [B] is the exception: the income
+   * CPC determined is printed in the intimation and stated in no record, so the
+   * PDF has to be read. Where the practice has already read it (from the
+   * Intimations screen) the figure is there for the taking; where it has not,
+   * this reads it — one order, the newest, once, on a press the practitioner
+   * made.
+   *
+   * Returns what it found, so the caller can say so in one sentence rather than
+   * leaving a figure to appear silently in a column nobody was looking at. */
+  const fillDetermined = async (ay, ret) => {
+    if (!ret) return null;
+    let found = determinedFromReturn(ret);
+    let read = false;
+
+    if (!found) {
+      const order = intimationToRead(ret);
+      if (!order) return null;
+      try {
+        const res = await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
+          returnId: ret.id, commRefNo: order.commRefNo,
+        });
+        const reading = res?.data?.reading;
+        if (!reading) return null;
+        read = true;
+        found = determinedFromReturn(withOrderReading(ret, order.commRefNo, reading));
+      } catch (e) {
+        // Not fatal to the fill. The figures out of the JSON are already in;
+        // this column simply stays for the practitioner, which is where it was.
+        console.warn("itr-b: couldn't read the intimation for", ay, e);
+        return null;
+      }
+    }
+    if (!found) return null;
+    setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === ay ? withDetermined(y, found) : y)) }));
+    setDirty(true);
+    return { ...found, read };
+  };
+
   const fillFromSync = async (year) => {
     const ret = syncedReturn(year.ay);
     if (!ret) { notify(`No return on file for A.Y. ${year.ay}.`, "alert"); return; }
@@ -251,14 +292,27 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
     if (!ret.jsonPath) {
       setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === year.ay ? withFiledParticulars(y, ret) : y)) }));
       setDirty(true);
-      notify(`A.Y. ${year.ay}: filing particulars filled. The ITR JSON hasn't been synced, so upload it for the declared income.`);
+      /* Column [B] does not come from the JSON — it comes from the intimation —
+         so a year with no JSON synced can still have it, and refusing to look
+         would leave a column blank for a reason that has nothing to do with it. */
+      setBusyYear(year.key);
+      const only = await fillDetermined(year.ay, ret);
+      setBusyYear("");
+      notify(`A.Y. ${year.ay}: filing particulars filled.${only
+        ? ` Column [B] is ${fmtINR(only.amount)}, ${only.read ? "read off" : "from"} the intimation${only.orderDate ? ` dated ${dateOf(only.orderDate)}` : ""}.`
+        : ""} The ITR JSON hasn't been synced, so upload it for the declared income.`);
       return;
     }
 
     setBusyYear(year.key);
     try {
       const json = await readStoredJson(ret.jsonPath);
-      if (applyReading(readDeclared(json), "sync", year.ay, ret)) notify(`A.Y. ${year.ay} filled from the return on file.`);
+      if (applyReading(readDeclared(json), "sync", year.ay, ret)) {
+        const determined = await fillDetermined(year.ay, ret);
+        notify(`A.Y. ${year.ay} filled from the return on file.${determined
+          ? ` Column [B] is ${fmtINR(determined.amount)}, ${determined.read ? "read off" : "from"} the intimation${determined.orderDate ? ` dated ${dateOf(determined.orderDate)}` : ""}.`
+          : ""}`);
+      }
     } catch (e) {
       console.error("itr-b: sync fill", e);
       notify(e?.message?.slice(0, 240) || "Couldn't read that return.", "alert");
@@ -278,6 +332,8 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
        never synced. Doing only the first left those years blank beside a line
        on screen stating both facts. */
     let read = 0;
+    let columnB = 0;
+    let intimationsRead = 0;
     const particularsOnly = [];
     for (const y of todo) {
       const ret = syncedReturn(y.ay);
@@ -285,20 +341,27 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
         setDraft((d) => ({ ...d, years: d.years.map((r) => (r.ay === y.ay ? withFiledParticulars(r, ret) : r)) }));
         setDirty(true);
         particularsOnly.push(y.ay);
-        continue;
+      } else {
+        try {
+          const json = await readStoredJson(ret.jsonPath);
+          if (applyReading(readDeclared(json), "sync", y.ay, ret)) read += 1;
+        } catch (err) {
+          console.error("itr-b: sync fill", y.ay, err);
+        }
       }
-      try {
-        const json = await readStoredJson(ret.jsonPath);
-        if (applyReading(readDeclared(json), "sync", y.ay, ret)) read += 1;
-      } catch (err) {
-        console.error("itr-b: sync fill", y.ay, err);
-      }
+      // Column [B] comes from the intimation, not the JSON, so it is looked for
+      // on every year with a return — including those with no JSON synced.
+      const determined = await fillDetermined(y.ay, ret);
+      if (determined) { columnB += 1; if (determined.read) intimationsRead += 1; }
     }
     setBusyYear("");
 
     if (!read && !particularsOnly.length) { notify("Couldn't read any of the returns on file.", "alert"); return; }
     notify([
       read ? `Filled ${read} year${read === 1 ? "" : "s"} from the returns on file.` : "",
+      columnB
+        ? `Column [B] filled for ${columnB} year${columnB === 1 ? "" : "s"}${intimationsRead ? `, reading ${intimationsRead} intimation${intimationsRead === 1 ? "" : "s"} to do it` : ""}.`
+        : "",
       particularsOnly.length
         ? `A.Y. ${particularsOnly.join(", ")}: acknowledgement and date only — no ITR JSON synced, so upload ${particularsOnly.length === 1 ? "it" : "them"} for the declared income.`
         : "",
@@ -711,6 +774,8 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
         </div>
         <div className="muted" style={{fontSize: 11.5}}>
           Upload as many years at once as you like — each file is filed against the assessment year it states, not the row it was dropped on.
+          {" "}Part C column [B] comes from the s.143(1) intimation rather than from the return, so where one is on file and has not
+          been read yet, filling reads it once.
         </div>
       </div>
 
@@ -1036,7 +1101,23 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
           in column [A] — the form states it so the officer can see what the block income sits on top of.
         </div>
 
-        {suggestion && (
+        {/* WHERE COLUMN [B] CAME FROM, IN THREE STATES.
+            Filled by the sync fill — say so, and say which order and which row,
+            because this is the one figure on the screen that came out of a
+            model reading a PDF rather than out of the department's own data.
+            Not yet filled — offer it. Filled by hand while an intimation on
+            file says something else — leave the figure alone and print what the
+            order reads, which is a cross-check worth having. */}
+        {year.partC?.determinedFrom ? (
+          <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: "var(--p-mint)", color: "#1B8C5C", fontSize: 12}}>
+            <Icon name="check" size={13}/>
+            <span>
+              Column [B] read off the intimation
+              {year.partC.determinedFrom.orderDate ? ` dated ${dateOf(year.partC.determinedFrom.orderDate)}` : ""}
+              {year.partC.determinedFrom.head ? `, against “${year.partC.determinedFrom.head}”` : ""} — check it against the order.
+            </span>
+          </div>
+        ) : suggestion && (
           <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: "var(--p-lavender-2)", fontSize: 12}}>
             <Icon name="sparkle" size={13}/>
             <span>

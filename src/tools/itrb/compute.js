@@ -47,6 +47,7 @@
 import { HEADS } from "./declared.js";
 import { DII_ITEMS } from "./form.js";
 import { PART_C_COLUMNS, appliesTo, partBColumns } from "./partC.js";
+import { computePartB, partBYear, tiesToPartC } from "./partB.js";
 import { monthsOfDelay } from "./blockPeriod.js";
 
 /** Tax on undisclosed income of the block period — s.113. */
@@ -219,6 +220,13 @@ export function computeItrB(draft) {
     .filter((c) => y.partC[`${c.key}Misplaced`])
     .map((c) => ({ ay: y.ay, slot: y.slot, letter: c.letter })));
 
+  /* Part B — the part period's income, head by head. Worked out for the one row
+     it belongs to, and checked against what Part C says about the same period,
+     which is the tie the form itself asks for. */
+  const partBRow = partBYear(years, spansYears);
+  const partB = computePartB(partBRow ? partBRow.partB : {});
+  const partBTie = tiesToPartC(partB.total, partBTotal);
+
   const totalUndisclosed = years.reduce((sum, y) => sum + y.totalUndisclosed, 0);
   const totalDeclared = years.reduce((sum, y) => sum + y.declaredTotal, 0);
   const roundedUndisclosed = round288B(totalUndisclosed);
@@ -286,9 +294,13 @@ export function computeItrB(draft) {
     blockTaxPaidTotal,
     spansYears,
     byPartCColumn,
-    /* What Part B's row 6 must come to. Named for what it is FOR, because that
-       is the only reason the figure exists. */
+    /* What Part B's row 6 must come to, from Part C's side. */
     partBTotal,
+    /* And Part B's own answer, with the rows where "enter nil if loss" bit and
+       whether the two sides agree. */
+    partB,
+    partBRow,
+    partBTie,
     misplacedPartC,
     byItem,
     totalByItem,

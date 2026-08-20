@@ -31,6 +31,7 @@ import { HEADS } from "./declared.js";
 import { DII_ITEMS, VERIFICATION_TEXT, furnishingMode } from "./form.js";
 import { columnsFor, labelFor, appliesTo, partBColumns } from "./partC.js";
 import { variantFor, partYearIncome } from "./partA.js";
+import { PART_B_ROWS } from "./partB.js";
 
 const L = 14, R = 196, W = R - L, PAGE_H = 297, FOOT = 20;
 
@@ -305,7 +306,42 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
       L, p.y, { size: 6.8, weight: "medium", color: MUTED });
     p.y += 8;
 
-    /* ---------------- PART B — TOTAL INCOME OF THE BLOCK PERIOD ---------------- */
+    /* ---------------- PART B — THE PART PERIOD, HEAD BY HEAD ---------------- */
+    if (result.partBRow) {
+      partHead(ctx, p, accent, "B", "Break-up of the part period's income",
+        `${result.partBRow.slot} — A.Y. ${result.partBRow.ay}, to ${fmtDate(result.partBRow.to)} — s.158BB(1A)(c)(ii) and (iii)`);
+      table(ctx, p, accent,
+        [
+          { label: "", w: 14 },
+          { label: "PARTICULARS", w: 130 },
+          { label: "AMOUNT (₹)", w: 38, align: "right" },
+        ],
+        PART_B_ROWS.map((row) => {
+          if (row.heading) return { 0: `${row.no}.  ${row.heading}`, _span: true, _tone: "sub" };
+          const pad = "     ".repeat(row.indent || 0);
+          const value = result.partB.rows[row.key] || 0;
+          const cells = [row.no, `${pad}${row.label}${row.nilIfLoss ? "  (nil if loss)" : ""}`, amt(value, { zero: "Nil" })];
+          if (row.grand) return { 0: cells[0], 1: cells[1], 2: cells[2], _tone: "total" };
+          if (row.of) return { 0: cells[0], 1: cells[1], 2: cells[2], _tone: "sub" };
+          return cells;
+        }),
+        { size: 6.8, pad: 2 }
+      );
+      if (result.partB.floored.length) {
+        p.need(9);
+        wrap(`Carried at nil because the form says so on ${result.partB.floored.map((f) => f.no).join(", ")}: a head that lost money in the part period cannot shelter income in another head of the same period.`,
+          W - 4, 6.8, "regular").forEach((ln) => { text(ln, L, p.y, { size: 6.8, weight: "medium", color: MUTED }); p.y += 3.2; });
+        p.y += 4;
+      }
+      p.need(8);
+      text(result.partBTie.ties
+        ? `Row 6 agrees with the ${amt(result.partBTie.partCTotal, { zero: "Nil" })} Part C states for the same period.`
+        : `Row 6 comes to ${amt(result.partBTie.partBTotal)} against the ${amt(result.partBTie.partCTotal)} Part C states for the same period. The form requires the two to agree.`,
+        L, p.y, { size: 6.8, weight: "semibold", color: result.partBTie.ties ? BODY : [193, 51, 120] });
+      p.y += 8;
+    }
+
+    /* ---------------- PART C — COMPUTATION OF UNDISCLOSED INCOME ---------------- */
     partHead(ctx, p, accent, "C", "Computation of undisclosed income",
       "Column [A] — undisclosed income declared for each year comprised in the block period, s.158BB(1)(a) r.w.s. 158B(b)");
     table(ctx, p, accent,

@@ -17,6 +17,7 @@
 import { blockPeriod, dueDateFor } from "./blockPeriod.js";
 import { DII_ITEMS } from "./form.js";
 import { PART_C_COLUMNS } from "./partC.js";
+import { PART_B_LEAVES } from "./partB.js";
 export { STATUSES, EMPLOYMENT_NATURE, FILED_UNDER, PENDING_UNDER } from "./form.js";
 import { UNDISCLOSED_HEADS } from "./compute.js";
 import { HEADS, declaredTotal } from "./declared.js";
@@ -81,6 +82,10 @@ export function blankYear(period) {
       dueDateExpired: "",    // (ix) — where no return was filed
       itrFormChosen: "",     // (x)  — and the due date has not expired
     },
+    /* Part B — the break-up of a part period's income. Carried on every row so
+       a change of search date cannot strand it, but only ever asked of the one
+       row that IS the part period; see partBYear(). */
+    partB: Object.fromEntries(PART_B_LEAVES.map((r) => [r.key, ""])),
     /* A31/A33 (vii) and (viii) for a full year, A32/A34 (ii) and (iii) for a
        part period: the aggregate VALUE of international and specified domestic
        transactions. One pair of fields, because it is one question asked of
@@ -368,6 +373,12 @@ export function readiness(draft, result) {
     gaps.push(
       `Part C has figures in columns that do not belong to those rows — ${named}. Columns [E] to [H] each describe one period `
       + "of the block, and a figure against any other year has nowhere to go on the form."
+    );
+  }
+  if (result && result.partBTie && result.partBTie.entered && !result.partBTie.ties) {
+    gaps.push(
+      `Part B's row 6 comes to ${result.partBTie.partBTotal.toLocaleString("en-IN")} against the `
+      + `${result.partBTie.partCTotal.toLocaleString("en-IN")} Part C states for the same part period. The form requires the two to agree.`
     );
   }
   if (result && result.itemsEntered && !result.itemsTie) {

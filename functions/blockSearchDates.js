@@ -29,6 +29,12 @@ const LATEST = "2100-01-01";
    thing. Seven years before the regime began is as far back as it can go. */
 const EARLIEST_BLOCK_START = "2017-01-01";
 
+/* A notice in a block assessment is issued after the search, so it cannot
+   predate the regime by much — but its own floor is separate from the search
+   dates', because a wrong one here fills a Part A field rather than moving
+   seven years of assessment. */
+const EARLIEST_NOTICE = "2024-01-01";
+
 /** YYYY-MM-DD, or "" for anything that is not a date in the window. */
 function saneDate(v, normDate, floor) {
   const d = normDate(v);
@@ -91,11 +97,41 @@ function normaliseSearchDates(raw, normDate, now) {
     lastAuthFrom = "blockPeriod";
   }
 
+  /* THE NOTICE'S OWN PARTICULARS, read only because they may have no other
+   * source.
+   *
+   * Everywhere else in this app a notice's DIN and dates come from the portal
+   * sync and a language model is not allowed near them — re-reading a recorded
+   * fact can only make it worse. But a document the practitioner has UPLOADED
+   * is, by definition, one the portal never sent us: there is no record to
+   * prefer, and refusing to read it leaves the fields empty for no reason.
+   *
+   * So they are returned, and the client writes them ONLY into fields that are
+   * still blank. That rule lives on the client (`fromRead` in ItrB.jsx) rather
+   * than here, because only the client knows what the draft already holds.
+   *
+   * The PAN is read for one purpose: to notice that the wrong client's
+   * panchnama has been uploaded. */
+  const notice = {
+    pan: /^[A-Z]{5}\d{4}[A-Z]$/i.test(String(r.pan || "").trim()) ? String(r.pan).trim().toUpperCase() : "",
+    din: String(r.noticeDin || "").replace(/\D/g, "").slice(0, 30),
+    date: saneDate(r.noticeDate, normDate, EARLIEST_NOTICE),
+    section: ["158BC", "158BD"].includes(String(r.noticeSection || "").replace(/\s|\./g, "").toUpperCase())
+      ? String(r.noticeSection).replace(/\s|\./g, "").toUpperCase() : "",
+    serviceDate: saneDate(r.serviceDate, normDate, EARLIEST_NOTICE),
+    dueDate: saneDate(r.responseDueDate, normDate, EARLIEST_NOTICE),
+  };
+  // A notice cannot be served before it is issued, and a return cannot be due
+  // before the notice exists. Either way round means a misread, so it goes.
+  if (notice.date && notice.serviceDate && notice.serviceDate < notice.date) notice.serviceDate = "";
+  if (notice.date && notice.dueDate && notice.dueDate < notice.date) notice.dueDate = "";
+
   return {
     initiationDate,
     lastAuthorisationDate,
     lastAuthFrom,
     statedPeriod,
+    notice,
     panchnamaDates,
     searchSection: ["132", "132A"].includes(String(r.searchSection || "").trim()) ? String(r.searchSection).trim() : "",
     /* Kept beside every date, because these two decide seven years of

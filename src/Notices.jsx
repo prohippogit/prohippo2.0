@@ -11,6 +11,7 @@ import { downloadFromStorage } from './downloadFile';
 import { noticeFilename } from './downloadNames';
 import { Icon, titleCase, fmtDateLong } from './shared';
 import { useData, todayISO, itemsFromNoticeDocuments, docRequestsOf } from './store';
+import { isBlockNotice } from './tools/itrb/draft';
 import { AssesseeModal, AssesseeRequiredNote, PAN_RE } from './AssesseeModal';
 import DocumentRequestComposer from './DocumentRequest';
 import NoticeDocuments from './NoticeDocuments';
@@ -63,7 +64,7 @@ function Toggle({ on, onToggle, icon, iconColor, title, desc, disabled }) {
 // Normalise a DIN for comparison — ignore case and any spacing.
 const normDin = (s) => (s || "").replace(/\s+/g, "").toUpperCase();
 
-export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
+export function NoticeReview({ notice, onClose, onSaved, onOpenNotice, onBuildItrB }) {
   const { data, profile, addNotice, updateNotice, addHearing, addDocRequest, addMatter, notify } = useData();
   const isNew = !notice?.id;
   const [edited, setEdited] = React.useState({
@@ -281,6 +282,21 @@ export function NoticeReview({ notice, onClose, onSaved, onOpenNotice }) {
             </div>
           </div>
           <div className="center" style={{gap: 8}}>
+            {/* A notice under s.158BC is the start of a block assessment, and
+                the return answering it is furnished through this very
+                e-Proceeding. The notice already carries the DIN, its date, the
+                date of service and the period the AO allowed — everything Part
+                A of ITR-B asks about the notice — so the builder is opened from
+                here rather than leaving all four to be typed again. */}
+            {!isNew && isBlockNotice(edited) && onBuildItrB && (
+              <button
+                className="btn btn-primary btn-sm"
+                title="Start the block assessment return for this notice, with Part A filled from it"
+                onClick={() => onBuildItrB({ ...notice, ...edited })}
+              >
+                <Icon name="sparkle" size={14}/>Build the ITR-B
+              </button>
+            )}
             {edited.storagePath && (
               <button className="btn btn-secondary btn-sm" title="Download the PDF synced from the portal" onClick={() => downloadNotice(edited)}>
                 <Icon name="doc" size={14}/>View portal PDF

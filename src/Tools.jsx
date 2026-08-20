@@ -28,10 +28,24 @@ const COLORS = {
   success: ["var(--p-mint)", "#1B8C5C"],
 };
 
-export default function Tools() {
+export default function Tools({ seed, onSeedUsed }) {
   const { data } = useData();
-  const [open, setOpen] = React.useState(null);   // tool id
+  // A seeded arrival opens its tool immediately: somebody who clicked "Build
+  // the ITR-B" on a notice has already chosen, and a catalogue page in between
+  // is a click that asks them to choose again.
+  const [open, setOpen] = React.useState(seed?.tool || null);
   const [openDraftId, setOpenDraftId] = React.useState(null);
+  /* Adjusted during render rather than in an effect, because the seed can
+     arrive while this page is ALREADY the one on screen — a practitioner who
+     came to Tools first, went back for the notice, and clicked through from
+     there. Initialising from the prop alone would leave them looking at the
+     catalogue wondering what the button did. */
+  const [seedUsed, setSeedUsed] = React.useState(seed || null);
+  if (seed && seed !== seedUsed) {
+    setSeedUsed(seed);
+    setOpen(seed.tool);
+    setOpenDraftId(null);
+  }
 
   const drafts = [...(data.itrbDrafts || [])].sort((a, b) =>
     String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
@@ -41,7 +55,11 @@ export default function Tools() {
   if (open === "itrb") {
     return (
       <React.Suspense fallback={<div className="card animate-in" style={{display: "grid", placeItems: "center", minHeight: 220}}><span className="muted">Opening ITR-B…</span></div>}>
-        <ItrB draftId={openDraftId} onBack={() => { setOpen(null); setOpenDraftId(null); }}/>
+        <ItrB
+          draftId={openDraftId}
+          seedNotice={seedUsed?.notice || null}
+          onBack={() => { setOpen(null); setOpenDraftId(null); onSeedUsed?.(); }}
+        />
       </React.Suspense>
     );
   }

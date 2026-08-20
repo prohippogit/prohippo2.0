@@ -9,16 +9,31 @@
  *
  *   the previous years relevant to the SIX assessment years preceding the
  *   assessment year relevant to the previous year in which the search was
- *   initiated,
+ *   INITIATED,
  *
- *   PLUS the part of that previous year running from 1 April to the date of
- *   the last of the authorisations for the search (or the requisition).
+ *   PLUS the period from 1 April of that previous year to the date on which the
+ *   last of the authorisations for the search (or the requisition) was EXECUTED.
  *
- * So a search on 15 November 2025 falls in P.Y. 2025-26 (A.Y. 2026-27); the six
- * preceding assessment years are A.Y. 2020-21 to A.Y. 2025-26, whose previous
- * years are 2019-20 to 2024-25; and the part period is 01-04-2025 to
- * 15-11-2025. Seven rows, and the last one is a stub of a year — which is why
- * every row carries `part` and its own from/to rather than only an A.Y.
+ * TWO DATES, NOT ONE. That last limb runs to the date of EXECUTION of the last
+ * authorisation, which is not always in the same previous year as the
+ * initiation — and the shape of the block period changes when it is not:
+ *
+ *   Initiated 01-07-2025, concluded 31-07-2025 (same previous year)
+ *     Y6…Y1  A.Y. 2020-21 … 2025-26
+ *     Y0     01-04-2025 to 31-07-2025      ← one part period, seven rows
+ *
+ *   Initiated 15-03-2026, concluded 05-04-2026 (the next previous year)
+ *     Y6…Y1  A.Y. 2020-21 … 2025-26
+ *     Y0     A.Y. 2026-27, the WHOLE year  ← now a full year
+ *     Y+1    01-04-2026 to 05-04-2026      ← and a part period after it
+ *
+ * The six preceding years are the same in both; what changes is the tail. Form
+ * ITR-B is built around exactly this distinction — Part C carries two mutually
+ * exclusive tables, one for each case — so a tool that models a single "search
+ * date" cannot fill the form for the second one at all.
+ *
+ * The rows are labelled Y6 … Y1, Y0, Y+1 because that is what the form calls
+ * them, and a practitioner keying the portal should not have to translate.
  *
  * Everything here is pure and date-only. No timezone arithmetic: an ISO date is
  * split on hyphens rather than parsed into a Date, because `new Date("2025-04-01")`
@@ -60,19 +75,23 @@ export const pyOfAy = (ay) => {
 export const BLOCK_REGIME_FROM = "2024-09-01";
 
 /**
- * Build the block period for a search or requisition date.
+ * Build the block period.
  *
- * @param searchDate  ISO date of the last authorisation / requisition
- * @returns { ok, reason, from, to, searchPy, years }
+ * @param initiation  ISO date the search was initiated / the requisition made
+ * @param lastAuth    ISO date the last of the authorisations was executed.
+ *                    Blank means "the same day" — which is also what a draft
+ *                    saved before this file knew about two dates carries, so an
+ *                    existing draft keeps exactly the block period it had.
+ * @returns { ok, reason, from, to, initiationPy, spansYears, years }
  *
  * `years` runs OLDEST FIRST — that is the order the form prints, and the order
- * a practitioner reads a block period in. The final entry is the part period
- * and carries `part: true`; it is the only row whose `to` is not 31 March.
+ * a practitioner reads a block period in. Exactly one row carries `part: true`:
+ * the last one, which ends on the date of execution rather than on 31 March.
  */
-export function blockPeriod(searchDate) {
-  const parsed = parseISO(searchDate);
-  if (!parsed) return { ok: false, reason: "Enter the date of the search or requisition.", years: [] };
-  if (String(searchDate) < BLOCK_REGIME_FROM) {
+export function blockPeriod(initiation, lastAuth) {
+  const parsed = parseISO(initiation);
+  if (!parsed) return { ok: false, reason: "Enter the date the search was initiated or the requisition made.", years: [] };
+  if (String(initiation) < BLOCK_REGIME_FROM) {
     return {
       ok: false,
       reason: "Chapter XIV-B block assessment applies to searches initiated on or after 01-09-2024. An earlier search is assessed under s.153A/153C, for which there is no ITR-B.",
@@ -80,14 +99,30 @@ export function blockPeriod(searchDate) {
     };
   }
 
-  const searchPy = fyStart(searchDate);
-  // The six previous years relevant to the six A.Y.s preceding the A.Y. of the
-  // search year: P.Y. (search − 6) through P.Y. (search − 1).
+  /* An absent execution date means the search began and ended the same day, so
+     far as this calculation can tell. That is the ordinary case AND the safe
+     one: it produces the shorter block period, never a longer one the facts do
+     not support. */
+  const end = parseISO(lastAuth) ? String(lastAuth) : String(initiation);
+  if (end < String(initiation)) {
+    return {
+      ok: false,
+      reason: "The last authorisation cannot have been executed before the search was initiated.",
+      years: [],
+    };
+  }
+
+  const initiationPy = fyStart(initiation);
+  const endPy = fyStart(end);
+
   const years = [];
+  // Y6 … Y1 — the previous years relevant to the six A.Y.s preceding the A.Y.
+  // relevant to the previous year of INITIATION. Never affected by the tail.
   for (let i = 6; i >= 1; i--) {
-    const start = searchPy - i;
+    const start = initiationPy - i;
     years.push({
       key: pyLabel(start),
+      slot: `Y${i}`,
       py: pyLabel(start),
       ay: ayOfPy(start),
       from: `${start}-04-01`,
@@ -95,21 +130,36 @@ export function blockPeriod(searchDate) {
       part: false,
     });
   }
-  years.push({
-    key: `${pyLabel(searchPy)}-part`,
-    py: pyLabel(searchPy),
-    ay: ayOfPy(searchPy),
-    from: `${searchPy}-04-01`,
-    to: searchDate,
-    part: true,
-  });
+
+  /* Y0 onwards. One row per previous year from the initiation year through the
+     year the last authorisation was executed in — normally just Y0. Only the
+     final row is a part period; any year in between is complete and is carried
+     whole, which is what makes the loop right rather than a special case for
+     the one-year gap the form illustrates. */
+  for (let start = initiationPy; start <= endPy; start++) {
+    const last = start === endPy;
+    const offset = start - initiationPy;
+    years.push({
+      key: last ? `${pyLabel(start)}-part` : pyLabel(start),
+      slot: offset === 0 ? "Y0" : `Y+${offset}`,
+      py: pyLabel(start),
+      ay: ayOfPy(start),
+      from: `${start}-04-01`,
+      to: last ? end : `${start + 1}-03-31`,
+      part: last,
+    });
+  }
 
   return {
     ok: true,
     reason: "",
     from: years[0].from,
-    to: searchDate,
-    searchPy: pyLabel(searchPy),
+    to: end,
+    initiationPy: pyLabel(initiationPy),
+    /* Whether the last authorisation was executed in a previous year AFTER the
+       one the search began in. Part C of ITR-B has two mutually exclusive
+       tables and this is the flag that chooses between them. */
+    spansYears: endPy > initiationPy,
     years,
   };
 }

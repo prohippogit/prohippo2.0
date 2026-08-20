@@ -45,6 +45,7 @@
  * the total income and to the net payable, which is where the Act applies it.
  */
 import { HEADS } from "./declared.js";
+import { DII_ITEMS } from "./form.js";
 import { monthsOfDelay } from "./blockPeriod.js";
 
 /** Tax on undisclosed income of the block period — s.113. */
@@ -106,18 +107,58 @@ export function computeItrB(draft) {
     const total = Math.max(0, gross);
     const floored = gross < 0;
 
+    /* Part D-II — the same undisclosed income, item-wise. Totalled here so the
+       two break-ups can be compared; never used to derive the liability, which
+       comes from Part D-I's heads. */
+    const items = {};
+    let itemTotal = 0;
+    for (const it of DII_ITEMS) {
+      const v = n(row.items && row.items[it.key]);
+      items[it.key] = v;
+      itemTotal += v;
+    }
+
     const declaredTotal = n(row.declaredTotal);
+    /* Credits, split as Parts G and H split them. `total` stays for the
+       arithmetic, but nothing prints it without saying which part it came
+       from — the "not claimed earlier" condition is on H alone. */
     const credits = {
       tds: n(row.credits && row.credits.tds),
       tcs: n(row.credits && row.credits.tcs),
       advance: n(row.credits && row.credits.advance),
       selfAssessment: n(row.credits && row.credits.selfAssessment),
     };
-    credits.total = credits.tds + credits.tcs + credits.advance + credits.selfAssessment;
+    credits.partG = credits.advance + credits.selfAssessment;
+    credits.partH = credits.tds + credits.tcs;
+    credits.total = credits.partG + credits.partH;
 
     return {
       ...row,
       undisclosed,
+      items,
+      itemTotal,
+        /* s.158BB(3), and Note 4 to the form: undisclosed income in respect of an
+         international transaction or a specified domestic transaction
+         PERTAINING TO A PART PREVIOUS YEAR in the block period is assessed
+         under the ordinary provisions, and "is not required to be submitted as
+         part of the block return". Part D-II says the same thing structurally —
+         rows 11 and 12 are marked fillable only where Y0 is a complete year.
+
+         So this is not a deduction to be netted off. Income on that account
+         does not belong in the block return at all, and an amount keyed against
+         those two rows of a PART period is an error in the return rather than a
+         figure to adjust. It is flagged, and readiness() names it. */
+      excluded158BB3: row.part ? n(items.internationalTxn) + n(items.sdt) : 0,
+      /* Part D-I and Part D-II describe one figure two ways, and the form says
+         so out loud: the total of Part D-II "should be equal to row 6 of Part
+         D I". When they disagree the form does not cast, and only the
+         practitioner can say which side is wrong — so this is reported, never
+         reconciled. */
+      itemMismatch: itemTotal !== 0 && itemTotal !== total,
+      /* A32/A34 (ii) and (iii) — the aggregate VALUE of such transactions in a
+         part period. A disclosure the form asks for, not income. */
+      intlTxnValue: n(row.intlTxnValue),
+      sdtValue: n(row.sdtValue),
       grossUndisclosed: gross,
       totalUndisclosed: total,
       floored,
@@ -139,6 +180,12 @@ export function computeItrB(draft) {
   for (const h of UNDISCLOSED_HEADS) {
     byHead[h.key] = years.reduce((sum, y) => sum + (y.floored ? 0 : n(y.undisclosed[h.key])), 0);
   }
+
+  const byItem = {};
+  for (const it of DII_ITEMS) {
+    byItem[it.key] = years.reduce((sum, y) => sum + (y.floored ? 0 : n(y.items[it.key])), 0);
+  }
+  const totalByItem = DII_ITEMS.reduce((sum, it) => sum + byItem[it.key], 0);
 
   const totalUndisclosed = years.reduce((sum, y) => sum + y.totalUndisclosed, 0);
   const totalDeclared = years.reduce((sum, y) => sum + y.declaredTotal, 0);
@@ -176,9 +223,17 @@ export function computeItrB(draft) {
     }),
     { tds: 0, tcs: 0, advance: 0, selfAssessment: 0 }
   );
-  credits.total = credits.tds + credits.tcs + credits.advance + credits.selfAssessment;
+  credits.partG = credits.advance + credits.selfAssessment;
+  credits.partH = credits.tds + credits.tcs;
+  credits.total = credits.partG + credits.partH;
 
-  const balance = round288B(aggregate - credits.total);
+  /* Part F — tax actually paid against THIS block return, by challan. Not a
+     credit for an earlier year: money paid now, on this liability. */
+  const blockTaxPaid = (Array.isArray(d.blockTaxPaid) ? d.blockTaxPaid : [])
+    .map((c) => ({ ...c, amount: n(c && c.amount) }));
+  const blockTaxPaidTotal = blockTaxPaid.reduce((sum, c) => sum + c.amount, 0);
+
+  const balance = round288B(aggregate - credits.total - blockTaxPaidTotal);
 
   return {
     years,
@@ -195,6 +250,17 @@ export function computeItrB(draft) {
       aggregate,
     },
     credits,
+    blockTaxPaid,
+    blockTaxPaidTotal,
+    byItem,
+    totalByItem,
+    /* Whether Part D-II was filled at all, and whether it ties to Part D-I.
+       Untouched is not a mismatch — plenty of drafts never reach it. */
+    itemsEntered: totalByItem !== 0,
+    itemsTie: totalByItem === 0 || totalByItem === totalUndisclosed,
+    // Years where income has been put against Part D-II rows 11 or 12 of a part
+    // period, which s.158BB(3) keeps out of the block return altogether.
+    misplaced158BB3: years.filter((y) => y.excluded158BB3 > 0).map((y) => y.ay),
     // Positive is tax still payable; negative is a refund, which on a block
     // return means the credits already on record exceed the whole liability.
     netPayable: balance > 0 ? balance : 0,

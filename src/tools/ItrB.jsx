@@ -35,7 +35,7 @@ import {
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
-import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, withOrderReading, describeOrders, partCOverlap } from './itrb/partC';
+import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, describeOrders, partCOverlap } from './itrb/partC';
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
@@ -278,16 +278,25 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
 
     if (candidate && (!found || supersedes)) {
       try {
-        const res = await httpsCallable(functions, "readIntimationOrder", { timeout: 120000 })({
+        /* readDeterminedIncome, not readIntimationOrder. Both read this same
+           PDF out of Storage; that one asks for thirty fields and drops the
+           total-income row on an order that varied nothing, and this one asks
+           for the figure. */
+        const res = await httpsCallable(functions, "readDeterminedIncome", { timeout: 180000 })({
           returnId: ret.id, commRefNo: candidate.commRefNo,
         });
-        const reading = res?.data?.reading;
-        if (reading) {
+        const determined = res?.data?.determined;
+        if (determined && typeof determined.amount === "number") {
           read = true;
           // A newer order that turns out to state no income leaves the figure
           // already on file standing, rather than throwing it away.
-          const after = determinedFromReturn(withOrderReading(ret, candidate.commRefNo, reading));
+          const after = determinedFromReturn({
+            ...ret,
+            orders: (ret.orders || []).map((o) => (String(o.commRefNo) === String(candidate.commRefNo) ? { ...o, determined } : o)),
+          });
           if (after) found = after;
+        } else if (!found) {
+          return { ok: false, why: `the order for A.Y. ${ay} was read but states no total income — key [B] off it, or upload it` };
         }
       } catch (e) {
         console.warn("itr-b: couldn't read the intimation for", ay, e);

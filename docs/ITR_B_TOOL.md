@@ -243,6 +243,23 @@ years' orders only by e-mail) is never re-read.
 JSON was never synced — refusing to look would leave the column blank for a
 reason that has nothing to do with it.
 
+**Column [B] uses its own reader, not the Intimations screen's.** Both read the
+same PDF out of Storage, and they are asked different questions.
+`readIntimationOrder` wants the whole comparison table, the demand, the refund,
+the arrears of other years and a classification of the cause — thirty fields.
+That is the right shape for a variance and a poor one for a single number: on an
+order that varied nothing, which is most of them, there are no differences to
+report and the total-income row kept falling out of the answer. It was this, not
+the record and not the lock, that left [B] empty on a real practice with the
+order sitting right there.
+
+`readDeterminedIncome` asks for the figure and nothing else, and takes
+`{ returnId, commRefNo }` so it reads the order already in Storage — no upload.
+The result is cached on the order as `determined`, so a second press costs
+nothing and the figure stays beside the document it came from. `determinedFromReturn`
+prefers it over any `reading` on the same order: where both exist, believe the
+reader that was asked the question.
+
 **A reading that cannot answer the question is not an answer.** The gate used to
 skip any order carrying a `reading` at all, which made column [B] permanently
 unfillable on a real practice: a read that came back *without* the total-income

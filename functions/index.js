@@ -1156,6 +1156,57 @@ exports.readDeterminedIncome = onCall(
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
 
+    /* TWO WAYS IN, ONE READER.
+     *
+     * `returnId` + `commRefNo` reads the order the returns sync already put in
+     * Storage — the ordinary path, and the reason nobody has to upload
+     * anything. `uploads` reads a document the practitioner hands it, for the
+     * years CPC sends only by e-mail.
+     *
+     * WHY THIS RATHER THAN readIntimationOrder, WHICH READS THE SAME PDF. That
+     * one asks for the whole comparison table, the demand, the refund, the
+     * arrears of other years and a classification of the cause — thirty fields.
+     * On an order that varied nothing, which is most of them, there are no
+     * differences to report and the total-income row kept falling out of the
+     * answer. This asks for one figure and gets it. The two coexist because
+     * they are for different things: that one drives the Intimations screen's
+     * variance table, this one fills one column of one form. */
+    const { returnId, commRefNo } = request.data || {};
+    if (returnId && commRefNo) {
+      const ref = db.doc(`users/${uid}/returns/${returnId}`);
+      const snap = await ref.get();
+      if (!snap.exists) throw new HttpsError("not-found", "That return is not on file.");
+      const data = snap.data() || {};
+      const orders = Array.isArray(data.orders) ? data.orders : [];
+      const i = orders.findIndex((o) => o && String(o.commRefNo) === String(commRefNo));
+      if (i < 0) throw new HttpsError("not-found", "That order is not on this return.");
+      const order = orders[i];
+      if (!order.storagePath || order.locked) {
+        throw new HttpsError("failed-precondition", order.lockReason === "request-only"
+          ? "CPC only sends this year's order by e-mail, so there is no PDF here to read."
+          : "That order's PDF is still locked — re-run the returns sync with the date of birth on file.");
+      }
+
+      let buf;
+      try {
+        [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(order.storagePath).download();
+      } catch {
+        throw new HttpsError("not-found", "That order's PDF could not be read from Storage.");
+      }
+
+      const out = await callGeminiDetermined(PRIMARY_MODEL, geminiApiKey.value(), [
+        { mimeType: "application/pdf", data: buf.toString("base64") },
+      ], { uid });
+      const determined = shapeDetermined(out, order);
+
+      // Cached on the order, so a second press costs nothing and the figure
+      // stays beside the document it came from rather than only in one draft.
+      const next = orders.slice();
+      next[i] = { ...order, determined };
+      await ref.set({ orders: next }, { merge: true }).catch(() => {});
+      return { ok: typeof determined.amount === "number", determined, message: typeof determined.amount === "number" ? "" : "That order does not state a total income determined in a form that could be read." };
+    }
+
     const prefix = `users/${uid}/itrb/`;
     const uploads = (Array.isArray(request.data?.uploads) ? request.data.uploads : [])
       .filter((u) => u && typeof u.storagePath === "string"
@@ -1178,27 +1229,37 @@ exports.readDeterminedIncome = onCall(
     if (!files.length) return { ok: false, reason: "nothing-readable", manifest, message: "That file could not be opened as a document." };
 
     const out = await callGeminiDetermined(PRIMARY_MODEL, geminiApiKey.value(), files, { uid });
-    const r = out && typeof out === "object" ? out : {};
-    const SECTIONS = ["143(1)", "143(3)", "144", "147", "153A", "153C", "158BC(1)(c)", "245D"];
-    const amount = Number(r.totalIncome);
-
+    const determined = shapeDetermined(out);
     return {
-      ok: Number.isFinite(amount),
+      ok: typeof determined.amount === "number",
       manifest,
-      determined: {
-        amount: Number.isFinite(amount) ? Math.round(amount) : null,
-        asReturned: Number.isFinite(Number(r.asReturned)) ? Math.round(Number(r.asReturned)) : null,
-        section: SECTIONS.includes(String(r.section || "").replace(/\s/g, "")) ? String(r.section).replace(/\s/g, "") : "",
-        orderDate: normDate(r.orderDate) || "",
-        ay: /^\d{4}-\d{2}$/.test(String(r.ay || "").trim()) ? String(r.ay).trim() : "",
-        pan: /^[A-Z]{5}\d{4}[A-Z]$/i.test(String(r.pan || "").trim()) ? String(r.pan).trim().toUpperCase() : "",
-        head: String(r.head || "").slice(0, 120),
-        quote: String(r.quote || "").slice(0, 200),
-      },
-      message: Number.isFinite(amount) ? "" : "That document does not state a total income determined in a form that could be read.",
+      determined,
+      message: typeof determined.amount === "number" ? "" : "That document does not state a total income determined in a form that could be read.",
     };
   }
 );
+
+/* What the model said, bounded. `order` is the record the PDF came off, where
+   there is one — its own date and reference are better than a re-read of them,
+   for the same reason the rest of this app prefers a recorded fact to a read. */
+const DETERMINED_SECTIONS = ["143(1)", "143(3)", "144", "147", "153A", "153C", "158BC(1)(c)", "245D"];
+function shapeDetermined(out, order) {
+  const r = out && typeof out === "object" ? out : {};
+  const amount = Number(r.totalIncome);
+  const said = String(r.section || "").replace(/\s/g, "");
+  return {
+    amount: Number.isFinite(amount) ? Math.round(amount) : null,
+    asReturned: Number.isFinite(Number(r.asReturned)) ? Math.round(Number(r.asReturned)) : null,
+    section: DETERMINED_SECTIONS.includes(said) ? said : "",
+    orderDate: (order && order.orderDate) || normDate(r.orderDate) || "",
+    commRefNo: (order && order.commRefNo) || "",
+    ay: /^\d{4}-\d{2}$/.test(String(r.ay || "").trim()) ? String(r.ay).trim() : "",
+    pan: /^[A-Z]{5}\d{4}[A-Z]$/i.test(String(r.pan || "").trim()) ? String(r.pan).trim().toUpperCase() : "",
+    head: String(r.head || "").slice(0, 120),
+    quote: String(r.quote || "").slice(0, 200),
+    at: new Date().toISOString(),
+  };
+}
 
 /* ---------- documents called for ----------------------------------------------
  * Notices that arrive through the portal sync are written with `documents: []`

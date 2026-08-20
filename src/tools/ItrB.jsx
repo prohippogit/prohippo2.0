@@ -21,7 +21,8 @@
  */
 import React from 'react';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { storage, functions } from '../firebase';
 import { Icon, EmptyState, FormField, SelectInput, ComboBox, Toggle, Table, fmtINR, fmtDateLong, titleCase } from '../shared';
 import { useData } from '../store';
 import { saveBlob } from '../downloadFile';
@@ -38,6 +39,7 @@ import { columnsFor, labelFor, appliesTo, determinedFromReturn } from './itrb/pa
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
+import { findBlockProceedings, fieldsFromNotices, describeScan } from './itrb/findProceeding';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -163,6 +165,21 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
 
   const setPeriodDate = (patch) => {
     setDraft((d) => withBlockPeriod(d, patch));
+    setDirty(true);
+  };
+
+  /* Write what the scan found. Split in two on purpose: `fields` are the
+     notice's own recorded particulars and go straight in, `dates` came out of a
+     language model reading a scan and arrive only when the practitioner has
+     looked at the quote and pressed the button. Both re-cut the block period
+     where a search date moves. */
+  const applyScan = (patch) => {
+    setDraft((d) => {
+      const next = withDueDate({ ...d, ...patch });
+      return patch.searchDate !== undefined || patch.lastAuthDate !== undefined
+        ? withBlockPeriod(next, { searchDate: next.searchDate, lastAuthDate: next.lastAuthDate })
+        : next;
+    });
     setDirty(true);
   };
 
@@ -373,6 +390,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
           draft={draft} edit={edit} period={period} furnishing={furnishing}
           assesseeOptions={assesseeOptions} onPickAssessee={pickAssessee}
           onPeriodDate={setPeriodDate} onServiceDate={setServiceDate}
+          onApplyScan={applyScan}
         />
       )}
 
@@ -427,7 +445,7 @@ function SummaryBar({ draft, result }) {
 
 /* ------------------------------ Part A ------------------------------ */
 
-function DetailsTab({ draft, edit, period, furnishing, assesseeOptions, onPickAssessee, onPeriodDate, onServiceDate }) {
+function DetailsTab({ draft, edit, period, furnishing, assesseeOptions, onPickAssessee, onPeriodDate, onServiceDate, onApplyScan }) {
   return (
     <>
       <div className="card">
@@ -476,6 +494,8 @@ function DetailsTab({ draft, edit, period, furnishing, assesseeOptions, onPickAs
           </FormField>
         </div>
       </div>
+
+      <ProceedingScan draft={draft} onApply={onApplyScan}/>
 
       <div className="card" style={{marginTop: 16}}>
         <div className="card-head">
@@ -1095,6 +1115,171 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* What the practice already holds about this search.
+ *
+ * A search case does not arrive here as an ITR-B draft. It arrives as a
+ * proceeding under Matters, with the s.158BC notice in it and the panchnama
+ * attached to it. This finds that proceeding and takes what it can.
+ *
+ * TWO SOURCES, SHOWN APART. The DIN, the notice date, the date of service and
+ * the period allowed are recorded fields — as reliable as the portal sync that
+ * wrote them, so they go in on one press. The two dates that fix the block
+ * period are in the prose of the documents and come back from a language model
+ * reading them, so they arrive with the sentence they were read from and go
+ * nowhere until somebody has looked at it. One of these is a lookup and the
+ * other is a reading, and they should not arrive looking alike. */
+function ProceedingScan({ draft, onApply }) {
+  const { data, notify } = useData();
+  const [scan, setScan] = React.useState(null);
+  const [reading, setReading] = React.useState(false);
+  const [dates, setDates] = React.useState(null);
+
+  const pan = (draft.pan || "").toUpperCase();
+  const run = () => {
+    const found = findBlockProceedings(data, pan);
+    const { fields, conflicts, source } = fieldsFromNotices(found.notices);
+    setScan({ ...found, fields, conflicts, source });
+    setDates(null);
+    if (found.notices.length) {
+      onApply(fields);
+      notify(describeScan(found));
+    } else {
+      notify("Nothing on file for this PAN under s.158BC or s.158BD.", "alert");
+    }
+  };
+
+  /* The two dates, read out of the notice and everything attached to it. The
+     panchnama is an attachment far more often than it is the notice, which is
+     why the whole bundle goes to the reader rather than the notice alone. */
+  const readDates = async () => {
+    if (!scan?.source?.id) return;
+    setReading(true);
+    try {
+      const call = httpsCallable(functions, "readBlockSearchDates");
+      const res = await call({ noticeId: scan.source.id });
+      const bs = res?.data?.blockSearch;
+      if (!bs || (!bs.initiationDate && !bs.lastAuthorisationDate)) {
+        notify("The documents don't state the search dates in a form that could be read. Enter them by hand.", "alert");
+        setDates(null);
+      } else {
+        setDates(bs);
+      }
+    } catch (e) {
+      console.error("itr-b: search dates", e);
+      notify(e?.message?.slice(0, 240) || "Couldn't read the documents.", "alert");
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const applyDates = () => {
+    const patch = {};
+    if (dates.initiationDate) patch.searchDate = dates.initiationDate;
+    if (dates.lastAuthorisationDate) patch.lastAuthDate = dates.lastAuthorisationDate;
+    if (dates.panchnamaDates?.length) patch.lastPanchnamaDate = dates.panchnamaDates[dates.panchnamaDates.length - 1];
+    if (dates.searchSection) patch.searchSection = dates.searchSection;
+    onApply(patch);
+    notify("Search dates applied — the block period follows from them, so check it.");
+  };
+
+  return (
+    <div className="card" style={{marginTop: 16}}>
+      <div className="card-head" style={{flexWrap: "wrap", gap: 12}}>
+        <div>
+          <div className="card-title">From the proceeding on file</div>
+          <div className="card-sub">
+            The s.158BC notice is almost certainly already under this assessee&apos;s Matters, with the panchnama attached to it.
+            Take the particulars from there rather than keying them again.
+          </div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={run} disabled={!pan}
+          title={pan ? "Search this assessee's matters and notices" : "Pick the assessee first"}>
+          <Icon name="search" size={13}/>Find the s.158BC proceeding
+        </button>
+      </div>
+
+      {scan && (
+        <div style={{display: "flex", flexDirection: "column", gap: 10}}>
+          <div style={{fontSize: 12.5}}>{describeScan(scan)}</div>
+
+          {scan.matters.length > 0 && (
+            <div className="muted" style={{fontSize: 11.5}}>
+              {scan.matters.map((m) => `${m.type || "Proceeding"}${m.section ? ` u/s ${m.section}` : ""}${m.bench ? ` · ${m.bench}` : ""}`).join("  ·  ")}
+            </div>
+          )}
+
+          {scan.source && (
+            <div style={{padding: "10px 13px", borderRadius: 10, background: "var(--p-mint)", color: "#1B8C5C", fontSize: 12.5}}>
+              Filled from the notice dated {dateOf(scan.source.date)}
+              {scan.source.din ? ` — DIN ${scan.source.din}` : ""}:{" "}
+              {Object.keys(scan.fields).length ? Object.keys(scan.fields).map((k) => ({
+                noticeDin: "DIN", noticeDate: "notice date", serviceDate: "date of service",
+                dueDate: "due date", returnSection: "the limb of s.158BC",
+              })[k] || k).join(", ") : "nothing it did not already have"}.
+            </div>
+          )}
+
+          {scan.conflicts.map((c) => (
+            <div key={c.field} style={{padding: "10px 13px", borderRadius: 10, background: "var(--p-amber)", color: "#8A5B10", fontSize: 12.5}}>
+              {c.field} differs between the notices on file — {c.seen.map(dateOf).join(" and ")}. Left blank; read the notices and enter it.
+            </div>
+          ))}
+
+          {scan.attachments.length > 0 && (
+            <div style={{borderTop: "1px solid var(--p-line)", paddingTop: 12}}>
+              <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
+                <div style={{flex: 1, minWidth: 200}}>
+                  <div style={{fontWeight: 700, fontSize: 12.5}}>The two search dates</div>
+                  <div className="muted" style={{fontSize: 11.5}}>
+                    A19 and A20 are in the prose of the notice and the panchnama, not in any record. Reading all
+                    {" "}{scan.attachments.length} document{scan.attachments.length === 1 ? "" : "s"} is the only way to get them.
+                  </div>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={readDates} disabled={reading}>
+                  <Icon name="sparkle" size={13}/>{reading ? "Reading…" : "Read the search dates"}
+                </button>
+              </div>
+
+              {dates && (
+                <div style={{marginTop: 12, padding: "12px 14px", borderRadius: 12, background: "var(--p-lavender-2)"}}>
+                  {[
+                    ["A19  Search initiated", dates.initiationDate, dates.quotes?.initiationDate],
+                    ["A20  Last authorisation executed", dates.lastAuthorisationDate, dates.quotes?.lastAuthorisationDate],
+                  ].map(([label, value, quote]) => (
+                    <div key={label} style={{marginBottom: 8}}>
+                      <div style={{fontSize: 12.5}}>
+                        <span className="muted">{label}</span> — <strong>{value ? dateOf(value) : "not stated in the documents"}</strong>
+                      </div>
+                      {/* The sentence it was read from. These two dates decide
+                          seven years of assessment between them; a date offered
+                          without its source cannot be checked. */}
+                      {quote && <div className="muted" style={{fontSize: 11, fontStyle: "italic", marginTop: 2}}>“{quote}”</div>}
+                    </div>
+                  ))}
+                  {dates.panchnamaDates?.length > 0 && (
+                    <div style={{fontSize: 12.5, marginBottom: 8}}>
+                      <span className="muted">Panchnama</span> — {dates.panchnamaDates.map(dateOf).join(", ")}
+                    </div>
+                  )}
+                  {dates.skipped > 0 && (
+                    <div className="muted" style={{fontSize: 11, marginBottom: 8}}>
+                      {dates.skipped} document{dates.skipped === 1 ? "" : "s"} could not be included — too large, or unreadable.
+                    </div>
+                  )}
+                  <button className="btn btn-primary btn-sm" onClick={applyDates} disabled={!dates.initiationDate && !dates.lastAuthorisationDate}>
+                    <Icon name="check" size={13}/>Use these dates
+                  </button>
+                  <span className="muted" style={{fontSize: 11, marginLeft: 10}}>Read from a scan — check them against the documents.</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

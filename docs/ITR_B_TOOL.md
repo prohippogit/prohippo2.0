@@ -218,6 +218,43 @@ under s.143(1) regardless, because column [B]'s list of sections has no entry
 for s.154. "Gross total income" is excluded explicitly: it sits next to total
 income in every intimation and differs by the Chapter VI-A deductions.
 
+## Finding the proceeding the practice already holds
+
+A search case does not arrive here as an ITR-B draft. It arrives as a proceeding
+under **Matters**, with the s.158BC notice in it and the panchnama attached to
+it. **Find the s.158BC proceeding** on the Details tab searches for it and takes
+what it can. Two sources, deliberately shown apart:
+
+**Recorded fields — filled on one press.** `findProceeding.js` matches matters
+and notices on the PAN and on a s.158BC/158BD section, picks the *earliest*
+s.158BC notice (a reminder carries its own DIN, which is not the one Part A
+wants), and takes the DIN, the notice date, the date of service, the period the
+Assessing Officer allowed, and the limb of s.158BC. Where two notices **disagree**
+about a date it fills nothing and says so — the sixty-day clock runs off the
+date of service, and quietly picking one of two is how that clock ends up wrong
+with nobody looking.
+
+**The two search dates — read, then shown, then applied.** A19 and A20 are in
+the prose of the notice and the panchnama and are in no record at all, so
+`readBlockSearchDates` (a callable in `functions/`) sends the notice **and every
+attachment** to a language model — the panchnama is an attachment far more often
+than it is the notice. Each date comes back with the sentence it was read from,
+and nothing is written until the practitioner has looked at the quote. These two
+dates decide seven years of assessment between them; one day either side of
+31 March moves the whole block by a year and changes which Part C table applies.
+
+`functions/blockSearchDates.js` holds the normalisation, in its own CommonJS
+module so `node --test` can reach it without Firebase: a conclusion dated before
+the initiation drops the conclusion (falling back to the shorter block period,
+never one that invents a year), and any date before 2024 is discarded as a
+misread — Chapter XIV-B runs from 01-09-2024, so a 1998 "search date" is an
+assessment year read off the same page.
+
+> **Deploy note.** `readBlockSearchDates` is new. Until
+> `firebase deploy --only functions:readBlockSearchDates` has run, the scan and
+> its recorded-field fill work normally and **Read the search dates** returns an
+> error.
+
 ## Starting from the notice
 
 A block return is furnished through the e-Proceeding for the s.158BC notice, and

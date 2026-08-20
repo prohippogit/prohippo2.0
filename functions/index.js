@@ -818,6 +818,14 @@ Extract ONLY these facts. Return null for anything the documents do not state. N
 - "blockPeriodFrom" and "blockPeriodTo": the block period AS PRINTED, where any document prints one. Every notice issued in a block assessment carries it in the letterhead, as "Block Period: 01/04/2019-23/08/2025" or "in connection with the assessment for the block period 01/04/2019-23/08/2025". Return the two ends separately, as YYYY-MM-DD. COPY IT, NEVER COMPUTE IT: if no document prints a block period, return null for both, even where you know the search dates. If different documents print different block periods, return the one printed most often.
 - "quotes": for each of initiationDate, lastAuthorisationDate and the block period that you found, the sentence or phrase from the document that states it, verbatim and under 200 characters. Use the keys "initiationDate", "lastAuthorisationDate" and "blockPeriod".
 
+THE PARTICULARS OF THE NOTICE ITSELF. Where one of these documents is a notice under section 158BC or 158BD, also return what is printed in its letterhead. Return null for anything not printed; never carry a value over from a different document.
+- "pan": the PAN of the person the notice is addressed to, as printed. Ten characters, five letters then four digits then a letter.
+- "noticeDin": the Document Identification Number, printed as "DIN & Notice No" or "*ITBA1001...*". Digits only, no ITBA prefix and no notice number.
+- "noticeDate": the date the notice was issued, printed as "Dated:", as YYYY-MM-DD.
+- "noticeSection": "158BC" or "158BD" — which of the two the notice is under. null for a notice under any other section, and for a panchnama.
+- "serviceDate": the date the notice was served or delivered, if the document states one distinct from the date it was issued. Usually absent — return null rather than repeating noticeDate.
+- "responseDueDate": the date by which the return is to be furnished, as YYYY-MM-DD. On a s.158BC notice this is the end of the period the Assessing Officer allowed.
+
 DATES: return every date as YYYY-MM-DD. Indian documents write DD/MM/YYYY and DD-MM-YYYY — read them as day first. "05/04/2026" is 5 April 2026, never 4 May 2026. Getting this backwards moves the block period by months, so where a date is ambiguous and the document gives no other clue, return null rather than a guess.
 
 Do not extract the DIN, the notice date, the assessment years, or anything about income. Those are known from elsewhere.`;
@@ -831,6 +839,12 @@ const SEARCH_DATES_SCHEMA = {
     searchSection: { type: "STRING", nullable: true },
     blockPeriodFrom: { type: "STRING", nullable: true },
     blockPeriodTo: { type: "STRING", nullable: true },
+    pan: { type: "STRING", nullable: true },
+    noticeDin: { type: "STRING", nullable: true },
+    noticeDate: { type: "STRING", nullable: true },
+    noticeSection: { type: "STRING", nullable: true },
+    serviceDate: { type: "STRING", nullable: true },
+    responseDueDate: { type: "STRING", nullable: true },
     quotes: {
       type: "OBJECT",
       properties: {
@@ -914,15 +928,40 @@ exports.readBlockSearchDates = onCall(
     const { noticeId, noticeIds, force } = request.data || {};
 
     const ids = [...new Set([noticeId, ...(Array.isArray(noticeIds) ? noticeIds : [])].filter((v) => typeof v === "string" && v))].slice(0, 12);
-    if (!ids.length) throw new HttpsError("invalid-argument", "noticeId is required.");
 
-    const snaps = await Promise.all(ids.map((id) => db.doc(`users/${uid}/notices/${id}`).get()));
+    /* DOCUMENTS THE PRACTITIONER UPLOADED, alongside whatever the portal sent.
+     *
+     * The panchnama is very often nowhere in this app — it is handed over on
+     * paper on the day the search concludes and reaches the portal only if
+     * somebody files it as an annexure later. So the reader takes uploads too,
+     * and treats them identically: same call, same manifest, same quotes.
+     *
+     * ONLY FROM THE CALLER'S OWN itrb/ FOLDER. The path arrives from the client
+     * and is a request to read a file, so it is checked rather than trusted:
+     * Storage rules already confine a user to users/{their-uid}/**, and the
+     * prefix below narrows that again to the one folder uploads are written to.
+     * A caller cannot point this at their own notices, their own returns, or
+     * anything else. */
+    const uploadPrefix = `users/${uid}/itrb/`;
+    const uploads = (Array.isArray(request.data?.uploads) ? request.data.uploads : [])
+      .filter((u) => u && typeof u.storagePath === "string"
+        && u.storagePath.startsWith(uploadPrefix) && !u.storagePath.includes("..") && u.storagePath.length < 300)
+      // The name the practitioner's file had. A manifest naming the random id
+      // it is stored under is one nobody can check against their own folder.
+      .map((u) => ({ path: u.storagePath, name: String(u.name || "").slice(0, 120) || u.storagePath.split("/").pop() }))
+      .slice(0, 10);
+
+    if (!ids.length && !uploads.length) throw new HttpsError("invalid-argument", "Give it a notice to read, or a document to read.");
+
+    const snaps = ids.length ? await Promise.all(ids.map((id) => db.doc(`users/${uid}/notices/${id}`).get())) : [];
     const found = snaps.map((snap, i) => ({ id: ids[i], snap })).filter((r) => r.snap.exists);
-    if (!found.length) throw new HttpsError("not-found", "Those notices are not on file.");
+    if (!found.length && !uploads.length) throw new HttpsError("not-found", "Those notices are not on file.");
 
-    // Cached against the first notice that actually exists — the client sends
-    // the notice that starts the return first.
-    const ref = db.doc(`users/${uid}/notices/${found[0].id}`);
+    /* Cached against the first notice that actually exists — the client sends
+       the notice that starts the return first. An upload-only read has no
+       notice to cache against and simply is not cached; it is one call, and the
+       practitioner who uploaded the file is standing there waiting for it. */
+    const ref = found.length ? db.doc(`users/${uid}/notices/${found[0].id}`) : null;
 
     /* Every file on every one of those notices. `label` is what the manifest
        will show against each — the practitioner needs to see WHICH notice a
@@ -960,15 +999,19 @@ exports.readBlockSearchDates = onCall(
         }
       }
     }
+    for (const u of uploads) {
+      wanted.push({ noticeId: "", notice: "Uploaded by you", name: u.name, path: u.path });
+    }
+
     if (!wanted.length) {
-      return { ok: false, reason: "no-files", manifest: [], read: 0, repliesPassedOver, message: "Nothing is attached to the notices on this proceeding — upload the notice and the panchnama, or enter the two dates by hand." };
+      return { ok: false, reason: "no-files", manifest: [], read: 0, repliesPassedOver, message: "Nothing is attached to the notices on this proceeding — upload the panchnama or the notice below, or enter the two dates by hand." };
     }
 
     // Same bundle, same answer. Keyed on the paths themselves rather than on
     // the notice ids, so adding an attachment invalidates it and re-reading the
     // same files does not.
     const key = crypto.createHash("sha1").update(wanted.map((w) => w.path).sort().join("\n")).digest("hex").slice(0, 16);
-    const cached = found[0].snap.data().blockSearch;
+    const cached = ref ? found[0].snap.data().blockSearch : null;
     if (cached && cached.key === key && !force) return { ok: true, cached: true, blockSearch: cached };
 
     const sources = [];
@@ -990,12 +1033,12 @@ exports.readBlockSearchDates = onCall(
     try {
       out = await callGeminiSearchDates(PRIMARY_MODEL, geminiApiKey.value(), files, { uid });
     } catch (e) {
-      await ref.set({ blockSearchError: String((e && e.message) || e).slice(0, 200) }, { merge: true }).catch(() => {});
+      if (ref) await ref.set({ blockSearchError: String((e && e.message) || e).slice(0, 200) }, { merge: true }).catch(() => {});
       throw e;
     }
 
     const blockSearch = { ...normaliseSearchDates(out, normDate), key, notices: found.length, read, skipped, repliesPassedOver, manifest };
-    await ref.set({ blockSearch, blockSearchError: "" }, { merge: true });
+    if (ref) await ref.set({ blockSearch, blockSearchError: "" }, { merge: true });
     return { ok: true, cached: false, blockSearch };
   }
 );

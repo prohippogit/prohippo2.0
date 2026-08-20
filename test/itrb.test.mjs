@@ -27,6 +27,7 @@ import { createRequire } from "node:module";
 const { normaliseSearchDates, sniffKind, readArchive, collectDocuments, isSearchDocName: isSearchDocNameServer } =
   createRequire(import.meta.url)("../functions/blockSearchDates.js");
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
+import { checkUpload, looksLikePdf, uploadPath, shortName, MAX_UPLOADS, MAX_UPLOAD_BYTES } from "../src/tools/itrb/uploads.js";
 import { documentKind, documentExt, sniffExtension, retypeFilename } from "../src/downloadNames.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
@@ -1529,4 +1530,117 @@ test("the printed period, read end to end, gives the block period on the notice"
   assert.equal(bp.years.length, 7);
   assert.equal(bp.spansYears, false);
   assert.equal(bp.years[6].part, true);        // 2025-26 is the part year
+});
+
+/* ---------------------------------------------------------------------------
+ * Documents the practitioner uploads.
+ *
+ * The panchnama is handed over on paper on the day the search concludes and
+ * reaches the portal only if somebody files it as an annexure later — so on a
+ * great many cases the two dates that fix seven years of assessment are on a
+ * scanner in the practitioner's office and nowhere else.
+ * ------------------------------------------------------------------------- */
+
+const PDF_HEAD = [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34];   // "%PDF-1.4"
+const asFile = (name, size) => ({ name, size });
+
+test("a PDF is taken", () => {
+  assert.deepEqual(checkUpload(asFile("Panchnama 23.08.25.pdf", 890_000), PDF_HEAD), { ok: true, reason: "" });
+  assert.equal(checkUpload(asFile("NOTICE.PDF", 1000), PDF_HEAD).ok, true);   // the extension's case is not the point
+});
+
+test("a file named .pdf that is not one is refused, by its bytes", () => {
+  // The failure this prevents: a scanner writes a TIFF called "panchnama.pdf",
+  // it uploads, the read runs, it costs money, and it comes back with nothing
+  // and nobody able to say why.
+  const tiff = [0x49, 0x49, 0x2a, 0x00, 0, 0, 0, 0];
+  const out = checkUpload(asFile("panchnama.pdf", 500_000), tiff);
+  assert.equal(out.ok, false);
+  assert.match(out.reason, /named \.pdf but is not one/);
+  assert.match(out.reason, /panchnama\.pdf/);          // says WHICH file
+});
+
+test("anything that is not a PDF at all is refused on its name, before its bytes", () => {
+  for (const name of ["papers.zip", "notice.docx", "scan.jpg", "panchnama"]) {
+    const out = checkUpload(asFile(name, 1000), PDF_HEAD);
+    assert.equal(out.ok, false, name);
+    assert.match(out.reason, /Only PDFs can be read/);
+  }
+});
+
+test("an empty file, an oversized one, and one too many are each refused by name", () => {
+  assert.match(checkUpload(asFile("a.pdf", 0), PDF_HEAD).reason, /is empty/);
+
+  const big = checkUpload(asFile("scan.pdf", MAX_UPLOAD_BYTES + 1), PDF_HEAD);
+  assert.equal(big.ok, false);
+  assert.match(big.reason, /the limit is 6 MB/);
+  assert.match(big.reason, /lower resolution/);        // says what to do about it
+
+  const full = checkUpload(asFile("a.pdf", 1000), PDF_HEAD, MAX_UPLOADS);
+  assert.equal(full.ok, false);
+  assert.match(full.reason, /Remove one first/);
+  // One below the ceiling still goes through.
+  assert.equal(checkUpload(asFile("a.pdf", 1000), PDF_HEAD, MAX_UPLOADS - 1).ok, true);
+});
+
+test("the magic number is read strictly", () => {
+  assert.equal(looksLikePdf(PDF_HEAD), true);
+  assert.equal(looksLikePdf([0x25, 0x50, 0x44]), false);          // truncated
+  assert.equal(looksLikePdf([0x50, 0x4b, 0x03, 0x04]), false);    // a zip
+  assert.equal(looksLikePdf([]), false);
+  assert.equal(looksLikePdf(null), false);
+});
+
+test("an upload lands under the user's own itrb folder, and nowhere else", () => {
+  // The callable insists on exactly this prefix before it will read a path, so
+  // a change here without a change there silently stops uploads being read.
+  assert.equal(uploadPath("uid123", "abc-DEF_1"), "users/uid123/itrb/abc-DEF_1.pdf");
+  // A crafted id cannot climb out of the folder: dots and slashes are stripped
+  // outright, so there is no traversal to sanitise in the first place.
+  assert.equal(uploadPath("uid123", "../../notices/x"), "users/uid123/itrb/noticesx.pdf");
+  assert.equal(uploadPath("uid123", "a/b"), "users/uid123/itrb/ab.pdf");
+});
+
+test("a scanner's filename is shortened in the middle, keeping both ends", () => {
+  // The tail matters: "…_30062026.pdf" is how one scan is told from the next.
+  const long = "70000000162509875_205130490_2026_AST_AACTR2704C_Notice us 158BC_1090657518(1)_30062026.pdf";
+  const out = shortName(long, 40);
+  assert.ok(out.length <= 40, out);
+  assert.ok(out.startsWith("70000000162509875"));
+  assert.ok(out.endsWith("2026.pdf"));
+  assert.equal(shortName("Panchnama.pdf", 40), "Panchnama.pdf");   // short enough, untouched
+});
+
+/* ---------------------------------------------------------------------------
+ * What an uploaded notice says about itself.
+ * ------------------------------------------------------------------------- */
+
+test("a notice's own particulars are read, because an upload has no other source", () => {
+  const out = shape({
+    pan: "aactr2704c", noticeDin: "ITBA100115783112", noticeDate: "2026-06-30",
+    noticeSection: "158 BC", responseDueDate: "2026-08-29",
+  });
+  assert.deepEqual(out.notice, {
+    pan: "AACTR2704C",          // upper-cased, and shape-checked
+    din: "100115783112",        // the ITBA prefix is not part of the DIN
+    date: "2026-06-30",
+    section: "158BC",
+    serviceDate: "",
+    dueDate: "2026-08-29",
+  });
+});
+
+test("a notice served before it was issued is a misread and is dropped", () => {
+  const out = shape({ noticeDate: "2026-06-30", serviceDate: "2026-05-01", responseDueDate: "2026-01-01" });
+  assert.equal(out.notice.serviceDate, "");
+  assert.equal(out.notice.dueDate, "");
+  assert.equal(out.notice.date, "2026-06-30");        // the one that was right survives
+});
+
+test("junk particulars come back empty rather than wrong", () => {
+  const out = shape({ pan: "NOTAPAN", noticeDin: "no digits here", noticeSection: "143(3)" });
+  assert.equal(out.notice.pan, "");
+  assert.equal(out.notice.din, "");
+  assert.equal(out.notice.section, "");               // 143(3) is not a limb of s.158BC
+  assert.deepEqual(shape({}).notice, { pan: "", din: "", date: "", section: "", serviceDate: "", dueDate: "" });
 });

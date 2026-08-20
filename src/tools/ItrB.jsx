@@ -20,9 +20,9 @@
  * object in state, hands it to those modules, and renders what comes back.
  */
 import React from 'react';
-import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, getDownloadURL, uploadBytes, deleteObject } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
-import { storage, functions } from '../firebase';
+import { storage, functions, auth } from '../firebase';
 import { Icon, EmptyState, FormField, SelectInput, ComboBox, Toggle, Table, fmtINR, fmtDateLong, titleCase } from '../shared';
 import { useData } from '../store';
 import { saveBlob } from '../downloadFile';
@@ -40,6 +40,7 @@ import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from '.
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
 import { findBlockProceedings, fieldsFromNotices, describeScan, readingOrder } from './itrb/findProceeding';
+import { checkUpload, uploadPath, shortName, MAX_UPLOADS } from './itrb/uploads';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -1119,6 +1120,107 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
   );
 }
 
+/* Documents the practitioner has that the portal never sent.
+ *
+ * The panchnama is the reason this exists. It is handed over on paper on the
+ * day the search concludes and reaches the portal only if somebody later files
+ * it as an annexure to a reply — so on a great many cases there is nothing in
+ * this app to read, and the two dates the whole block period hangs off are
+ * sitting on a scanner in the practitioner's office. This takes them.
+ *
+ * They go to the same reader as everything else, and come back in the same
+ * manifest with the same quotes: for the purpose of reading a date out of a
+ * document, where it came from makes no difference.
+ *
+ * PDF ONLY, REFUSED BY ITS BYTES. The rules are in itrb/uploads.js. A file is
+ * checked before it is uploaded rather than after, because the alternative is a
+ * read that costs money and comes back empty with nobody able to say why. */
+function SearchDocUploads({ docs, onChange, notify }) {
+  const inputRef = React.useRef(null);
+  const [busy, setBusy] = React.useState("");
+
+  const add = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) { notify("Sign in again before uploading.", "alert"); return; }
+
+    const added = [];
+    for (const file of files) {
+      let head;
+      try { head = new Uint8Array(await file.slice(0, 8).arrayBuffer()); } catch { head = new Uint8Array(); }
+      const check = checkUpload(file, head, docs.length + added.length);
+      if (!check.ok) { notify(check.reason, "alert"); continue; }
+
+      setBusy(file.name);
+      const path = uploadPath(uid, crypto.randomUUID());
+      try {
+        await uploadBytes(storageRef(storage, path), file, {
+          contentType: "application/pdf",
+          contentDisposition: `attachment; filename="${file.name.replace(/["\\]/g, "")}"`,
+        });
+        added.push({ name: file.name, storagePath: path, bytes: file.size, at: new Date().toISOString() });
+      } catch (e) {
+        console.error("itr-b: upload", e);
+        notify(`Couldn't upload ${file.name} — ${e?.code || e?.message || "error"}`, "alert");
+      }
+    }
+    setBusy("");
+    if (added.length) {
+      onChange([...docs, ...added]);
+      notify(`${added.length} document${added.length === 1 ? "" : "s"} added. Press “Read the search dates”.`);
+    }
+  };
+
+  /* Removed from Storage as well as from the draft. A document uploaded by
+     mistake — the wrong client's panchnama — should not stay in the practice's
+     files because somebody only unticked it. */
+  const remove = async (doc) => {
+    onChange(docs.filter((d) => d.storagePath !== doc.storagePath));
+    try { await deleteObject(storageRef(storage, doc.storagePath)); }
+    catch (e) { console.warn("itr-b: couldn't delete upload", doc.storagePath, e); }
+  };
+
+  return (
+    <div style={{marginTop: 10}}>
+      <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
+        <div style={{flex: 1, minWidth: 200}}>
+          <div style={{fontWeight: 700, fontSize: 12.5}}>Add the panchnama, or any notice</div>
+          <div className="muted" style={{fontSize: 11.5}}>
+            PDF only, up to {MAX_UPLOADS}. The panchnama is the document that states when the search concluded, and it is
+            usually not on the portal at all — upload it here and it is read with everything else.
+          </div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={() => inputRef.current?.click()} disabled={Boolean(busy) || docs.length >= MAX_UPLOADS}>
+          <Icon name="upload" size={13}/>{busy ? `Uploading ${shortName(busy, 22)}…` : "Add a PDF"}
+        </button>
+        <input
+          ref={inputRef} type="file" accept="application/pdf,.pdf" multiple hidden
+          onChange={(e) => { add(e.target.files); e.target.value = ""; }}
+        />
+      </div>
+
+      {docs.length > 0 && (
+        <div style={{marginTop: 8, display: "flex", flexDirection: "column", gap: 5}}>
+          {docs.map((d) => (
+            <div key={d.storagePath} style={{
+              display: "flex", alignItems: "center", gap: 9, padding: "7px 10px",
+              background: "white", border: "1px solid var(--p-line-2)", borderRadius: 9, fontSize: 12,
+            }}>
+              <span style={{fontSize: 8.5, fontWeight: 800, padding: "2px 5px", borderRadius: 4, background: "var(--p-pink)", color: "#C13388", flexShrink: 0}}>PDF</span>
+              <span style={{flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}} title={d.name}>{d.name}</span>
+              {d.bytes ? <span className="muted" style={{fontSize: 10.5, flexShrink: 0}}>{Math.max(1, Math.round(d.bytes / 1024))} KB</span> : null}
+              <button className="icon-btn danger" title={`Remove ${d.name}`} onClick={() => remove(d)}>
+                <Icon name="trash" size={12}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* What the practice already holds about this search.
  *
  * A search case does not arrive here as an ITR-B draft. It arrives as a
@@ -1150,7 +1252,7 @@ const FILE_STATUS = {
   skipped: { label: "Not a document", bg: "var(--p-lavender)", fg: "var(--p-text-3)" },
 };
 
-function FilesRead({ manifest, notices, passedOver, open, onToggle }) {
+function FilesRead({ manifest, notices, uploads, passedOver, open, onToggle }) {
   if (!manifest?.length) return null;
   const read = manifest.filter((m) => m.status === "read").length;
   const opened = manifest.filter((m) => m.status === "archive").length;
@@ -1166,7 +1268,11 @@ function FilesRead({ manifest, notices, passedOver, open, onToggle }) {
           {read} of {manifest.filter((m) => m.status !== "archive").length} file{manifest.length === 1 ? "" : "s"} read
         </span>
         <span className="muted" style={{fontSize: 11.5}}>
-          across {notices || 1} notice{(notices || 1) === 1 ? "" : "s"}{opened ? `, ${opened} archive${opened === 1 ? "" : "s"} opened` : ""}
+          {[
+            notices ? `across ${notices} notice${notices === 1 ? "" : "s"}` : "",
+            uploads ? `${uploads} you uploaded` : "",
+            opened ? `${opened} archive${opened === 1 ? "" : "s"} opened` : "",
+          ].filter(Boolean).join(", ")}
         </span>
       </button>
 
@@ -1227,6 +1333,14 @@ function ProceedingScan({ draft, onApply }) {
   const [filesOpen, setFilesOpen] = React.useState(false);
 
   const pan = (draft.pan || "").toUpperCase();
+  const uploaded = draft.searchDocs || [];
+  const readCount = readingOrder(scan || {}).length;
+  const uploadCount = uploaded.length;
+  // Kept apart on purpose: the sentence below has to say where each document
+  // came from, and a total that mixes them says nothing useful.
+  const portalCount = (scan?.attachments?.length || 0) + (scan?.replies?.picked?.length || 0);
+  const docCount = portalCount + uploadCount;
+
   const run = () => {
     const found = findBlockProceedings(data, pan);
     const { fields, conflicts, source } = fieldsFromNotices(found.notices);
@@ -1251,11 +1365,15 @@ function ProceedingScan({ draft, onApply }) {
      given the whole bundle in one call and reports back what it opened. */
   const readDates = async () => {
     const order = readingOrder(scan || {});
-    if (!order.length) return;
+    const uploads = (draft.searchDocs || []).map((d) => ({ name: d.name, storagePath: d.storagePath }));
+    if (!order.length && !uploads.length) return;
     setReading(true);
     try {
       const call = httpsCallable(functions, "readBlockSearchDates");
-      const res = await call({ noticeId: order[0], noticeIds: order });
+      // Uploads are not cached against anything, so a read that includes one is
+      // always fresh — `force` keeps a cached answer from an earlier run of the
+      // notices alone from being handed back instead.
+      const res = await call({ noticeId: order[0], noticeIds: order, uploads, force: uploads.length > 0 });
       const out = res?.data || {};
       const bs = out.blockSearch;
 
@@ -1302,6 +1420,21 @@ function ProceedingScan({ draft, onApply }) {
     if (sameDay && !dates.initiationDate && dates.lastAuthorisationDate) patch.searchDate = dates.lastAuthorisationDate;
     if (dates.panchnamaDates?.length) patch.lastPanchnamaDate = dates.panchnamaDates[dates.panchnamaDates.length - 1];
     if (dates.searchSection) patch.searchSection = dates.searchSection;
+
+    /* THE NOTICE'S PARTICULARS, ONLY WHERE THERE IS NOTHING THERE.
+     *
+     * Read out of an uploaded notice, which by definition is one the portal
+     * never sent — so for those fields there is no record to prefer, and
+     * leaving them blank helps nobody. But a value that DID come from the
+     * portal sync is authoritative and a language model reading a scan does not
+     * get to argue with it. Hence: fill the empty, never touch the filled. */
+    for (const [field, value] of [
+      ["noticeDin", dates.notice?.din], ["noticeDate", dates.notice?.date],
+      ["serviceDate", dates.notice?.serviceDate], ["dueDate", dates.notice?.dueDate],
+      ["returnSection", dates.notice?.section],
+    ]) {
+      if (value && !draft[field]) patch[field] = value;
+    }
     onApply(patch);
     notify(sameDay
       ? "Block period set to the one printed on the notice. A19 is the same day as A20 — correct it from the panchnama if the search began earlier."
@@ -1314,8 +1447,8 @@ function ProceedingScan({ draft, onApply }) {
         <div>
           <div className="card-title">From the proceeding on file</div>
           <div className="card-sub">
-            The s.158BC notice is almost certainly already under this assessee&apos;s Matters, with the panchnama attached to it.
-            Take the particulars from there rather than keying them again.
+            The s.158BC notice is very likely already under this assessee&apos;s Matters — take the particulars from there
+            rather than keying them again. The panchnama usually is not, so upload it below and it is read with the rest.
           </div>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={run} disabled={!pan}
@@ -1351,24 +1484,36 @@ function ProceedingScan({ draft, onApply }) {
             </div>
           ))}
 
-          {(scan.attachments.length > 0 || scan.replies?.picked?.length > 0) && (
-            <div style={{borderTop: "1px solid var(--p-line)", paddingTop: 12}}>
+        </div>
+      )}
+
+      {/* THE SEARCH DATES, WHATEVER THE PROCEEDING HOLDS.
+          Outside the scan block on purpose. A practitioner whose client has
+          just been searched may have nothing on the portal yet and the
+          panchnama on their desk — that is the case this feature is FOR, and
+          gating the upload behind a scan that finds nothing would shut them
+          out of it. */}
+      <div style={{borderTop: "1px solid var(--p-line)", marginTop: 12, paddingTop: 12}}>
               <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
                 <div style={{flex: 1, minWidth: 200}}>
                   <div style={{fontWeight: 700, fontSize: 12.5}}>The two search dates</div>
                   <div className="muted" style={{fontSize: 11.5}}>
-                    A19 and A20 are in the prose of the notice and the panchnama, not in any record.
-                    {" "}{scan.attachments.length} document{scan.attachments.length === 1 ? "" : "s"} on
-                    {" "}{readingOrder(scan).length} notice{readingOrder(scan).length === 1 ? "" : "s"}
-                    {scan.replies?.picked?.length
-                      ? `, and ${scan.replies.picked.length} search document${scan.replies.picked.length === 1 ? "" : "s"} out of the replies already filed,`
-                      : ""} are read together, and any ZIP among them is opened first.
+                    A19 and A20 are in the prose of the notice and the panchnama, not in any record.{" "}
+                    {docCount === 0
+                      ? "Nothing to read yet — find the proceeding above, or upload the panchnama below."
+                      : `${[
+                          portalCount && `${portalCount} document${portalCount === 1 ? "" : "s"} on ${readCount} notice${readCount === 1 ? "" : "s"}`,
+                          uploadCount && `${uploadCount} you uploaded`,
+                        ].filter(Boolean).join(", and ")} ${docCount === 1 ? "is" : "are"} read together, and any ZIP among them is opened first.`}
                   </div>
                 </div>
-                <button className="btn btn-secondary btn-sm" onClick={readDates} disabled={reading}>
+                <button className="btn btn-secondary btn-sm" onClick={readDates} disabled={reading || !docCount}
+                  title={docCount ? `Read ${docCount} document${docCount === 1 ? "" : "s"}` : "Find the proceeding, or add a PDF, first"}>
                   <Icon name="sparkle" size={13}/>{reading ? "Reading…" : "Read the search dates"}
                 </button>
               </div>
+
+              <SearchDocUploads docs={uploaded} onChange={(next) => onApply({ searchDocs: next })} notify={notify}/>
 
               {dates && (
                 <div style={{marginTop: 12, padding: "12px 14px", borderRadius: 12, background: "var(--p-lavender-2)"}}>
@@ -1434,17 +1579,27 @@ function ProceedingScan({ draft, onApply }) {
                 </div>
               )}
 
+              {/* THE PAN ON THE DOCUMENT AGAINST THE PAN ON THE DRAFT.
+                  Uploading the wrong client's panchnama is an easy mistake and
+                  a serious one — it would set a block period from another
+                  person's search. Nothing is blocked, because a document may
+                  legitimately name a different person, but it is said. */}
+              {dates?.notice?.pan && pan && dates.notice.pan !== pan && (
+                <div style={{marginTop: 10, padding: "10px 13px", borderRadius: 10, background: "var(--p-amber)", color: "#8A5B10", fontSize: 12.5}}>
+                  These documents are addressed to <strong>{dates.notice.pan}</strong>, and this draft is for <strong>{pan}</strong>.
+                  Check you have uploaded the right client&apos;s papers before using anything read from them.
+                </div>
+              )}
+
               <FilesRead
                 manifest={manifest}
                 passedOver={passedOver}
-                notices={dates?.notices || readingOrder(scan).length}
+                notices={dates?.notices ?? readCount}
+                uploads={uploadCount}
                 open={filesOpen}
                 onToggle={() => setFilesOpen((v) => !v)}
               />
-            </div>
-          )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -157,6 +157,15 @@ export function blankDraft() {
     noticeId: "",
     proceedingReqId: "",
 
+    /* Documents the practitioner uploaded for the reader — the panchnama, most
+       of the time, because it is handed over on paper and reaches the portal
+       only if somebody files it as an annexure later. Each is
+       { name, storagePath, bytes, at }; the file itself lives in Storage under
+       users/{uid}/itrb/. Kept on the draft rather than in component state so it
+       survives a reload, and so the reader can be run again without uploading
+       the same scan twice. */
+    searchDocs: [],
+
     verifierName: "",
     verifierFather: "",
     verifierPan: "",

@@ -299,6 +299,35 @@ size are all capped, and a declared size is checked *before* anything is
 decompressed. Password-protected entries are reported as such rather than as bad
 reads; RAR and 7-Zip are named and skipped.
 
+**The practitioner can upload documents the portal never sent.** This is the
+common case, not the fallback: the panchnama is handed over on paper on the day
+the search concludes and reaches the portal only if somebody later files it as an
+annexure, so on a great many cases the two dates are on a scanner in the
+practitioner's office and nowhere else. **Add a PDF** in the card uploads to
+`users/{uid}/itrb/` (already covered by the existing Storage rules) and records
+the file on the draft as `searchDocs[]`, so it survives a reload and a second
+read costs no second upload. The callable takes the paths, insists on that exact
+prefix before it will read one, and puts them through the same reader, the same
+manifest and the same quotes — for the purpose of reading a date out of a
+document, where it came from makes no difference.
+
+PDF only, and refused by its **bytes** (`checkUpload` in `itrb/uploads.js`), not
+by its name. The failure a name-only check produces is the worst kind: a scanner
+writes a TIFF called `panchnama.pdf`, it uploads, the read runs, it costs money,
+and it comes back empty with nobody able to say why. The whole section sits
+outside the scan results, because a practitioner whose client has just been
+searched may have nothing on the portal at all — that is the case this is *for*,
+and gating it behind a scan that finds nothing would shut them out of it.
+
+**An uploaded notice's own particulars are read too** — DIN, date, the limb of
+s.158BC, the date of service, the due date — and written **only into fields that
+are still blank**. Everywhere else in this app a language model is kept away from
+a notice's recorded particulars, because re-reading a fact the portal stated can
+only make it worse. An uploaded document is by definition one the portal never
+sent: there is no record to prefer, and leaving the fields empty helps nobody.
+The PAN is read for one purpose — to say so when the wrong client's panchnama has
+been uploaded.
+
 **It says which files it read.** Every run returns a manifest — every file
 considered, the notice it came off, the archive it came out of, and what became
 of it (read, opened, left out, password, not opened, not a document). The card is
@@ -318,8 +347,8 @@ date" is an assessment year read off the same page.
 > **Deploy note.** `readBlockSearchDates` takes a list of notice ids, reads reply
 > annexures, extracts the printed block period, and returns a manifest. Until
 > `firebase deploy --only functions:readBlockSearchDates` has run, **Read the
-> search dates** still works but reads only the first notice, cannot open a ZIP
-> and will not see the printed block period. The scan, the proceeding matching
+> search dates** still works but reads only the first notice, cannot open a ZIP,
+> will not see the printed block period, and ignores uploads. The scan, the proceeding matching
 > and the recorded-field fill are pure client code and deploy with hosting.
 
 ## Starting from the notice

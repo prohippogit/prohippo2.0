@@ -307,3 +307,21 @@ export function partCOverlap(year) {
   if (!B || !C) return null;                       // nil in either is not an overlap
   return { amount: B, other: C, same: B === C };
 }
+
+/* Every year whose [C] merely repeats [B].
+ *
+ * On a practice whose returns were all processed without change — the ordinary
+ * case — this is every year of the block at once, because [C] fills from the
+ * ITR JSON and [B] from the order and the two agree to the rupee. Clearing them
+ * one at a time is seven presses to say one thing.
+ *
+ * ONLY WHERE THE TWO ARE EQUAL. A year where they differ may genuinely have
+ * income in both columns; that one keeps its warning and its decision. This is
+ * for the case where there is nothing to decide.
+ */
+export function yearsRepeatingB(years) {
+  return (years || []).filter((y) => {
+    const o = partCOverlap(y);
+    return o && o.same;
+  });
+}

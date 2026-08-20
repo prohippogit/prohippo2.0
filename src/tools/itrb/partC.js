@@ -246,6 +246,8 @@ function fromFocusedRead(order) {
     commRefNo: d.commRefNo || order.commRefNo || "",
     head: d.head || "",
     quote: d.quote || "",
+    // The assessee's own column off the same page — see withDeclaredFromOrder.
+    returned: d.returned || null,
   };
 }
 

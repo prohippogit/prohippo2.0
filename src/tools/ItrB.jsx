@@ -28,10 +28,11 @@ import { useData } from '../store';
 import { saveBlob } from '../downloadFile';
 import { blockPeriod, statedPeriodAgrees } from './itrb/blockPeriod';
 import { readDeclared } from './itrb/declared';
+import { parseItrXml, looksLikeItrXml } from './itrb/itrXml';
 import { computeItrB, UNDISCLOSED_HEADS, RATE_113, RATE_CESS, RATE_158BFA } from './itrb/compute';
 import { HEADS } from './itrb/declared';
 import {
-  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withFiledParticulars, withDetermined, withDueDate,
+  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withDeclaredFromOrder, withFiledParticulars, withDetermined, withDueDate,
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
@@ -208,7 +209,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
    * that list would otherwise put one year's declared income against another —
    * silently, and in a figure that reduces the undisclosed income. */
   const applyReading = (reading, source, expectedAy, ret = null) => {
-    if (!reading) { notify("That file isn't an ITR JSON downloaded from the portal.", "alert"); return false; }
+    if (!reading) { notify("That file isn't an ITR JSON or XML downloaded from the portal.", "alert"); return false; }
     const pan = (draft.pan || "").toUpperCase();
     if (pan && reading.pan && reading.pan !== pan) {
       notify(`That return is for PAN ${reading.pan}, not ${pan}.`, "alert");
@@ -338,7 +339,11 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
         const prev = y.partC?.determinedFrom;
         const over = Boolean(read && prev && !prev.uploaded
           && String(found.orderDate || "") > String(prev.orderDate || ""));
-        return withDetermined(y, found, { over });
+        /* And the intimation's OTHER column, where this year has no return file
+           at all — every year up to A.Y. 2020-21 was served as XML, and a
+           practice that never kept it has nothing else to read. Never over a
+           return that was read. */
+        return withDeclaredFromOrder(withDetermined(y, found, { over }), found.returned);
       }),
     }));
     setDirty(true);
@@ -465,15 +470,28 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
     notify(`[C] cleared for ${hits.length} year${hits.length === 1 ? "" : "s"} — ${hits.map((y) => y.ay).join(", ")} — where it only repeated [B].`);
   };
 
+  /* A filed return, in whichever of the two shapes the portal served it.
+   *
+   * The JSON schema came in for A.Y. 2021-22; every year before that was served
+   * as XML, and a block period reaching back seven years reaches back into the
+   * XML era for its earliest rows. The tag names inside the XML are ITD's own
+   * and are the SAME NAMES as the JSON keys — both are generated from one
+   * schema — so the XML is turned into the same object and every rule that
+   * reads a return applies to it unchanged. Nothing is guessed and nothing is
+   * read by a model: this is the return itself. */
   const onFiles = async (files, expectedAy) => {
     let done = 0;
     for (const file of files) {
       try {
-        const reading = readDeclared(JSON.parse(await file.text()));
-        if (applyReading(reading, "json", expectedAy, reading.ay ? syncedReturn(reading.ay) : null)) done += 1;
+        const raw = await file.text();
+        const xml = /\.xml$/i.test(file.name) || looksLikeItrXml(raw);
+        const parsed = xml ? parseItrXml(raw) : JSON.parse(raw);
+        const reading = readDeclared(parsed);
+        if (!reading) throw new Error("not a return");
+        if (applyReading(reading, xml ? "xml" : "json", expectedAy, reading.ay ? syncedReturn(reading.ay) : null)) done += 1;
       } catch (e) {
         console.error("itr-b: upload", file.name, e);
-        notify(`${file.name} couldn't be read as an ITR JSON.`, "alert");
+        notify(`${file.name} couldn't be read as an ITR ${/\.xml$/i.test(file.name) ? "XML" : "JSON or XML"}.`, "alert");
       }
     }
     if (done) notify(`${done} return${done === 1 ? "" : "s"} read into the block period.`);
@@ -872,16 +890,17 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
               </button>
             )}
             <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
-              <Icon name="upload" size={13}/>Upload ITR JSONs
+              <Icon name="upload" size={13}/>Upload ITR JSON or XML
             </button>
             <input
-              ref={fileRef} type="file" accept="application/json,.json" multiple hidden
+              ref={fileRef} type="file" accept="application/json,.json,text/xml,application/xml,.xml" multiple hidden
               onChange={(e) => { onFiles([...e.target.files], ""); e.target.value = ""; }}
             />
           </div>
         </div>
         <div className="muted" style={{fontSize: 11.5}}>
           Upload as many years at once as you like — each file is filed against the assessment year it states, not the row it was dropped on.
+          {" "}The portal served returns as <strong>XML</strong> up to A.Y. 2020-21 and as JSON since; both are read here.
           {" "}Part C column [B] comes from the s.143(1) intimation rather than from the return, so where one is on file and has not
           been read yet, filling reads it once.
         </div>
@@ -984,6 +1003,7 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
 }
 
 function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onReadIntimation, onFiles, editYear }) {
+  const { notify } = useData();
   const upload = React.useRef(null);
   const set = (patch) => editYear(year.key, patch);
   const setPartC = (key, v) => set({ partC: { ...year.partC, [key]: v } });
@@ -1073,8 +1093,21 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
         setBRead({ busy: false, why: `that order is for A.Y. ${d.ay}, not A.Y. ${year.ay}` });
         return;
       }
-      set({ partC: withDetermined(year, { ...d, uploaded: true }, { over: true }).partC });
+      /* [B] and the section from CPC's column; the declared income from the
+         assessee's, but only where this year has no return file read into it.
+         For A.Y. 2020-21 and earlier there may be none — the portal served XML
+         then, and a practice that never kept it has only this document. */
+      const next = withDeclaredFromOrder(
+        withDetermined(year, { ...d, uploaded: true }, { over: true }),
+        d.returned
+      );
+      set({ partC: next.partC, declared: next.declared, declaredTotal: next.declaredTotal,
+        declaredSource: next.declaredSource, returnFiled: next.returnFiled,
+        credits: next.credits, claimed: next.claimed });
       setBRead({ busy: false, why: "" });
+      if (next.declaredSource === "intimation") {
+        notify(`A.Y. ${year.ay}: column [B] and the income declared both taken off that order — there is no return file on record for this year.`);
+      }
     } catch (e) {
       console.error("itr-b: upload order", e);
       setBRead({ busy: false, why: `it failed — ${String(e?.message || e).slice(0, 120)}` });
@@ -1109,14 +1142,14 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onRe
             <Icon name="refresh" size={11}/>{busy ? "Reading…" : "From synced return"}
           </button>
           <button className="btn btn-secondary btn-xs" onClick={() => upload.current?.click()}>
-            <Icon name="upload" size={11}/>Upload JSON
+            <Icon name="upload" size={11}/>Upload JSON / XML
           </button>
-          <input ref={upload} type="file" accept="application/json,.json" hidden
+          <input ref={upload} type="file" accept="application/json,.json,text/xml,application/xml,.xml" hidden
             onChange={(e) => { onFiles([...e.target.files]); e.target.value = ""; }}/>
         </div>
         <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
           {ret
-            ? `On file: ${ret.form || "ITR"} · ack ${ret.ackNum || "—"} · filed ${dateOf(ret.filedOn)}${ret.jsonPath ? "" : " · the JSON for this year hasn't been synced, so upload it instead"}`
+            ? `On file: ${ret.form || "ITR"} · ack ${ret.ackNum || "—"} · filed ${dateOf(ret.filedOn)}${ret.jsonPath ? "" : " · no return file synced for this year — upload the JSON, or the XML for A.Y. 2020-21 and earlier"}`
             : "The form asks a different set of questions of each part of the block; these are the ones it asks of this row."}
         </div>
 

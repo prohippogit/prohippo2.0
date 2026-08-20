@@ -312,6 +312,67 @@ export function fromNotice(draft, notice, assessee) {
  * block income by what was DISCLOSED, and what was disclosed is the figure in
  * the return, not a figure this tool arrived at.
  */
+/* The declared income, taken off the intimation's own first column.
+ *
+ * A last resort with a real use. The portal served returns as XML up to
+ * A.Y. 2020-21, so a practice that never kept the XML has no return file at all
+ * for the oldest years of a block period — and a CPC intimation prints the
+ * computation TWICE, the assessee's column beside CPC's. The second column
+ * answers Part C's [B]; the first is the income declared, which is what the
+ * return file would have given.
+ *
+ * ONLY WHERE THERE IS NOTHING BETTER. The return file, JSON or XML, is the
+ * return; this is a reading of a document about the return. So it fills a year
+ * that has no declared income yet and never overwrites one that has, and it
+ * marks itself `intimation` so the screen can say which of the three it was.
+ */
+export function withDeclaredFromOrder(year, returned) {
+  if (!year || !returned || typeof returned !== "object") return year;
+  if (year.declaredSource) return year;               // a return was read; leave it
+
+  /* null is not nil. Number(null) is 0, so a bare isFinite check would write a
+     head the document never printed as a declared nil — a figure claimed on the
+     assessee's behalf out of the absence of one. */
+  const money = (v) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const declared = {};
+  let any = false;
+  for (const h of HEADS) {
+    const v = money(returned[h.key]);
+    if (v !== null) { declared[h.key] = v; any = true; }
+  }
+  const total = money(returned.totalIncome);
+  if (!any && total === null) return year;
+
+  return {
+    ...year,
+    declared: { ...year.declared, ...declared },
+    declaredTotal: total === null ? year.declaredTotal : total,
+    declaredSource: "intimation",
+    returnFiled: true,
+    partC: {
+      ...year.partC,
+      returned: total === null ? year.partC?.returned : total,
+      returnedSection: year.partC?.returnedSection || "139(1)",
+    },
+    credits: {
+      ...year.credits,
+      advance: fillMoney(year.credits?.advance, money(returned.advanceTax)),
+      selfAssessment: fillMoney(year.credits?.selfAssessment, money(returned.selfAssessmentTax)),
+      tds: fillMoney(year.credits?.tds, money(returned.tds)),
+      tcs: fillMoney(year.credits?.tcs, money(returned.tcs)),
+    },
+    claimed: {
+      tds: money(returned.tds) ?? year.claimed?.tds ?? null,
+      tcs: money(returned.tcs) ?? year.claimed?.tcs ?? null,
+      ay: year.ay || "",
+    },
+  };
+}
+
 /* Part C column [B] — the income CPC determined, off the intimation.
  *
  * The one figure on this screen that comes from a PDF rather than from data.

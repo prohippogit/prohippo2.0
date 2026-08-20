@@ -218,6 +218,41 @@ under s.143(1) regardless, because column [B]'s list of sections has no entry
 for s.154. "Gross total income" is excluded explicitly: it sits next to total
 income in every intimation and differs by the Chapter VI-A deductions.
 
+### The return as XML — A.Y. 2020-21 and earlier
+
+The portal served returns as **XML** until the JSON schema came in, so a block
+period reaching back seven years reaches back into the XML era for its earliest
+rows. The year that could not be filled was the oldest one in the block, on a
+screen whose whole purpose is seven years at once.
+
+`itrXml.js` turns the XML into the same object the JSON reader already takes,
+and stops. The tag names inside are ITD's own and are the **same names as the
+JSON keys** — `<ITRForm:TotalIncome>` is `TotalIncome` — because both are
+generated from one schema. So there is no mapping table to drift out of date:
+strip the namespace, keep the shape, and every rule in `declared.js`, `partA.js`
+and the rest applies unchanged to a 2020 return. No AI: this is the return
+itself, parsed, to the rupee.
+
+The parser is hand-rolled rather than `DOMParser` for one reason that matters —
+`node --test` has no DOM, and a parser nobody can test against a real return's
+shape is one nobody should trust with seven years of an assessment. Repeated
+siblings become arrays, because schedules repeat rows and keeping only the last
+would silently drop every capital gain but the final entry.
+
+### And where there is no return file at all
+
+A CPC intimation prints the computation **twice** — the assessee's column beside
+CPC's. The second answers column [B]; the first is the income declared. A
+practice that never kept the XML has no return file for its oldest years, and
+that one document states both. `readDeterminedIncome` returns the first column as
+`returned`, and `withDeclaredFromOrder` fills the year from it — marked
+`declaredSource: "intimation"`, and **only where no return file has been read**.
+The return is the return; the intimation is a document about it.
+
+`null` is not nil in either path. `Number(null)` is `0`, so a bare finite check
+would write a head the order never printed as a declared zero — a figure claimed
+on the assessee's behalf out of the absence of one.
+
 ### Column [B] comes from the intimation, not the return
 
 Column [B] is the total income **determined or assessed** — the figure CPC

@@ -54,7 +54,7 @@ and `blockPeriod()` reports which applies as `spansYears`.
 | --- | --- | --- |
 | A | General information, both search dates, the notice, per-year filing and assessment status | Partly — the per-year filing section, acknowledgement and pending-assessment fields are not modelled yet |
 | B | Break-up of Y0/Y+1 part-year income under s.158BB(1A)(c)(ii)/(iii) | Not modelled — complete it on the portal |
-| C | Undisclosed income per year, column [A], with the disclosed-income context in [B]–[H] | Column [A] and a declared total; [B]–[H] not modelled |
+| C | Undisclosed income per year, column [A], with the disclosed-income context in [B]–[H] | Yes — all columns, with the applicable table chosen automatically |
 | D-I | Head-wise break-up | Yes |
 | D-II | Item-wise break-up, fourteen rows, tied to D-I | Yes |
 | E | Tax payable | Yes |
@@ -115,6 +115,48 @@ It never adds anything up and never applies a rate, so there is no arithmetic to
 get wrong against a form nobody has mapped — only a field to find or not find. A
 head a form does not have (there is no capital-gains head on ITR-1) reads `null`
 and prints as a dash, never as a nil.
+
+## Part C, and what its columns are not
+
+Column **[A]** is the undisclosed income declared for the year, and it is the
+only column the tax touches — row 8 (or 9) reads *"Income chargeable to tax for
+the block period as declared {Refer s.158BB(5)} (Figure in Column [A])"*.
+Columns **[B]** to **[H]** state the income already determined, assessed or
+declared. **None of it is added to [A] and none of it is subtracted from it.**
+
+Worth saying plainly, because the pre-Finance-Act-2025 s.158BB worked the other
+way round — total income first, disclosed income deducted — so anyone who learnt
+the old scheme will expect these columns to feed an arithmetic they do not feed.
+`test/itrb.test.mjs` pins this: adding context figures must not move the tax.
+
+Each period column belongs to exactly one row, and `appliesTo()` is what stops a
+figure being keyed where the form has nowhere to put it:
+
+| Column | Belongs to | Section |
+| --- | --- | --- |
+| [B] [C] [D] | every row | 158BB(1A)(a), (b), (d) |
+| [E] | Y1, and Y0 once Y0 is a complete year | 158BB(1A)(c)(i) |
+| [F] [G] | Y0 | 158BB(1A)(c)(ii), (iii) |
+| [H] | Y+1, second table only | 158BB(1A)(c)(iii) |
+
+[G] means different periods in the two tables — to the execution of the last
+authorisation in the first, to 31 March in the second — which `labelFor()`
+handles.
+
+### What fills itself, and what only suggests
+
+**[C] fills** from the ITR JSON, because that is a document the department
+produced and the figure is stated in it.
+
+**[B] suggests.** The income determined u/s 143(1) comes from a language
+model's reading of the intimation PDF (`functions/intimationReading.js`), which
+is good enough to put in front of somebody and not good enough to put in a
+return behind their back. The banner names the figure, the row it came from and
+the order's date, and waits to be told to use it. The latest order wins — a
+s.154 rectification supersedes the s.143(1) it rectifies — and it is reported
+under s.143(1) regardless, because column [B]'s list of sections has no entry
+for s.154. "Gross total income" is excluded explicitly: it sits next to total
+income in every intimation and differs by the Chapter VI-A deductions.
 
 ## Starting from the notice
 

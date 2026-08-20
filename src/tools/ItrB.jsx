@@ -33,7 +33,8 @@ import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withDueDate,
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
-import { DII_ITEMS, furnishingMode } from './itrb/form';
+import { DII_ITEMS, furnishingMode, ASSESSED_UNDER } from './itrb/form';
+import { columnsFor, labelFor, appliesTo, determinedFromReturn } from './itrb/partC';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -697,7 +698,7 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
                   <YearPanel
                     year={draft.years.find((row) => row.key === y.key) || y}
                     computed={y}
-                    ret={ret} busy={busyYear === y.key}
+                    ret={ret} busy={busyYear === y.key} spansYears={result.spansYears}
                     onFill={() => onFillYear(y)}
                     onFiles={(files) => onFiles(files, y.ay)}
                     editYear={editYear}
@@ -743,9 +744,18 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
   );
 }
 
-function YearPanel({ year, computed, ret, busy, onFill, onFiles, editYear }) {
+function YearPanel({ year, computed, ret, busy, spansYears, onFill, onFiles, editYear }) {
   const upload = React.useRef(null);
   const set = (patch) => editYear(year.key, patch);
+  const setPartC = (key, v) => set({ partC: { ...year.partC, [key]: v } });
+
+  /* Column [B] read off the s.143(1) intimation this practice already holds.
+     Offered, never applied: it comes from a language model's reading of a PDF,
+     and everything else this tool fills in comes from a JSON the department
+     itself produced. That difference should be visible, so this one waits to
+     be accepted. */
+  const suggestion = React.useMemo(() => determinedFromReturn(ret), [ret]);
+  const cols = columnsFor(spansYears).filter((c) => appliesTo(c, year, spansYears));
   const setUndisclosed = (key, v) => set({ undisclosed: { ...year.undisclosed, [key]: v } });
   const setItem = (key, v) => set({ items: { ...year.items, [key]: v } });
   const setCredit = (key, v) => set({ credits: { ...year.credits, [key]: v } });
@@ -826,6 +836,65 @@ function YearPanel({ year, computed, ret, busy, onFill, onFiles, editYear }) {
               placeholder="e.g. Annexure A-3, pages 12–31, seized from the business premises"/>
           </FormField>
         </div>
+      </div>
+
+      {/* ---- Part C, columns [B] to [H] ---- */}
+      <div>
+        <div style={{fontWeight: 700, fontSize: 12.5, marginBottom: 4}}>Part C — income already on record</div>
+        <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
+          What was already determined, assessed or declared for this year. None of it is added to or taken off the undisclosed income
+          in column [A] — the form states it so the officer can see what the block income sits on top of.
+        </div>
+
+        {suggestion && (
+          <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, padding: "9px 12px", borderRadius: 10, background: "var(--p-lavender-2)", fontSize: 12}}>
+            <Icon name="sparkle" size={13}/>
+            <span>
+              The intimation on file reads <strong>{fmtINR(suggestion.amount)}</strong> against “{suggestion.head}”
+              {suggestion.orderDate ? ` (order dated ${dateOf(suggestion.orderDate)})` : ""}.
+            </span>
+            <button
+              className="btn btn-secondary btn-xs"
+              onClick={() => set({ partC: { ...year.partC, determined: suggestion.amount, determinedSection: "143(1)" } })}
+            >
+              Use for column [B]
+            </button>
+          </div>
+        )}
+
+        <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12}}>
+          {cols.map((c) => (
+            <div key={c.key} className="field">
+              <label style={{fontSize: 11}}>
+                [{c.letter}] {c.short}
+                <span className="muted" style={{fontWeight: 500}}> · s.{c.ref}</span>
+              </label>
+              <div title={labelFor(c, spansYears)}>
+                <Amount value={year.partC?.[c.key]} onChange={(v) => setPartC(c.key, v)}/>
+              </div>
+              {c.hasSection && (
+                <div style={{marginTop: 6}}>
+                  <SelectInput
+                    value={year.partC?.[`${c.key}Section`] || ""}
+                    onChange={(v) => setPartC(`${c.key}Section`, v)}
+                    options={c.key === "returned" ? ["139(1)", "142(1)"] : ASSESSED_UNDER}
+                    placeholder="Section"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {cols.length < columnsFor(spansYears).length && (() => {
+          const missing = columnsFor(spansYears).filter((c) => !appliesTo(c, year, spansYears));
+          const one = missing.length === 1;
+          return (
+            <div className="muted" style={{fontSize: 11, marginTop: 8}}>
+              {one ? "Column" : "Columns"} {missing.map((c) => `[${c.letter}]`).join(" ")} {one ? "describes another period" : "describe other periods"} of
+              the block and {one ? "is" : "are"} not filled against {year.slot}.
+            </div>
+          );
+        })()}
       </div>
 
       {/* ---- Part D-II ---- */}

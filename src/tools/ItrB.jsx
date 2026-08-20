@@ -31,7 +31,7 @@ import { readDeclared } from './itrb/declared';
 import { computeItrB, UNDISCLOSED_HEADS, RATE_113, RATE_CESS, RATE_158BFA } from './itrb/compute';
 import { HEADS } from './itrb/declared';
 import {
-  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withDueDate,
+  blankDraft, withBlockPeriod, fromAssessee, fromNotice, withDeclared, withFiledParticulars, withDueDate,
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
@@ -207,7 +207,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
    * by acknowledgement number, and a practitioner picking the wrong one out of
    * that list would otherwise put one year's declared income against another —
    * silently, and in a figure that reduces the undisclosed income. */
-  const applyReading = (reading, source, expectedAy) => {
+  const applyReading = (reading, source, expectedAy, ret = null) => {
     if (!reading) { notify("That file isn't an ITR JSON downloaded from the portal.", "alert"); return false; }
     const pan = (draft.pan || "").toUpperCase();
     if (pan && reading.pan && reading.pan !== pan) {
@@ -224,7 +224,14 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       );
       return false;
     }
-    setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === row.ay ? withDeclared(y, reading, source) : y)) }));
+    /* The figures out of the file, then the filing particulars out of the
+       record. Both, because they answer different questions and neither source
+       has the other's answers: the JSON has the income, the portal's record has
+       the acknowledgement number and the date it was filed. */
+    setDraft((d) => ({
+      ...d,
+      years: d.years.map((y) => (y.ay === row.ay ? withFiledParticulars(withDeclared(y, reading, source), ret) : y)),
+    }));
     setDirty(true);
     if (expectedAy && expectedAy !== row.ay) {
       notify(`That file is A.Y. ${row.ay}, so it was filed against that year instead.`, "info");
@@ -234,11 +241,24 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
 
   const fillFromSync = async (year) => {
     const ret = syncedReturn(year.ay);
-    if (!ret?.jsonPath) { notify(`No synced ITR JSON on file for A.Y. ${year.ay}.`, "alert"); return; }
+    if (!ret) { notify(`No return on file for A.Y. ${year.ay}.`, "alert"); return; }
+
+    /* A record with no JSON behind it still answers half the questions. The
+       acknowledgement number and the date of filing come from the portal's own
+       list of returns, not from the file, so a year whose JSON was never synced
+       can still have its Part A particulars filled instead of being refused
+       outright — which is what used to happen. */
+    if (!ret.jsonPath) {
+      setDraft((d) => ({ ...d, years: d.years.map((y) => (y.ay === year.ay ? withFiledParticulars(y, ret) : y)) }));
+      setDirty(true);
+      notify(`A.Y. ${year.ay}: filing particulars filled. The ITR JSON hasn't been synced, so upload it for the declared income.`);
+      return;
+    }
+
     setBusyYear(year.key);
     try {
       const json = await readStoredJson(ret.jsonPath);
-      if (applyReading(readDeclared(json), "sync", year.ay)) notify(`A.Y. ${year.ay} filled from the return on file.`);
+      if (applyReading(readDeclared(json), "sync", year.ay, ret)) notify(`A.Y. ${year.ay} filled from the return on file.`);
     } catch (e) {
       console.error("itr-b: sync fill", e);
       notify(e?.message?.slice(0, 240) || "Couldn't read that return.", "alert");
@@ -248,20 +268,41 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
   };
 
   const fillAllFromSync = async () => {
-    const todo = draft.years.filter((y) => syncedReturn(y.ay)?.jsonPath);
-    if (!todo.length) { notify("No synced ITR JSONs on file for this block period yet — run a returns sync first.", "alert"); return; }
+    const todo = draft.years.filter((y) => syncedReturn(y.ay));
+    if (!todo.length) { notify("No returns on file for this block period yet — run a returns sync first.", "alert"); return; }
     setBusyYear("all");
-    let done = 0;
+
+    /* Two different fills, and a year may get either. The figures need the ITR
+       JSON; the acknowledgement number and the date of filing need only the
+       portal's record of the return, which exists for years whose JSON was
+       never synced. Doing only the first left those years blank beside a line
+       on screen stating both facts. */
+    let read = 0;
+    const particularsOnly = [];
     for (const y of todo) {
+      const ret = syncedReturn(y.ay);
+      if (!ret.jsonPath) {
+        setDraft((d) => ({ ...d, years: d.years.map((r) => (r.ay === y.ay ? withFiledParticulars(r, ret) : r)) }));
+        setDirty(true);
+        particularsOnly.push(y.ay);
+        continue;
+      }
       try {
-        const json = await readStoredJson(syncedReturn(y.ay).jsonPath);
-        if (applyReading(readDeclared(json), "sync", y.ay)) done += 1;
+        const json = await readStoredJson(ret.jsonPath);
+        if (applyReading(readDeclared(json), "sync", y.ay, ret)) read += 1;
       } catch (err) {
         console.error("itr-b: sync fill", y.ay, err);
       }
     }
     setBusyYear("");
-    notify(done ? `Filled ${done} of ${todo.length} year${todo.length === 1 ? "" : "s"} from the returns on file.` : "Couldn't read any of the returns on file.", done ? "check" : "alert");
+
+    if (!read && !particularsOnly.length) { notify("Couldn't read any of the returns on file.", "alert"); return; }
+    notify([
+      read ? `Filled ${read} year${read === 1 ? "" : "s"} from the returns on file.` : "",
+      particularsOnly.length
+        ? `A.Y. ${particularsOnly.join(", ")}: acknowledgement and date only — no ITR JSON synced, so upload ${particularsOnly.length === 1 ? "it" : "them"} for the declared income.`
+        : "",
+    ].filter(Boolean).join(" "), "check");
   };
 
   const onFiles = async (files, expectedAy) => {
@@ -269,7 +310,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
     for (const file of files) {
       try {
         const reading = readDeclared(JSON.parse(await file.text()));
-        if (applyReading(reading, "json", expectedAy)) done += 1;
+        if (applyReading(reading, "json", expectedAy, reading.ay ? syncedReturn(reading.ay) : null)) done += 1;
       } catch (e) {
         console.error("itr-b: upload", file.name, e);
         notify(`${file.name} couldn't be read as an ITR JSON.`, "alert");
@@ -811,8 +852,10 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
           <div style={{fontWeight: 700, fontSize: 12.5}}>Part A — the return for this year</div>
           <span className="pill pill-muted" style={{fontSize: 10}}>{numbers.__label}</span>
           <div style={{flex: 1}}/>
-          <button className="btn btn-secondary btn-xs" onClick={onFill} disabled={busy || !ret?.jsonPath}
-            title={ret?.jsonPath ? "Read this year's return details from the copy already synced" : "No synced ITR JSON on file for this year"}>
+          <button className="btn btn-secondary btn-xs" onClick={onFill} disabled={busy || !ret}
+            title={ret?.jsonPath
+              ? "Read this year's return details from the copy already synced"
+              : ret ? "Fill the acknowledgement number and date of filing from the portal's record" : "No return on file for this year"}>
             <Icon name="refresh" size={11}/>{busy ? "Reading…" : "From synced return"}
           </button>
           <button className="btn btn-secondary btn-xs" onClick={() => upload.current?.click()}>

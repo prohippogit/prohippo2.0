@@ -307,6 +307,51 @@ export function fromNotice(draft, notice, assessee) {
  * block income by what was DISCLOSED, and what was disclosed is the figure in
  * the return, not a figure this tool arrived at.
  */
+/* A26-A30(iii) and (iv) — when the return was filed, and under what number.
+ *
+ * WHY THIS IS SEPARATE FROM withDeclared. Those two fields are not in the ITR
+ * JSON. The JSON is the return as PREPARED; the acknowledgement number and the
+ * date of filing are stamped by the portal at the moment of submission, and
+ * they live in the returns record the sync writes, not in the file. So the
+ * screen was printing "On file: ITR-2 · ack 946927300190122 · filed 19 Jan
+ * 2022" above two empty boxes asking for exactly those two things — the app
+ * holding a fact, showing it, and still making somebody key it.
+ *
+ * THE RECORD WINS OVER THE FILE. Where both have a value, this one is the
+ * portal's own and the JSON's is whatever was in the preparation software.
+ * Never overwrites what the practitioner has typed, though: a value already in
+ * the draft stays, because they may be correcting a record that is wrong.
+ *
+ * @param ret  the synced return record — { form, ackNum, filedOn }
+ */
+export function withFiledParticulars(year, ret, { over = false } = {}) {
+  if (!year || !ret) return year;
+  const take = (current, incoming) => (incoming && (over || !current) ? incoming : current);
+  const filedOn = isoDate(ret.filedOn);
+  const next = {
+    ...year,
+    ackNum: take(year.ackNum, String(ret.ackNum || "").trim()),
+    filedOn: take(year.filedOn, filedOn),
+    declaredForm: take(year.declaredForm, /^ITR-[1-7]$/.test(String(ret.form || "")) ? ret.form : ""),
+  };
+  // A year with an acknowledgement number is a year in which a return was
+  // furnished. A26(i) follows from the record rather than being asked again.
+  if (next.ackNum || next.filedOn) next.returnFiled = true;
+  return next;
+}
+
+/* YYYY-MM-DD, or "" — a date input accepts nothing else, and portal records
+   have carried both ISO and DD/MM/YYYY at different times. */
+export function isoDate(v) {
+  const s = String(v || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  // An ISO timestamp, which is what a Firestore write of a Date turns into.
+  const t = /^(\d{4}-\d{2}-\d{2})T/.exec(s);
+  return t ? t[1] : "";
+}
+
 export function withDeclared(year, reading, source = "json") {
   if (!reading) return year;
   const declared = {};

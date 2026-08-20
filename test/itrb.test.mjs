@@ -32,7 +32,7 @@ import { documentKind, documentExt, sniffExtension, retypeFilename } from "../sr
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
-  withDeclared, withDueDate, readiness,
+  withDeclared, withFiledParticulars, isoDate, withDueDate, readiness, blankYear,
 } from "../src/tools/itrb/draft.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -1643,4 +1643,72 @@ test("junk particulars come back empty rather than wrong", () => {
   assert.equal(out.notice.din, "");
   assert.equal(out.notice.section, "");               // 143(3) is not a limb of s.158BC
   assert.deepEqual(shape({}).notice, { pan: "", din: "", date: "", section: "", serviceDate: "", dueDate: "" });
+});
+
+/* ---------------------------------------------------------------------------
+ * When the return was filed, and under what number.
+ *
+ * The screen was printing "On file: ITR-2 · ack 946927300190122 · filed 19 Jan
+ * 2022" directly above two empty boxes asking for exactly those two things.
+ * They are not in the ITR JSON — that is the return as PREPARED, and both are
+ * stamped by the portal at submission — so reading the file could never fill
+ * them. They are in the returns record the sync writes.
+ * ------------------------------------------------------------------------- */
+
+const record = { form: "ITR-2", ackNum: "946927300190122", filedOn: "2022-01-19" };
+
+test("the acknowledgement and the date of filing come off the portal's record", () => {
+  const out = withFiledParticulars(blankYear({ ay: "2021-22" }), record);
+  assert.equal(out.ackNum, "946927300190122");
+  assert.equal(out.filedOn, "2022-01-19");
+  assert.equal(out.declaredForm, "ITR-2");
+  // A year with an acknowledgement number is a year in which a return was
+  // furnished — A26(i) follows rather than being asked again.
+  assert.equal(out.returnFiled, true);
+});
+
+test("what the practitioner has already typed is never overwritten", () => {
+  // They may be correcting a record that is wrong, and a fill that undoes a
+  // correction is worse than one that does nothing.
+  const edited = { ...blankYear({ ay: "2021-22" }), ackNum: "111111111111111", filedOn: "2022-03-01" };
+  const out = withFiledParticulars(edited, record);
+  assert.equal(out.ackNum, "111111111111111");
+  assert.equal(out.filedOn, "2022-03-01");
+  // Unless it is asked to, explicitly.
+  assert.equal(withFiledParticulars(edited, record, { over: true }).ackNum, "946927300190122");
+});
+
+test("a record with nothing in it changes nothing", () => {
+  const year = blankYear({ ay: "2021-22" });
+  assert.deepEqual(withFiledParticulars(year, null), year);
+  assert.deepEqual(withFiledParticulars(year, {}), year);
+  const partial = withFiledParticulars(year, { ackNum: "946927300190122" });
+  assert.equal(partial.filedOn, "");                  // no date on the record, none invented
+  assert.equal(partial.returnFiled, true);
+});
+
+test("a form code that is not an ITR form is not written into the form field", () => {
+  assert.equal(withFiledParticulars(blankYear({ ay: "2021-22" }), { form: "ITR-9" }).declaredForm, "");
+  assert.equal(withFiledParticulars(blankYear({ ay: "2021-22" }), { form: "2" }).declaredForm, "");
+  assert.equal(withFiledParticulars(blankYear({ ay: "2021-22" }), { form: "ITR-7" }).declaredForm, "ITR-7");
+});
+
+test("a date input takes one shape, so every recorded shape is turned into it", () => {
+  assert.equal(isoDate("2022-01-19"), "2022-01-19");
+  assert.equal(isoDate("19/01/2022"), "2022-01-19");        // as the portal prints it
+  assert.equal(isoDate("9-1-2022"), "2022-01-09");          // single digits, padded
+  assert.equal(isoDate("2022-01-19T00:00:00.000Z"), "2022-01-19");
+  assert.equal(isoDate("19 Jan 2022"), "");                 // not a shape to guess at
+  assert.equal(isoDate(""), "");
+  assert.equal(isoDate(null), "");
+});
+
+test("the figures come from the file and the particulars from the record, together", () => {
+  // Neither source has the other's answers. This is the whole reason there are
+  // two calls rather than one.
+  const reading = { ay: "2021-22", formLabel: "ITR-2", salary: 11333, otherSources: 233916, capitalGains: 3756, houseProperty: 0 };
+  const out = withFiledParticulars(withDeclared(blankYear({ ay: "2021-22" }), reading, "sync"), record);
+  assert.equal(out.declaredTotal, 249005);          // out of the JSON
+  assert.equal(out.ackNum, "946927300190122");      // out of the record
+  assert.equal(out.filedOn, "2022-01-19");
 });

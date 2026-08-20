@@ -29,7 +29,7 @@ const COLORS = {
 };
 
 export default function Tools({ seed, onSeedUsed }) {
-  const { data } = useData();
+  const { data, notify, removeItrbDraft } = useData();
   // A seeded arrival opens its tool immediately: somebody who clicked "Build
   // the ITR-B" on a notice has already chosen, and a catalogue page in between
   // is a click that asks them to choose again.
@@ -51,6 +51,21 @@ export default function Tools({ seed, onSeedUsed }) {
     String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
 
   const enter = (toolId, draftId = null) => { setOpen(toolId); setOpenDraftId(draftId); };
+
+  /* Delete from the list, without opening the draft first.
+   *
+   * The builder has its own delete, but reaching it means opening the very
+   * draft you have decided you do not want — and on a block return that is a
+   * seven-year form re-rendering so you can leave again. Confirmed by name
+   * rather than by a bare "are you sure": a practice accumulates drafts for
+   * several assessees and the one thing worth checking is WHICH one this is. */
+  const removeDraft = async (e, d) => {
+    e.stopPropagation();          // the row itself opens the draft
+    const label = d.name || d.assessee || "this ITR-B draft";
+    if (!window.confirm(`Delete ${label}? The figures entered against it cannot be recovered.`)) return;
+    await removeItrbDraft(d.id);
+    notify("Draft deleted.");
+  };
 
   if (open === "itrb") {
     return (
@@ -134,6 +149,15 @@ export default function Tools({ seed, onSeedUsed }) {
                 <div className="muted" style={{fontSize: 11.5, flexShrink: 0}}>
                   {d.updatedAt ? `Saved ${fmtDateTime(d.updatedAt)}` : ""}
                 </div>
+                <button
+                  className="icon-btn danger"
+                  style={{width: 30, height: 30, borderRadius: 9, flexShrink: 0}}
+                  title={`Delete ${d.name || d.assessee || "this draft"}`}
+                  aria-label={`Delete ${d.name || d.assessee || "this draft"}`}
+                  onClick={(e) => removeDraft(e, d)}
+                >
+                  <Icon name="trash" size={14}/>
+                </button>
                 <Icon name="chevron-right" size={15}/>
               </div>
             ))}

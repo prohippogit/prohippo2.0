@@ -222,6 +222,11 @@ input, select, textarea { font-family: inherit; color: inherit; }
   color: var(--p-text-2);
 }
 .icon-btn:hover { color: var(--p-primary); }
+/* A destructive icon button stays red on hover. The default turns it the brand
+   purple, which reads as "this is the primary thing to do here" on the one
+   control where that is exactly the wrong thing to say. */
+.icon-btn.danger { color: var(--p-danger); }
+.icon-btn.danger:hover { color: var(--p-danger); background: var(--p-coral); border-color: var(--p-coral); }
 .icon-btn .dot {
   position: absolute; top: 8px; right: 8px;
   width: 8px; height: 8px;

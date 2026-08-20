@@ -45,7 +45,7 @@ const { computeVariances, summariseVariances, VARIANCE_ENGINE } = require("./ret
 /* Reading the intimation's own comparison table — on demand, never on a sync,
    and never able to change the flag the arithmetic above settled. */
 const { normaliseReading, CAUSE_IDS } = require("./intimationReading");
-const { normaliseSearchDates } = require("./blockSearchDates");
+const { normaliseSearchDates, collectDocuments } = require("./blockSearchDates");
 const { normaliseTranslation, languageFor } = require("./messageTranslation");
 
 /* ---------- where these functions run ----------------------------------------
@@ -807,7 +807,7 @@ exports.summarizePortalNotice = onCall(
  * cannot check it should not be asked to rely on it. So every date comes back
  * with its quote, and the client shows both before writing anything.
  * ---------------------------------------------------------------------------- */
-const SEARCH_DATES_PROMPT = `You are reading documents from an Indian income-tax search case — a notice under section 158BC and, usually, the panchnama drawn up at the conclusion of the search.
+const SEARCH_DATES_PROMPT = `You are reading the documents of an Indian income-tax search case. You may be given SEVERAL files at once, in any order: notices under section 158BC or 158BD, covering letters, reminders, warrants of authorisation under section 132, and the panchnamas drawn up during and at the conclusion of the search. Read them all and answer from whichever states the fact — the notice usually states when the search was initiated, and only the panchnama states when it concluded.
 
 Extract ONLY these facts. Return null for anything the documents do not state. Never infer a date from another date, and never guess.
 
@@ -879,57 +879,87 @@ async function callGeminiSearchDates(model, apiKey, files, meta = {}) {
   }
 }
 
-/* Read the search dates off one s.158BC notice and everything attached to it.
+/* Read the search dates off a block proceeding — every notice in it, and every
+ * file hanging off those notices, archives included.
  *
- * Cached onto the notice as `blockSearch`, so a practitioner who runs it twice
- * pays for it once — and so the figures stay beside the document they came
- * from rather than only inside one ITR-B draft. `force` re-reads.
+ * WHY IT IS THE WHOLE PROCEEDING AND NOT ONE NOTICE. The first live run read
+ * the notice that starts the return, found nothing, and said so. That notice is
+ * the one document in a search bundle LEAST likely to state the date the search
+ * concluded: the s.158BC notice calls for a return, and it is the panchnama —
+ * filed separately, and usually inside a ZIP — that records when the last
+ * authorisation was executed. So the caller passes every block notice it found
+ * and this reads across all of them at once, which is also one Gemini call
+ * rather than five.
+ *
+ * IT ALWAYS RETURNS THE MANIFEST. Even when nothing could be read, and even
+ * when nothing was found, the result names every file that was considered and
+ * what became of it. "The documents don't state the dates" is unfalsifiable
+ * from the outside; "the two files on this proceeding are the notice and its
+ * covering letter, and no panchnama has been uploaded" is the actual answer,
+ * and it is the one a practitioner can act on.
+ *
+ * Cached onto the notice the request was keyed to, against the exact set of
+ * files read — add an attachment and it re-reads, run it twice on the same
+ * bundle and it is paid for once. `force` re-reads regardless.
  */
 exports.readBlockSearchDates = onCall(
-  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 180, memory: "512MiB", maxInstances: 5 },
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB", maxInstances: 5 },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
-    const { noticeId, force } = request.data || {};
-    if (!noticeId) throw new HttpsError("invalid-argument", "noticeId is required.");
+    const { noticeId, noticeIds, force } = request.data || {};
 
-    const ref = db.doc(`users/${uid}/notices/${noticeId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new HttpsError("not-found", "That notice is not on file.");
-    const n = snap.data();
+    const ids = [...new Set([noticeId, ...(Array.isArray(noticeIds) ? noticeIds : [])].filter((v) => typeof v === "string" && v))].slice(0, 12);
+    if (!ids.length) throw new HttpsError("invalid-argument", "noticeId is required.");
 
-    if (n.blockSearch && !force) return { ok: true, cached: true, blockSearch: n.blockSearch };
+    const snaps = await Promise.all(ids.map((id) => db.doc(`users/${uid}/notices/${id}`).get()));
+    const found = snaps.map((snap, i) => ({ id: ids[i], snap })).filter((r) => r.snap.exists);
+    if (!found.length) throw new HttpsError("not-found", "Those notices are not on file.");
 
-    /* The notice itself, then whatever came with it. The panchnama is an
-       ATTACHMENT far more often than it is the notice, so reading the notice
-       alone would miss the one document that states both dates plainly. */
-    const paths = [
-      ...(n.storagePath ? [n.storagePath] : []),
-      ...((n.attachments || []).map((a) => a && a.storagePath).filter(Boolean)),
-    ];
-    if (!paths.length) {
-      throw new HttpsError("failed-precondition", "This notice has no PDF or attachment to read — enter the search dates by hand.");
-    }
+    // Cached against the first notice that actually exists — the client sends
+    // the notice that starts the return first.
+    const ref = db.doc(`users/${uid}/notices/${found[0].id}`);
 
-    const files = [];
-    let total = 0;
-    const skipped = [];
-    for (const path of paths) {
-      let buf;
-      try {
-        [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(path).download();
-      } catch {
-        skipped.push(path);
-        continue;
+    /* Every file on every one of those notices. `label` is what the manifest
+       will show against each — the practitioner needs to see WHICH notice a
+       file came off, because that is how they will find it again. */
+    const wanted = [];
+    for (const { id, snap } of found) {
+      const n = snap.data();
+      const label = [
+        n.section ? `s.${String(n.section).replace(/^s\.?/i, "")}` : "",
+        n.date ? `dated ${n.date}` : "",
+      ].filter(Boolean).join(" ") || "Notice";
+      if (n.storagePath) wanted.push({ noticeId: id, notice: label, name: n.fileName || n.storagePath, path: n.storagePath });
+      for (const a of n.attachments || []) {
+        if (a && a.storagePath) wanted.push({ noticeId: id, notice: label, name: a.filename || a.label || a.storagePath, path: a.storagePath });
       }
-      // The cap is on the REQUEST, not on each file: the model is given one
-      // call and everything has to fit in it. Files past the cap are named in
-      // the result rather than dropped in silence.
-      if (total + buf.length > MAX_TOTAL_BYTES) { skipped.push(path); continue; }
-      total += buf.length;
-      files.push({ mimeType: "application/pdf", data: buf.toString("base64") });
     }
-    if (!files.length) throw new HttpsError("not-found", "Couldn't read any of this notice's documents from Storage.");
+    if (!wanted.length) {
+      return { ok: false, reason: "no-files", manifest: [], read: 0, message: "Nothing is attached to the notices on this proceeding — upload the notice and the panchnama, or enter the two dates by hand." };
+    }
+
+    // Same bundle, same answer. Keyed on the paths themselves rather than on
+    // the notice ids, so adding an attachment invalidates it and re-reading the
+    // same files does not.
+    const key = crypto.createHash("sha1").update(wanted.map((w) => w.path).sort().join("\n")).digest("hex").slice(0, 16);
+    const cached = found[0].snap.data().blockSearch;
+    if (cached && cached.key === key && !force) return { ok: true, cached: true, blockSearch: cached };
+
+    const sources = [];
+    for (const w of wanted) {
+      try {
+        const [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(w.path).download();
+        sources.push({ noticeId: w.noticeId, notice: w.notice, name: w.name, buf });
+      } catch {
+        sources.push({ noticeId: w.noticeId, notice: w.notice, name: w.name, error: "not in storage" });
+      }
+    }
+
+    const { files, manifest, read, skipped } = collectDocuments(sources, { maxTotalBytes: MAX_TOTAL_BYTES });
+    if (!files.length) {
+      return { ok: false, reason: "nothing-readable", manifest, read: 0, message: "None of the files on this proceeding could be opened as a document." };
+    }
 
     let out;
     try {
@@ -939,7 +969,7 @@ exports.readBlockSearchDates = onCall(
       throw e;
     }
 
-    const blockSearch = { ...normaliseSearchDates(out, normDate), read: files.length, skipped: skipped.length };
+    const blockSearch = { ...normaliseSearchDates(out, normDate), key, notices: found.length, read, skipped, manifest };
     await ref.set({ blockSearch, blockSearchError: "" }, { merge: true });
     return { ok: true, cached: false, blockSearch };
   }

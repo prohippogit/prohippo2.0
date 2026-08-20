@@ -71,4 +71,243 @@ function normaliseSearchDates(raw, normDate, now) {
   };
 }
 
-module.exports = { normaliseSearchDates, EARLIEST, LATEST };
+/* ---------- what was actually in the bundle ---------------------------------
+ *
+ * The first live run of this reader came back with nothing, on a proceeding
+ * that plainly had the dates in it. Two reasons, and neither was the model's:
+ *
+ *  1. The department does not send ONE notice. A block proceeding accumulates
+ *     the s.158BC notice, the covering letter, reminders, and the panchnama —
+ *     often on separate entries. Reading only the notice that starts the return
+ *     reads the one document least likely to state the date the search
+ *     concluded.
+ *
+ *  2. What it sends is frequently a ZIP. The portal and the department's own
+ *     e-mail both bundle scans that way, so what is on file is an archive whose
+ *     name says nothing and whose contents were never opened. Handing that to a
+ *     language model as though it were a PDF reads nothing at all.
+ *
+ * So: every block notice's files, archives expanded, and — because a reader
+ * that silently read nothing is worse than one that fails loudly — a manifest
+ * naming every file considered and what became of it. The practitioner can see
+ * that the panchnama was never uploaded, which is the actual answer, instead of
+ * being told the documents "could not be read".
+ *
+ * ZIP IS READ HERE RATHER THAN BY A DEPENDENCY. The format's central directory
+ * is a few hundred bytes of fixed-offset fields and zlib — already in Node —
+ * does the only hard part. Reading it here keeps it inside `node --test`, which
+ * matters more than usual: a zip-bomb guard that is never exercised is not a
+ * guard.
+ * -------------------------------------------------------------------------- */
+
+const zlib = require("zlib");
+
+const EOCD_SIG = 0x06054b50;
+const CEN_SIG = 0x02014b50;
+const LOC_SIG = 0x04034b50;
+
+/* What a language model can be handed. Anything else is named in the manifest
+   and not sent — a .xlsx costs a page of tokens and cannot state a date. */
+const READABLE_MIME = {
+  pdf: "application/pdf",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+/** What a file actually is, by its first bytes. Extensions lie; scans arrive
+    named "document.pdf" and are TIFFs, and archives arrive with no extension. */
+function sniffKind(buf) {
+  if (!buf || buf.length < 4) return { kind: "empty", mimeType: "" };
+  const b = buf;
+  const at = (i, ...bytes) => bytes.every((v, k) => b[i + k] === v);
+  if (at(0, 0x25, 0x50, 0x44, 0x46)) return { kind: "pdf", mimeType: READABLE_MIME.pdf };
+  if (at(0, 0x50, 0x4b) && [0x03, 0x05, 0x07].includes(b[2])) return { kind: "zip", mimeType: "" };
+  if (at(0, 0xff, 0xd8, 0xff)) return { kind: "jpeg", mimeType: READABLE_MIME.jpeg };
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return { kind: "png", mimeType: READABLE_MIME.png };
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return { kind: "webp", mimeType: READABLE_MIME.webp };
+  if (at(0, 0x52, 0x61, 0x72, 0x21)) return { kind: "rar", mimeType: "" };
+  if (at(0, 0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c)) return { kind: "7z", mimeType: "" };
+  if (at(0, 0x49, 0x49, 0x2a, 0x00) || at(0, 0x4d, 0x4d, 0x00, 0x2a)) return { kind: "tiff", mimeType: "" };
+  if (at(0, 0xd0, 0xcf, 0x11, 0xe0)) return { kind: "office", mimeType: "" };
+  return { kind: "other", mimeType: "" };
+}
+
+/** The End of Central Directory record, scanned back from the tail. Its comment
+    field may be up to 64 KB, so that is how far back it can be. */
+function findEocd(buf) {
+  const floor = Math.max(0, buf.length - 66_000);
+  for (let i = buf.length - 22; i >= floor; i--) if (buf.readUInt32LE(i) === EOCD_SIG) return i;
+  return -1;
+}
+
+const isCruft = (name) => /^__MACOSX\//.test(name) || /(^|\/)\.[^/]/.test(name) || name.endsWith("/");
+
+/**
+ * Everything inside a ZIP, decompressed.
+ *
+ * @returns { ok, reason, entries, truncated }
+ *          entries[] are { name, data } or { name, error, bytes }.
+ *
+ * Bounded three ways — entry count, per-entry size and total size — because the
+ * archive is a stranger's file and `uncompressedSize` in it is a claim, not a
+ * fact. zlib's own maxOutputLength enforces the claim.
+ */
+function readArchive(buf, opts = {}) {
+  const maxEntries = opts.maxEntries || 40;
+  const maxEntryBytes = opts.maxEntryBytes || 12 * 1024 * 1024;
+  const maxArchiveBytes = opts.maxArchiveBytes || 48 * 1024 * 1024;
+
+  const eocd = findEocd(buf);
+  if (eocd < 0) return { ok: false, reason: "not a readable zip", entries: [], truncated: false };
+
+  const count = buf.readUInt16LE(eocd + 10);
+  const cenOff = buf.readUInt32LE(eocd + 16);
+  /* 0xFFFFFFFF is ZIP64's escape value. Those archives are 4 GB or 65,535
+     files; nothing the department sends is either, so a bundle claiming to be
+     one is corrupt or hostile. Refuse it by name rather than misparse it. */
+  if (cenOff === 0xffffffff || count === 0xffff) return { ok: false, reason: "zip64 archives are not supported", entries: [], truncated: false };
+  if (cenOff >= buf.length) return { ok: false, reason: "corrupt zip directory", entries: [], truncated: false };
+
+  const entries = [];
+  let p = cenOff;
+  let total = 0;
+  let truncated = false;
+
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== CEN_SIG) break;
+    const flag = buf.readUInt16LE(p + 8);
+    const method = buf.readUInt16LE(p + 10);
+    const compSize = buf.readUInt32LE(p + 20);
+    const uncompSize = buf.readUInt32LE(p + 24);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    const localOff = buf.readUInt32LE(p + 42);
+    const name = buf.subarray(p + 46, p + 46 + nameLen).toString("utf8");
+    p += 46 + nameLen + extraLen + commentLen;
+
+    if (isCruft(name)) continue;
+    if (entries.length >= maxEntries) { truncated = true; break; }
+
+    // General purpose bit 0. An encrypted entry is not a failure to report as a
+    // bad read — somebody has to be asked for the password.
+    if (flag & 0x1) { entries.push({ name, error: "password-protected", bytes: uncompSize }); continue; }
+    if (compSize === 0xffffffff || uncompSize === 0xffffffff) { entries.push({ name, error: "zip64 entry", bytes: 0 }); continue; }
+    if (uncompSize > maxEntryBytes) { entries.push({ name, error: "too large to open", bytes: uncompSize }); continue; }
+    if (total + uncompSize > maxArchiveBytes) { entries.push({ name, error: "archive too large to open in full", bytes: uncompSize }); truncated = true; continue; }
+
+    if (localOff + 30 > buf.length || buf.readUInt32LE(localOff) !== LOC_SIG) { entries.push({ name, error: "corrupt entry", bytes: uncompSize }); continue; }
+    // The local header's name and extra lengths are its own and need not match
+    // the central directory's — reading the central one here is the classic way
+    // to land in the middle of the data.
+    const start = localOff + 30 + buf.readUInt16LE(localOff + 26) + buf.readUInt16LE(localOff + 28);
+    const end = start + compSize;
+    if (end > buf.length) { entries.push({ name, error: "corrupt entry", bytes: uncompSize }); continue; }
+
+    let data = null;
+    try {
+      if (method === 0) data = Buffer.from(buf.subarray(start, end));
+      else if (method === 8) data = zlib.inflateRawSync(buf.subarray(start, end), { maxOutputLength: maxEntryBytes });
+    } catch { data = null; }
+    if (!data) { entries.push({ name, error: method === 0 || method === 8 ? "corrupt entry" : `compression method ${method} not supported`, bytes: uncompSize }); continue; }
+
+    total += data.length;
+    entries.push({ name, data });
+  }
+
+  return { ok: true, reason: "", entries, truncated };
+}
+
+/** The leaf of a path, as a person would name the file. */
+function fileName(s) {
+  const bare = String(s || "").split(/[/\\]/).filter(Boolean).pop() || "document";
+  return bare.slice(0, 120);
+}
+
+/* Which documents get the byte budget when not everything fits.
+ *
+ * The panchnama states both dates and the s.158BC notice usually states only
+ * the first, so on a bundle too big to send whole the panchnama is the file
+ * that must go. Everything else is read in the order it was found. */
+function documentPriority(name) {
+  const n = String(name || "").toLowerCase();
+  if (/panch(n|an)ama|panchnama|conclusion of search/.test(n)) return 0;
+  if (/authoris|authoriz|warrant|132/.test(n)) return 1;
+  if (/158\s*b|notice|order/.test(n)) return 2;
+  return 3;
+}
+
+/**
+ * Turn what came out of Storage into what goes to the model, and a manifest of
+ * everything considered.
+ *
+ * @param sources [{ notice, noticeId, name, buf, error }]
+ * @param opts    { maxTotalBytes, ...archive limits }
+ * @returns { files, manifest, read, skipped }
+ *
+ * `files` are Gemini inlineData parts. `manifest` names every file — including
+ * the ones that were not sent, and why — in the order they were found, so the
+ * card the practitioner sees is the bundle as it stands on file.
+ */
+function collectDocuments(sources, opts = {}) {
+  const budget = opts.maxTotalBytes || 9 * 1024 * 1024;
+  const maxDepth = opts.maxDepth || 2;
+  const candidates = [];
+  let seq = 0;
+
+  const add = (row) => { candidates.push({ order: seq++, bytes: 0, from: "", detail: "", kind: "", ...row }); return candidates[candidates.length - 1]; };
+
+  const expand = (src, depth) => {
+    const base = { notice: src.notice || "", noticeId: src.noticeId || "", name: fileName(src.name), from: src.from || "" };
+    if (src.error) return add({ ...base, status: "unreadable", detail: src.error });
+    const buf = src.buf;
+    if (!buf || !buf.length) return add({ ...base, status: "unreadable", detail: "empty file" });
+
+    const { kind, mimeType } = sniffKind(buf);
+
+    if (kind === "zip") {
+      if (depth >= maxDepth) return add({ ...base, kind, bytes: buf.length, status: "skipped", detail: "an archive inside an archive" });
+      const arch = readArchive(buf, opts);
+      if (!arch.ok) return add({ ...base, kind, bytes: buf.length, status: "unreadable", detail: arch.reason });
+      const inside = arch.entries.filter((e) => e.data).length;
+      add({ ...base, kind, bytes: buf.length, status: "archive", detail: `opened — ${inside} file${inside === 1 ? "" : "s"} inside${arch.truncated ? ", and more it could not open" : ""}` });
+      for (const e of arch.entries) {
+        if (e.data) expand({ notice: base.notice, noticeId: base.noticeId, name: e.name, from: base.name, buf: e.data }, depth + 1);
+        else add({ notice: base.notice, noticeId: base.noticeId, name: fileName(e.name), from: base.name, bytes: e.bytes || 0, status: e.error === "password-protected" ? "encrypted" : "unreadable", detail: e.error });
+      }
+      return null;
+    }
+
+    if (!mimeType) {
+      return add({ ...base, kind, bytes: buf.length, status: "skipped", detail: kind === "rar" || kind === "7z" ? `${kind.toUpperCase()} archives cannot be opened here` : "not a document that can be read" });
+    }
+    return add({ ...base, kind, bytes: buf.length, status: "candidate", mimeType, buf });
+  };
+
+  for (const s of sources || []) expand(s, 0);
+
+  const queue = candidates.filter((c) => c.status === "candidate")
+    .sort((a, b) => documentPriority(a.name) - documentPriority(b.name) || a.bytes - b.bytes || a.order - b.order);
+
+  const files = [];
+  let total = 0;
+  for (const c of queue) {
+    if (total + c.bytes > budget) { c.status = "too-large"; c.detail = "left out — the bundle is bigger than one read"; continue; }
+    total += c.bytes;
+    files.push({ mimeType: c.mimeType, data: c.buf.toString("base64") });
+    c.status = "read";
+  }
+
+  const manifest = candidates
+    .sort((a, b) => a.order - b.order)
+    .map(({ name, from, notice, kind, bytes, status, detail }) => ({ name, from, notice, kind, bytes, status, detail }))
+    .slice(0, 60);
+
+  return { files, manifest, read: files.length, skipped: candidates.filter((c) => !["read", "archive"].includes(c.status)).length };
+}
+
+module.exports = {
+  normaliseSearchDates, EARLIEST, LATEST,
+  sniffKind, readArchive, collectDocuments, documentPriority, fileName,
+};

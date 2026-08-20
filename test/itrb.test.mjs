@@ -21,7 +21,8 @@ import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from
 import { completeness, summarise, STATUS } from "../src/tools/itrb/completeness.js";
 import { findBlockProceedings, primaryNotice, fieldsFromNotices, describeScan, isBlockSection } from "../src/tools/itrb/findProceeding.js";
 import { createRequire } from "node:module";
-const { normaliseSearchDates } = createRequire(import.meta.url)("../functions/blockSearchDates.js");
+const { normaliseSearchDates, sniffKind, readArchive, collectDocuments } =
+  createRequire(import.meta.url)("../functions/blockSearchDates.js");
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
@@ -1111,4 +1112,214 @@ test("the read feeds the block period, both shapes", () => {
   const bp = blockPeriod(spans.initiationDate, spans.lastAuthorisationDate);
   assert.equal(bp.years.length, 8);
   assert.equal(bp.spansYears, true);
+});
+
+/* ---------------------------------------------------------------------------
+ * The bundle: several notices, and the ZIPs the department sends them in.
+ *
+ * The first live run of the reader found nothing on a proceeding that had the
+ * dates in it, because it read one notice and could not open an archive. These
+ * are the two halves of that fix — what a file actually is, and what came out
+ * of the archive — plus the manifest, which exists so that "nothing was found"
+ * can be told apart from "nothing was opened".
+ *
+ * The zip WRITER below is deliberately hand-rolled rather than taken from a
+ * library: writing the bytes independently of the code that reads them is the
+ * only way this test proves the offsets are right rather than proving that two
+ * copies of one mistake agree.
+ * ------------------------------------------------------------------------- */
+import zlib from "node:zlib";
+
+const crc32 = (buf) => (typeof zlib.crc32 === "function" ? zlib.crc32(buf) : 0) >>> 0;
+
+/** entries: [{ name, data, method?: 0|8, encrypted?: boolean }] */
+function makeZip(entries, { comment = "" } = {}) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+
+  for (const e of entries) {
+    const name = Buffer.from(e.name, "utf8");
+    const raw = Buffer.from(e.data ?? "");
+    const method = e.method ?? 8;
+    const body = method === 0 ? raw : zlib.deflateRawSync(raw);
+    const flags = e.encrypted ? 0x1 : 0;
+
+    const loc = Buffer.alloc(30);
+    loc.writeUInt32LE(0x04034b50, 0);
+    loc.writeUInt16LE(20, 4);
+    loc.writeUInt16LE(flags, 6);
+    loc.writeUInt16LE(method, 8);
+    loc.writeUInt32LE(crc32(raw), 14);
+    loc.writeUInt32LE(body.length, 18);
+    loc.writeUInt32LE(e.declaredSize ?? raw.length, 22);
+    loc.writeUInt16LE(name.length, 26);
+    locals.push(loc, name, body);
+
+    const cen = Buffer.alloc(46);
+    cen.writeUInt32LE(0x02014b50, 0);
+    cen.writeUInt16LE(20, 4);
+    cen.writeUInt16LE(20, 6);
+    cen.writeUInt16LE(flags, 8);
+    cen.writeUInt16LE(method, 10);
+    cen.writeUInt32LE(crc32(raw), 16);
+    cen.writeUInt32LE(body.length, 20);
+    cen.writeUInt32LE(e.declaredSize ?? raw.length, 24);
+    cen.writeUInt16LE(name.length, 28);
+    cen.writeUInt32LE(offset, 42);
+    centrals.push(cen, name);
+
+    offset += 30 + name.length + body.length;
+  }
+
+  const localBytes = Buffer.concat(locals);
+  const centralBytes = Buffer.concat(centrals);
+  const tail = Buffer.from(comment, "utf8");
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBytes.length, 12);
+  eocd.writeUInt32LE(localBytes.length, 16);
+  eocd.writeUInt16LE(tail.length, 20);
+  return Buffer.concat([localBytes, centralBytes, eocd, tail]);
+}
+
+const pdf = (text = "notice") => Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.from(text)]);
+const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40)]);
+
+test("a file is what its bytes say, not what its name says", () => {
+  assert.equal(sniffKind(pdf()).kind, "pdf");
+  assert.equal(sniffKind(makeZip([{ name: "a.pdf", data: pdf() }])).kind, "zip");
+  assert.equal(sniffKind(jpeg()).kind, "jpeg");
+  assert.equal(sniffKind(Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07])).kind, "rar");
+  assert.equal(sniffKind(Buffer.alloc(0)).kind, "empty");
+  assert.equal(sniffKind(Buffer.from("plain text here")).kind, "other");
+  // The pdf and the jpeg are the ones that must carry a mime type — those are
+  // the only two the model is ever handed.
+  assert.equal(sniffKind(pdf()).mimeType, "application/pdf");
+  assert.equal(sniffKind(Buffer.from("plain text here")).mimeType, "");
+});
+
+test("an archive opens, deflated or stored, and its cruft is left behind", () => {
+  const zip = makeZip([
+    { name: "folder/", data: "" },
+    { name: "__MACOSX/._panchnama.pdf", data: "junk" },
+    { name: "folder/panchnama.pdf", data: pdf("panchnama 20-11-2025"), method: 8 },
+    { name: "folder/notice.pdf", data: pdf("notice u/s 158BC"), method: 0 },
+  ]);
+  const out = readArchive(zip);
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.entries.map((e) => e.name), ["folder/panchnama.pdf", "folder/notice.pdf"]);
+  assert.match(out.entries[0].data.toString(), /panchnama 20-11-2025/);
+  assert.match(out.entries[1].data.toString(), /158BC/);
+});
+
+test("a password-protected entry is named as such, not reported as a bad read", () => {
+  // Somebody has to be asked for the password. Calling this "unreadable" sends
+  // the practitioner looking for a problem with the file.
+  const zip = makeZip([{ name: "locked.pdf", data: pdf(), encrypted: true }]);
+  const [entry] = readArchive(zip).entries;
+  assert.equal(entry.data, undefined);
+  assert.equal(entry.error, "password-protected");
+});
+
+test("an entry that claims to be enormous is refused on the claim alone", () => {
+  // The declared size is a claim in a stranger's file. It is checked BEFORE
+  // anything is decompressed, which is the whole point of a zip-bomb guard.
+  const zip = makeZip([{ name: "bomb.pdf", data: pdf(), declaredSize: 500 * 1024 * 1024 }]);
+  const [entry] = readArchive(zip).entries;
+  assert.equal(entry.data, undefined);
+  assert.match(entry.error, /too large/);
+});
+
+test("something that is not a zip is refused rather than misparsed", () => {
+  assert.equal(readArchive(pdf()).ok, false);
+  assert.match(readArchive(pdf()).reason, /not a readable zip/);
+});
+
+test("the bundle is expanded and every file is accounted for in the manifest", () => {
+  const zip = makeZip([
+    { name: "panchnama.pdf", data: pdf("panchnama") },
+    { name: "annexure.xlsx", data: Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0, 0, 0]) },
+  ]);
+  const { files, manifest, read, skipped } = collectDocuments([
+    { notice: "s.158BC dated 2026-06-30", name: "Notice.pdf", buf: pdf("158BC notice") },
+    { notice: "s.158BC dated 2026-06-30", name: "search-papers.zip", buf: zip },
+    { notice: "s.158BC dated 2026-06-30", name: "missing.pdf", error: "not in storage" },
+  ]);
+
+  assert.equal(read, 2);                       // the notice and the panchnama
+  assert.equal(files.length, 2);
+  assert.ok(files.every((f) => f.mimeType === "application/pdf" && f.data.length > 0));
+
+  // The manifest is the bundle as it stands on file, in the order it was found:
+  // the archive itself is listed too, so the practitioner can see it was opened.
+  assert.deepEqual(manifest.map((m) => [m.name, m.status]), [
+    ["Notice.pdf", "read"],
+    ["search-papers.zip", "archive"],
+    ["panchnama.pdf", "read"],
+    ["annexure.xlsx", "skipped"],
+    ["missing.pdf", "unreadable"],
+  ]);
+  assert.equal(manifest[2].from, "search-papers.zip");    // shown under the archive it came out of
+  assert.match(manifest[1].detail, /2 files inside/);
+  assert.equal(skipped, 2);                    // the spreadsheet and the file that is not there
+});
+
+test("when the bundle is bigger than one read, the panchnama is what goes", () => {
+  // The notice states when the search began; only the panchnama states when it
+  // ended. On a budget that fits one file, the one that must be sent is the one
+  // that answers the question nothing else can.
+  const big = (n, text) => ({ notice: "n", name: n, buf: Buffer.concat([pdf(text), Buffer.alloc(3000)]) });
+  const { manifest } = collectDocuments(
+    [big("covering-letter.pdf", "a"), big("Panchnama-final.pdf", "b"), big("reminder.pdf", "c")],
+    { maxTotalBytes: 3500 }
+  );
+  const byName = Object.fromEntries(manifest.map((m) => [m.name, m.status]));
+  assert.equal(byName["Panchnama-final.pdf"], "read");
+  assert.equal(byName["covering-letter.pdf"], "too-large");
+  assert.equal(byName["reminder.pdf"], "too-large");
+  assert.match(manifest.find((m) => m.name === "reminder.pdf").detail, /bigger than one read/);
+});
+
+test("a zip inside a zip is opened once, and no further", () => {
+  const inner = makeZip([{ name: "panchnama.pdf", data: pdf("inner") }]);
+  const deeper = makeZip([{ name: "inner.zip", data: inner }]);
+  const outer = makeZip([{ name: "deeper.zip", data: deeper }]);
+
+  const one = collectDocuments([{ notice: "n", name: "bundle.zip", buf: makeZip([{ name: "inner.zip", data: inner }]) }]);
+  assert.equal(one.read, 1);
+
+  const two = collectDocuments([{ notice: "n", name: "bundle.zip", buf: outer }]);
+  assert.equal(two.read, 0);
+  const stopped = two.manifest.find((m) => m.status === "skipped");
+  assert.match(stopped.detail, /archive inside an archive/);
+});
+
+test("files from several notices are read together, each labelled with its own", () => {
+  // The department sends the notice, then the panchnama, then a reminder, and
+  // they arrive as separate entries. Reading only the first is what found
+  // nothing the first time this ran.
+  const { files, manifest } = collectDocuments([
+    { notice: "s.158BC dated 2026-06-30", name: "Notice.pdf", buf: pdf("a") },
+    { notice: "s.158BD dated 2026-07-14", name: "Panchnama.pdf", buf: pdf("b") },
+    { notice: "s.158BD dated 2026-07-14", name: "Reminder.pdf", buf: pdf("c") },
+  ]);
+  assert.equal(files.length, 3);
+  assert.deepEqual([...new Set(manifest.map((m) => m.notice))], ["s.158BC dated 2026-06-30", "s.158BD dated 2026-07-14"]);
+});
+
+test("nothing readable still comes back as a manifest, not as an exception", () => {
+  // The failure this replaces said "the documents don't state the dates" when
+  // the truth was that no document had been opened at all.
+  const { files, manifest, read } = collectDocuments([
+    { notice: "n", name: "scan.tif", buf: Buffer.from([0x49, 0x49, 0x2a, 0x00, 1, 2, 3, 4]) },
+    { notice: "n", name: "papers.rar", buf: Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0, 0]) },
+  ]);
+  assert.equal(read, 0);
+  assert.equal(files.length, 0);
+  assert.equal(manifest.length, 2);
+  assert.ok(manifest.every((m) => m.status === "skipped" && m.detail));
+  assert.match(manifest[1].detail, /RAR/);
 });

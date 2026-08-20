@@ -132,6 +132,26 @@ export function fieldsFromNotices(notices) {
   return { fields, conflicts, source: primary };
 }
 
+/* Which notices to read, and in what order.
+ *
+ * EVERY notice on the proceeding that has a file, not just the one that starts
+ * the return. The s.158BC notice calls for the return and usually states when
+ * the search was initiated; the date it CONCLUDED is in the panchnama, which
+ * arrives on its own entry — often a fortnight later, often as a ZIP. Reading
+ * the first notice alone reads the one document least likely to answer the
+ * question, which is exactly what it did the first time this ran.
+ *
+ * The notice that starts the return goes first all the same: the reader caches
+ * its answer against the first id it is given, and that is the entry a
+ * practitioner will look under afterwards.
+ */
+export function readingOrder({ notices, attachments }) {
+  const withFiles = new Set((attachments || []).map((a) => a.noticeId));
+  const ids = (notices || []).filter((n) => withFiles.has(n.id)).map((n) => n.id);
+  const first = primaryNotice(notices)?.id;
+  return first && ids.includes(first) ? [first, ...ids.filter((id) => id !== first)] : ids;
+}
+
 /**
  * A sentence about what the scan found, for the practitioner to read before
  * anything is written into their draft.

@@ -235,25 +235,53 @@ date of service, and quietly picking one of two is how that clock ends up wrong
 with nobody looking.
 
 **The two search dates — read, then shown, then applied.** A19 and A20 are in
-the prose of the notice and the panchnama and are in no record at all, so
-`readBlockSearchDates` (a callable in `functions/`) sends the notice **and every
-attachment** to a language model — the panchnama is an attachment far more often
-than it is the notice. Each date comes back with the sentence it was read from,
-and nothing is written until the practitioner has looked at the quote. These two
-dates decide seven years of assessment between them; one day either side of
-31 March moves the whole block by a year and changes which Part C table applies.
+the prose of the documents and are in no record at all, so `readBlockSearchDates`
+(a callable in `functions/`) reads them. Each date comes back with the sentence
+it was read from, and nothing is written until the practitioner has looked at the
+quote. These two dates decide seven years of assessment between them; one day
+either side of 31 March moves the whole block by a year and changes which Part C
+table applies.
 
-`functions/blockSearchDates.js` holds the normalisation, in its own CommonJS
-module so `node --test` can reach it without Firebase: a conclusion dated before
-the initiation drops the conclusion (falling back to the shorter block period,
-never one that invents a year), and any date before 2024 is discarded as a
-misread — Chapter XIV-B runs from 01-09-2024, so a 1998 "search date" is an
-assessment year read off the same page.
+**It reads the whole proceeding, not one notice.** The department does not send
+one notice: a block proceeding accumulates the s.158BC notice, the covering
+letter, reminders and the panchnama, on separate entries and often a fortnight
+apart. The s.158BC notice is the document *least* likely to state when the search
+concluded — it calls for a return. So `readingOrder()` gives the callable every
+block notice that has a file, the notice that starts the return first (the answer
+is cached against it), and all of them are read in one Gemini call.
 
-> **Deploy note.** `readBlockSearchDates` is new. Until
-> `firebase deploy --only functions:readBlockSearchDates` has run, the scan and
-> its recorded-field fill work normally and **Read the search dates** returns an
-> error.
+**It opens archives.** What arrives is frequently a ZIP of scans. `collectDocuments`
+in `functions/blockSearchDates.js` sniffs every file by its **first bytes** rather
+than its extension, expands ZIPs (two levels deep, then it stops), and hands the
+PDFs and images inside to the model. The ZIP reader is hand-rolled on `zlib`
+rather than taken from a dependency, so that `node --test` exercises it —
+including the guards, which are the point: entry count, per-entry size and total
+size are all capped, and a declared size is checked *before* anything is
+decompressed. Password-protected entries are reported as such rather than as bad
+reads; RAR and 7-Zip are named and skipped.
+
+**It says which files it read.** Every run returns a manifest — every file
+considered, the notice it came off, the archive it came out of, and what became
+of it (read, opened, left out, password, not opened, not a document). The card is
+shown whether or not dates were found, and opens by itself when they were not.
+This exists because the first live run reported that the documents "don't state
+the search dates", when what had actually happened was that one notice of several
+was read and its archive was never opened. "No document says X" is not checkable
+unless the reader also says which documents it opened.
+
+`functions/blockSearchDates.js` also holds the normalisation, in the same
+CommonJS module so `node --test` can reach it without Firebase: a conclusion
+dated before the initiation drops the conclusion (falling back to the shorter
+block period, never one that invents a year), and any date before 2024 is
+discarded as a misread — Chapter XIV-B runs from 01-09-2024, so a 1998 "search
+date" is an assessment year read off the same page.
+
+> **Deploy note.** `readBlockSearchDates` changed shape — it now takes a list of
+> notice ids and returns a manifest. Until
+> `firebase deploy --only functions:readBlockSearchDates` has run again, **Read
+> the search dates** still works but reads only the first notice and cannot open
+> a ZIP. The scan and its recorded-field fill are pure client code and are
+> unaffected.
 
 ## Starting from the notice
 

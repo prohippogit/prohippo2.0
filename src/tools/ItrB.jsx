@@ -39,7 +39,7 @@ import { columnsFor, labelFor, appliesTo, determinedFromReturn } from './itrb/pa
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
-import { findBlockProceedings, fieldsFromNotices, describeScan } from './itrb/findProceeding';
+import { findBlockProceedings, fieldsFromNotices, describeScan, readingOrder } from './itrb/findProceeding';
 
 const TABS = ["Details", "Block period", "Tax", "Review"];
 
@@ -1132,11 +1132,88 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
  * reading them, so they arrive with the sentence they were read from and go
  * nowhere until somebody has looked at it. One of these is a lookup and the
  * other is a reading, and they should not arrive looking alike. */
+/* What became of every file the reader was given.
+ *
+ * The reader's first live run said "the documents don't state the search dates
+ * in a form that could be read", which was not true and not checkable: what had
+ * actually happened was that one notice was read out of three and its archive
+ * was never opened. A statement about what a document does not say is worthless
+ * unless the reader also says WHICH documents it opened — so this card is shown
+ * on every run, found or not found, and it is open by default when nothing was
+ * found, because that is when it is the answer rather than the footnote. */
+const FILE_STATUS = {
+  read: { label: "Read", bg: "var(--p-mint)", fg: "#1B8C5C" },
+  archive: { label: "Opened", bg: "var(--p-lavender-2)", fg: "#5A4B9C" },
+  encrypted: { label: "Password", bg: "var(--p-amber)", fg: "#8A5B10" },
+  "too-large": { label: "Left out", bg: "var(--p-amber)", fg: "#8A5B10" },
+  unreadable: { label: "Not opened", bg: "var(--p-amber)", fg: "#8A5B10" },
+  skipped: { label: "Not a document", bg: "var(--p-lavender)", fg: "var(--p-text-3)" },
+};
+
+function FilesRead({ manifest, notices, open, onToggle }) {
+  if (!manifest?.length) return null;
+  const read = manifest.filter((m) => m.status === "read").length;
+  const opened = manifest.filter((m) => m.status === "archive").length;
+
+  return (
+    <div style={{marginTop: 12, border: "1px solid var(--p-line)", borderRadius: 12, overflow: "hidden"}}>
+      <button
+        onClick={onToggle}
+        style={{width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 13px", background: "var(--p-card-tint)", border: 0, cursor: "pointer", textAlign: "left", font: "inherit"}}
+      >
+        <Icon name={open ? "chevron-down" : "chevron-right"} size={13}/>
+        <span style={{fontWeight: 700, fontSize: 12.5}}>
+          {read} of {manifest.filter((m) => m.status !== "archive").length} file{manifest.length === 1 ? "" : "s"} read
+        </span>
+        <span className="muted" style={{fontSize: 11.5}}>
+          across {notices || 1} notice{(notices || 1) === 1 ? "" : "s"}{opened ? `, ${opened} archive${opened === 1 ? "" : "s"} opened` : ""}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{padding: "4px 0"}}>
+          {manifest.map((m, i) => {
+            const tone = FILE_STATUS[m.status] || FILE_STATUS.skipped;
+            return (
+              <div key={`${m.name}-${i}`} style={{display: "flex", alignItems: "flex-start", gap: 10, padding: "7px 13px", borderTop: i ? "1px solid var(--p-line)" : 0}}>
+                {/* Files that came out of an archive are indented under it, so
+                    the card reads as the bundle rather than as a flat list. */}
+                <div style={{flex: 1, minWidth: 0, paddingLeft: m.from ? 18 : 0}}>
+                  <div style={{fontSize: 12.5, wordBreak: "break-word"}}>{m.name}</div>
+                  <div className="muted" style={{fontSize: 11}}>
+                    {[m.from ? `in ${m.from}` : "", m.notice, m.detail, m.bytes ? `${Math.max(1, Math.round(m.bytes / 1024))} KB` : ""].filter(Boolean).join("  ·  ")}
+                  </div>
+                </div>
+                <span style={{flexShrink: 0, padding: "2px 8px", borderRadius: 999, fontSize: 10.5, fontWeight: 700, background: tone.bg, color: tone.fg}}>{tone.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* What the practice already holds about this search.
+ *
+ * A search case does not arrive here as an ITR-B draft. It arrives as a
+ * proceeding under Matters, with the s.158BC notice in it and the panchnama
+ * attached to it. This finds that proceeding and takes what it can.
+ *
+ * TWO SOURCES, SHOWN APART. The DIN, the notice date, the date of service and
+ * the period allowed are recorded fields — as reliable as the portal sync that
+ * wrote them, so they go in on one press. The two dates that fix the block
+ * period are in the prose of the documents and come back from a language model
+ * reading them, so they arrive with the sentence they were read from and go
+ * nowhere until somebody has looked at it. One of these is a lookup and the
+ * other is a reading, and they should not arrive looking alike. */
 function ProceedingScan({ draft, onApply }) {
   const { data, notify } = useData();
   const [scan, setScan] = React.useState(null);
   const [reading, setReading] = React.useState(false);
   const [dates, setDates] = React.useState(null);
+  const [manifest, setManifest] = React.useState(null);
+  const [filesOpen, setFilesOpen] = React.useState(false);
 
   const pan = (draft.pan || "").toUpperCase();
   const run = () => {
@@ -1144,6 +1221,7 @@ function ProceedingScan({ draft, onApply }) {
     const { fields, conflicts, source } = fieldsFromNotices(found.notices);
     setScan({ ...found, fields, conflicts, source });
     setDates(null);
+    setManifest(null);
     if (found.notices.length) {
       onApply(fields);
       notify(describeScan(found));
@@ -1152,22 +1230,46 @@ function ProceedingScan({ draft, onApply }) {
     }
   };
 
-  /* The two dates, read out of the notice and everything attached to it. The
-     panchnama is an attachment far more often than it is the notice, which is
-     why the whole bundle goes to the reader rather than the notice alone. */
+  /* The two dates, read out of EVERY notice on the proceeding and everything
+     attached to them, archives opened.
+     
+     Not the notice that starts the return alone: that one calls for the return
+     and states when the search began, while the date it CONCLUDED is in the
+     panchnama, which arrives separately and usually inside a ZIP. The reader is
+     given the whole bundle in one call and reports back what it opened. */
   const readDates = async () => {
-    if (!scan?.source?.id) return;
+    const order = readingOrder(scan || {});
+    if (!order.length) return;
     setReading(true);
     try {
       const call = httpsCallable(functions, "readBlockSearchDates");
-      const res = await call({ noticeId: scan.source.id });
-      const bs = res?.data?.blockSearch;
-      if (!bs || (!bs.initiationDate && !bs.lastAuthorisationDate)) {
-        notify("The documents don't state the search dates in a form that could be read. Enter them by hand.", "alert");
+      const res = await call({ noticeId: order[0], noticeIds: order });
+      const out = res?.data || {};
+      const bs = out.blockSearch;
+
+      // The manifest is kept whatever happened — it is the only thing that can
+      // tell "the panchnama says nothing" apart from "no panchnama was ever
+      // uploaded", and those need different work from the practitioner.
+      setManifest(bs?.manifest || out.manifest || null);
+
+      if (out.ok === false) {
         setDates(null);
-      } else {
-        setDates(bs);
+        setFilesOpen(true);
+        notify(out.message || "None of the files on this proceeding could be opened.", "alert");
+        return;
       }
+      if (!bs || (!bs.initiationDate && !bs.lastAuthorisationDate)) {
+        setDates(null);
+        setFilesOpen(true);
+        notify(
+          `Read ${bs?.read || 0} file${bs?.read === 1 ? "" : "s"} and none of them states the search dates. `
+          + "The panchnama is what usually does — check it is on the proceeding, or enter the dates by hand.",
+          "alert"
+        );
+        return;
+      }
+      setDates(bs);
+      setFilesOpen(false);
     } catch (e) {
       console.error("itr-b: search dates", e);
       notify(e?.message?.slice(0, 240) || "Couldn't read the documents.", "alert");
@@ -1235,8 +1337,10 @@ function ProceedingScan({ draft, onApply }) {
                 <div style={{flex: 1, minWidth: 200}}>
                   <div style={{fontWeight: 700, fontSize: 12.5}}>The two search dates</div>
                   <div className="muted" style={{fontSize: 11.5}}>
-                    A19 and A20 are in the prose of the notice and the panchnama, not in any record. Reading all
-                    {" "}{scan.attachments.length} document{scan.attachments.length === 1 ? "" : "s"} is the only way to get them.
+                    A19 and A20 are in the prose of the notice and the panchnama, not in any record. All
+                    {" "}{scan.attachments.length} document{scan.attachments.length === 1 ? "" : "s"} on
+                    {" "}{readingOrder(scan).length} notice{readingOrder(scan).length === 1 ? "" : "s"} are read together,
+                    and any ZIP among them is opened first.
                   </div>
                 </div>
                 <button className="btn btn-secondary btn-sm" onClick={readDates} disabled={reading}>
@@ -1265,17 +1369,19 @@ function ProceedingScan({ draft, onApply }) {
                       <span className="muted">Panchnama</span> — {dates.panchnamaDates.map(dateOf).join(", ")}
                     </div>
                   )}
-                  {dates.skipped > 0 && (
-                    <div className="muted" style={{fontSize: 11, marginBottom: 8}}>
-                      {dates.skipped} document{dates.skipped === 1 ? "" : "s"} could not be included — too large, or unreadable.
-                    </div>
-                  )}
                   <button className="btn btn-primary btn-sm" onClick={applyDates} disabled={!dates.initiationDate && !dates.lastAuthorisationDate}>
                     <Icon name="check" size={13}/>Use these dates
                   </button>
                   <span className="muted" style={{fontSize: 11, marginLeft: 10}}>Read from a scan — check them against the documents.</span>
                 </div>
               )}
+
+              <FilesRead
+                manifest={manifest}
+                notices={dates?.notices || readingOrder(scan).length}
+                open={filesOpen}
+                onToggle={() => setFilesOpen((v) => !v)}
+              />
             </div>
           )}
         </div>

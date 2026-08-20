@@ -45,6 +45,7 @@ const { computeVariances, summariseVariances, VARIANCE_ENGINE } = require("./ret
 /* Reading the intimation's own comparison table — on demand, never on a sync,
    and never able to change the flag the arithmetic above settled. */
 const { normaliseReading, CAUSE_IDS } = require("./intimationReading");
+const { normaliseSearchDates } = require("./blockSearchDates");
 const { normaliseTranslation, languageFor } = require("./messageTranslation");
 
 /* ---------- where these functions run ----------------------------------------
@@ -783,6 +784,164 @@ exports.summarizePortalNotice = onCall(
     if (!snap.exists) throw new HttpsError("not-found", "Notice not found.");
     const patch = await summariseNoticeDoc(ref, snap.data(), geminiApiKey.value(), uid);
     return { ok: true, aiSummary: patch.aiSummary, docType: patch.docType, parsed: patch.parsed };
+  }
+);
+
+/* ---------- the two dates that fix a block period ------------------------------
+ * s.158B(b) builds the block period out of the date the search was INITIATED
+ * and the date the LAST of the authorisations was EXECUTED. Form ITR-B asks for
+ * both (A19 and A20) and derives the period from them.
+ *
+ * Neither is in any record this app holds. The portal supplies a notice with a
+ * DIN, a date and a section; the search dates are in the notice's prose, and
+ * more often in the panchnama attached to it. So this reads them — and it is
+ * the ONLY thing it reads. Everything else Part A wants about the notice came
+ * from the source system and is authoritative; re-reading it with a language
+ * model could only make it worse. Same rule, and the same reason, as
+ * extractNoticeDocuments above.
+ *
+ * WHY IT QUOTES. These two dates decide seven years of assessment between them:
+ * one day either side of 31 March moves the whole block by a year and changes
+ * which of Part C's two tables applies. A date offered without the sentence it
+ * came from cannot be checked against the document, and a practitioner who
+ * cannot check it should not be asked to rely on it. So every date comes back
+ * with its quote, and the client shows both before writing anything.
+ * ---------------------------------------------------------------------------- */
+const SEARCH_DATES_PROMPT = `You are reading documents from an Indian income-tax search case — a notice under section 158BC and, usually, the panchnama drawn up at the conclusion of the search.
+
+Extract ONLY these facts. Return null for anything the documents do not state. Never infer a date from another date, and never guess.
+
+- "initiationDate": the date the search under section 132 was INITIATED, or the requisition under section 132A was made. This is the date the FIRST authorisation was executed. Documents phrase it as "a search was initiated on", "search u/s 132 was conducted on", or as the date of the first panchnama.
+- "lastAuthorisationDate": the date the LAST of the authorisations for the search was EXECUTED — the date the search finally concluded. Where a search ran over several days this is the LAST of them, and it is often the date of the final panchnama, which may be marked "concluded" or "finally concluded". If the documents show only one date for the whole search, return the same date here as for initiationDate.
+- "panchnamaDates": every distinct date on which a panchnama was drawn up, oldest first.
+- "searchSection": "132" for a search, "132A" for a requisition. null if the documents do not say.
+- "quotes": for each of initiationDate and lastAuthorisationDate that you found, the sentence or phrase from the document that states it, verbatim and under 200 characters. Use the keys "initiationDate" and "lastAuthorisationDate".
+
+DATES: return every date as YYYY-MM-DD. Indian documents write DD/MM/YYYY and DD-MM-YYYY — read them as day first. "05/04/2026" is 5 April 2026, never 4 May 2026. Getting this backwards moves the block period by months, so where a date is ambiguous and the document gives no other clue, return null rather than a guess.
+
+Do not extract the DIN, the notice date, the assessment years, or anything about income. Those are known from elsewhere.`;
+
+const SEARCH_DATES_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    initiationDate: { type: "STRING", nullable: true },
+    lastAuthorisationDate: { type: "STRING", nullable: true },
+    panchnamaDates: { type: "ARRAY", items: { type: "STRING" } },
+    searchSection: { type: "STRING", nullable: true },
+    quotes: {
+      type: "OBJECT",
+      properties: {
+        initiationDate: { type: "STRING", nullable: true },
+        lastAuthorisationDate: { type: "STRING", nullable: true },
+      },
+    },
+  },
+};
+
+async function callGeminiSearchDates(model, apiKey, files, meta = {}) {
+  const started = Date.now();
+  let usage = null;
+  let ok = false;
+  let errorCode = null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const body = {
+      contents: [{ role: "user", parts: [...files.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })), { text: SEARCH_DATES_PROMPT }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: SEARCH_DATES_SCHEMA, temperature: 0 },
+    };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new HttpsError("unavailable", `Gemini API error ${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    usage = json?.usageMetadata;
+    const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
+    let out;
+    try { out = JSON.parse(text); } catch { throw new HttpsError("internal", "Gemini returned malformed JSON."); }
+    ok = true;
+    return out;
+  } catch (e) {
+    errorCode = String(e?.code || e?.message || "error").slice(0, 80);
+    throw e;
+  } finally {
+    await recordSpend({
+      uid: meta.uid || null,
+      vendor: "gemini",
+      sku: model,
+      feature: "readBlockSearchDates",
+      promptTokens: usage?.promptTokenCount || 0,
+      outputTokens: (usage?.candidatesTokenCount || 0) + (usage?.thoughtsTokenCount || 0),
+      ms: Date.now() - started,
+      ok,
+      errorCode,
+    });
+  }
+}
+
+/* Read the search dates off one s.158BC notice and everything attached to it.
+ *
+ * Cached onto the notice as `blockSearch`, so a practitioner who runs it twice
+ * pays for it once — and so the figures stay beside the document they came
+ * from rather than only inside one ITR-B draft. `force` re-reads.
+ */
+exports.readBlockSearchDates = onCall(
+  { region: REGIONS, secrets: [geminiApiKey], timeoutSeconds: 180, memory: "512MiB", maxInstances: 5 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+    const { noticeId, force } = request.data || {};
+    if (!noticeId) throw new HttpsError("invalid-argument", "noticeId is required.");
+
+    const ref = db.doc(`users/${uid}/notices/${noticeId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "That notice is not on file.");
+    const n = snap.data();
+
+    if (n.blockSearch && !force) return { ok: true, cached: true, blockSearch: n.blockSearch };
+
+    /* The notice itself, then whatever came with it. The panchnama is an
+       ATTACHMENT far more often than it is the notice, so reading the notice
+       alone would miss the one document that states both dates plainly. */
+    const paths = [
+      ...(n.storagePath ? [n.storagePath] : []),
+      ...((n.attachments || []).map((a) => a && a.storagePath).filter(Boolean)),
+    ];
+    if (!paths.length) {
+      throw new HttpsError("failed-precondition", "This notice has no PDF or attachment to read — enter the search dates by hand.");
+    }
+
+    const files = [];
+    let total = 0;
+    const skipped = [];
+    for (const path of paths) {
+      let buf;
+      try {
+        [buf] = await admin.storage().bucket(STORAGE_BUCKET).file(path).download();
+      } catch {
+        skipped.push(path);
+        continue;
+      }
+      // The cap is on the REQUEST, not on each file: the model is given one
+      // call and everything has to fit in it. Files past the cap are named in
+      // the result rather than dropped in silence.
+      if (total + buf.length > MAX_TOTAL_BYTES) { skipped.push(path); continue; }
+      total += buf.length;
+      files.push({ mimeType: "application/pdf", data: buf.toString("base64") });
+    }
+    if (!files.length) throw new HttpsError("not-found", "Couldn't read any of this notice's documents from Storage.");
+
+    let out;
+    try {
+      out = await callGeminiSearchDates(PRIMARY_MODEL, geminiApiKey.value(), files, { uid });
+    } catch (e) {
+      await ref.set({ blockSearchError: String((e && e.message) || e).slice(0, 200) }, { merge: true }).catch(() => {});
+      throw e;
+    }
+
+    const blockSearch = { ...normaliseSearchDates(out, normDate), read: files.length, skipped: skipped.length };
+    await ref.set({ blockSearch, blockSearchError: "" }, { merge: true });
+    return { ok: true, cached: false, blockSearch };
   }
 );
 

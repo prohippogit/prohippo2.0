@@ -19,6 +19,9 @@ import { columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PA
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
 import { completeness, summarise, STATUS } from "../src/tools/itrb/completeness.js";
+import { findBlockProceedings, primaryNotice, fieldsFromNotices, describeScan, isBlockSection } from "../src/tools/itrb/findProceeding.js";
+import { createRequire } from "node:module";
+const { normaliseSearchDates } = createRequire(import.meta.url)("../functions/blockSearchDates.js");
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
@@ -947,4 +950,165 @@ test("nothing claimed under Parts F, G and H is a legitimate answer", () => {
   assert.match(partsOf(d).FGH.detail, /the form does not require a figure/);
   d.years[2].credits.tds = 45000;
   assert.equal(partsOf(d).FGH.status, STATUS.DONE);
+});
+
+
+/* ---------------------------------------------------------------------------
+ * Finding the block proceeding the practice already holds.
+ * ------------------------------------------------------------------------- */
+
+const CASE = {
+  matters: [
+    { id: "m1", pan: "ABCPS1234F", section: "158BC", type: "Block assessment", proceedingReqId: "P9", bench: "Central Circle 1" },
+    { id: "m2", pan: "ABCPS1234F", section: "143(2)", type: "Scrutiny", proceedingReqId: "P1" },
+    { id: "m3", pan: "OTHER1234F", section: "158BC", type: "Block assessment", proceedingReqId: "P7" },
+  ],
+  notices: [
+    { id: "n1", pan: "ABCPS1234F", section: "158BC", din: "ITBA/158BC/1", date: "2026-01-05",
+      servedOn: "2026-01-10", responseDueDate: "2026-03-11", proceedingReqId: "P9",
+      storagePath: "notice.pdf", attachments: [{ storagePath: "panchnama.pdf", filename: "Panchnama.pdf" }] },
+    { id: "n2", pan: "ABCPS1234F", section: "158BC", din: "ITBA/158BC/2", date: "2026-02-01",
+      servedOn: "2026-01-10", responseDueDate: "2026-03-11", proceedingReqId: "P9", storagePath: "reminder.pdf" },
+    { id: "n3", pan: "ABCPS1234F", section: "143(2)", date: "2025-06-01" },
+  ],
+};
+
+test("the section matcher takes the spacing the portal actually uses", () => {
+  assert.equal(isBlockSection("158BC"), true);
+  assert.equal(isBlockSection("158 B C"), true);
+  assert.equal(isBlockSection("158BC r.w.s. 158BD"), true);
+  assert.equal(isBlockSection("158BD"), true);
+  assert.equal(isBlockSection("143(2)"), false);
+  assert.equal(isBlockSection("153A"), false);   // a different regime entirely
+  assert.equal(isBlockSection(""), false);
+});
+
+test("the scan finds the block proceeding, and only this assessee's", () => {
+  const found = findBlockProceedings(CASE, "abcps1234f");   // case-insensitive
+  assert.deepEqual(found.matters.map((m) => m.id), ["m1"]);      // not the scrutiny, not the other PAN
+  assert.deepEqual(found.notices.map((n) => n.id), ["n1", "n2"]);
+  assert.deepEqual(found.proceedingIds, ["P9"]);
+  // Every file that will go to the reader: the notice PDFs plus the panchnama.
+  assert.equal(found.attachments.length, 3);
+  assert.equal(found.attachments.filter((a) => a.primary).length, 2);
+  assert.match(describeScan(found), /1 proceeding, 2 notices, 3 documents/);
+});
+
+test("a notice keyed in by hand is found by its section, with no proceeding to hang off", () => {
+  // The case where nothing else in the app has the details either, so missing
+  // it would be missing the only record there is.
+  const found = findBlockProceedings({
+    matters: [], notices: [{ id: "x", pan: "ABCPS1234F", section: "158BC", din: "D", date: "2026-01-05" }],
+  }, "ABCPS1234F");
+  assert.deepEqual(found.notices.map((n) => n.id), ["x"]);
+  assert.deepEqual(found.matters, []);
+});
+
+test("an empty practice scans to nothing rather than throwing", () => {
+  const found = findBlockProceedings({}, "ABCPS1234F");
+  assert.deepEqual(found.notices, []);
+  assert.match(describeScan(found), /Nothing on file/);
+  assert.deepEqual(fieldsFromNotices([]), { fields: {}, conflicts: [], source: null });
+});
+
+test("the notice that starts the return is the earliest under s.158BC", () => {
+  // An assessee gets several in a block proceeding; the first fixes the sixty
+  // days, and a reminder carries its own DIN which is not the one Part A wants.
+  const found = findBlockProceedings(CASE, "ABCPS1234F");
+  assert.equal(primaryNotice(found.notices).id, "n1");
+  const { fields, source } = fieldsFromNotices(found.notices);
+  assert.equal(source.id, "n1");
+  assert.equal(fields.noticeDin, "ITBA/158BC/1");
+  assert.equal(fields.noticeDate, "2026-01-05");
+  assert.equal(fields.serviceDate, "2026-01-10");
+  // The AO's own period, not one derived from service.
+  assert.equal(fields.dueDate, "2026-03-11");
+  assert.equal(fields.returnSection, "158BC");
+});
+
+test("a s.158BD notice picks the other limb", () => {
+  const { fields } = fieldsFromNotices([{ section: "158BC r.w.s. 158BD", din: "D", date: "2026-01-05" }]);
+  assert.equal(fields.returnSection, "158BC/158BD");
+});
+
+test("notices that disagree about a date fill nothing, and say so", () => {
+  // The sixty-day clock runs off the date of service. Quietly picking one of
+  // two is how that clock ends up wrong with nobody looking.
+  const { fields, conflicts } = fieldsFromNotices([
+    { section: "158BC", din: "D1", date: "2026-01-05", servedOn: "2026-01-10", responseDueDate: "2026-03-11" },
+    { section: "158BC", din: "D2", date: "2026-02-01", servedOn: "2026-01-15", responseDueDate: "2026-03-11" },
+  ]);
+  assert.equal("serviceDate" in fields, false);
+  assert.deepEqual(conflicts.map((c) => c.field), ["Date of service"]);
+  assert.deepEqual(conflicts[0].seen, ["2026-01-10", "2026-01-15"]);
+  // The one they agree on still goes in.
+  assert.equal(fields.dueDate, "2026-03-11");
+});
+
+/* ---------------------------------------------------------------------------
+ * Shaping what the reader returned. The network call cannot be tested here;
+ * this is the half where a bad read becomes a bad block period.
+ * ------------------------------------------------------------------------- */
+
+const normDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : "");
+const shape = (raw) => normaliseSearchDates(raw, normDate, "T");
+
+test("a clean read comes through with its quotes and sorted panchnama dates", () => {
+  const out = shape({
+    initiationDate: "2025-11-15", lastAuthorisationDate: "2025-11-20",
+    panchnamaDates: ["2025-11-20", "2025-11-15", "2025-11-15"],
+    searchSection: "132",
+    quotes: { initiationDate: "a search u/s 132 was initiated on 15/11/2025" },
+  });
+  assert.equal(out.initiationDate, "2025-11-15");
+  assert.equal(out.lastAuthorisationDate, "2025-11-20");
+  assert.deepEqual(out.panchnamaDates, ["2025-11-15", "2025-11-20"]);   // deduped, oldest first
+  assert.equal(out.searchSection, "132");
+  assert.match(out.quotes.initiationDate, /initiated on 15\/11\/2025/);
+});
+
+test("a conclusion before the initiation is dropped, not kept", () => {
+  // The pair is untrustworthy, but the initiation date is what the six
+  // preceding years hang off and is the better read of the two. Dropping the
+  // conclusion falls back to the same-day case — the shorter block period,
+  // never one that invents a year of assessment.
+  const out = shape({ initiationDate: "2025-11-15", lastAuthorisationDate: "2025-01-01" });
+  assert.equal(out.initiationDate, "2025-11-15");
+  assert.equal(out.lastAuthorisationDate, "");
+});
+
+test("a date outside the block regime is a misread and is discarded", () => {
+  // Chapter XIV-B runs from 01-09-2024, so a 1998 "search date" is an
+  // assessment year or a date of incorporation read off the same page.
+  assert.equal(shape({ initiationDate: "1998-04-01" }).initiationDate, "");
+  assert.equal(shape({ initiationDate: "2200-01-01" }).initiationDate, "");
+  assert.deepEqual(shape({ panchnamaDates: ["2019-01-01", "2025-11-15"] }).panchnamaDates, ["2025-11-15"]);
+});
+
+test("junk in returns an empty shape rather than throwing", () => {
+  for (const junk of [null, undefined, {}, "nonsense", 42]) {
+    const out = shape(junk);
+    assert.equal(out.initiationDate, "");
+    assert.equal(out.lastAuthorisationDate, "");
+    assert.deepEqual(out.panchnamaDates, []);
+    assert.equal(out.searchSection, "");
+  }
+});
+
+test("only the two real search sections survive, and quotes are bounded", () => {
+  assert.equal(shape({ searchSection: "132" }).searchSection, "132");
+  assert.equal(shape({ searchSection: "132A" }).searchSection, "132A");
+  assert.equal(shape({ searchSection: "133A" }).searchSection, "");    // a survey is not a search
+  assert.equal(shape({ quotes: { initiationDate: "x".repeat(500) } }).quotes.initiationDate.length, 200);
+});
+
+test("the read feeds the block period, both shapes", () => {
+  // What the whole feature is for: two dates out of a document, seven or eight
+  // rows out of the two dates.
+  const same = shape({ initiationDate: "2025-07-01", lastAuthorisationDate: "2025-07-31" });
+  assert.equal(blockPeriod(same.initiationDate, same.lastAuthorisationDate).years.length, 7);
+  const spans = shape({ initiationDate: "2026-03-15", lastAuthorisationDate: "2026-04-05" });
+  const bp = blockPeriod(spans.initiationDate, spans.lastAuthorisationDate);
+  assert.equal(bp.years.length, 8);
+  assert.equal(bp.spansYears, true);
 });

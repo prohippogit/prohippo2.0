@@ -85,6 +85,7 @@ export const formLabel = (form) => String(form || "").replace(/^ITR/, "ITR-");
 /**
  * → {
  *     form, formLabel, ay, pan, name, filedOn, ackNum,
+ *     advanceTax, selfAssessmentTax, tds, tcs, taxesPaid,
  *     salary, houseProperty, business, capitalGains, otherSources,
  *     grossTotalIncome, chapterVIA, totalIncome,
  *     taxesPaid, balTaxPayable, refundDue,
@@ -166,6 +167,15 @@ export function readDeclared(itrJson) {
     ]),
     totalIncome: pick(income, ["TotalIncome"]),
 
+    /* The tax already paid for the year, split the way Form ITR-B splits it.
+       Part G wants the advance tax and the self-assessment tax; Part H wants
+       TDS and TCS, but only what was NOT claimed in an earlier return — which
+       is why these two are read and reported rather than written straight into
+       the form. See withDeclared in draft.js. */
+    advanceTax: pick(taxes, ["TaxPaid.TaxesPaid.AdvanceTax", "TaxesPaid.AdvanceTax", "TaxPaid.TaxesPaid.AdvancedTax", "TaxesPaid.AdvancedTax"]),
+    selfAssessmentTax: pick(taxes, ["TaxPaid.TaxesPaid.SelfAssessmentTax", "TaxesPaid.SelfAssessmentTax"]),
+    tds: pick(taxes, ["TaxPaid.TaxesPaid.TDS", "TaxesPaid.TDS"]),
+    tcs: pick(taxes, ["TaxPaid.TaxesPaid.TCS", "TaxesPaid.TCS"]),
     taxesPaid: pick(taxes, ["TaxPaid.TaxesPaid.TotalTaxesPaid", "TaxesPaid.TotalTaxesPaid"]),
     balTaxPayable: pick(taxes, ["TaxPaid.BalTaxPayable", "BalTaxPayable"]),
     refundDue: pick(taxes, ["Refund.RefundDue", "RefundDue"]),

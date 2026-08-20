@@ -1712,3 +1712,84 @@ test("the figures come from the file and the particulars from the record, togeth
   assert.equal(out.ackNum, "946927300190122");      // out of the record
   assert.equal(out.filedOn, "2022-01-19");
 });
+
+/* ---------------------------------------------------------------------------
+ * Taxes already paid for the year — and the line the form draws through them.
+ *
+ * Part G asks for the advance tax and self-assessment tax paid. Part H asks for
+ * TDS and TCS "not claimed in any earlier return". The ITR states all four, but
+ * what it states about TDS is precisely the credit it DID claim — so three of
+ * the four are not the same kind of fact, and only two of them may be written
+ * into the form.
+ * ------------------------------------------------------------------------- */
+
+test("all four figures are read out of the return", () => {
+  const d = readDeclared(fixture("itr3-partner-salary-agri-ay2025-26"));
+  assert.equal(d.advanceTax, 250000);
+  assert.equal(d.selfAssessmentTax, 67250);
+  assert.equal(d.tds, 55703);
+  assert.equal(d.tcs, 0);
+});
+
+test("ITR-1 keeps them a level up, and is read all the same", () => {
+  // ITR-1 has no PartB_TTI; TaxPaid sits on the body. One candidate list covers
+  // both shapes, and a fixture proves it rather than a memory of the schema.
+  const d = readDeclared(fixture("itr1-80ggc-tds-refund-ay2024-25"));
+  assert.equal(d.tds, 34555);
+  assert.equal(d.advanceTax, 0);
+  assert.equal(d.taxesPaid, 34555);
+});
+
+test("Part G fills from the return; Part H does not", () => {
+  const d = readDeclared(fixture("itr3-partner-salary-agri-ay2025-26"));
+  const y = withDeclared(blankYear({ ay: "2025-26" }), d, "sync");
+
+  assert.equal(y.credits.advance, 250000);            // Part G — the form asks for the payment
+  assert.equal(y.credits.selfAssessment, 67250);
+
+  // Part H asks for credit NOT claimed in any earlier return. Writing what the
+  // return claimed into it would put somebody one press from claiming the same
+  // TDS twice, in a return the officer verifies under rule 12AE(4).
+  assert.equal(y.credits.tds, "");
+  assert.equal(y.credits.tcs, "");
+  // It is carried instead, to be shown beside the box as the figure to subtract.
+  assert.equal(y.claimed.tds, 55703);
+  assert.equal(y.claimed.tcs, 0);
+});
+
+test("a figure the practitioner has keyed is never replaced by the return's", () => {
+  const edited = { ...blankYear({ ay: "2025-26" }), credits: { tds: "", tcs: "", advance: 999, selfAssessment: "" } };
+  const y = withDeclared(edited, readDeclared(fixture("itr3-partner-salary-agri-ay2025-26")), "sync");
+  assert.equal(y.credits.advance, 999);
+  assert.equal(y.credits.selfAssessment, 67250);      // the one they left alone still fills
+});
+
+test("nil is an answer, and fills; absent is not, and does not", () => {
+  // A year with no advance tax says so with a zero. Leaving the box empty would
+  // make an answered question look unanswered.
+  const nil = withDeclared(blankYear({ ay: "2024-25" }), readDeclared(fixture("itr1-80ggc-tds-refund-ay2024-25")), "sync");
+  assert.equal(nil.credits.advance, 0);
+  assert.equal(nil.credits.selfAssessment, 0);
+
+  const silent = withDeclared(blankYear({ ay: "2024-25" }), { ay: "2024-25" }, "json");
+  assert.equal(silent.credits.advance, "");           // the reading says nothing, so nor does the box
+  assert.equal(silent.claimed.tds, null);
+});
+
+test("what is entered in Parts G and H reaches the tax computation", () => {
+  // The point of filling them: the block return's bottom line moves.
+  const draft = withBlockPeriod({ ...blankDraft(), pan: "AACTR2704C" },
+    { searchDate: "2025-08-23", lastAuthDate: "2025-08-23" });
+  const y = draft.years.find((r) => r.ay === "2025-26");
+  const filled = {
+    ...draft,
+    years: draft.years.map((r) => (r.key === y.key
+      ? { ...r, items: { ...r.items, money: 1000000 }, undisclosed: { ...r.undisclosed },
+          credits: { advance: 250000, selfAssessment: 67250, tds: "", tcs: 50000 } }
+      : r)),
+  };
+  const res = computeItrB(filled);
+  const row = res.years.find((r) => r.key === y.key);
+  assert.equal(row.credits.partG, 317250);            // advance + self-assessment
+  assert.equal(row.credits.partH, 50000);             // only what was entered as unclaimed
+});

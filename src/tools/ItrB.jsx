@@ -1148,13 +1148,36 @@ function YearPanel({ year, computed, result, ret, busy, spansYears, onFill, onFi
         <div className="muted" style={{fontSize: 11.5, marginBottom: 10}}>
           Advance tax and self-assessment tax paid earlier go to <strong>Part G</strong>; TDS and TCS <em>not claimed in any
           earlier return</em> go to <strong>Part H</strong>. Rule 12AE(4): every credit here except self-assessment tax for
-          the block period itself is allowed only on the Assessing Officer's verification and satisfaction.
+          the block period itself is allowed only on the Assessing Officer&apos;s verification and satisfaction.
+          {" "}Part G fills from the return; Part H cannot, because the return states the credit it <em>did</em> claim —
+          what it claimed is shown under each box to subtract from.
         </div>
         <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))", gap: 10}}>
           {[["advance", "Advance tax — Part G"], ["selfAssessment", "Self-assessment tax — Part G"], ["tds", "TDS — Part H"], ["tcs", "TCS — Part H"]].map(([k, label]) => (
             <div key={k} className="field">
               <label style={{fontSize: 11}}>{label}</label>
               <Amount value={year.credits?.[k]} onChange={(v) => setCredit(k, v)}/>
+              {/* WHAT THE RETURN CLAIMED, SHOWN AND NOT WRITTEN.
+                  Part G's two boxes fill from the return, because the form asks
+                  for the payments and the return states them. Part H's do not:
+                  it asks for credit "not claimed in any earlier return", and
+                  what the return states is precisely the credit it DID claim.
+                  Filling it would put somebody one press from claiming the same
+                  TDS twice in a return the officer verifies under rule 12AE(4).
+                  So the figure is put where they can subtract from it. */}
+              {(k === "tds" || k === "tcs") && year.claimed?.[k] !== null && year.claimed?.[k] !== undefined && (
+                <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>
+                  {fmtINR(year.claimed[k])} claimed in the return — enter only what was not
+                </span>
+              )}
+              {/* Part G IS filled, and says where from. The check it cannot make
+                  for anybody: whether that payment has already been given credit
+                  in the regular assessment for the year. */}
+              {(k === "advance" || k === "selfAssessment") && year.declaredSource && year.credits?.[k] !== "" && (
+                <span className="muted" style={{fontSize: 10.5, marginTop: 4}}>
+                  From the return for A.Y. {year.ay} — check it has not already been credited there
+                </span>
+              )}
             </div>
           ))}
         </div>

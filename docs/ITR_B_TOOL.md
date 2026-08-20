@@ -218,6 +218,29 @@ under s.143(1) regardless, because column [B]'s list of sections has no entry
 for s.154. "Gross total income" is excluded explicitly: it sits next to total
 income in every intimation and differs by the Chapter VI-A deductions.
 
+### Taxes already paid — Part G fills, Part H does not
+
+The return states all four figures, and they are all read
+(`advanceTax`, `selfAssessmentTax`, `tds`, `tcs` in `declared.js`). Only two of
+them may be written into the form, and the reason is in the form's own words.
+
+**Part G** asks for the advance tax and self-assessment tax paid. The return
+states exactly that, so both boxes fill, each annotated with the year it came
+from and the one check the app cannot make for anybody — whether that payment
+has already been given credit in the regular assessment for the year.
+
+**Part H** asks for TDS and TCS *"not claimed in any earlier return"*. What the
+return states is the precise opposite: the credit it **did** claim. Writing it
+into Part H would put a practitioner one press away from claiming the same TDS
+twice, in a return the Assessing Officer verifies under rule 12AE(4). So it is
+carried on the year as `claimed` and shown under each Part H box — "₹55,703
+claimed in the return — enter only what was not" — which is the figure they need
+in front of them to work out what is left.
+
+A figure already keyed is never replaced. A read of **nil** still fills: nil
+advance tax is an answer, and an empty box makes an answered question look
+unanswered.
+
 ### The acknowledgement number and the date of filing
 
 These two are **not in the ITR JSON**. The JSON is the return as *prepared*;

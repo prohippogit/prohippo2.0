@@ -295,6 +295,23 @@ three, because this is the one figure on the screen that came out of a model
 reading a document rather than out of the department's own data. A figure
 already in [B] stands: whoever keyed it read the order.
 
+### [B] and [C] are the same income at two stages
+
+Column [C]'s own label ends *"and not covered in [B]"*. The two columns are the
+same income seen twice — declared in the return, then determined on processing —
+so on a year that has been assessed the figure belongs in [B] and comes out of
+[C]. Stating it in both puts the same income on the face of the return twice.
+
+That is now easy to arrive at without meaning to, because the two fill from
+different sources: [C] from the ITR JSON, [B] from the order. On a return CPC
+accepted as filed they are the same number to the rupee. `partCOverlap` flags
+it, with **Clear [C]** beside the warning. Where the two differ it still says
+so, more softly — a year can legitimately have income in both, but the common
+way to get there is one income counted twice.
+
+Nil in either column is not an overlap: a year assessed at nil states 0 in [B],
+which is an answer rather than a clash.
+
 ### Taxes already paid — Part G fills, Part H does not
 
 The return states all four figures, and they are all read

@@ -233,3 +233,27 @@ export function describeOrders(ret) {
     readAlready ? `${readAlready} already read` : "",
   ].filter(Boolean).join(" · ");
 }
+
+/* Does this year state the same income in both [B] and [C]?
+ *
+ * Column [C]'s own label ends "and not covered in [B]". The two columns are the
+ * same income seen at two stages — declared in the return, and then determined
+ * on processing — so on a year that has been assessed the figure belongs in [B]
+ * and comes out of [C]. Stating it in both puts the same income on the face of
+ * the return twice.
+ *
+ * It is easy to arrive at without anyone meaning to: [C] fills from the ITR
+ * JSON and [B] from the order, and on a return CPC accepted as filed they are
+ * the same number to the rupee.
+ *
+ * @returns null where there is nothing to say, else { amount, same }
+ */
+export function partCOverlap(year) {
+  const b = year?.partC?.determined;
+  const c = year?.partC?.returned;
+  const money = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
+  const B = money(b);
+  const C = money(c);
+  if (!B || !C) return null;                       // nil in either is not an overlap
+  return { amount: B, other: C, same: B === C };
+}

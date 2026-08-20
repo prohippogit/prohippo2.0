@@ -106,6 +106,11 @@ export function blankYear(period) {
        presented as one list: the "not claimed earlier" condition applies to
        H alone, and a practitioner who cannot see the split cannot apply it. */
     credits: { tds: "", tcs: "", advance: "", selfAssessment: "" },
+    /* What the return for this year CLAIMED by way of TDS and TCS. Not a form
+       field — Part H asks for the opposite, the credit not claimed anywhere —
+       so this is carried only to be shown beside those boxes as the figure to
+       subtract from. See withDeclared. */
+    claimed: { tds: null, tcs: null, ay: "" },
   };
 }
 
@@ -340,6 +345,14 @@ export function withFiledParticulars(year, ret, { over = false } = {}) {
   return next;
 }
 
+/* A money field the practitioner has not touched takes the read; one they have
+   keeps what they keyed. A read of nil is still a read — nil advance tax is an
+   answer, and leaving the box empty would make it look unanswered. */
+function fillMoney(current, incoming) {
+  if (current !== "" && current !== null && current !== undefined) return current;
+  return incoming === null || incoming === undefined ? current : incoming;
+}
+
 /* YYYY-MM-DD, or "" — a date input accepts nothing else, and portal records
    have carried both ISO and DD/MM/YYYY at different times. */
 export function isoDate(v) {
@@ -370,6 +383,30 @@ export function withDeclared(year, reading, source = "json") {
       ...year.partC,
       returned: total === null || total === undefined ? year.partC?.returned : total,
       returnedSection: year.partC?.returnedSection || "139(1)",
+    },
+    /* PART G, FILLED. PART H, NOT.
+     *
+     * The form draws a line here that the two figures either side of it do not
+     * make obvious. Part G asks for the advance tax and self-assessment tax
+     * paid for the year — the return states both, and they go in.
+     *
+     * Part H asks for TDS and TCS "not claimed in any earlier return". What the
+     * return states is exactly the opposite: the credit it DID claim. Writing
+     * it into Part H would put the practitioner one press away from claiming
+     * the same credit twice, in a return the officer verifies under rule
+     * 12AE(4). So those two are carried as `claimed` — shown beside the boxes,
+     * for the practitioner to subtract from — and the boxes stay theirs.
+     *
+     * Nothing already keyed is overwritten either way. */
+    credits: {
+      ...year.credits,
+      advance: fillMoney(year.credits?.advance, reading.advanceTax),
+      selfAssessment: fillMoney(year.credits?.selfAssessment, reading.selfAssessmentTax),
+    },
+    claimed: {
+      tds: reading.tds ?? year.claimed?.tds ?? null,
+      tcs: reading.tcs ?? year.claimed?.tcs ?? null,
+      ay: reading.ay || year.ay || "",
     },
     declaredSource: source,
     declaredForm: reading.formLabel || year.declaredForm,

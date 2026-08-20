@@ -347,6 +347,15 @@ way to get there is one income counted twice.
 Nil in either column is not an overlap: a year assessed at nil states 0 in [B],
 which is an answer rather than a clash.
 
+**And it is a block-level action, because it is a block-level fact.** On a
+practice whose returns were all processed without change — the ordinary case —
+every year of the block acquires the same figure in both columns in a single
+press of *Fill from synced returns*. Clearing them one at a time is seven
+presses to say one thing, so **Clear [C] on N years** sits beside that button
+and does the lot. Only where the two are **equal**: a year where they differ may
+genuinely have income in both columns, and keeps its own warning and its own
+decision.
+
 ### Taxes already paid — Part G fills, Part H does not
 
 The return states all four figures, and they are all read

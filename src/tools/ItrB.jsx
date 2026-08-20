@@ -35,7 +35,7 @@ import {
   readiness, STATUSES, SEARCH_SECTIONS, RETURN_SECTIONS,
 } from './itrb/draft';
 import { DII_ITEMS, furnishingMode, ASSESSED_UNDER, FILED_UNDER, PENDING_UNDER } from './itrb/form';
-import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, describeOrders, partCOverlap } from './itrb/partC';
+import { columnsFor, labelFor, appliesTo, determinedFromReturn, intimationToRead, describeOrders, partCOverlap, yearsRepeatingB } from './itrb/partC';
 import { variantFor, FIELD_NUMBERS, FILED_UNDER_RECENT, partYearIncome } from './itrb/partA';
 import { PART_B_ROWS, computePartB } from './itrb/partB';
 import { completeness, summarise, STATUS } from './itrb/completeness';
@@ -443,6 +443,28 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
     ].filter(Boolean).join(" "), "check");
   };
 
+  /* Clear [C] wherever it merely repeats [B], across the whole block.
+   *
+   * The form's own words: [C] is "not covered in [B]". A year that has been
+   * assessed has its income in [B], so [C] comes out. On a practice whose
+   * returns were all processed without change — the ordinary case — that is
+   * every year at once, and doing it one at a time is seven presses to say one
+   * thing. Only where the two are equal: a year where they differ may genuinely
+   * have income in both, and keeps its own warning and its own decision. */
+  const clearRepeatedC = () => {
+    const hits = yearsRepeatingB(draft.years);
+    if (!hits.length) { notify("No year has the same figure in both [B] and [C].", "info"); return; }
+    const keys = new Set(hits.map((y) => y.key));
+    setDraft((d) => ({
+      ...d,
+      years: d.years.map((y) => (keys.has(y.key)
+        ? { ...y, partC: { ...y.partC, returned: "", returnedSection: "" } }
+        : y)),
+    }));
+    setDirty(true);
+    notify(`[C] cleared for ${hits.length} year${hits.length === 1 ? "" : "s"} — ${hits.map((y) => y.ay).join(", ")} — where it only repeated [B].`);
+  };
+
   const onFiles = async (files, expectedAy) => {
     let done = 0;
     for (const file of files) {
@@ -580,6 +602,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
           period={period} busyYear={busyYear}
           syncedReturn={syncedReturn}
           onFillYear={fillFromSync} onFillAll={fillAllFromSync} onReadIntimation={fillDetermined}
+          onClearRepeatedC={clearRepeatedC}
           onFiles={onFiles} fileRef={fileRef}
         />
       )}
@@ -807,8 +830,9 @@ function DetailsTab({ draft, edit, period, furnishing, assesseeOptions, onPickAs
  * computeItrB() coerces every blank to a number for the arithmetic, and an
  * input bound to that shows a nil in every field nobody has filled in yet. A
  * form full of zeroes reads as a return that has been completed. */
-function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onFillYear, onFillAll, onReadIntimation, onFiles, fileRef }) {
+function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onFillYear, onFillAll, onReadIntimation, onClearRepeatedC, onFiles, fileRef }) {
   const [open, setOpen] = React.useState("");
+  const repeatedC = React.useMemo(() => yearsRepeatingB(draft.years), [draft.years]);
 
   if (!period.ok) {
     return (
@@ -838,6 +862,15 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
             <button className="btn btn-secondary btn-sm" onClick={onFillAll} disabled={busyYear === "all"}>
               <Icon name="refresh" size={13}/>{busyYear === "all" ? "Reading…" : "Fill from synced returns"}
             </button>
+            {/* Shown only when there is something to clear. A button offering to
+                do nothing is a button that has to be read before it can be
+                ignored. */}
+            {repeatedC.length > 0 && (
+              <button className="btn btn-secondary btn-sm" onClick={onClearRepeatedC}
+                title={`[C] repeats [B] on ${repeatedC.map((y) => y.ay).join(", ")}`}>
+                <Icon name="check" size={13}/>Clear [C] on {repeatedC.length} year{repeatedC.length === 1 ? "" : "s"}
+              </button>
+            )}
             <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
               <Icon name="upload" size={13}/>Upload ITR JSONs
             </button>

@@ -17,7 +17,7 @@ import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy, stated
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import {
   columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS,
-  intimationToRead, withOrderReading, describeOrders, partCOverlap, answersColumnB,
+  intimationToRead, withOrderReading, describeOrders, partCOverlap, answersColumnB, yearsRepeatingB,
 } from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
@@ -2120,4 +2120,30 @@ test("the focused read carries the section the order states", () => {
   const found = determinedFromReturn({ orders: [scrutiny] });
   assert.equal(found.section, "143(3)");
   assert.equal(withDetermined(blankYear({ ay: "2021-22" }), found).partC.determinedSection, "143(3)");
+});
+
+test("every year whose [C] merely repeats [B] is found in one pass", () => {
+  // On a practice whose returns were all processed without change — the
+  // ordinary case — this is the whole block at once, because [C] fills from the
+  // ITR JSON and [B] from the order and the two agree to the rupee.
+  const years = [
+    { ...blankYear({ ay: "2020-21" }), key: "Y6", partC: { determined: 460590, returned: 460590 } },
+    { ...blankYear({ ay: "2021-22" }), key: "Y5", partC: { determined: 500000, returned: 460590 } },
+    { ...blankYear({ ay: "2022-23" }), key: "Y4", partC: { determined: "", returned: 479890 } },
+    { ...blankYear({ ay: "2023-24" }), key: "Y3", partC: { determined: 28790, returned: 28790 } },
+  ];
+  assert.deepEqual(yearsRepeatingB(years).map((y) => y.ay), ["2020-21", "2023-24"]);
+});
+
+test("a year where the two differ is left alone — it has a decision in it", () => {
+  const differing = [{ ...blankYear({ ay: "2021-22" }), partC: { determined: 500000, returned: 460590 } }];
+  assert.deepEqual(yearsRepeatingB(differing), []);
+  // But it still carries its own warning, so nothing is hidden.
+  assert.equal(partCOverlap(differing[0]).same, false);
+});
+
+test("nothing to clear is not an error", () => {
+  assert.deepEqual(yearsRepeatingB([]), []);
+  assert.deepEqual(yearsRepeatingB(null), []);
+  assert.deepEqual(yearsRepeatingB([blankYear({ ay: "2021-22" })]), []);
 });

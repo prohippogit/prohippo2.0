@@ -1073,6 +1073,8 @@ const DETERMINED_PROMPT = `You are a chartered accountant reading ONE Indian inc
 
 - "asReturned": the same row's figure in the assessee's own column, if the document prints one. null otherwise.
 
+- "returnedHeads": what the ASSESSEE'S OWN COLUMN states, head by head, for a document that prints the computation that way — a CPC intimation does, under "HEADS OF INCOME". This is the income as RETURNED, not as computed: the first money column, not the second. Use null for any line the document does not print. Keys: "salary" (Salaries), "houseProperty" (Income from house property), "capitalGains" (Income from capital gains), "otherSources" (Income from other sources), "grossTotalIncome" (the row labelled "Gross Total Income", however numbered), "chapterVIA" (Total Deductions Under Chapter VI-A), "totalIncome" (the "Total Income" row), "advanceTax", "tds", "tcs", "selfAssessmentTax" (from the TAXES PAID block). Amounts in rupees, plain numbers without separators. Omit the whole object where the document prints no such computation.
+
 - "section": the section the income was determined under, exactly one of "143(1)", "143(3)", "144", "147", "153A", "153C", "158BC(1)(c)", "245D". An intimation from CPC is 143(1). A scrutiny assessment order is 143(3) — and where it recites that it is passed under section 147 read with 143(3), answer "147". A best-judgment order is 144. Return null if the document does not say.
 
 - "orderDate": the date the order or intimation was passed, as YYYY-MM-DD. In a CPC intimation this is printed as "Intimation Order Date".
@@ -1100,6 +1102,23 @@ const DETERMINED_SCHEMA = {
     pan: { type: "STRING", nullable: true },
     head: { type: "STRING", nullable: true },
     quote: { type: "STRING", nullable: true },
+    returnedHeads: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        salary: { type: "NUMBER", nullable: true },
+        houseProperty: { type: "NUMBER", nullable: true },
+        capitalGains: { type: "NUMBER", nullable: true },
+        otherSources: { type: "NUMBER", nullable: true },
+        grossTotalIncome: { type: "NUMBER", nullable: true },
+        chapterVIA: { type: "NUMBER", nullable: true },
+        totalIncome: { type: "NUMBER", nullable: true },
+        advanceTax: { type: "NUMBER", nullable: true },
+        tds: { type: "NUMBER", nullable: true },
+        tcs: { type: "NUMBER", nullable: true },
+        selfAssessmentTax: { type: "NUMBER", nullable: true },
+      },
+    },
   },
 };
 
@@ -1257,8 +1276,39 @@ function shapeDetermined(out, order) {
     pan: /^[A-Z]{5}\d{4}[A-Z]$/i.test(String(r.pan || "").trim()) ? String(r.pan).trim().toUpperCase() : "",
     head: String(r.head || "").slice(0, 120),
     quote: String(r.quote || "").slice(0, 200),
+    /* WHAT THE RETURN ITSELF SAID, off the same page.
+     *
+     * A CPC intimation prints the computation twice, side by side: the
+     * assessee's column and CPC's. The second answers column [B]; the FIRST is
+     * the income declared, which is what the ITR file would have given. For
+     * A.Y. 2020-21 and earlier the portal served returns as XML, so a practice
+     * that never kept the XML has no return file at all for its oldest years —
+     * and the one document it does have states both columns. Read for that
+     * case; the return file is still the better source where there is one, and
+     * the client prefers it. */
+    returned: shapeReturnedHeads(r.returnedHeads),
     at: new Date().toISOString(),
   };
+}
+
+const RETURNED_HEAD_KEYS = [
+  "salary", "houseProperty", "capitalGains", "otherSources",
+  "grossTotalIncome", "chapterVIA", "totalIncome",
+  "advanceTax", "tds", "tcs", "selfAssessmentTax",
+];
+function shapeReturnedHeads(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = {};
+  let any = false;
+  for (const k of RETURNED_HEAD_KEYS) {
+    // null is not nil: Number(null) is 0, and a head the order never printed
+    // must not come back as a declared zero.
+    const v = raw[k];
+    if (v === null || v === undefined || v === "") continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) { out[k] = Math.round(n); any = true; }
+  }
+  return any ? out : null;
 }
 
 /* ---------- documents called for ----------------------------------------------

@@ -30,12 +30,13 @@ import { createRequire } from "node:module";
 const { normaliseSearchDates, sniffKind, readArchive, collectDocuments, isSearchDocName: isSearchDocNameServer } =
   createRequire(import.meta.url)("../functions/blockSearchDates.js");
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
+import { parseItrXml, looksLikeItrXml } from "../src/tools/itrb/itrXml.js";
 import { checkUpload, looksLikePdf, uploadPath, shortName, MAX_UPLOADS, MAX_UPLOAD_BYTES } from "../src/tools/itrb/uploads.js";
 import { documentKind, documentExt, sniffExtension, retypeFilename } from "../src/downloadNames.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
-  withDeclared, withFiledParticulars, withDetermined, isoDate, withDueDate, readiness, blankYear,
+  withDeclared, withDeclaredFromOrder, withFiledParticulars, withDetermined, isoDate, withDueDate, readiness, blankYear,
 } from "../src/tools/itrb/draft.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -2146,4 +2147,147 @@ test("nothing to clear is not an error", () => {
   assert.deepEqual(yearsRepeatingB([]), []);
   assert.deepEqual(yearsRepeatingB(null), []);
   assert.deepEqual(yearsRepeatingB([blankYear({ ay: "2021-22" })]), []);
+});
+
+/* ---------------------------------------------------------------------------
+ * The return as XML — every year up to A.Y. 2020-21.
+ *
+ * The portal served returns as XML until the JSON schema came in, so a block
+ * period reaching back seven years reaches back into the XML era for its
+ * earliest rows. The year that could not be filled was the oldest one in the
+ * block, on a screen whose whole purpose is seven years at once.
+ * ------------------------------------------------------------------------- */
+
+const xmlFixture = readFileSync(new URL("./fixtures/itr2-xml-ay2020-21.xml", import.meta.url), "utf8");
+
+test("a real A.Y. 2020-21 XML reads exactly as a JSON would", () => {
+  // The tag names inside are ITD's own and are the SAME NAMES as the JSON keys,
+  // because both are generated from one schema. So no mapping table exists to
+  // drift: strip the namespace, keep the shape, and every rule applies.
+  const d = readDeclared(parseItrXml(xmlFixture));
+  assert.equal(d.form, "ITR2");
+  assert.equal(d.ay, "2020-21");
+  assert.equal(d.pan, "AAAPZ1007A");
+  assert.equal(d.salary, 850);
+  assert.equal(d.houseProperty, 0);
+  assert.equal(d.capitalGains, 2485);
+  assert.equal(d.otherSources, 387819);
+  assert.equal(d.grossTotalIncome, 391154);
+  assert.equal(d.chapterVIA, 9097);
+  assert.equal(d.totalIncome, 382060);
+  assert.equal(declaredTotal(d), 382060);
+});
+
+test("the credits and the filing section come out of the XML too", () => {
+  const d = readDeclared(parseItrXml(xmlFixture));
+  assert.equal(d.advanceTax, 0);
+  assert.equal(d.selfAssessmentTax, 0);
+  assert.equal(d.tds, 19500);
+  assert.equal(d.tcs, 0);
+  assert.equal(d.taxesPaid, 19500);
+  assert.equal(d.filedSection, "139(1)");     // ReturnFileSec 11, same code as the JSON
+});
+
+test("the whole year fills from an XML the way it does from a JSON", () => {
+  const y = withDeclared(blankYear({ ay: "2020-21" }), readDeclared(parseItrXml(xmlFixture)), "xml");
+  assert.equal(y.declaredTotal, 382060);
+  assert.equal(y.partC.returned, 382060);
+  assert.equal(y.declared.otherSources, 387819);
+  assert.equal(y.credits.tds, 19500);
+  assert.equal(y.declaredSource, "xml");
+  assert.equal(y.partA.filedSection, "139(1)");
+});
+
+test("the parser handles what a machine-written document actually contains", () => {
+  const doc = `<?xml version="1.0" encoding="UTF-8"?>
+    <!-- a comment -->
+    <ITRETURN:ITR xmlns:ITRETURN="http://incometaxindiaefiling.gov.in/main">
+      <ITRForm:ITR2>
+        <ITRForm:Form_ITR2><ITRForm:AssessmentYear>2020</ITRForm:AssessmentYear></ITRForm:Form_ITR2>
+        <ITRForm:Empty/>
+        <ITRForm:Name><![CDATA[Sample & Co]]></ITRForm:Name>
+        <ITRForm:Note>a &lt;b&gt; &amp; c</ITRForm:Note>
+        <ITRForm:Row><ITRForm:Amt>1</ITRForm:Amt></ITRForm:Row>
+        <ITRForm:Row><ITRForm:Amt>2</ITRForm:Amt></ITRForm:Row>
+      </ITRForm:ITR2>
+    </ITRETURN:ITR>`;
+  const out = parseItrXml(doc);
+  const body = out.ITR.ITR2;
+  assert.equal(body.Form_ITR2.AssessmentYear, "2020");
+  assert.equal(body.Empty, "");                       // self-closing
+  assert.equal(body.Name, "Sample & Co");             // CDATA
+  assert.equal(body.Note, "a <b> & c");               // entities, ampersand last
+  // Repeated siblings become an array — schedules repeat rows, and keeping only
+  // the last would silently drop every capital gain but the final entry.
+  assert.equal(Array.isArray(body.Row), true);
+  assert.deepEqual(body.Row.map((r) => r.Amt), ["1", "2"]);
+});
+
+test("anything that is not an ITR XML is refused rather than half-parsed", () => {
+  assert.equal(parseItrXml("<?xml version=\"1.0\"?><invoice><total>5</total></invoice>"), null);
+  assert.equal(parseItrXml(""), null);
+  assert.equal(parseItrXml(null), null);
+  assert.equal(parseItrXml("{\"ITR\":{}}"), null);
+  assert.equal(readDeclared(parseItrXml("<?xml version=\"1.0\"?><invoice><ITRish>1</ITRish></invoice>")), null);
+});
+
+test("an ITR XML is told from an ITR JSON before either is parsed", () => {
+  assert.equal(looksLikeItrXml(xmlFixture), true);
+  assert.equal(looksLikeItrXml('{"ITR":{"ITR2":{}}}'), false);
+  assert.equal(looksLikeItrXml(""), false);
+});
+
+/* ---------------------------------------------------------------------------
+ * The intimation's OTHER column.
+ *
+ * A CPC intimation prints the computation twice, the assessee's beside CPC's.
+ * The second answers [B]; the first is the income declared — which is all a
+ * practice has for a year whose XML it never kept.
+ * ------------------------------------------------------------------------- */
+
+// The figures as the A.Y. 2020-21 intimation prints them.
+const returnedCol = {
+  salary: 850, houseProperty: 0, capitalGains: 2485, otherSources: 387819,
+  grossTotalIncome: 391154, chapterVIA: 9097, totalIncome: 382060,
+  advanceTax: 0, tds: 19500, tcs: 0, selfAssessmentTax: 0,
+};
+
+test("the declared income can be taken off the intimation where there is no return file", () => {
+  const y = withDeclaredFromOrder(blankYear({ ay: "2020-21" }), returnedCol);
+  assert.equal(y.declaredTotal, 382060);
+  assert.equal(y.declared.otherSources, 387819);
+  assert.equal(y.partC.returned, 382060);
+  assert.equal(y.credits.tds, 19500);
+  assert.equal(y.returnFiled, true);
+  // Marked, so the screen can say which of the three sources it was.
+  assert.equal(y.declaredSource, "intimation");
+});
+
+test("a return that was read is never overwritten by a reading about it", () => {
+  // The return file is the return; the intimation is a document about it. The
+  // XML and the intimation agree here to the rupee, which is why the rule has
+  // to be tested rather than observed.
+  const fromXml = withDeclared(blankYear({ ay: "2020-21" }), readDeclared(parseItrXml(xmlFixture)), "xml");
+  const after = withDeclaredFromOrder(fromXml, { ...returnedCol, totalIncome: 999999 });
+  assert.equal(after.declaredTotal, 382060);
+  assert.equal(after.declaredSource, "xml");
+});
+
+test("an order that prints no computation changes nothing", () => {
+  const year = blankYear({ ay: "2020-21" });
+  assert.deepEqual(withDeclaredFromOrder(year, null), year);
+  assert.deepEqual(withDeclaredFromOrder(year, {}), year);
+  assert.deepEqual(withDeclaredFromOrder(year, { salary: null }), year);
+});
+
+test("a head the order did not print is not a declared nil", () => {
+  // Number(null) is 0. A bare isFinite check would write every unprinted head
+  // as a nil the assessee never declared.
+  const y = withDeclaredFromOrder(blankYear({ ay: "2020-21" }), {
+    salary: null, houseProperty: 0, totalIncome: 382060, tds: null,
+  });
+  assert.equal("salary" in y.declared && y.declared.salary === 0, false);
+  assert.equal(y.declared.houseProperty, 0);          // a printed nil IS nil
+  assert.equal(y.declaredTotal, 382060);
+  assert.equal(y.credits.tds, "");                    // unprinted, so left alone
 });

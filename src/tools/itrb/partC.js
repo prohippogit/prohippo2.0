@@ -154,11 +154,23 @@ const isTotalIncomeLine = (head) => {
 export function determinedFromReturn(ret) {
   const orders = Array.isArray(ret?.orders) ? ret.orders : [];
   const dated = orders
-    .filter((o) => o && o.reading && Array.isArray(o.reading.lines))
+    .filter((o) => o && (fromFocusedRead(o) || (o.reading && Array.isArray(o.reading.lines))))
     .slice()
     .sort((a, b) => String(b.orderDate || "").localeCompare(String(a.orderDate || "")));
 
   for (const order of dated) {
+    /* THE FOCUSED READ FIRST, WHERE THERE IS ONE.
+     *
+     * `determined` is what readDeterminedIncome wrote — a reader asked for this
+     * one figure and nothing else. `reading` is the Intimations screen's read
+     * of the whole comparison table, thirty fields deep, which is the right
+     * shape for a variance and a poor one for a single number: on an order that
+     * varied nothing there are no differences to report and the total-income
+     * row keeps falling out of the answer. Where both exist, prefer the one
+     * that was asked the question. */
+    const focused = fromFocusedRead(order);
+    if (focused) return focused;
+
     const line = order.reading.lines.find((l) => isTotalIncomeLine(l && l.head));
     // asComputed is CPC's column. asReturned is the taxpayer's, which is [C].
     const amount = line && typeof line.asComputed === "number" ? line.asComputed : null;
@@ -217,9 +229,24 @@ export function intimationToRead(ret) {
  * offered for re-reading, and the read that follows costs the same as the one
  * that produced nothing. */
 export function answersColumnB(order) {
+  if (fromFocusedRead(order)) return true;
   const lines = order && order.reading && Array.isArray(order.reading.lines) ? order.reading.lines : null;
   if (!lines) return false;
   return lines.some((l) => l && isTotalIncomeLine(l.head) && typeof l.asComputed === "number");
+}
+
+/** What readDeterminedIncome cached on this order, in determinedFromReturn's shape. */
+function fromFocusedRead(order) {
+  const d = order && order.determined;
+  if (!d || typeof d.amount !== "number") return null;
+  return {
+    amount: d.amount,
+    section: d.section || "143(1)",
+    orderDate: d.orderDate || order.orderDate || "",
+    commRefNo: d.commRefNo || order.commRefNo || "",
+    head: d.head || "",
+    quote: d.quote || "",
+  };
 }
 
 /** The same return with one order's freshly-read `reading` merged in. */

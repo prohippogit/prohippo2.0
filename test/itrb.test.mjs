@@ -2063,3 +2063,61 @@ test("the newest order is the one offered, read or not", () => {
   assert.equal(after.amount, 431200);
   assert.equal(after.orderDate, "2024-02-14");
 });
+
+/* ---------------------------------------------------------------------------
+ * The focused read beats the thirty-field one.
+ *
+ * Both read the same PDF out of Storage. readIntimationOrder asks for the whole
+ * comparison table, the demand, the refund, the arrears of other years and a
+ * classification of the cause — and on an order that varied nothing, which is
+ * most of them, there are no differences to report and the total-income row
+ * keeps falling out of the answer. readDeterminedIncome asks for the figure.
+ * ------------------------------------------------------------------------- */
+
+const focused = (over = {}) => ({
+  amount: 460590, asReturned: 460590, section: "143(1)", orderDate: "2023-08-09",
+  commRefNo: "CPC/2021/A1/123", head: "Total Income [13=(10-12)]",
+  quote: "13 Total Income [13=(10-12)] 4,60,590 4,60,590", ...over,
+});
+
+test("a focused read answers where the thirty-field one could not", () => {
+  // Exactly the live state: the order was read, and what came back has no
+  // total-income row. The focused read then puts the figure on the same order.
+  const stuck = order({ reading: { lines: [{ head: "Gross Total Income [10=(8-9)]", asComputed: 504236 }] } });
+  assert.equal(answersColumnB(stuck), false);
+
+  const done = { ...stuck, determined: focused() };
+  assert.equal(answersColumnB(done), true);
+  assert.equal(intimationToRead({ orders: [done] }), null);
+
+  const found = determinedFromReturn({ orders: [done] });
+  assert.equal(found.amount, 460590);
+  assert.equal(found.head, "Total Income [13=(10-12)]");
+  assert.match(found.quote, /4,60,590/);
+});
+
+test("where both reads exist the focused one wins", () => {
+  // The comparison table can carry a total-income row too. It is not wrong,
+  // but the reader that was asked the question is the one to believe.
+  const both = order({
+    reading: { lines: [{ head: "Total Income", asReturned: 1, asComputed: 999999 }] },
+    determined: focused(),
+  });
+  assert.equal(determinedFromReturn({ orders: [both] }).amount, 460590);
+});
+
+test("a focused read with no figure is not an answer", () => {
+  const empty = order({ determined: { amount: null, section: "", head: "" } });
+  assert.equal(answersColumnB(empty), false);
+  assert.equal(determinedFromReturn({ orders: [empty] }), null);
+  assert.equal(intimationToRead({ orders: [empty] })?.commRefNo, "CPC/2021/A1/123");
+});
+
+test("the focused read carries the section the order states", () => {
+  // The thirty-field reader is pointed at CPC intimations and can only ever
+  // say 143(1). A scrutiny order says what it is.
+  const scrutiny = order({ determined: focused({ section: "143(3)", amount: 812340 }) });
+  const found = determinedFromReturn({ orders: [scrutiny] });
+  assert.equal(found.section, "143(3)");
+  assert.equal(withDetermined(blankYear({ ay: "2021-22" }), found).partC.determinedSection, "143(3)");
+});

@@ -50,13 +50,30 @@ const samePan = (r, pan) => pan && String(r?.pan || "").toUpperCase() === pan;
  */
 export function findBlockProceedings(data, pan) {
   const PAN = String(pan || "").toUpperCase();
-  const matters = (data?.matters || []).filter((m) => samePan(m, PAN) && looksBlock(m));
-  const proceedingIds = [...new Set(matters.map((m) => m.proceedingReqId).filter(Boolean))];
+  const allMatters = (data?.matters || []).filter((m) => samePan(m, PAN));
+  const allNotices = (data?.notices || []).filter((n) => samePan(n, PAN));
 
-  const notices = (data?.notices || []).filter((n) => {
-    if (!samePan(n, PAN)) return false;
-    return looksBlock(n) || (n.proceedingReqId && proceedingIds.includes(n.proceedingReqId));
-  });
+  /* A PROCEEDING IS A BLOCK PROCEEDING IF ANYTHING IN IT IS UNDER s.158BC.
+   *
+   * This used to work only from the MATTER's own type and section, which is how
+   * a real proceeding came back holding one notice out of four. The department
+   * runs a block assessment inside a proceeding the portal has typed "Scrutiny",
+   * with the s.158BC notice sitting alongside three notices u/s 142(1) calling
+   * for the material — and it is one of THOSE that carries the ZIP with the
+   * panchnama in it. Typing the container is the portal's business and it does
+   * it loosely; what the notices are under is a fact.
+   *
+   * So the proceeding is identified from the notices as well as the matters,
+   * and then everything sharing that proceeding is in scope whatever section it
+   * is under. */
+  const proceedingIds = [...new Set([
+    ...allMatters.filter(looksBlock).map((m) => m.proceedingReqId),
+    ...allNotices.filter(looksBlock).map((n) => n.proceedingReqId),
+  ].filter(Boolean))];
+
+  const inScope = (r) => looksBlock(r) || (r.proceedingReqId && proceedingIds.includes(r.proceedingReqId));
+  const matters = allMatters.filter(inScope);
+  const notices = allNotices.filter(inScope);
 
   // Every file hanging off those notices — the notice PDF itself plus whatever
   // the department sent with it. This is what the reader will be given.
@@ -67,7 +84,49 @@ export function findBlockProceedings(data, pan) {
     }))),
   ]);
 
-  return { matters, notices, attachments, proceedingIds };
+  const replies = searchDocsInReplies(notices);
+
+  return { matters, notices, attachments, replies, proceedingIds };
+}
+
+/* Search documents inside the replies the practice has already filed.
+ *
+ * THE PANCHNAMA IS OFTEN NOT WHAT THE DEPARTMENT SENT — IT IS WHAT WE SENT
+ * BACK. It is handed over at the conclusion of the search, scanned, and then
+ * uploaded to the portal as an annexure to the reply to a s.142(1) notice. On a
+ * real proceeding it sat there, under a filed response, while the reader was
+ * being told there was nothing to read.
+ *
+ * MATCHED BY NAME, NOT READ WHOLESALE. A reply carries the client's ledgers,
+ * bank statements and confirmations — dozens of files, none of which can state
+ * when a search was authorised. Sending all of them would cost a great deal to
+ * learn nothing, so only the ones NAMED as search documents are read, and the
+ * rest are counted in the manifest so a miss is visible rather than silent. */
+/* Kept in step with functions/blockSearchDates.js, which is the authority — it
+   decides what is actually sent to the reader; this only counts it on screen.
+   A test asserts the two classify the same names the same way. */
+export const isSearchDocName = (name) => /panch|warrant|authoris|authoriz|\b132\b|search\s*(&|and)?\s*seiz/i.test(String(name || ""));
+
+export function searchDocsInReplies(notices) {
+  const picked = [];
+  let considered = 0;
+  for (const n of notices || []) {
+    for (const r of n.responses || []) {
+      for (const a of r.attachments || []) {
+        if (!a || !a.storagePath) continue;
+        considered++;
+        const name = `${a.label || ""} ${a.filename || ""}`;
+        if (!isSearchDocName(name)) continue;
+        picked.push({
+          noticeId: n.id,
+          storagePath: a.storagePath,
+          filename: a.label || a.filename || "Reply attachment",
+          filedOn: r.submittedOn || "",
+        });
+      }
+    }
+  }
+  return { picked, considered, passedOver: considered - picked.length };
 }
 
 /* Which notice starts the block return.
@@ -145,8 +204,11 @@ export function fieldsFromNotices(notices) {
  * its answer against the first id it is given, and that is the entry a
  * practitioner will look under afterwards.
  */
-export function readingOrder({ notices, attachments }) {
-  const withFiles = new Set((attachments || []).map((a) => a.noticeId));
+export function readingOrder({ notices, attachments, replies }) {
+  const withFiles = new Set([
+    ...(attachments || []).map((a) => a.noticeId),
+    ...((replies?.picked) || []).map((a) => a.noticeId),
+  ]);
   const ids = (notices || []).filter((n) => withFiles.has(n.id)).map((n) => n.id);
   const first = primaryNotice(notices)?.id;
   return first && ids.includes(first) ? [first, ...ids.filter((id) => id !== first)] : ids;
@@ -156,11 +218,16 @@ export function readingOrder({ notices, attachments }) {
  * A sentence about what the scan found, for the practitioner to read before
  * anything is written into their draft.
  */
-export function describeScan({ matters, notices, attachments }) {
+export function describeScan({ matters, notices, attachments, replies }) {
   if (!notices.length && !matters.length) return "Nothing on file for this PAN under s.158BC or s.158BD.";
   const bits = [];
   if (matters.length) bits.push(`${matters.length} proceeding${matters.length === 1 ? "" : "s"}`);
   bits.push(`${notices.length} notice${notices.length === 1 ? "" : "s"}`);
   if (attachments.length) bits.push(`${attachments.length} document${attachments.length === 1 ? "" : "s"}`);
-  return `Found ${bits.join(", ")} under Matters for this PAN.`;
+  const found = `Found ${bits.join(", ")} under Matters for this PAN.`;
+  const picked = replies?.picked?.length || 0;
+  if (!picked) return found;
+  // Said out loud, because a document out of our OWN filed reply is not where a
+  // practitioner expects the app to have been looking.
+  return `${found} ${picked} search document${picked === 1 ? "" : "s"} also found in the replies already filed.`;
 }

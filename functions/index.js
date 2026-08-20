@@ -45,7 +45,7 @@ const { computeVariances, summariseVariances, VARIANCE_ENGINE } = require("./ret
 /* Reading the intimation's own comparison table — on demand, never on a sync,
    and never able to change the flag the arithmetic above settled. */
 const { normaliseReading, CAUSE_IDS } = require("./intimationReading");
-const { normaliseSearchDates, collectDocuments } = require("./blockSearchDates");
+const { normaliseSearchDates, collectDocuments, isSearchDocName } = require("./blockSearchDates");
 const { normaliseTranslation, languageFor } = require("./messageTranslation");
 
 /* ---------- where these functions run ----------------------------------------
@@ -815,7 +815,8 @@ Extract ONLY these facts. Return null for anything the documents do not state. N
 - "lastAuthorisationDate": the date the LAST of the authorisations for the search was EXECUTED — the date the search finally concluded. Where a search ran over several days this is the LAST of them, and it is often the date of the final panchnama, which may be marked "concluded" or "finally concluded". If the documents show only one date for the whole search, return the same date here as for initiationDate.
 - "panchnamaDates": every distinct date on which a panchnama was drawn up, oldest first.
 - "searchSection": "132" for a search, "132A" for a requisition. null if the documents do not say.
-- "quotes": for each of initiationDate and lastAuthorisationDate that you found, the sentence or phrase from the document that states it, verbatim and under 200 characters. Use the keys "initiationDate" and "lastAuthorisationDate".
+- "blockPeriodFrom" and "blockPeriodTo": the block period AS PRINTED, where any document prints one. Every notice issued in a block assessment carries it in the letterhead, as "Block Period: 01/04/2019-23/08/2025" or "in connection with the assessment for the block period 01/04/2019-23/08/2025". Return the two ends separately, as YYYY-MM-DD. COPY IT, NEVER COMPUTE IT: if no document prints a block period, return null for both, even where you know the search dates. If different documents print different block periods, return the one printed most often.
+- "quotes": for each of initiationDate, lastAuthorisationDate and the block period that you found, the sentence or phrase from the document that states it, verbatim and under 200 characters. Use the keys "initiationDate", "lastAuthorisationDate" and "blockPeriod".
 
 DATES: return every date as YYYY-MM-DD. Indian documents write DD/MM/YYYY and DD-MM-YYYY — read them as day first. "05/04/2026" is 5 April 2026, never 4 May 2026. Getting this backwards moves the block period by months, so where a date is ambiguous and the document gives no other clue, return null rather than a guess.
 
@@ -828,11 +829,14 @@ const SEARCH_DATES_SCHEMA = {
     lastAuthorisationDate: { type: "STRING", nullable: true },
     panchnamaDates: { type: "ARRAY", items: { type: "STRING" } },
     searchSection: { type: "STRING", nullable: true },
+    blockPeriodFrom: { type: "STRING", nullable: true },
+    blockPeriodTo: { type: "STRING", nullable: true },
     quotes: {
       type: "OBJECT",
       properties: {
         initiationDate: { type: "STRING", nullable: true },
         lastAuthorisationDate: { type: "STRING", nullable: true },
+        blockPeriod: { type: "STRING", nullable: true },
       },
     },
   },
@@ -924,6 +928,7 @@ exports.readBlockSearchDates = onCall(
        will show against each — the practitioner needs to see WHICH notice a
        file came off, because that is how they will find it again. */
     const wanted = [];
+    let repliesPassedOver = 0;
     for (const { id, snap } of found) {
       const n = snap.data();
       const label = [
@@ -934,9 +939,29 @@ exports.readBlockSearchDates = onCall(
       for (const a of n.attachments || []) {
         if (a && a.storagePath) wanted.push({ noticeId: id, notice: label, name: a.filename || a.label || a.storagePath, path: a.storagePath });
       }
+      /* And the search documents inside the replies already filed. The
+         panchnama is handed over at the conclusion of the search and goes back
+         to the department as an annexure to a s.142(1) reply — so on a real
+         proceeding it is under a response we filed, not under anything the
+         department sent. Only the ones named as search documents; a reply's
+         ledgers and bank statements cannot state when a search was authorised
+         and cost a page of tokens each to establish it. */
+      for (const r of n.responses || []) {
+        for (const a of r.attachments || []) {
+          if (!a || !a.storagePath) continue;
+          const name = `${a.label || ""} ${a.filename || ""}`.trim();
+          if (!isSearchDocName(name)) { repliesPassedOver++; continue; }
+          wanted.push({
+            noticeId: id,
+            notice: `${label} — reply filed ${r.submittedOn || ""}`.trim(),
+            name: a.label || a.filename || a.storagePath,
+            path: a.storagePath,
+          });
+        }
+      }
     }
     if (!wanted.length) {
-      return { ok: false, reason: "no-files", manifest: [], read: 0, message: "Nothing is attached to the notices on this proceeding — upload the notice and the panchnama, or enter the two dates by hand." };
+      return { ok: false, reason: "no-files", manifest: [], read: 0, repliesPassedOver, message: "Nothing is attached to the notices on this proceeding — upload the notice and the panchnama, or enter the two dates by hand." };
     }
 
     // Same bundle, same answer. Keyed on the paths themselves rather than on
@@ -958,7 +983,7 @@ exports.readBlockSearchDates = onCall(
 
     const { files, manifest, read, skipped } = collectDocuments(sources, { maxTotalBytes: MAX_TOTAL_BYTES });
     if (!files.length) {
-      return { ok: false, reason: "nothing-readable", manifest, read: 0, message: "None of the files on this proceeding could be opened as a document." };
+      return { ok: false, reason: "nothing-readable", manifest, read: 0, repliesPassedOver, message: "None of the files on this proceeding could be opened as a document." };
     }
 
     let out;
@@ -969,7 +994,7 @@ exports.readBlockSearchDates = onCall(
       throw e;
     }
 
-    const blockSearch = { ...normaliseSearchDates(out, normDate), key, notices: found.length, read, skipped, manifest };
+    const blockSearch = { ...normaliseSearchDates(out, normDate), key, notices: found.length, read, skipped, repliesPassedOver, manifest };
     await ref.set({ blockSearch, blockSearchError: "" }, { merge: true });
     return { ok: true, cached: false, blockSearch };
   }

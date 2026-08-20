@@ -23,11 +23,17 @@
 const EARLIEST = "2024-01-01";
 const LATEST = "2100-01-01";
 
+/* The block period's OWN start date is exempt from that floor. It is 1 April of
+   the sixth year before the search, so a perfectly correct one reads 2019 —
+   the window that catches misread search dates would throw away the real
+   thing. Seven years before the regime began is as far back as it can go. */
+const EARLIEST_BLOCK_START = "2017-01-01";
+
 /** YYYY-MM-DD, or "" for anything that is not a date in the window. */
-function saneDate(v, normDate) {
+function saneDate(v, normDate, floor) {
   const d = normDate(v);
   if (!d) return "";
-  return d >= EARLIEST && d <= LATEST ? d : "";
+  return d >= (floor || EARLIEST) && d <= LATEST ? d : "";
 }
 
 /**
@@ -55,9 +61,41 @@ function normaliseSearchDates(raw, normDate, now) {
   const quotes = r.quotes && typeof r.quotes === "object" ? r.quotes : {};
   const quote = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : "");
 
+  /* THE BLOCK PERIOD, WHERE THE DEPARTMENT HAS ALREADY PRINTED IT.
+   *
+   * Every s.142(1) notice issued in a block assessment carries a line reading
+   * "Block Period: 01/04/2019-23/08/2025" in its letterhead. That is the
+   * department's own statement of the period it is assessing, and it was
+   * sitting unread on a real proceeding while the app asked a practitioner to
+   * find two dates by hand.
+   *
+   * Its END is not an inference. s.158B(b) DEFINES the block period as ending
+   * on the date the last of the authorisations was executed, so a printed end
+   * date IS A20 — read off the page, not computed from anything. Its START is
+   * different: it fixes only the YEAR the search was initiated, never the day,
+   * and A19 stays empty rather than being invented. What the start is good for
+   * is checking (see statedPeriodAgrees in the client): if a same-day reading
+   * of the end date reproduces the printed start, the printed period and the
+   * derived one are the same period, and that can be shown rather than assumed. */
+  const blockPeriodFrom = saneDate(r.blockPeriodFrom, normDate, EARLIEST_BLOCK_START);
+  const blockPeriodTo = saneDate(r.blockPeriodTo, normDate);
+  const statedPeriod = blockPeriodFrom && blockPeriodTo && blockPeriodFrom < blockPeriodTo
+    ? { from: blockPeriodFrom, to: blockPeriodTo, quote: quote(quotes.blockPeriod) }
+    : null;
+
+  // A20 taken from a printed block period is still A20, and it is marked so the
+  // screen can say where it came from rather than showing it like a direct read.
+  let lastAuthFrom = lastAuthorisationDate ? "document" : "";
+  if (!lastAuthorisationDate && statedPeriod && (!initiationDate || statedPeriod.to >= initiationDate)) {
+    lastAuthorisationDate = statedPeriod.to;
+    lastAuthFrom = "blockPeriod";
+  }
+
   return {
     initiationDate,
     lastAuthorisationDate,
+    lastAuthFrom,
+    statedPeriod,
     panchnamaDates,
     searchSection: ["132", "132A"].includes(String(r.searchSection || "").trim()) ? String(r.searchSection).trim() : "",
     /* Kept beside every date, because these two decide seven years of
@@ -66,6 +104,7 @@ function normaliseSearchDates(raw, normDate, now) {
     quotes: {
       initiationDate: quote(quotes.initiationDate),
       lastAuthorisationDate: quote(quotes.lastAuthorisationDate),
+      blockPeriod: quote(quotes.blockPeriod),
     },
     at: now || new Date().toISOString(),
   };
@@ -307,7 +346,30 @@ function collectDocuments(sources, opts = {}) {
   return { files, manifest, read: files.length, skipped: candidates.filter((c) => !["read", "archive"].includes(c.status)).length };
 }
 
+
+/* Which files in a FILED REPLY are worth reading for a search date.
+ *
+ * The panchnama is handed to the assessee at the conclusion of the search and
+ * comes back to the department as an annexure to the reply to a s.142(1)
+ * notice — so on a real proceeding it sits under a response we filed, not under
+ * anything the department sent. Reading a whole reply is out of the question: a
+ * reply carries the client's ledgers, bank statements and confirmations, dozens
+ * of files, none of which can state when a search was authorised. So the ones
+ * NAMED as search documents are read and the rest are counted.
+ *
+ * "panch" rather than "panchnama": the spelling on a real annexure was
+ * "Comprihansive Panchanama". A name typed by a person is not a fixed string,
+ * and the cost of a false positive here is one extra PDF in a read that was
+ * happening anyway.
+ *
+ * THE CLIENT HAS A COPY of this rule in src/tools/itrb/findProceeding.js, to
+ * count on screen what this will read. This one is the authority — it decides
+ * what is actually sent — and a test asserts the two agree.
+ */
+const SEARCH_DOC_NAME = /panch|warrant|authoris|authoriz|\b132\b|search\s*(&|and)?\s*seiz/i;
+const isSearchDocName = (name) => SEARCH_DOC_NAME.test(String(name || ""));
+
 module.exports = {
-  normaliseSearchDates, EARLIEST, LATEST,
+  normaliseSearchDates, EARLIEST, LATEST, isSearchDocName,
   sniffKind, readArchive, collectDocuments, documentPriority, fileName,
 };

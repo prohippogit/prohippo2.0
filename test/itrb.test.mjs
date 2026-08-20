@@ -13,17 +13,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy } from "../src/tools/itrb/blockPeriod.js";
+import { blockPeriod, dueDateFor, monthsOfDelay, fyStart, ayOfPy, pyOfAy, statedPeriodAgrees } from "../src/tools/itrb/blockPeriod.js";
 import { DII_ITEMS, furnishingMode, VERIFICATION_TEXT } from "../src/tools/itrb/form.js";
 import { columnsFor, labelFor, appliesTo, partBColumns, determinedFromReturn, PART_C_COLUMNS } from "../src/tools/itrb/partC.js";
 import { variantFor, filedSectionFrom, partYearIncome, missingFor, FIELD_NUMBERS } from "../src/tools/itrb/partA.js";
 import { PART_B_ROWS, PART_B_LEAVES, computePartB, partBYear, tiesToPartC } from "../src/tools/itrb/partB.js";
 import { completeness, summarise, STATUS } from "../src/tools/itrb/completeness.js";
-import { findBlockProceedings, primaryNotice, fieldsFromNotices, describeScan, isBlockSection } from "../src/tools/itrb/findProceeding.js";
+import {
+  findBlockProceedings, primaryNotice, fieldsFromNotices, describeScan, isBlockSection,
+  readingOrder, searchDocsInReplies, isSearchDocName,
+} from "../src/tools/itrb/findProceeding.js";
 import { createRequire } from "node:module";
-const { normaliseSearchDates, sniffKind, readArchive, collectDocuments } =
+const { normaliseSearchDates, sniffKind, readArchive, collectDocuments, isSearchDocName: isSearchDocNameServer } =
   createRequire(import.meta.url)("../functions/blockSearchDates.js");
 import { readDeclared, declaredTotal, HEADS } from "../src/tools/itrb/declared.js";
+import { documentKind, documentExt, sniffExtension, retypeFilename } from "../src/downloadNames.js";
 import { computeItrB, round288B, UNDISCLOSED_HEADS } from "../src/tools/itrb/compute.js";
 import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
@@ -1322,4 +1326,207 @@ test("nothing readable still comes back as a manifest, not as an exception", () 
   assert.equal(manifest.length, 2);
   assert.ok(manifest.every((m) => m.status === "skipped" && m.detail));
   assert.match(manifest[1].detail, /RAR/);
+});
+
+/* ---------------------------------------------------------------------------
+ * The proceeding as the department actually files it.
+ *
+ * A real block proceeding came back holding one notice out of four. The portal
+ * had typed the MATTER "Scrutiny" and hung a s.158BC notice in it alongside
+ * three u/s 142(1) calling for the material — and it was one of THOSE that
+ * carried the ZIP, and a reply to one of them that carried the panchnama.
+ * ------------------------------------------------------------------------- */
+
+const trustPan = "AACTR2704C";
+const proceedingData = {
+  matters: [
+    // Typed "Scrutiny" by the portal, not "Block assessment". This is the shape
+    // that used to make the whole proceeding invisible.
+    { id: "m1", pan: trustPan, type: "Scrutiny", section: "", proceedingReqId: "PR-1" },
+    { id: "m2", pan: trustPan, type: "Scrutiny", section: "", proceedingReqId: "PR-OTHER" },
+  ],
+  notices: [
+    { id: "n158", pan: trustPan, section: "158BC", date: "2026-06-30", din: "100115783112",
+      proceedingReqId: "PR-1", storagePath: "p/notice-158bc.pdf", fileName: "Notice us 158BC.pdf" },
+    { id: "n142a", pan: trustPan, section: "142(1)", date: "2026-07-31", din: "100117490908",
+      proceedingReqId: "PR-1", storagePath: "p/notice-142-a.pdf", fileName: "Notice us 142(1).pdf",
+      attachments: [{ storagePath: "p/attachment.pdf", filename: "ATTACHMENT.pdf", contentType: "application/x-zip-compressed" }],
+      responses: [{ submittedOn: "2026-08-19", attachments: [
+        { storagePath: "p/reply-1.pdf", label: "The Copy of Handwritten Hindi Statement for ref — Comprihansive Panchanama 23.08.25.pdf" },
+        { storagePath: "p/reply-2.pdf", label: "Documents set 1" },
+        { storagePath: "p/reply-3.pdf", label: "Document set 2" },
+      ] }] },
+    { id: "n142b", pan: trustPan, section: "142(1)", date: "2026-07-23", din: "100116970322",
+      proceedingReqId: "PR-1", storagePath: "p/notice-142-b.pdf", fileName: "Notice us 142(1).pdf" },
+    // Same PAN, different proceeding. Nothing to do with the search.
+    { id: "nother", pan: trustPan, section: "142(1)", date: "2026-02-01",
+      proceedingReqId: "PR-OTHER", storagePath: "p/unrelated.pdf" },
+    // Another assessee's block notice. Must never be swept in.
+    { id: "nelse", pan: "AAAAA1111A", section: "158BC", date: "2026-06-30", proceedingReqId: "PR-1" },
+  ],
+};
+
+test("a s.158BC notice makes its whole proceeding a block proceeding", () => {
+  // The matter says "Scrutiny". The notice says s.158BC. The notice is the fact.
+  const found = findBlockProceedings(proceedingData, trustPan);
+  assert.deepEqual(found.notices.map((n) => n.id), ["n158", "n142a", "n142b"]);
+  assert.deepEqual(found.matters.map((m) => m.id), ["m1"]);
+  assert.deepEqual(found.proceedingIds, ["PR-1"]);
+});
+
+test("the proceeding stops at its own boundary, and at this assessee", () => {
+  const found = findBlockProceedings(proceedingData, trustPan);
+  assert.equal(found.notices.some((n) => n.id === "nother"), false);   // another proceeding
+  assert.equal(found.notices.some((n) => n.id === "nelse"), false);    // another PAN
+});
+
+test("the ZIP on the 142(1) notice is in the bundle, and every notice is read", () => {
+  // The archive with the search papers in it hangs off a s.142(1) notice, not
+  // off the notice that starts the return. Finding it is the whole point.
+  const found = findBlockProceedings(proceedingData, trustPan);
+  assert.ok(found.attachments.some((a) => a.storagePath === "p/attachment.pdf"));
+  // Every notice with a file is read, the one that starts the return first.
+  assert.deepEqual(readingOrder(found), ["n158", "n142a", "n142b"]);
+});
+
+test("the panchnama filed with our own reply is picked up; the ledgers are not", () => {
+  const { replies } = findBlockProceedings(proceedingData, trustPan);
+  assert.deepEqual(replies.picked.map((r) => r.storagePath), ["p/reply-1.pdf"]);
+  assert.equal(replies.considered, 3);
+  assert.equal(replies.passedOver, 2);          // counted, so a miss is visible
+  assert.match(describeScan(findBlockProceedings(proceedingData, trustPan)), /1 search document also found in the replies/);
+});
+
+test("a misspelt panchnama still counts — a name typed by a person is not a fixed string", () => {
+  // The real annexure was called "Comprihansive Panchanama". Matching the whole
+  // word would have missed it.
+  for (const n of ["Comprihansive Panchanama 23.08.25.pdf", "PANCHNAMA-final.pdf", "Warrant of authorisation u-s 132", "search & seizure annexure"]) {
+    assert.equal(isSearchDocName(n), true, n);
+  }
+  for (const n of ["Documents set 1", "Bank statement HDFC", "Ledger 2019-20", ""]) {
+    assert.equal(isSearchDocName(n), false, n);
+  }
+});
+
+test("the client's rule for reply annexures and the server's cannot drift apart", () => {
+  // One decides what is READ (the callable), the other what is COUNTED on
+  // screen. A disagreement means the card promises a file that is never sent.
+  const names = [
+    "Comprihansive Panchanama 23.08.25.pdf", "PANCHNAMA.pdf", "panch.pdf",
+    "Warrant of authorisation", "Authorization u/s 132", "search and seizure",
+    "Documents set 1", "Others", "Partial Reply", "Bank statement", "132 crore turnover note", "",
+  ];
+  for (const n of names) assert.equal(isSearchDocName(n), isSearchDocNameServer(n), n);
+});
+
+/* ---------------------------------------------------------------------------
+ * A compressed folder the department called "ATTACHMENT.pdf".
+ *
+ * The card said ZIP and the download said .pdf, so the practitioner got a file
+ * their reader refused to open. Two functions were reading the same two facts
+ * and reaching different answers.
+ * ------------------------------------------------------------------------- */
+
+test("the kind decides the extension, so the badge and the download agree", () => {
+  const filename = "ATTACHMENT.pdf";
+  const contentType = "application/x-zip-compressed";
+  assert.equal(documentKind(filename, contentType), "zip");
+  assert.equal(documentExt(filename, contentType), "zip");        // was "pdf"
+});
+
+test("a name that agrees with the kind is kept as it is", () => {
+  assert.equal(documentExt("papers.rar", "application/x-rar-compressed"), "rar");
+  assert.equal(documentExt("Notice us 148.pdf", "application/pdf"), "pdf");
+  assert.equal(documentExt("Annexure.xlsx", ""), "xlsx");
+  assert.equal(documentExt("ATTACHMENT", "application/zip"), "zip");
+});
+
+test("the first bytes overrule both names, for everything already in Storage", () => {
+  // Nothing can be fixed at upload for a file uploaded last month. This is read
+  // at the one moment the bytes are in hand.
+  assert.equal(sniffExtension([0x50, 0x4b, 0x03, 0x04]), "zip");
+  assert.equal(sniffExtension([0x25, 0x50, 0x44, 0x46, 0x2d]), "pdf");
+  assert.equal(sniffExtension([0x52, 0x61, 0x72, 0x21]), "rar");
+  assert.equal(sniffExtension([0x00, 0x01]), "");                 // says nothing, changes nothing
+  assert.equal(sniffExtension(null), "");
+});
+
+test("a wrong extension is replaced, not stacked on top of", () => {
+  // "ATTACHMENT.pdf.zip" is not an improvement on "ATTACHMENT.pdf".
+  assert.equal(retypeFilename("Trust - AY 2020-21 - ATTACHMENT.pdf", "zip"), "Trust - AY 2020-21 - ATTACHMENT.zip");
+  assert.equal(retypeFilename("Notice u-s 158BC", "pdf"), "Notice u-s 158BC.pdf");
+  assert.equal(retypeFilename("already.zip", "zip"), "already.zip");
+  // A dot that is not an extension is left alone — "23.08.25" is a date.
+  assert.equal(retypeFilename("Panchanama 23.08.25", "pdf"), "Panchanama 23.08.25.pdf");
+});
+
+/* ---------------------------------------------------------------------------
+ * The block period the department has already printed.
+ *
+ * The s.142(1) notices in a real block proceeding carry "Block Period:
+ * 01/04/2019-23/08/2025" in the letterhead. It was sitting unread while the app
+ * asked the practitioner to find two dates by hand — because the reader had
+ * never been given those notices, and because it had never been asked to look.
+ * ------------------------------------------------------------------------- */
+
+test("a printed block period gives A20, because s.158B(b) defines it that way", () => {
+  // Not an inference: the block period ENDS on the date the last authorisation
+  // was executed, so a printed end date is that date, read off the page.
+  const out = shape({
+    blockPeriodFrom: "2019-04-01", blockPeriodTo: "2025-08-23",
+    quotes: { blockPeriod: "Block Period: 01/04/2019-23/08/2025" },
+  });
+  assert.equal(out.lastAuthorisationDate, "2025-08-23");
+  assert.equal(out.lastAuthFrom, "blockPeriod");        // marked, so the screen can say so
+  assert.deepEqual(out.statedPeriod, { from: "2019-04-01", to: "2025-08-23", quote: "Block Period: 01/04/2019-23/08/2025" });
+  // A19 is NOT invented from it. The start date fixes the year, never the day.
+  assert.equal(out.initiationDate, "");
+});
+
+test("a date actually read from a document beats one taken from the period", () => {
+  const out = shape({
+    lastAuthorisationDate: "2025-08-20", blockPeriodFrom: "2019-04-01", blockPeriodTo: "2025-08-23",
+  });
+  assert.equal(out.lastAuthorisationDate, "2025-08-20");
+  assert.equal(out.lastAuthFrom, "document");
+  assert.ok(out.statedPeriod);                          // still reported, still checkable
+});
+
+test("the block period's own start date survives the misread filter", () => {
+  // 2019 is seven years before the search and a perfectly correct start date.
+  // The window that throws away misread search dates would have binned it.
+  assert.equal(shape({ blockPeriodFrom: "2019-04-01", blockPeriodTo: "2025-08-23" }).statedPeriod.from, "2019-04-01");
+  assert.equal(shape({ initiationDate: "2019-04-01" }).initiationDate, "");
+  // Still bounded — a 2012 "block period" is a misread of something else.
+  assert.equal(shape({ blockPeriodFrom: "2012-04-01", blockPeriodTo: "2025-08-23" }).statedPeriod, null);
+});
+
+test("a printed period the wrong way round, or half missing, is not a period", () => {
+  assert.equal(shape({ blockPeriodFrom: "2025-08-23", blockPeriodTo: "2019-04-01" }).statedPeriod, null);
+  assert.equal(shape({ blockPeriodTo: "2025-08-23" }).statedPeriod, null);
+  assert.equal(shape({ blockPeriodFrom: "2019-04-01" }).statedPeriod, null);
+});
+
+test("the printed period is checked against the one this app derives", () => {
+  // The real case. A same-day reading of the end date reproduces the printed
+  // start exactly, so the two periods are the same period — and that can be
+  // shown to the practitioner instead of assumed on their behalf.
+  const check = statedPeriodAgrees({ from: "2019-04-01", to: "2025-08-23" });
+  assert.deepEqual(check, { agrees: true, derivedFrom: "2019-04-01" });
+
+  // And when it does not line up, it says what it derived instead.
+  assert.deepEqual(statedPeriodAgrees({ from: "2018-04-01", to: "2025-08-23" }), { agrees: false, derivedFrom: "2019-04-01" });
+  assert.equal(statedPeriodAgrees(null), null);
+  assert.equal(statedPeriodAgrees({ from: "2019-04-01" }), null);
+});
+
+test("the printed period, read end to end, gives the block period on the notice", () => {
+  // What the whole thing is for: a line in a letterhead becomes seven rows.
+  const out = shape({ blockPeriodFrom: "2019-04-01", blockPeriodTo: "2025-08-23" });
+  const bp = blockPeriod(out.lastAuthorisationDate, out.lastAuthorisationDate);
+  assert.equal(bp.from, "2019-04-01");
+  assert.equal(bp.to, "2025-08-23");
+  assert.equal(bp.years.length, 7);
+  assert.equal(bp.spansYears, false);
+  assert.equal(bp.years[6].part, true);        // 2025-26 is the part year
 });

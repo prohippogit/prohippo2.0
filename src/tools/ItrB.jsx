@@ -26,7 +26,7 @@ import { storage, functions } from '../firebase';
 import { Icon, EmptyState, FormField, SelectInput, ComboBox, Toggle, Table, fmtINR, fmtDateLong, titleCase } from '../shared';
 import { useData } from '../store';
 import { saveBlob } from '../downloadFile';
-import { blockPeriod } from './itrb/blockPeriod';
+import { blockPeriod, statedPeriodAgrees } from './itrb/blockPeriod';
 import { readDeclared } from './itrb/declared';
 import { computeItrB, UNDISCLOSED_HEADS, RATE_113, RATE_CESS, RATE_158BFA } from './itrb/compute';
 import { HEADS } from './itrb/declared';
@@ -1150,7 +1150,7 @@ const FILE_STATUS = {
   skipped: { label: "Not a document", bg: "var(--p-lavender)", fg: "var(--p-text-3)" },
 };
 
-function FilesRead({ manifest, notices, open, onToggle }) {
+function FilesRead({ manifest, notices, passedOver, open, onToggle }) {
   if (!manifest?.length) return null;
   const read = manifest.filter((m) => m.status === "read").length;
   const opened = manifest.filter((m) => m.status === "archive").length;
@@ -1188,6 +1188,16 @@ function FilesRead({ manifest, notices, open, onToggle }) {
               </div>
             );
           })}
+          {/* What was deliberately NOT sent. A reply carries the client's
+              ledgers and confirmations by the dozen and none of them can state
+              when a search was authorised, so only the ones named as search
+              documents are read — said out loud, so a miss is visible. */}
+          {passedOver > 0 && (
+            <div className="muted" style={{fontSize: 11, padding: "8px 13px", borderTop: "1px solid var(--p-line)"}}>
+              {passedOver} other document{passedOver === 1 ? "" : "s"} in the replies already filed {passedOver === 1 ? "was" : "were"} not
+              sent — nothing in {passedOver === 1 ? "its name" : "their names"} suggests a panchnama or a warrant of authorisation.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1213,6 +1223,7 @@ function ProceedingScan({ draft, onApply }) {
   const [reading, setReading] = React.useState(false);
   const [dates, setDates] = React.useState(null);
   const [manifest, setManifest] = React.useState(null);
+  const [passedOver, setPassedOver] = React.useState(0);
   const [filesOpen, setFilesOpen] = React.useState(false);
 
   const pan = (draft.pan || "").toUpperCase();
@@ -1222,6 +1233,7 @@ function ProceedingScan({ draft, onApply }) {
     setScan({ ...found, fields, conflicts, source });
     setDates(null);
     setManifest(null);
+    setPassedOver(0);
     if (found.notices.length) {
       onApply(fields);
       notify(describeScan(found));
@@ -1251,6 +1263,7 @@ function ProceedingScan({ draft, onApply }) {
       // tell "the panchnama says nothing" apart from "no panchnama was ever
       // uploaded", and those need different work from the practitioner.
       setManifest(bs?.manifest || out.manifest || null);
+      setPassedOver(bs?.repliesPassedOver ?? out.repliesPassedOver ?? 0);
 
       if (out.ok === false) {
         setDates(null);
@@ -1278,14 +1291,21 @@ function ProceedingScan({ draft, onApply }) {
     }
   };
 
-  const applyDates = () => {
+  const applyDates = ({ sameDay = false } = {}) => {
     const patch = {};
     if (dates.initiationDate) patch.searchDate = dates.initiationDate;
     if (dates.lastAuthorisationDate) patch.lastAuthDate = dates.lastAuthorisationDate;
+    /* The same-day reading, taken only when the practitioner presses the button
+       that says so. A19 is set to the end of the printed block period — not
+       because the search began that day, but because it is the one value that
+       makes the derived period match the period the department printed. */
+    if (sameDay && !dates.initiationDate && dates.lastAuthorisationDate) patch.searchDate = dates.lastAuthorisationDate;
     if (dates.panchnamaDates?.length) patch.lastPanchnamaDate = dates.panchnamaDates[dates.panchnamaDates.length - 1];
     if (dates.searchSection) patch.searchSection = dates.searchSection;
     onApply(patch);
-    notify("Search dates applied — the block period follows from them, so check it.");
+    notify(sameDay
+      ? "Block period set to the one printed on the notice. A19 is the same day as A20 — correct it from the panchnama if the search began earlier."
+      : "Search dates applied — the block period follows from them, so check it.");
   };
 
   return (
@@ -1331,16 +1351,18 @@ function ProceedingScan({ draft, onApply }) {
             </div>
           ))}
 
-          {scan.attachments.length > 0 && (
+          {(scan.attachments.length > 0 || scan.replies?.picked?.length > 0) && (
             <div style={{borderTop: "1px solid var(--p-line)", paddingTop: 12}}>
               <div style={{display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"}}>
                 <div style={{flex: 1, minWidth: 200}}>
                   <div style={{fontWeight: 700, fontSize: 12.5}}>The two search dates</div>
                   <div className="muted" style={{fontSize: 11.5}}>
-                    A19 and A20 are in the prose of the notice and the panchnama, not in any record. All
+                    A19 and A20 are in the prose of the notice and the panchnama, not in any record.
                     {" "}{scan.attachments.length} document{scan.attachments.length === 1 ? "" : "s"} on
-                    {" "}{readingOrder(scan).length} notice{readingOrder(scan).length === 1 ? "" : "s"} are read together,
-                    and any ZIP among them is opened first.
+                    {" "}{readingOrder(scan).length} notice{readingOrder(scan).length === 1 ? "" : "s"}
+                    {scan.replies?.picked?.length
+                      ? `, and ${scan.replies.picked.length} search document${scan.replies.picked.length === 1 ? "" : "s"} out of the replies already filed,`
+                      : ""} are read together, and any ZIP among them is opened first.
                   </div>
                 </div>
                 <button className="btn btn-secondary btn-sm" onClick={readDates} disabled={reading}>
@@ -1352,7 +1374,10 @@ function ProceedingScan({ draft, onApply }) {
                 <div style={{marginTop: 12, padding: "12px 14px", borderRadius: 12, background: "var(--p-lavender-2)"}}>
                   {[
                     ["A19  Search initiated", dates.initiationDate, dates.quotes?.initiationDate],
-                    ["A20  Last authorisation executed", dates.lastAuthorisationDate, dates.quotes?.lastAuthorisationDate],
+                    ["A20  Last authorisation executed", dates.lastAuthorisationDate,
+                      dates.lastAuthFrom === "blockPeriod"
+                        ? dates.quotes?.blockPeriod || "from the block period printed on the notice"
+                        : dates.quotes?.lastAuthorisationDate],
                   ].map(([label, value, quote]) => (
                     <div key={label} style={{marginBottom: 8}}>
                       <div style={{fontSize: 12.5}}>
@@ -1369,15 +1394,49 @@ function ProceedingScan({ draft, onApply }) {
                       <span className="muted">Panchnama</span> — {dates.panchnamaDates.map(dateOf).join(", ")}
                     </div>
                   )}
-                  <button className="btn btn-primary btn-sm" onClick={applyDates} disabled={!dates.initiationDate && !dates.lastAuthorisationDate}>
-                    <Icon name="check" size={13}/>Use these dates
-                  </button>
-                  <span className="muted" style={{fontSize: 11, marginLeft: 10}}>Read from a scan — check them against the documents.</span>
+                  {/* THE BLOCK PERIOD AS THE DEPARTMENT PRINTED IT.
+                      Every notice in a block assessment carries it in the
+                      letterhead. Its end date is A20 by definition — s.158B(b)
+                      says the period ends when the last authorisation was
+                      executed — and its start date fixes the YEAR of initiation
+                      and not the day, which is why A19 is still offered
+                      separately and labelled for what it is. */}
+                  {dates.statedPeriod && (() => {
+                    const check = statedPeriodAgrees(dates.statedPeriod);
+                    return (
+                      <div style={{marginTop: 4, marginBottom: 10, padding: "10px 12px", borderRadius: 10, background: "white"}}>
+                        <div style={{fontSize: 12.5}}>
+                          The notice prints the block period as{" "}
+                          <strong>{dateOf(dates.statedPeriod.from)} — {dateOf(dates.statedPeriod.to)}</strong>.
+                        </div>
+                        {dates.statedPeriod.quote && (
+                          <div className="muted" style={{fontSize: 11, fontStyle: "italic", marginTop: 2}}>“{dates.statedPeriod.quote}”</div>
+                        )}
+                        <div className="muted" style={{fontSize: 11.5, marginTop: 6}}>
+                          {check?.agrees
+                            ? "Its end date is A20 — s.158B(b) defines the block period as ending on the date the last authorisation was executed. Its start date fixes the year the search began, not the day, so taking that same day for A19 reproduces exactly this period."
+                            : `Its start date does not line up: a search concluding ${dateOf(dates.statedPeriod.to)} gives a block period from ${dateOf(check?.derivedFrom)}. Read the documents before relying on either.`}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
+                    <button className="btn btn-primary btn-sm" onClick={() => applyDates()} disabled={!dates.initiationDate && !dates.lastAuthorisationDate}>
+                      <Icon name="check" size={13}/>Use these dates
+                    </button>
+                    {!dates.initiationDate && dates.statedPeriod && statedPeriodAgrees(dates.statedPeriod)?.agrees && (
+                      <button className="btn btn-secondary btn-sm" onClick={() => applyDates({sameDay: true})}>
+                        <Icon name="check" size={13}/>Use the printed block period — A19 and A20 both {dateOf(dates.statedPeriod.to)}
+                      </button>
+                    )}
+                  </div>
+                  <div className="muted" style={{fontSize: 11, marginTop: 8}}>Read from a scan — check them against the documents.</div>
                 </div>
               )}
 
               <FilesRead
                 manifest={manifest}
+                passedOver={passedOver}
                 notices={dates?.notices || readingOrder(scan).length}
                 open={filesOpen}
                 onToggle={() => setFilesOpen((v) => !v)}

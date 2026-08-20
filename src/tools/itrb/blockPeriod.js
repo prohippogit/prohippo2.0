@@ -189,3 +189,29 @@ export function monthsOfDelay(dueDate, filedOn) {
   const whole = (b.y - a.y) * 12 + (b.m - a.m);
   return b.d > a.d ? whole + 1 : whole;
 }
+
+/* Does a block period the DEPARTMENT printed match the one this app derives?
+ *
+ * Every notice in a block assessment carries the period in its letterhead —
+ * "Block Period: 01/04/2019-23/08/2025". Its end date is A20 by definition:
+ * s.158B(b) says the block period ends on the date the last authorisation was
+ * executed. Its start date is not A19, and never can be — it is 1 April of the
+ * sixth preceding year, so it fixes the YEAR the search was initiated and says
+ * nothing about the day.
+ *
+ * What the start IS good for is this check. If treating the end date as both
+ * dates — the same-day reading, the shorter of the two shapes — reproduces the
+ * printed start exactly, then the period this app would derive and the period
+ * the department printed are the same period. The practitioner can be shown
+ * that, and shown the one thing it does not settle: the true date of initiation
+ * may be earlier within the same year, which changes A19 on the form without
+ * changing a single row of the block period.
+ *
+ * @returns null where there is nothing to check, else { agrees, derivedFrom }
+ */
+export function statedPeriodAgrees(stated) {
+  if (!stated || !stated.from || !stated.to) return null;
+  const bp = blockPeriod(stated.to, stated.to);
+  if (!bp.ok) return null;
+  return { agrees: bp.from === stated.from, derivedFrom: bp.from };
+}

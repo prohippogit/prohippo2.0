@@ -27,7 +27,8 @@ export function noticeDocuments(notice) {
     out.push({
       storagePath: notice.storagePath,
       filename: notice.fileName || "",
-      kind: documentKind(notice.fileName, ""),
+      kind: documentKind(notice.fileName, notice.contentType || ""),
+      contentType: notice.contentType || "",
       bytes: 0,
       primary: true,
     });
@@ -38,6 +39,10 @@ export function noticeDocuments(notice) {
       storagePath: at.storagePath,
       filename: at.filename || "",
       kind: at.kind || documentKind(at.filename, at.contentType),
+      // Carried through, not dropped. The name and the content type disagree on
+      // exactly the files that matter — a compressed folder the department
+      // called "ATTACHMENT.pdf" — and the naming needs both to settle it.
+      contentType: at.contentType || "",
       bytes: at.bytes || 0,
       primary: false,
     });

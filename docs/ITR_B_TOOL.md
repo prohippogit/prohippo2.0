@@ -250,6 +250,45 @@ concluded — it calls for a return. So `readingOrder()` gives the callable ever
 block notice that has a file, the notice that starts the return first (the answer
 is cached against it), and all of them are read in one Gemini call.
 
+**A s.158BC notice makes its whole proceeding a block proceeding.** The scan used
+to identify the proceeding from the MATTER's own type and section, and on a real
+case that found one notice out of four: the portal had typed the matter
+"Scrutiny" and hung the s.158BC notice in it alongside three u/s 142(1) calling
+for the material — and it was one of *those* that carried the ZIP. Typing the
+container is the portal's business and it does it loosely; what the notices are
+under is a fact. `findBlockProceedings` now takes the proceeding id off the
+block notices as well as the matters, and everything sharing that proceeding is
+in scope whatever section it is under.
+
+**The panchnama is often in a reply we filed, not in anything the department
+sent.** It is handed over at the conclusion of the search, scanned, and uploaded
+as an annexure to the reply to a s.142(1) notice — so it sits under
+`notice.responses[].attachments[]`, where nothing was looking. Those are now read
+too, but only the ones NAMED as search documents: a reply carries the client's
+ledgers, bank statements and confirmations by the dozen and none of them can
+state when a search was authorised. The rule is `isSearchDocName` in
+`functions/blockSearchDates.js` — matching "panch" rather than "panchnama",
+because the annexure on the real case was called "Comprihansive Panchanama" and a
+name typed by a person is not a fixed string. The client keeps a copy to count
+what the card shows; a test asserts the two cannot drift apart. Everything passed
+over is counted in the manifest, so a miss is visible rather than silent.
+
+**The block period is usually already printed on the notice.** Every notice
+issued in a block assessment carries it in the letterhead — "Block Period:
+01/04/2019-23/08/2025" — and it was going unread while the practitioner was asked
+to find two dates by hand. The reader extracts it verbatim (never computed), and
+`normaliseSearchDates` takes its END as A20: that is not an inference but the
+definition in s.158B(b), which is that the block period ends on the date the last
+authorisation was executed. Its START is not A19 and never can be — 1 April of
+the sixth preceding year fixes the *year* the search began and says nothing about
+the day. What it is good for is checking: `statedPeriodAgrees()` asks whether a
+same-day reading of the end date reproduces the printed start, and where it does,
+the screen offers **Use the printed block period** — clearly labelled as setting
+A19 to the same day so the derived period matches what the department printed,
+and as a value to correct from the panchnama if the search actually began
+earlier. `lastAuthFrom` marks which of the two routes A20 came by, so a date read
+off a printed period never shows like one read from a sentence about the search.
+
 **It opens archives.** What arrives is frequently a ZIP of scans. `collectDocuments`
 in `functions/blockSearchDates.js` sniffs every file by its **first bytes** rather
 than its extension, expands ZIPs (two levels deep, then it stops), and hands the
@@ -276,12 +315,12 @@ block period, never one that invents a year), and any date before 2024 is
 discarded as a misread — Chapter XIV-B runs from 01-09-2024, so a 1998 "search
 date" is an assessment year read off the same page.
 
-> **Deploy note.** `readBlockSearchDates` changed shape — it now takes a list of
-> notice ids and returns a manifest. Until
-> `firebase deploy --only functions:readBlockSearchDates` has run again, **Read
-> the search dates** still works but reads only the first notice and cannot open
-> a ZIP. The scan and its recorded-field fill are pure client code and are
-> unaffected.
+> **Deploy note.** `readBlockSearchDates` takes a list of notice ids, reads reply
+> annexures, extracts the printed block period, and returns a manifest. Until
+> `firebase deploy --only functions:readBlockSearchDates` has run, **Read the
+> search dates** still works but reads only the first notice, cannot open a ZIP
+> and will not see the printed block period. The scan, the proceeding matching
+> and the recorded-field fill are pure client code and deploy with hosting.
 
 ## Starting from the notice
 

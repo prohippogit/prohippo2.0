@@ -62,13 +62,62 @@ export function documentKind(filename, contentType) {
   return "other";
 }
 
-/** The extension a downloaded copy must carry, from the same evidence. */
+/* The extension a downloaded copy must carry, from the same evidence.
+ *
+ * THE KIND DECIDES, NOT THE NAME. This used to return the filename's own
+ * extension whenever it had one, which quietly disagreed with documentKind
+ * above — that one lets the content type overrule the name. The department
+ * serves compressed folders named "ATTACHMENT.pdf" with a zip content type, so
+ * the card said ZIP, the download said .pdf, and the practitioner got a file
+ * their reader refused to open. Two functions reading the same two facts must
+ * not reach different answers.
+ *
+ * The name is still used where it AGREES with the kind — a .rar keeps .rar
+ * rather than being flattened to .zip, and a file that is neither keeps
+ * whatever extension it came with. */
 export function documentExt(filename, contentType) {
   const name = String(filename || "").replace(/\.gz$/i, "");
-  const m = /\.([a-z0-9]{2,5})$/i.exec(name);
-  if (m) return m[1].toLowerCase();
+  const fromName = (/\.([a-z0-9]{2,5})$/i.exec(name) || [])[1]?.toLowerCase() || "";
   const kind = documentKind(name, contentType);
-  return kind === "zip" ? "zip" : kind === "pdf" ? "pdf" : "";
+  if (kind === "zip") return COMPRESSED_EXT.test(`.${fromName}`) ? fromName : "zip";
+  if (kind === "pdf") return "pdf";
+  return fromName;
+}
+
+/* What a file actually is, read off its first bytes.
+ *
+ * The last word, and the only one that cannot be wrong. Everything above works
+ * from a filename and a content type, both of which are the department's claims
+ * about the file rather than the file — and both of which are already wrong in
+ * Storage for every compressed folder fetched before this was fixed. A handful
+ * of magic numbers settles it at the moment of saving, so a document downloaded
+ * today arrives correctly named however it was recorded.
+ *
+ * @param head  the first few bytes of the file
+ * @returns "zip" | "pdf" | "" — empty where the bytes say nothing familiar */
+export function sniffExtension(head) {
+  const b = head || [];
+  const at = (i, ...bytes) => bytes.every((v, k) => b[i + k] === v);
+  if (b.length < 4) return "";
+  if (at(0, 0x25, 0x50, 0x44, 0x46)) return "pdf";                              // %PDF
+  if (at(0, 0x50, 0x4b) && [0x03, 0x05, 0x07].includes(b[2])) return "zip";     // PK..
+  if (at(0, 0x52, 0x61, 0x72, 0x21)) return "rar";
+  if (at(0, 0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c)) return "7z";
+  return "";
+}
+
+/* Put the right extension on a name, replacing a wrong one.
+ *
+ * withExtension only ever ADDS, which is right when the name has none and wrong
+ * when the name says .pdf about a zip: "ATTACHMENT.pdf.zip" is not better than
+ * "ATTACHMENT.zip". So a known document extension is replaced rather than
+ * appended, and anything else is left alone. */
+const DOC_EXT = /\.(pdf|zip|rar|7z|tar|tgz|json|xml|xlsx?|docx?|jpe?g|png|tiff?)$/i;
+export function retypeFilename(name, ext) {
+  const e = String(ext || "").replace(/^\./, "").toLowerCase();
+  if (!e) return name;
+  const base = String(name || "").replace(DOC_EXT, "");
+  return withExtension(base, e);
 }
 
 /** Badge text for a document tile. Deliberately short — it sits on a chip. */

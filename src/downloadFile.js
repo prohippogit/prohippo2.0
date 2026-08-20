@@ -24,7 +24,7 @@
  */
 import { ref as storageRef, getDownloadURL } from "firebase/storage";
 import { storage } from "./firebase";
-import { safeFilename, withExtension } from "./downloadNames";
+import { safeFilename, withExtension, sniffExtension, retypeFilename } from "./downloadNames";
 
 /* The actual save. Kept separate so anything holding a Blob already — a PDF we
    generated in the browser, say — can use the same path. */
@@ -90,10 +90,23 @@ export async function downloadFromStorage(storagePath, filename) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
-    // The path's extension is the reliable one: Storage content types are set by
-    // us at upload, but the extension is what the operating system reads.
-    const ext = (storagePath.match(/\.([a-z0-9]{2,5})$/i) || [])[1];
-    saveBlob(blob, withExtension(name, ext));
+
+    /* WHAT THE FILE IS, FROM THE FILE.
+     *
+     * The path's extension used to decide this, on the reasoning that we chose
+     * it at upload. We did — from the department's filename and content type,
+     * which for a compressed folder are routinely "ATTACHMENT.pdf" and a zip
+     * content type disagreeing with each other. Every one of those is already
+     * in Storage under a .pdf path, so no amount of fixing the upload rules
+     * reaches them: the card said ZIP, the download said .pdf, and the
+     * practitioner's reader refused to open it.
+     *
+     * The first four bytes cannot be wrong. They are read here, at the one
+     * moment the bytes are actually in hand, and they overrule both names. */
+    const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+    const sniffed = sniffExtension(head);
+    const fromPath = (storagePath.match(/\.([a-z0-9]{2,5})$/i) || [])[1];
+    saveBlob(blob, sniffed ? retypeFilename(name, sniffed) : withExtension(name, fromPath));
     return true;
   } catch (err) {
     // Almost always a CORS or offline failure. Opening the URL still gets the

@@ -312,6 +312,39 @@ export function fromNotice(draft, notice, assessee) {
  * block income by what was DISCLOSED, and what was disclosed is the figure in
  * the return, not a figure this tool arrived at.
  */
+/* Part C column [B] — the income CPC determined, off the intimation.
+ *
+ * The one figure on this screen that comes from a PDF rather than from data.
+ * The portal hands over the return as a JSON and its own record of what was
+ * filed, but the income determined under s.143(1) is printed in the intimation
+ * and stated nowhere else — so this arrives from a language model reading that
+ * document, and it says so: `determinedFrom` records which order, dated when,
+ * and the row the figure was taken from, and the screen prints all three.
+ *
+ * Never overwrites a figure already there. [B] is a transcription of what is
+ * already on record, so a practitioner who has keyed it has read the order.
+ */
+export function withDetermined(year, found) {
+  if (!year || !found || typeof found.amount !== "number") return year;
+  const current = year.partC?.determined;
+  if (current !== "" && current !== null && current !== undefined) return year;
+  return {
+    ...year,
+    partC: {
+      ...year.partC,
+      determined: found.amount,
+      // Always 143(1) — see determinedFromReturn in partC.js. A rectification
+      // corrects that determination rather than making a fresh one.
+      determinedSection: year.partC?.determinedSection || found.section || "143(1)",
+      determinedFrom: {
+        orderDate: found.orderDate || "",
+        commRefNo: found.commRefNo || "",
+        head: found.head || "",
+      },
+    },
+  };
+}
+
 /* A26-A30(iii) and (iv) — when the return was filed, and under what number.
  *
  * WHY THIS IS SEPARATE FROM withDeclared. Those two fields are not in the ITR

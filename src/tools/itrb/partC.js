@@ -197,9 +197,29 @@ export function determinedFromReturn(ret) {
 export function intimationToRead(ret) {
   const orders = Array.isArray(ret?.orders) ? ret.orders : [];
   return orders
-    .filter((o) => o && o.storagePath && !o.locked && !(o.reading && Array.isArray(o.reading.lines)))
+    .filter((o) => o && o.storagePath && !o.locked && !answersColumnB(o))
     .slice()
     .sort((a, b) => String(b.orderDate || "").localeCompare(String(a.orderDate || "")))[0] || null;
+}
+
+/* Does this order's stored reading actually answer column [B]?
+ *
+ * NOT "has it been read". That distinction is the whole of a bug that made
+ * column [B] unfillable for ever on a real practice: this used to skip any
+ * order carrying a `reading` at all, so a read that came back WITHOUT the
+ * total-income row — which is what an earlier version of the prompt produced on
+ * a bilingual intimation, and on the very common order that varied nothing —
+ * left the order looking done. determinedFromReturn then found no figure and
+ * intimationToRead offered no order to read, and the two of them agreed, for
+ * ever, that there was nothing to be done.
+ *
+ * A reading that cannot answer the question is not an answer. Such an order is
+ * offered for re-reading, and the read that follows costs the same as the one
+ * that produced nothing. */
+export function answersColumnB(order) {
+  const lines = order && order.reading && Array.isArray(order.reading.lines) ? order.reading.lines : null;
+  if (!lines) return false;
+  return lines.some((l) => l && isTotalIncomeLine(l.head) && typeof l.asComputed === "number");
 }
 
 /** The same return with one order's freshly-read `reading` merged in. */
@@ -226,11 +246,14 @@ export function describeOrders(ret) {
   const withPdf = orders.filter((o) => o && o.storagePath).length;
   const locked = orders.filter((o) => o && o.locked).length;
   const readAlready = orders.filter((o) => o && o.reading && Array.isArray(o.reading.lines)).length;
+  const useful = orders.filter(answersColumnB).length;
   return [
     `${orders.length} order${orders.length === 1 ? "" : "s"} on file`,
     `${withPdf} with a PDF here`,
     locked ? `${locked} still locked` : "",
-    readAlready ? `${readAlready} already read` : "",
+    // "Read" and "answers [B]" are different facts, and telling them apart is
+    // what makes a stale reading visible instead of looking like a dead end.
+    readAlready ? `${readAlready} already read${useful ? `, ${useful} stating the income` : ", none stating the income"}` : "",
   ].filter(Boolean).join(" · ");
 }
 

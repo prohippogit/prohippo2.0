@@ -594,6 +594,62 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .mcard-foot .pill-muted { background: white; border: 1px solid var(--p-line); }
 
 /* ---------------------------------------------------------------------------
+   THE PHONE'S DASHBOARD HEAD
+   ---------------------------------------------------------------------------
+   Two cards where the desk has four stat tiles: what am I in this week, and
+   what is late. See HearingsSummary and AlertsCard in Dashboard.jsx.
+   --------------------------------------------------------------------------- */
+.dcard {
+  background: white;
+  border: 1px solid var(--p-line-2);
+  border-radius: 20px;
+  padding: 14px;
+  box-shadow: var(--p-shadow-sm);
+  -webkit-tap-highlight-color: transparent;
+}
+.dcard-hear { cursor: pointer; transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1); }
+.dcard-hear:active { transform: scale(0.99); }
+.dcard-head { display: flex; align-items: center; gap: 11px; }
+.dcard-ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 11px; flex-shrink: 0; }
+.dcard-title { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 800; letter-spacing: -0.015em; color: var(--p-text); }
+.dcard-go { color: #CFC7EE; flex-shrink: 0; }
+
+/* The count and the breakdown side by side: the number answers "how much" and
+   the list answers "of what", and on a phone those are one glance, not two. */
+.dhear-body { display: flex; align-items: flex-start; gap: 16px; margin-top: 12px; }
+.dhear-count { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; padding-right: 16px; border-right: 1px solid var(--p-line-2); min-width: 84px; }
+.dhear-n { font-size: 40px; font-weight: 800; letter-spacing: -0.05em; line-height: 1; color: var(--p-primary-2); }
+.dhear-k { font-size: 11.5px; font-weight: 600; color: var(--p-text-3); margin-top: 5px; }
+.dhear-legend { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; padding-top: 2px; }
+.dhear-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.dhear-row i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dhear-row-k { flex: 1 1 auto; min-width: 0; color: var(--p-text-2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dhear-row-n { font-weight: 800; color: var(--p-text); }
+
+.dcard-alert { background: linear-gradient(120deg, #FFF3EF 0%, #FFF7F4 100%); border-color: #FBDDD2; }
+.dcard-alert .dcard-head { cursor: pointer; }
+.dalert-sub { font-size: 12px; color: var(--p-text-2); margin-top: 2px; }
+.dcard-chev { display: grid; place-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.dcard-chev.open { transform: rotate(180deg); }
+.dalert-list { margin-top: 10px; border-top: 1px solid #FBDDD2; }
+.dalert-row {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; padding: 11px 2px;
+  border: 0; border-bottom: 1px solid #FBDDD2; background: none;
+  font: inherit; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dalert-row:last-child { border-bottom: none; }
+.dalert-row:active { opacity: 0.6; }
+.dalert-n {
+  display: inline-grid; place-items: center;
+  min-width: 26px; height: 24px; padding: 0 7px; flex-shrink: 0;
+  border-radius: 8px; background: white; border: 1px solid #FBDDD2;
+  font-size: 12.5px; font-weight: 800; color: #B8463A;
+}
+.dalert-label { flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--p-text-2); line-height: 1.35; }
+
+/* ---------------------------------------------------------------------------
    THE WEEK, AS A COLUMN OF DAYS
    ---------------------------------------------------------------------------
    The desk view is seven columns held at 960px. Here each day is a row: the

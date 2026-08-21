@@ -39,6 +39,7 @@ import {
   blankDraft, withBlockPeriod, fromAssessee, fromNotice, isBlockNotice,
   withDeclared, withDeclaredFromOrder, withFiledParticulars, withDetermined, isoDate, withDueDate, readiness, blankYear,
 } from "../src/tools/itrb/draft.js";
+import { buildItrBPDF, itrbFilename } from "../src/tools/itrb/pdf.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
 
@@ -2387,4 +2388,39 @@ test("only what is left of the credit reaches the tax computation", () => {
   assert.equal(left.credits.partH, 60500);
   // And the block's bottom line moves by exactly that, and no more.
   assert.equal(taken.netPayable - left.netPayable, 60500);
+});
+
+/* ------------------------------ the two documents ------------------------- */
+
+/* Reported: the "Transcription sheet" and "Computation of income" buttons each
+   downloaded the same PDF, under two different names — the page passed
+   `sections` to the filename but not to the builder, so every button handed
+   over the whole document. Names are not a document; these assert the contents. */
+
+const twoDocDraft = () => {
+  const d = withBlockPeriod({ ...blankDraft(), assessee: "SAMPLE ASSESSEE", pan: "AAAPZ1007A" }, "2024-09-01");
+  return { draft: d, result: computeItrB(d) };
+};
+
+test("the transcription sheet and the computation are different documents", () => {
+  const { draft, result } = twoDocDraft();
+  const pages = (sections) => buildItrBPDF({ draft, result, profile: {}, sections }).getNumberOfPages();
+
+  const both = pages("both");
+  const sheet = pages("return");
+  const computation = pages("computation");
+
+  assert.ok(sheet > computation, "the form is longer than the working paper off it");
+  assert.ok(both > sheet && both > computation, "either one alone is shorter than the two together");
+  // Nothing is dropped and nothing is drawn twice when they are asked for
+  // together: the joined document is exactly the two, back to back.
+  assert.equal(both, sheet + computation);
+});
+
+test("each document is named for what is in it", () => {
+  const draft = withBlockPeriod({ ...blankDraft(), assessee: "SAMPLE ASSESSEE", pan: "AAAPZ1007A" }, "2024-09-01");
+  const names = ["both", "return", "computation"].map((s) => itrbFilename(draft, s));
+  assert.equal(new Set(names).size, 3);
+  assert.match(names[1], /transcription sheet/i);
+  assert.match(names[2], /Computation of income/i);
 });

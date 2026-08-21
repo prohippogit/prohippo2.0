@@ -174,7 +174,10 @@ section against a year is a wrong answer on the form.
 * **Computation of income** — the working the client signs off.
 
 Downloadable separately or together; together is the default, so what is signed
-off is what was keyed.
+off is what was keyed. `sections` (`"both"` | `"return"` | `"computation"`) has
+to reach `buildItrBPDF` as well as `itrbFilename` — passing it to the filename
+alone hands over the same document under three names, which is what happened
+until a test compared the page counts rather than the names.
 
 ## Part C, and what its columns are not
 

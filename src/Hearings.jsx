@@ -556,7 +556,9 @@ function GoogleSyncChip({ onNav }) {
  * The counts update as the dates and filters change, so nobody downloads a
  * cause list to find out it was empty. */
 function CauseListModal({ weekStart, authority, onClose }) {
-  const { data, notify } = useData();
+  // The whole profile, not data.profile's two-field summary — the letterhead
+  // wants the firm's address and phone.
+  const { data, profile, notify } = useData();
   const week = weekRange(weekStart || new Date());
   const [from, setFrom] = React.useState(week.from);
   const [to, setTo] = React.useState(week.to);
@@ -585,7 +587,7 @@ function CauseListModal({ weekStart, authority, onClose }) {
     if (badRange || busy) return;
     setBusy(true);
     try {
-      downloadCauseListPDF({ hearings: data.hearings, from, to, authority: auth, includeAdjourned, profile: data.profile });
+      downloadCauseListPDF({ hearings: data.hearings, from, to, authority: auth, includeAdjourned, profile });
       notify(rows.length ? `Cause list downloaded — ${rows.length} hearing${rows.length === 1 ? "" : "s"}` : "Cause list downloaded — nothing listed in those dates");
       onClose();
     } catch (e) {

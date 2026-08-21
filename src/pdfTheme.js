@@ -11,6 +11,7 @@
  */
 import { jsPDF } from "jspdf";
 import { registerFonts, resolveWeight } from "./invoicePdf.js";
+import { alignedX } from "./pdfText.js";
 
 export const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -49,7 +50,11 @@ export function themedDoc() {
     doc.setFont(...resolveWeight(weight, bold));
     doc.setFontSize(size);
     doc.setTextColor(...color);
-    doc.text(String(str ?? ""), x, y, { align, charSpace: spacing, baseline: "alphabetic" });
+    const s = String(str ?? "");
+    /* Tracked text is aligned here, not by jsPDF — see pdfText.js. */
+    const ax = alignedX(doc, s, x, align, spacing);
+    if (ax === null) doc.text(s, x, y, { align, charSpace: spacing, baseline: "alphabetic" });
+    else doc.text(s, ax, y, { charSpace: spacing, baseline: "alphabetic" });
   };
   const wrap = (str, w, size, weight) => {
     doc.setFont(...resolveWeight(weight, false));

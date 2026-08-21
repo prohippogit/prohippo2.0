@@ -48,6 +48,7 @@ export const FILES = [
   "causeList.js",
   "causeListPdf.js",
   "pdfTheme.js",
+  "pdfText.js",
   "invoicePdf.js",
   "fonts/invoiceFonts.js",
 ];

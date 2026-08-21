@@ -13,6 +13,7 @@ import {
   POPPINS_REGULAR, POPPINS_MEDIUM, POPPINS_SEMIBOLD,
   POPPINS_BOLD, POPPINS_EXTRABOLD, POPPINS_ITALIC,
 } from "./fonts/invoiceFonts.js";
+import { alignedX } from "./pdfText.js";
 
 /* jsPDF addresses fonts by (family, style); we register the extra Poppins
    weights as their own families and resolve a friendly weight name to the
@@ -180,7 +181,11 @@ export function buildInvoicePDF({ invoice, assessee, profile, settings } = {}) {
     doc.setFont(...resolveWeight(weight, bold));
     doc.setFontSize(size);
     doc.setTextColor(...color);
-    doc.text(String(str ?? ""), x, y, { align, charSpace: spacing, baseline: "alphabetic" });
+    const s = String(str ?? "");
+    /* Same as pdfTheme.js: jsPDF mismeasures tracked text when aligning it. */
+    const ax = alignedX(doc, s, x, align, spacing);
+    if (ax === null) doc.text(s, x, y, { align, charSpace: spacing, baseline: "alphabetic" });
+    else doc.text(s, ax, y, { charSpace: spacing, baseline: "alphabetic" });
   };
   const fillRect = (x, y, w, h, color, r = 0) => {
     doc.setFillColor(...color);

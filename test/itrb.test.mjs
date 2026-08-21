@@ -2424,3 +2424,24 @@ test("each document is named for what is in it", () => {
   assert.match(names[1], /transcription sheet/i);
   assert.match(names[2], /Computation of income/i);
 });
+
+test("a long address does not push the form onto another page", () => {
+  // Reported: the assessee's address was cut off at "SATILLITE, AH…", losing
+  // the town and the pincode. It wraps now, in Part A and under the name on
+  // both documents — and wrapping is only safe if the row it sits in grows
+  // with it and stops growing. Anything past three lines is folded into the
+  // last one, so no address can walk the rest of Part A off the page.
+  const base = withBlockPeriod({ ...blankDraft(), assessee: "SAMPLE ASSESSEE", pan: "AAAPZ1007A" }, "2024-09-01");
+  const pages = (address, sections) => {
+    const draft = { ...base, address };
+    return buildItrBPDF({ draft, result: computeItrB(draft), profile: {}, sections }).getNumberOfPages();
+  };
+  const REAL = "34, SHAREYAS PARK SOC, RAMDEV NAGAR, SATILLITE, AHMEDABAD, GUJARAT, 380015";
+
+  for (const sections of ["return", "computation"]) {
+    const plain = pages("", sections);
+    assert.equal(pages("Ahmedabad", sections), plain);
+    assert.equal(pages(REAL, sections), plain, "a real address must not cost a page");
+    assert.equal(pages("PREMISES ".repeat(60), sections), plain, "and neither may an absurd one");
+  }
+});

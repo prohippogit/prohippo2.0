@@ -348,6 +348,287 @@ input, select, textarea { font-family: inherit; color: inherit; }
   display: grid; place-items: center;
 }
 
+/* The small white tile on an assessee's (or a group's) purple header. Was
+   inline-styled on the component; classed so the phone can restack it. */
+.ministat {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--p-line-2);
+  flex: 1; min-width: 0;
+}
+.ministat-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+.ministat-text { min-width: 0; }
+.ministat-label { font-size: 11px; color: var(--p-text-3); font-weight: 600; }
+.ministat-value { font-weight: 800; font-size: 16px; letter-spacing: -0.02em; color: var(--p-text); }
+
+/* Shown only on a phone. For the one or two lines that earn their place on a
+   390px screen and would be noise on a 1440px one. */
+.mob-only { display: none; }
+
+/* ---------------------------------------------------------------------------
+   THE PHONE'S ASSESSEE ROW
+   ---------------------------------------------------------------------------
+   Rendered instead of the eight-column desk row, not on top of it — see
+   AssesseeCard in Assessees.jsx. Three lines and two trailing controls:
+
+     [av]  Name .......................... • Active
+           the e-mail, or the group
+           PAN · Entity · 10          [edit]   ›
+
+   The avatar is the only thing on the left, so the three lines all start at
+   the same x and the row reads as one block rather than as a table cell that
+   happens to have grown.
+   --------------------------------------------------------------------------- */
+.acard-list { display: block; }
+.acard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 12px 13px 14px;
+  border-bottom: 1px solid var(--p-line-2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.14s ease;
+}
+.acard:last-child { border-bottom: none; }
+.acard:active { background: var(--p-card-tint); }
+.acard-main { min-width: 0; }
+
+.acard-top { display: flex; align-items: baseline; gap: 10px; }
+.acard-name {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 14.5px; font-weight: 700; letter-spacing: -0.012em; color: var(--p-text);
+  line-height: 1.3;
+  /* Two lines and then an ellipsis. One line loses half of "Parmar
+     Jigneshkumar Babubhai"; three turns every long name into a row twice the
+     height of its neighbours, and a list you scroll wants a steady rhythm. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* Where they stand, at the top right of the block, level with the name — the
+   first thing asked of a client list after the name itself. */
+.acard-state {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--p-text-2);
+  white-space: nowrap;
+}
+.acard-state i { width: 7px; height: 7px; border-radius: 50%; }
+
+.acard-sub {
+  font-size: 12px; color: var(--p-text-3);
+  margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* PAN, entity and the open-proceeding count. The count is a chip because it
+   is a number among words and would otherwise read as part of the entity. */
+.acard-meta {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 6px; min-width: 0;
+  font-size: 11.5px;
+}
+.acard-pan { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; color: var(--p-text-2); letter-spacing: 0.01em; }
+.acard-dot { color: var(--p-line); }
+.acard-entity { font-weight: 700; }
+.acard-count {
+  display: inline-grid; place-items: center;
+  min-width: 22px; height: 19px; padding: 0 6px;
+  border-radius: 7px;
+  background: var(--p-lavender-2); color: var(--p-primary-2);
+  font-size: 11px; font-weight: 800;
+}
+
+.acard-go { color: #CFC7EE; flex-shrink: 0; }
+
+/* ---------------------------------------------------------------------------
+   THE PHONE'S ASSESSEE HEADER
+   ---------------------------------------------------------------------------
+   A violet field that runs to the edges of the screen — the page's own top,
+   not a card sitting on a page. It carries who this is, what kind of assessee,
+   their PAN and how to reach them, and then four tiles that sit half in the
+   violet and half out of it, which is what marks where the header ends and
+   the record begins.
+   --------------------------------------------------------------------------- */
+.ahero {
+  /* Out to the edges through .main's own padding — exactly, so the violet
+     meets the app bar's violet with no seam and no overlap. .main is padded
+     14px on a phone; these are its negatives. */
+  margin: -14px -14px 0;
+  padding: 10px 16px 18px;
+  background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 58%, #8E7CFF 100%);
+  color: white;
+  border-radius: 0 0 26px 26px;
+  position: relative;
+}
+.ahero-bar { display: flex; align-items: center; justify-content: space-between; }
+.ahero-btn {
+  display: grid; place-items: center;
+  width: 36px; height: 36px; border-radius: 12px;
+  border: 0; background: rgba(255, 255, 255, 0.15); color: white;
+  cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ahero-btn:active { transform: scale(0.92); background: rgba(255, 255, 255, 0.28); }
+
+.ahero-id { display: flex; align-items: center; gap: 15px; margin-top: 12px; }
+/* The avatar is the biggest thing on the screen after the name — this is the
+   one page in the app that is about a person rather than a record. */
+.ahero-id .avatar {
+  width: 74px !important; height: 74px !important;
+  font-size: 24px !important;
+  flex-shrink: 0;
+  box-shadow: 0 6px 20px rgba(20, 16, 50, 0.22);
+}
+.ahero-who { min-width: 0; }
+.ahero-name {
+  margin: 0;
+  font-size: 21px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.2;
+  color: white;
+  /* A company name can be one 40-character word, and it breaks rather than
+     runs off the violet. */
+  overflow-wrap: anywhere;
+}
+/* Inline with the last word of the name, not on a line of its own: it is an
+   adjective on the name, and a 20px pill on its own line reads as a heading. */
+.ahero-chip {
+  display: inline-block; vertical-align: 3px;
+  margin-left: 8px; padding: 3px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px; font-weight: 700; letter-spacing: 0;
+  white-space: nowrap;
+}
+.ahero-pan {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 6px;
+}
+.ahero-contact {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  margin-top: 12px;
+  font-size: 12.5px; color: rgba(255, 255, 255, 0.82);
+}
+.ahero-contact span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Four tiles across, INSIDE the violet with its own padding under them. They
+   used to hang past its bottom edge, which cut the corner radius off and read
+   as the row bursting out of the header rather than sitting in it. */
+.ahero-stats {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.astat {
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: 10px 9px 11px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 20px -10px rgba(20, 16, 50, 0.35);
+  min-width: 0;
+}
+.astat-ico { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; margin-bottom: 7px; }
+/* Two lines of room whether the label needs them or not: "Outstanding" is one
+   word and "Upcoming hearings" is two lines, and without this the four numbers
+   sit at four different heights across one row. */
+.astat-k {
+  font-size: 10px; font-weight: 600; line-height: 1.25; color: var(--p-text-3);
+  min-height: 25px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.astat-v { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; color: var(--p-text); line-height: 1; margin-top: 3px; }
+
+/* The header runs to the page's edges, so what follows sets its own margin. */
+.ahero + .utabs { margin-top: 18px !important; }
+
+/* ---------------------------------------------------------------------------
+   THE PHONE'S MATTER CARD
+   ---------------------------------------------------------------------------
+   Two zones, because a matter answers two different questions: what
+   proceeding is this, and where does it stand. The first is white and reads
+   as the card's subject; the second is a tinted foot, which is what keeps
+   the year, the section and the status off the title's line.
+   --------------------------------------------------------------------------- */
+.mcard {
+  background: white;
+  border: 1px solid var(--p-line-2);
+  border-left: 4px solid var(--p-primary-3);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: var(--p-shadow-sm);
+  transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mcard:active { transform: scale(0.99); }
+.mcard-body { padding: 12px 13px 11px; }
+.mcard-top { display: flex; align-items: center; gap: 9px; }
+.mcard-title {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 14px; font-weight: 700; letter-spacing: -0.012em; color: var(--p-text);
+  line-height: 1.3;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.mcard-go { color: #CFC7EE; flex-shrink: 0; }
+.mcard-sub { font-size: 11.5px; color: var(--p-text-3); margin-top: 5px; }
+.mcard-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 13px;
+  background: var(--p-card-tint);
+  border-top: 1px solid var(--p-line-2);
+  font-size: 12px;
+}
+.mcard-ay { font-weight: 700; color: var(--p-text-2); }
+.mcard-ay i { font-style: normal; font-weight: 700; color: var(--p-text-3); margin-right: 5px; }
+.mcard-sec { color: var(--p-text-2); font-weight: 600; }
+/* Status goes to the far end, whatever is beside it. */
+.mcard-foot > *:last-child { margin-left: auto; }
+/* A muted pill is tinted card-white, which is what this foot is tinted with —
+   "Closed" arrived as bare text while "Active" arrived as a chip. On the foot
+   it takes the white back so both read as the same kind of thing. */
+.mcard-foot .pill-muted { background: white; border: 1px solid var(--p-line); }
+
+/* ---------------------------------------------------------------------------
+   THE ACTION SHEET
+   --------------------------------------------------------------------------- */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: flex-end;
+  background: rgba(20, 16, 50, 0.45);
+  padding: 10px;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.sheet {
+  width: 100%;
+  background: white;
+  border-radius: 20px;
+  padding: 6px;
+  margin-bottom: env(safe-area-inset-bottom);
+  box-shadow: var(--p-shadow-lg);
+}
+.sheet-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px 14px;
+  border: 0; background: none; border-radius: 14px;
+  font: inherit; font-size: 14.5px; font-weight: 600; color: var(--p-text);
+  text-align: left; text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sheet-item + .sheet-item { border-top: 1px solid var(--p-line-2); border-radius: 0; }
+.sheet-item:active { background: var(--p-lavender); }
+.sheet-item.danger { color: var(--p-danger); }
+.sheet-cancel {
+  width: 100%; margin-top: 6px; padding: 14px;
+  border: 0; border-radius: 14px;
+  background: var(--p-lavender); color: var(--p-primary-2);
+  font: inherit; font-size: 14.5px; font-weight: 800; cursor: pointer;
+}
+
 /* Pills */
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
@@ -832,17 +1113,38 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .mobile-topbar { display: none; }
 .sidebar-backdrop { display: none; }
 
+/* The app bar's own height, so the drawer and the backdrop can hang below it
+   without either of them guessing. 8 + 42 + 8, plus whatever the notch takes.
+   Zero by default: the admin console has no app bar and its drawer starts at
+   the top of the screen, as it always did. */
+:root { --mob-appbar-h: 0px; --mob-tabbar-h: 0px; }
+
+/* ============================================================================
+   THE PHONE'S OWN CHROME — app bar, tab bar
+   ============================================================================
+   Both are display:none here and only appear under the 920px query below, so
+   the desk layout never sees them. See src/MobileNav.jsx for why the app has
+   a tab bar at all.
+   ============================================================================ */
+.mob-appbar { display: none; }
+.mob-tabbar { display: none; }
+
 @media (max-width: 1200px) {
   .grid-stats { grid-template-columns: repeat(2, 1fr); }
   .grid-cards { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 920px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* App bar, then the page. The tab bar is fixed rather than a third row so
+     that a modal or a toast can sit over it, and so the page keeps its full
+     height while it scrolls under it. */
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .app:has(.mob-appbar) { --mob-appbar-h: calc(58px + env(safe-area-inset-top)); }
+  .app:has(.mob-tabbar) { --mob-tabbar-h: 62px; }
 
-  /* Sidebar becomes an off-canvas drawer */
+  /* Sidebar becomes an off-canvas drawer, hung below the app bar. */
   .sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0;
+    position: fixed; top: var(--mob-appbar-h); left: 0; bottom: 0;
     width: min(300px, 84vw);
     z-index: 120;
     transform: translateX(-105%);
@@ -850,20 +1152,116 @@ input, select, textarea { font-family: inherit; color: inherit; }
     overflow-y: auto;
   }
   .sidebar.open { transform: translateX(0); box-shadow: 24px 0 60px rgba(20, 16, 50, 0.35); }
+  /* The drawer's logo block is 230px of a 700px drawer spent saying the name
+     of the app you are already in — and on a phone the app bar two pixels
+     above it is saying the same thing. The admin console has no app bar and
+     keeps its own (it is where "Admin console" is printed). */
+  .app:has(.mob-appbar) .sidebar { padding-top: 14px; }
+  .app:has(.mob-appbar) .sidebar .brand { display: none; }
   .sidebar-backdrop {
     display: block;
-    position: fixed; inset: 0;
+    position: fixed; inset: var(--mob-appbar-h) 0 0 0;
     background: rgba(20, 16, 50, 0.45);
     z-index: 110;
   }
-  .mobile-topbar {
-    display: flex; align-items: center; gap: 12px;
-    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
-    background: white;
-    border-bottom: 1px solid var(--p-line-2);
+  /* ---- app bar ----------------------------------------------------------
+     Purple, because the page under it is lavender and a white bar on a
+     lavender page is a seam rather than a header. It scrolls away with
+     nothing: the bar is fixed by the grid, the page scrolls beneath it. */
+  .mob-appbar {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    align-items: center;
+    gap: 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
+    background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 100%);
+    color: white;
+    box-shadow: 0 2px 14px rgba(48, 32, 110, 0.22);
+    /* Above the drawer, not under it. The hamburger IS the close button — it
+       morphs into an X — and a control you have to slide a drawer back over to
+       reach is not one. The drawer starts below the bar for the same reason. */
+    z-index: 130;
+  }
+  .mob-appbar-brand { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+  .mob-appbar-mark { height: 28px; width: auto; flex-shrink: 0; }
+  .mob-appbar-word {
+    font-size: 18px; font-weight: 800; letter-spacing: -0.015em; color: white;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mob-appbar-btn {
+    display: grid; place-items: center; position: relative;
+    width: 42px; height: 42px; border-radius: 13px;
+    border: 0; background: rgba(255, 255, 255, 0.14); color: white;
+    cursor: pointer; padding: 0;
+    transition: background 0.15s ease, transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mob-appbar-btn:active { transform: scale(0.92); background: rgba(255, 255, 255, 0.26); }
+  /* The count is on the bar so it is seen from any page; it is the dashboard's
+     own two overdue queues, not a third opinion (see useOverdueCount). */
+  .mob-dot {
+    position: absolute; top: 3px; right: 3px;
+    min-width: 17px; height: 17px; padding: 0 4px;
+    border-radius: 999px; background: var(--p-danger); color: white;
+    font-size: 10px; font-weight: 800; line-height: 17px; text-align: center;
+    box-shadow: 0 0 0 2px #5A4FD0;
   }
 
-  .main { padding: 16px 14px calc(60px + env(safe-area-inset-bottom)); }
+  /* The hamburger, drawn rather than iconned so it can morph into the X that
+     closes the drawer — the same control, in both of its states. */
+  .mob-burger { flex-direction: column; gap: 4.5px; display: flex; align-items: center; justify-content: center; }
+  .mob-burger span {
+    display: block; width: 18px; height: 2px; border-radius: 2px; background: white;
+    transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s ease;
+  }
+  .mob-burger.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  .mob-burger.open span:nth-child(2) { opacity: 0; transform: scaleX(0.2); }
+  .mob-burger.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+  /* ---- tab bar ---------------------------------------------------------- */
+  .mob-tabbar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 105;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    /* Opaque. Translucent, the list scrolled up underneath it and you could
+       read half a matter card through the labels — which looks exactly like
+       content spilling past the end of the page. */
+    background: var(--p-card);
+    border-top: 1px solid var(--p-line);
+    box-shadow: 0 -6px 24px rgba(48, 32, 110, 0.07);
+  }
+  .mob-tab {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    border: 0; background: none; padding: 6px 2px 4px; cursor: pointer;
+    color: var(--p-text-3); font: inherit; min-height: 48px;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s ease;
+  }
+  .mob-tab-ico {
+    position: relative; display: grid; place-items: center;
+    width: 46px; height: 28px; border-radius: 999px;
+    transition: background 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mob-tab-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.01em; }
+  /* The pill under the icon is the whole state: colour alone is not enough to
+     say "you are here" at 20px, and a label that changes weight shifts the
+     row. */
+  .mob-tab.active { color: var(--p-primary-2); }
+  .mob-tab.active .mob-tab-ico { background: var(--p-lavender-2); transform: translateY(-1px); }
+  .mob-tab:active .mob-tab-ico { transform: scale(0.9); }
+  .mob-tab-dot {
+    position: absolute; top: -2px; right: 4px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 999px; background: var(--p-primary); color: white;
+    font-size: 9.5px; font-weight: 800; line-height: 16px; text-align: center;
+    box-shadow: 0 0 0 2px white;
+  }
+
+  /* Room for the bar: 58px of chrome plus the home indicator. Anything less
+     and the last row of every list on the phone is unreadable. */
+  .main { padding: 16px 14px calc(78px + env(safe-area-inset-bottom)); }
   .topbar { flex-wrap: wrap; row-gap: 12px; }
   .topbar-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .search { width: 100%; min-width: 0; flex: 1; }
@@ -884,17 +1282,31 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .modal-head { padding: 18px 18px 12px; }
   .modal-body { padding: 0 18px 18px; }
   .modal-foot { padding: 14px 18px; }
-  .toast { left: 14px; right: 14px; transform: none; }
+  .toast { left: 14px; right: 14px; transform: none; bottom: calc(74px + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 560px) {
-  .grid-stats { grid-template-columns: 1fr; }
+  /* Two across, not one. Four stat tiles stacked in a column are four
+     screenfuls of one number each, and the first thing on both the dashboard
+     and an assessee's profile is a stat row — stacking it pushes the work
+     below the fold on every visit. Side by side they still read: the number
+     is the tile, the label is one short line under it. */
+  .grid-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .grid-cards { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .page-title { font-size: 20px; }
 }
 
-/* Floating menu button (mobile) — bottom-right for one-thumb reach */
+/* THE FLOATING HAMBURGER.
+ *
+ * It stays. What it no longer has to be is the ONLY door to any page other
+ * than the one you are on — the tab bar carries the four places a practitioner
+ * moves between, and this opens the whole drawer over the top of them. It now
+ * floats ABOVE the tab bar rather than on top of the last row of whatever list
+ * you were reading, which is where it used to land.
+ *
+ * The admin console renders it too, with no tab bar under it, so its offset is
+ * the plain one. */
 .fab-menu { display: none; }
 
 @media (max-width: 920px) {
@@ -905,18 +1317,19 @@ input, select, textarea { font-family: inherit; color: inherit; }
     align-items: center;
     gap: 5px;
     position: fixed;
-    right: 18px;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    width: 58px;
-    height: 58px;
+    right: 16px;
+    /* Clear of the tab bar where there is one (see --mob-tabbar-h), and clear
+       of the home indicator where there is not. */
+    bottom: calc(18px + var(--mob-tabbar-h, 0px) + env(safe-area-inset-bottom));
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     border: none;
     background: linear-gradient(135deg, #6C5CE7 0%, #8E7CFF 100%);
     box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45);
-    z-index: 130;
+    z-index: 135;
     cursor: pointer;
     transition: transform 0.2s ease, background 0.25s ease;
-    animation: fab-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, fab-pulse 2.8s ease-in-out 1.2s infinite;
   }
   .fab-menu:active { transform: scale(0.9); }
   .fab-menu span {
@@ -927,27 +1340,18 @@ input, select, textarea { font-family: inherit; color: inherit; }
     background: white;
     transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
   }
-  /* hamburger → X morph when the drawer is open */
-  .fab-menu.open {
-    animation: none;
-    background: linear-gradient(135deg, #2B2270 0%, #5146C6 100%);
-  }
+  .fab-menu.open { background: linear-gradient(135deg, #2B2270 0%, #5146C6 100%); }
   .fab-menu.open span:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
   .fab-menu.open span:nth-child(2) { opacity: 0; transform: scaleX(0.2); }
   .fab-menu.open span:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
-}
 
-@keyframes fab-pop {
-  from { transform: scale(0) rotate(-90deg); }
-  to { transform: scale(1) rotate(0deg); }
-}
-@keyframes fab-pulse {
-  0%, 100% { box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45), 0 0 0 0 rgba(108, 92, 231, 0.4); }
-  50% { box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45), 0 0 0 14px rgba(108, 92, 231, 0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fab-menu { animation: none; }
+  /* The admin console's own header. */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+    background: white;
+    border-bottom: 1px solid var(--p-line-2);
+  }
 }
 
 /* ============================================================================
@@ -1090,7 +1494,12 @@ input, select, textarea { font-family: inherit; color: inherit; }
   /* Every card loses a little padding: 20px of chrome each side of a 390px
      screen is a fifth of it. */
   .card { padding: 14px; border-radius: 14px; }
-  .main { padding: 14px 14px calc(84px + env(safe-area-inset-bottom)); }
+  /* THE FLOOR OF EVERY PAGE. Two things float over it: the tab bar, 62px, and
+     the hamburger, which clears the bar by 18 and is 56 across. 136px of the
+     bottom of the screen therefore belongs to chrome, and a list that stops
+     short of it ends with its last row sliced by one and its last control
+     under the other. This is the dead space that buys the last row back. */
+  .main { padding: 14px 14px calc(142px + env(safe-area-inset-bottom)); }
 
   /* Room for the floating menu button, which otherwise sits on top of the last
      row of whatever list you were reading. */
@@ -1101,6 +1510,246 @@ input, select, textarea { font-family: inherit; color: inherit; }
     border-radius: 18px 18px 0 0;
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+/* ============================================================================
+   THE PHONE'S PAGES — dashboard, assessee, matter
+   ============================================================================
+
+   The desk layout is four stat cards across a 1440px row and a purple header
+   with a name on the left and five buttons on the right. Neither survives a
+   390px screen by being made narrower: a stat card at a quarter of its width
+   is a number with its own label overlapping its own icon, and a header that
+   was two halves becomes two squeezed halves rather than two rows.
+
+   What follows is those pages re-proportioned for a phone — the same cards,
+   the same violets, the same radii, laid out for one column and one thumb.
+   Every rule is inside a max-width query. The desk app is untouched.
+   ============================================================================ */
+@media (max-width: 720px) {
+  .mob-only { display: block; }
+
+  /* ---- stat cards (dashboard) -------------------------------------------
+     Two across, so the icon has to come out of the corner it shares with the
+     label, and the delta line has to be allowed to wrap rather than be cut. */
+  .stat { padding: 14px 14px 12px; border-radius: 18px; }
+  .stat-icon { width: 30px; height: 30px; border-radius: 10px; top: 12px; right: 12px; }
+  .stat-label { font-size: 11px; padding-right: 34px; line-height: 1.3; }
+  .stat-value { font-size: 24px; margin-top: 4px; }
+  .stat-delta {
+    font-size: 10.5px; padding: 3px 7px; margin-top: 8px;
+    line-height: 1.35; white-space: normal; text-align: left;
+  }
+  /* The hover affordance is a lie on a touch screen and it sits over the
+     delta line, which on two-across is the line that needs the room. */
+  .stat .stat-go { display: none; }
+
+  /* ---- the small tiles on a purple header (assessee, group) --------------
+     Icon over label over number. Beside each other they are a 34px box plus
+     "Upcoming hearings" plus a number in 170px, and the label wins by
+     truncating the thing the tile is for. */
+  .ministat { flex-direction: column; align-items: flex-start; gap: 9px; padding: 12px; border-radius: 16px; }
+  .ministat-ico { width: 32px; height: 32px; border-radius: 11px; }
+  .ministat-text { width: 100%; }
+  .ministat-label { font-size: 10.5px; line-height: 1.25; }
+  .ministat-value { font-size: 20px; margin-top: 1px; }
+
+  /* ---- the assessee's purple header -------------------------------------- */
+  .assessee-id { gap: 12px !important; }
+  .assessee-hero .assessee-id > div:last-child { min-width: 0; }
+
+  /* ---- MATTERS: a row of six columns becomes a card ----------------------
+     The desk row is type | proceeding | AY | section | status | view, held at
+     640px so the columns line up down the page. At 390px that is a sideways
+     scroll, and the first thing off the edge is the assessment year — which
+     is half of what identifies the matter. Reading a table sideways on a
+     phone is not reading, the same argument the notice tables lost.
+
+     So the same six cells are laid out as a card: what it is and where it
+     stands on the top line, what it is called under that, and the year, the
+     section and the way in along the foot. No markup changed — the cells are
+     placed by their own order. */
+  .matters-surface { overflow-x: visible !important; }
+  .matters-list { min-width: 0 !important; }
+  .matters-head { display: none !important; }
+
+  .matter-row {
+    grid-template-columns: auto 1fr auto !important;
+    grid-template-areas:
+      "type  .    status"
+      "title title title"
+      "ay    sec  view" !important;
+    column-gap: 10px !important;
+    row-gap: 9px !important;
+    padding: 14px 15px !important;
+    align-items: center;
+  }
+  .matter-row > *:nth-child(1) { grid-area: type; }
+  .matter-row > *:nth-child(2) { grid-area: title; }
+  .matter-row > *:nth-child(3) { grid-area: ay; font-size: 12px; color: var(--p-text-2); font-weight: 600; }
+  .matter-row > *:nth-child(4) { grid-area: sec; justify-self: start; }
+  .matter-row > *:nth-child(5) { grid-area: status; justify-self: end; }
+  .matter-row > *:nth-child(6) { grid-area: view; justify-self: end; }
+  /* The column heading said "AY"; without it the year is a bare number among
+     three other bare numbers. */
+  .matter-row > *:nth-child(3)::before { content: "AY "; color: var(--p-text-3); font-weight: 700; }
+  .matter-row > *:nth-child(2) .strong { white-space: normal !important; font-size: 13.5px !important; }
+
+  /* ---- ASSESSEES: eight columns become a card ---------------------------
+     30px checkbox | assessee | PAN | entity | proceedings | assigned |
+     status | actions, held at 820px. At 390px that is a sideways scroll
+     showing a checkbox and half a name.
+
+     The card the design draws is the same eight cells in two lines: who it
+     is and where they stand on the first, then what identifies them — PAN,
+     entity, how many proceedings — on the second, with the way in on the
+     right of both.
+
+     THE CHECKBOX GOES. It selects assessees for a bulk portal sync, and that
+     sync is driven by the browser EXTENSION: openPortalLogin cannot run
+     without it, and it is a desktop extension. On a phone the column is a
+     control that could never do anything. */
+  .ass-scroll { overflow-x: visible !important; }
+  .ass-list { min-width: 0 !important; }
+  .ass-head { display: none !important; }
+
+  .ass-row {
+    /* Three auto columns sized by the meta line, then the space the name
+       takes, then status and the way in. */
+    grid-template-columns: auto auto auto minmax(0, 1fr) auto auto !important;
+    column-gap: 8px !important;
+    row-gap: 9px !important;
+    padding: 13px 14px !important;
+    align-items: center;
+  }
+  .ass-row > *:nth-child(1) { display: none; }
+  .ass-row > *:nth-child(2) { grid-row: 1; grid-column: 1 / 5; }
+  .ass-row > *:nth-child(7) { grid-row: 1; grid-column: 5 / 6; justify-self: end; }
+  .ass-row > *:nth-child(8) { grid-row: 1 / 3; grid-column: 6 / 7; align-self: center; }
+  .ass-row > *:nth-child(3) { grid-row: 2; grid-column: 1 / 2; font-size: 11.5px !important; color: var(--p-text-2); }
+  .ass-row > *:nth-child(4) { grid-row: 2; grid-column: 2 / 3; }
+  .ass-row > *:nth-child(5) { grid-row: 2; grid-column: 3 / 4; }
+  .ass-row > *:nth-child(6) { grid-row: 2; grid-column: 4 / 6; justify-self: end; font-size: 11.5px; }
+  /* The name gets the room the row has and wraps rather than truncating: it
+     is the identity of the record, and "Salim Karmalibhai Wadh…" identifies
+     nobody. The line under it is the e-mail or the group, which is what tells
+     two Patels apart, and that one may still clip. */
+  .ass-row > *:nth-child(2) .strong { font-size: 14px !important; white-space: normal !important; line-height: 1.3; }
+  /* Edit is the row's second action — the row itself opens the assessee — so
+     it reads as a trailing mark rather than a boxed control competing with
+     the card it sits in. */
+  .ass-row > *:nth-child(8) .icon-btn { background: none; border: none; color: var(--p-text-3); }
+
+  /* ---- MATTER DETAILS: a full screen, not a sheet -----------------------
+     A proceeding is the deepest thing in the app — its notices, its orders,
+     its hearings, the AI's reading of each — and 92vh of bottom sheet with a
+     rounded lip and the page showing through above it says "a detour you are
+     about to come back from". It is a page. So on a phone it takes the whole
+     screen and its head takes the app bar's own violet, which is the only
+     thing on the screen that outranks the app bar. */
+  .modal-backdrop:has(.pm-full) { padding: 0 !important; align-items: stretch !important; }
+  .modal.pm-full {
+    max-width: none !important;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    padding-bottom: 0;
+    /* Head, then a body that takes what is left, then the foot on the floor.
+       Without this the three stack from the top and a short proceeding leaves
+       Close halfway up a white screen. */
+    display: flex;
+    flex-direction: column;
+  }
+  .pm-full .modal-body { flex: 1 1 auto; }
+  /* Back on the left, the name of the screen in the middle, and a matching
+     gap on the right so the title is centred on the bar and not on what is
+     left of it. The app bar's own violet: this is the one thing on the screen
+     that outranks it. */
+  .pm-full .modal-head {
+    position: sticky; top: 0; z-index: 3;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    align-items: center;
+    background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 100%);
+    color: white;
+    padding: calc(12px + env(safe-area-inset-top)) 12px 12px;
+    border-bottom: none;
+    box-shadow: 0 2px 14px rgba(48, 32, 110, 0.18);
+  }
+  .pm-full .modal-head > div:first-child { grid-column: 2; grid-row: 1; text-align: center; min-width: 0; }
+  .pm-full .modal-head .icon-btn { grid-column: 1; grid-row: 1; }
+  .pm-full .modal-head .muted { color: rgba(255, 255, 255, 0.78) !important; }
+  .pm-full .modal-head > div:first-child > div:first-child { font-size: 17px !important; }
+  .pm-full .modal-head .icon-btn {
+    background: rgba(255, 255, 255, 0.16); color: white;
+    width: 34px !important; height: 34px !important; border-radius: 11px;
+  }
+  .pm-full .modal-body { padding: 16px 14px; }
+  .pm-full .modal-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+  /* ---- the identity card ------------------------------------------------
+     What the proceeding IS, before anything that has happened in it. */
+  .pm-id {
+    background: white;
+    border: 1px solid var(--p-line-2);
+    border-radius: 20px;
+    padding: 15px 15px 0;
+    box-shadow: var(--p-shadow-sm);
+  }
+  .pm-id-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pm-id-title { font-size: 19px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.25; margin-top: 11px; color: var(--p-text); }
+  .pm-id-who { font-size: 13px; color: var(--p-text-2); margin-top: 4px; }
+  .pm-id-pan { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--p-text-3); margin-top: 2px; letter-spacing: 0.02em; }
+
+  /* The four facts, each labelled, in their own column, under a rule. Left
+     aligned: they are read as a row of answers, and a column of centred text
+     under a left-aligned title reads as a separate object. */
+  .pm-facts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 14px -15px 0;
+    padding: 12px 15px 13px;
+    border-top: 1px solid var(--p-line-2);
+  }
+  .pm-facts > div {
+    display: flex; flex-direction: column; gap: 3px;
+    min-width: 0; padding-right: 10px;
+  }
+  /* A rule between them rather than a box around each: four boxes in 360px is
+     four borders competing with the card's own. */
+  .pm-facts > div + div { border-left: 1px solid var(--p-line); padding-left: 11px; }
+  .pm-facts-k { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--p-text-3); }
+  .pm-facts-v { font-size: 14px; font-weight: 800; letter-spacing: -0.015em; color: var(--p-text); overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---- everything that has happened, one card per kind ------------------ */
+  .pm-sec {
+    background: white;
+    border: 1px solid var(--p-line-2);
+    border-radius: 20px;
+    padding: 14px;
+    box-shadow: var(--p-shadow-sm);
+  }
+  /* A card's heading is a title, not a filing label: sentence case at reading
+     weight rather than 11px of tracked-out capitals, which is what an eyebrow
+     over an untitled block has to be and this no longer is. */
+  .pm-sec .pm-eyebrow {
+    font-size: 13.5px !important;
+    letter-spacing: -0.01em !important;
+    text-transform: none !important;
+    color: var(--p-text) !important;
+  }
+
+  /* A hearing is a date, a time and where it stands, and then the control
+     that moves it. Left as a wrapping flex row those four fragments each took
+     a line of their own; two columns keeps them to two. */
+  .pm-hearing {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center;
+    column-gap: 8px !important;
+  }
+  .pm-hearing > div:first-child { row-gap: 4px !important; }
 }
 
 /* An input under 16px makes iOS zoom the whole page on focus, and it never
@@ -1124,7 +1773,14 @@ input, select, textarea { font-family: inherit; color: inherit; }
     flex-wrap: wrap;
     justify-content: flex-start;
   }
-  .assessee-hero .assessee-actions .btn { flex: 1 1 auto; justify-content: center; }
+  /* Two to a row, equal width, rather than four sizes of button wrapping into
+     a ragged block. The delete button keeps its own square at the end. */
+  .assessee-hero .assessee-actions .btn { flex: 1 1 calc(50% - 22px); min-width: 0; justify-content: center; }
+  /* Delete keeps its own square and is pushed to the far end of whatever row
+     it lands on, so it reads as deliberate rather than left over — and it
+     never grows into a half-width target, which is not what you want the
+     biggest button on the card to be. */
+  .assessee-hero .assessee-actions .icon-btn { flex: 0 0 auto; margin-left: auto; }
   /* Contact details wrap to their own lines rather than being squeezed onto
      one — an email address is the longest string on the card. */
   .assessee-contact { flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }

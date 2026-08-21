@@ -62,6 +62,13 @@ export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSea
       <div className="topbar">
         <div>
           <div className="page-title">{greeting}{firstName ? `, ${firstName}` : ""} 👋</div>
+          {/* Today's date, on the phone only. A practitioner opening this on a
+              desk has a clock in the corner of the screen and a diary open;
+              on a phone in a corridor between two hearings, which day it is
+              is the first thing the page is asked. */}
+          <div className="page-sub mob-only" style={{marginTop: 3, fontWeight: 600}}>
+            {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}
+          </div>
           <div className="page-sub">
             {isEmpty
               ? "Let's get your practice set up."

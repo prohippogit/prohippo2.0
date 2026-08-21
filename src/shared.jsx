@@ -161,6 +161,28 @@ export function Table({ wide = false, className = "", children, ...rest }) {
   );
 }
 
+/* Is this a phone-width screen?
+ *
+ * Some of what a phone needs is not a re-flow of the desk layout but a
+ * different arrangement of the same records — a table's row against a card
+ * that stacks three lines and a chevron. Where that is true the component
+ * renders one or the other rather than rendering both and hiding one, so a
+ * list of fifty assessees is fifty nodes on either screen, not a hundred.
+ *
+ * Live, not read once: a tablet turned on its side crosses this boundary, and
+ * so does a desktop window dragged narrow. */
+export function useIsPhone(query = "(max-width: 720px)") {
+  const [is, setIs] = React.useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  React.useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setIs(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return is;
+}
+
 export const Avatar = ({ name, color, size = "", round = false, soft = false }) => {
   const initials = name.split(" ").filter(p => p[0] && /[A-Z]/i.test(p[0])).slice(0, 2).map(p => p[0]).join("").toUpperCase() || "?";
   const grads = {
@@ -200,7 +222,9 @@ export const Avatar = ({ name, color, size = "", round = false, soft = false }) 
   return <div className={cls} style={{background: grads[key] || grads.violet}}>{initials}</div>;
 };
 
-export function Modal({ title, sub, onClose, children, footer, width = 560, className = "", titleStyle }) {
+// `closeIcon` is "x" everywhere except a modal that fills the screen, where the
+// control is not dismissing a dialog over the page — it is going back to it.
+export function Modal({ title, sub, onClose, children, footer, width = 560, className = "", titleStyle, closeIcon = "x" }) {
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -216,7 +240,7 @@ export function Modal({ title, sub, onClose, children, footer, width = 560, clas
             <div style={{fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", ...titleStyle}}>{title}</div>
             {sub && <div className="muted" style={{fontSize: 12.5, marginTop: 3}}>{sub}</div>}
           </div>
-          <button className="icon-btn" style={{width: 32, height: 32}} onClick={onClose}><Icon name="x" size={15}/></button>
+          <button className="icon-btn" style={{width: 32, height: 32}} aria-label={closeIcon === "x" ? "Close" : "Back"} onClick={onClose}><Icon name={closeIcon} size={closeIcon === "x" ? 15 : 17}/></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}

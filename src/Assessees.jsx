@@ -1,5 +1,6 @@
 import React from 'react';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Toggle, Table, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
+import { createPortal } from 'react-dom';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Toggle, Table, useIsPhone, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useAuth } from './auth';
 import { mobileTen, normaliseMobile, headConsent } from './whatsappSettings';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
@@ -232,6 +233,61 @@ function SyncTiming({ info }) {
 // Column layout for the Assessees list (checkbox · name · PAN · entity ·
 // contact · proceedings · assigned · status · actions).
 const ASS_GRID = "30px minmax(220px, 2fr) 130px 120px 110px 150px 110px 80px";
+
+/* THE PHONE'S ASSESSEE ROW.
+ *
+ * Not the desk row re-flowed. The desk row is eight columns held at 820px and
+ * every one of them is a column because a mouse can scan eight of them across
+ * a 1440px screen; a thumb reads a card, top to bottom, and gives up on the
+ * fourth line. So this is the same record said in three:
+ *
+ *   who they are        →  avatar, name
+ *   how you know them   →  the e-mail, or the group they belong to
+ *   what identifies them→  PAN, entity, how many proceedings are open
+ *
+ * with where they stand at the top right and the way in at the far right.
+ *
+ * The checkbox is not here. It selects assessees for a bulk portal sync, and
+ * that sync runs through the browser EXTENSION — openPortalLogin cannot do
+ * anything without one, and it is a desktop extension. On a phone it was a
+ * control that could never fire.
+ */
+function AssesseeCard({ a, stats, active, onOpen }) {
+  const ep = entityPill(a.status);
+  const sub = a.group || a.email || "";
+  return (
+    <div
+      className="acard"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(a)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(a); } }}
+    >
+      <Avatar name={a.name} color={a.color} round soft/>
+      <div className="acard-main">
+        <div className="acard-top">
+          <span className="acard-name">{titleCase(a.name)}</span>
+          <span className="acard-state">
+            <i style={{background: active ? "var(--p-success)" : "#E0A43B"}}/>
+            {active ? "Active" : "Pending"}
+          </span>
+        </div>
+        {sub && <div className="acard-sub">{sub}</div>}
+        <div className="acard-meta">
+          <span className="acard-pan">{a.pan}</span>
+          <span className="acard-dot">·</span>
+          <span className="acard-entity" style={{color: ep.c}}>{a.status}</span>
+          <span className="acard-dot">·</span>
+          <span className="acard-count" title={`${stats.matters} active matter${stats.matters === 1 ? "" : "s"}`}>{stats.matters}</span>
+        </div>
+      </div>
+      {/* No edit button. It cost 46px of a 390px row — the width the name
+          needed to stay on one line — to duplicate the Edit that sits on the
+          assessee's own page, one tap through this very row. */}
+      <Icon name="chevron-right" size={18} className="acard-go"/>
+    </div>
+  );
+}
 
 // Colour for an entity-type pill.
 function entityPill(status) {
@@ -636,6 +692,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   // communications were linked by id. Idempotent, so running it on every visit
   // to this page costs one read once everything is already stamped.
   React.useEffect(() => { backfillCommunicationLinks(); }, [backfillCommunicationLinks]);
+  const isPhone = useIsPhone();
   const [view, setView] = React.useState("list"); // "list" | "groups"
   const [openGroup, setOpenGroup] = React.useState(null); // group name being viewed
   const [tab, setTab] = React.useState("All");
@@ -833,10 +890,29 @@ export function Assessees({ onOpen, initialSearch = "" }) {
               </label>
             </div>
           </div>
-          <div className="card" style={{padding: 0, overflow: "hidden"}}>
-            <div style={{overflowX: "auto"}}>
-              <div style={{minWidth: 820}}>
-                <div style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+          {isPhone ? (
+            <div className="card acard-list" style={{padding: 0, overflow: "hidden"}}>
+              {pageRows.map((a) => (
+                <AssesseeCard
+                  key={a.id}
+                  a={a}
+                  stats={assesseeStats(data, a)}
+                  active={isActive(a)}
+                  onOpen={onOpen}
+                />
+              ))}
+              {pageRows.length === 0 && (
+                <div style={{textAlign: "center", padding: 34, color: "var(--p-text-3)", fontSize: 13}}>No assessees match this filter.</div>
+              )}
+            </div>
+          ) : (
+          <div className="card ass-card" style={{padding: 0, overflow: "hidden"}}>
+            <div className="ass-scroll" style={{overflowX: "auto"}}>
+              <div className="ass-list" style={{minWidth: 820}}>
+                {/* Column headings for the eight-column row below. A phone gets
+                    the same eight cells laid out as a card, with nothing for
+                    these to head — see .ass-row in app.css. */}
+                <div className="ass-head" style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
                   <span><input type="checkbox" checked={allPageSelected()} onChange={toggleAllPage} title="Select all on this page with a portal login"/></span>
                   <span>Assessee</span>
                   <span>PAN</span>
@@ -893,6 +969,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
               </div>
             </div>
           </div>
+          )}
 
           <div className="between" style={{marginTop: 14}}>
             <div className="muted" style={{fontSize: 12.5}}>
@@ -918,6 +995,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
 }
 
 export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMatterId }) {
+  const isPhone = useIsPhone();
   const { data, removeAssessee, updateAssessee, notify } = useData();
   const [tab, setTab] = React.useState(initialTab || "Overview");
   const [showEdit, setShowEdit] = React.useState(false);
@@ -1087,8 +1165,61 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
     }
   };
 
+  /* THE PHONE'S HEADER. A violet field that runs to the edges of the screen —
+     the page's own top, not a card sitting on a page — carrying the four
+     things a practitioner needs before anything else: who this is, what kind
+     of assessee, their PAN, and how to reach them. The four tiles sit at its
+     foot, half in the violet and half out of it, which is what marks the end
+     of the header and the beginning of the record.
+
+     The actions the desk header spreads across five buttons live behind the
+     one control at the top right: on 390px they were two ragged rows of
+     chrome above the only thing the screen is about. */
+  const heroActions = [
+    waLink ? { key: "wa", label: "WhatsApp", icon: "whatsapp", href: waLink } : null,
+    a.email ? { key: "mail", label: "Email", icon: "mail", href: `mailto:${a.email}` } : null,
+    { key: "matter", label: "New matter", icon: "plus", onClick: () => setShowMatter(true) },
+    { key: "edit", label: "Edit assessee", icon: "edit", onClick: () => setShowEdit(true) },
+    { key: "del", label: "Delete assessee", icon: "trash", onClick: doDelete, danger: true },
+  ].filter(Boolean);
+
+  const mobileHero = (
+    <div className="ahero">
+      <div className="ahero-bar">
+        <button className="ahero-btn" onClick={onBack} aria-label="Back to assessees"><Icon name="arrow-left" size={18}/></button>
+        <SheetMenu items={heroActions} label={`Actions for ${titleCase(a.name)}`}/>
+      </div>
+
+      <div className="ahero-id">
+        <Avatar name={a.name} color={a.color} round soft/>
+        <div className="ahero-who">
+          <h1 className="ahero-name">
+            {titleCase(a.name)}
+            <span className="ahero-chip">{a.status}</span>
+          </h1>
+          <div className="ahero-pan">{a.pan}</div>
+        </div>
+      </div>
+
+      {(a.mobile || a.email) && (
+        <div className="ahero-contact">
+          {a.mobile && <span><Icon name="phone" size={12}/>{a.mobile}</span>}
+          {a.email && <span><Icon name="mail" size={12}/>{a.email}</span>}
+        </div>
+      )}
+
+      <div className="ahero-stats">
+        <AStat icon="scale" label="Active matters" value={s.matters}/>
+        <AStat icon="calendar" label="Upcoming hearings" value={hearings.length} accent="pink"/>
+        <AStat icon="wallet" label="Outstanding" value={s.outstanding ? fmtLakhs(s.outstanding) : "—"} accent={s.outstanding > 100000 ? "warn" : "default"}/>
+        <AStat icon="doc" label="Notices on file" value={notices.length}/>
+      </div>
+    </div>
+  );
+
   return (
     <div className="animate-in">
+      {isPhone ? mobileHero : (<>
       <div className="center" style={{gap: 8, marginBottom: 16, fontSize: 13}}>
         <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrow-left" size={14}/>Back</button>
         <span className="muted">Assessees / </span>
@@ -1128,6 +1259,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
           <MiniStat label="Notices on file" value={notices.length} icon="doc"/>
         </div>
       </div>
+      </>)}
 
       <div className="utabs" style={{marginTop: 22}}>
         {["Overview","Returns","Matters","Hearings","Notices","Invoices","Communications","Notes"].map(t => (
@@ -2041,6 +2173,7 @@ const accentFor = (t) => TYPE_ACCENT[t] || { bar: "var(--p-primary-3)", tint: "v
    (ProceedingModal) with its hearings and notices/orders. Manual matters (no
    proceeding) open the same card — it simply has nothing synced to show yet. */
 function MattersView({ matters, notices, hearings, assesseeName, notify, focusReqId, openMatterId }) {
+  const isPhone = useIsPhone();
   const [openId, setOpenId] = React.useState(null);
   const [parsingId, setParsingId] = React.useState("");
 
@@ -2103,8 +2236,11 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
   return (
     <>
       <div className="matters-surface" style={{overflowX: "auto"}}>
-        <div className="col" style={{gap: 10, minWidth: 640}}>
-          <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
+        <div className="col matters-list" style={{gap: 10, minWidth: 640}}>
+          {/* Column headings for the six-column row below. On a phone the row
+              is not six columns and there is nothing for them to head, so they
+              are hidden there — see .matters-head in app.css. */}
+          <div className="matters-head" style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
             <span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span><span/>
           </div>
           {ordered.map((m) => {
@@ -2114,6 +2250,42 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
             const docCount = ns.length;
             const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
             const accent = accentFor(m.type);
+            /* THE PHONE'S MATTER CARD. Two zones, because a matter answers two
+               different questions: what proceeding is this (its kind, its name,
+               how much is in it) and where does it stand (which year, which
+               section, open or closed). The first is white and reads as the
+               card's subject; the second is a tinted foot, which is what keeps
+               five numbers off the same line as the title. */
+            if (isPhone) return (
+              <div
+                key={m.id}
+                className="mcard"
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenId(m.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(m.id); } }}
+                style={{borderLeftColor: accent.bar}}
+              >
+                <div className="mcard-body">
+                  <div className="mcard-top">
+                    <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span>
+                    <span className="mcard-title">{m.ref || m.proceedingName || "Matter"}</span>
+                    <Icon name="chevron-right" size={17} className="mcard-go"/>
+                  </div>
+                  <div className="mcard-sub">
+                    {[
+                      isPortal ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders` : "Manual matter",
+                      hs.length ? `${hs.length} hearing${hs.length === 1 ? "" : "s"}` : "",
+                    ].filter(Boolean).join("  ·  ")}
+                  </div>
+                </div>
+                <div className="mcard-foot">
+                  <span className="mcard-ay"><i>AY</i>{m.ay || "—"}</span>
+                  {section && <span className="mcard-sec">u/s {section}</span>}
+                  <StatusPill status={m.status}/>
+                </div>
+              </div>
+            );
             return (
               <div
                 key={m.id}
@@ -2194,9 +2366,44 @@ function hearingSeed(m) {
 
 /* Full, scrollable pop-up card for a single proceeding — its hearings and every
    notice / order / appeal filed against it, with the assessee's responses. */
+/* THE MATTER, ON A PHONE.
+ *
+ * The desk card is a tinted summary strip and then two long sections. That is
+ * the right shape for 780px of modal beside a page; on a 390px screen it is a
+ * wall you scroll rather than a thing you read.
+ *
+ * So the head becomes a card that says what the proceeding IS: what kind, where
+ * it stands, what it is called, whose it is, and then the four facts that
+ * identify it — year, section, notices, hearings — each labelled and in its own
+ * column. Everything below is what has HAPPENED in it, which is what the
+ * sections were already for. */
+function ProceedingIdentity({ m, section, docCount, hearingCount }) {
+  const accent = accentFor(m.type);
+  return (
+    <div className="pm-id">
+      <div className="pm-id-top">
+        <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 800}}>{m.type || "Matter"}</span>
+        <StatusPill status={m.status}/>
+      </div>
+      <div className="pm-id-title">{m.ref || m.proceedingName || "Proceeding"}</div>
+      {(m.assessee || m.bench) && (
+        <div className="pm-id-who">{[titleCase(m.assessee || ""), m.bench].filter(Boolean).join("  ·  ")}</div>
+      )}
+      {m.pan && <div className="pm-id-pan">{m.pan}</div>}
+      <div className="pm-facts">
+        <div><span className="pm-facts-k">AY</span><span className="pm-facts-v">{m.ay || "—"}</span></div>
+        <div><span className="pm-facts-k">Section</span><span className="pm-facts-v">{section ? `u/s ${section}` : "—"}</span></div>
+        <div><span className="pm-facts-k">Notices</span><span className="pm-facts-v">{docCount}</span></div>
+        <div><span className="pm-facts-k">Hearings</span><span className="pm-facts-v">{hearingCount}</span></div>
+      </div>
+    </div>
+  );
+}
+
 function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onParse, onClose }) {
   const [adjourning, setAdjourning] = React.useState(null);
   const [adding, setAdding] = React.useState(false);
+  const isPhone = useIsPhone();
   const accent = accentFor(m.type);
   const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
   const docCount = ns.length;
@@ -2206,15 +2413,27 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
   const fileCount = ns.reduce((s, n) => s + noticeDocumentCount(n), 0);
   return (
     <Modal
-      title={m.ref || m.proceedingName || "Proceeding"}
-      titleStyle={{fontSize: 22}}
-      sub={[m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
+      className="pm-full"
+      /* On a phone the bar says which screen this is and the identity card
+         under it carries the reference — printing a long appeal number twice
+         within 60px of itself is not identification, it is noise. On a desk
+         there is no such card and the modal's own head does the work. */
+      title={isPhone ? "Matter Details" : (m.ref || m.proceedingName || "Proceeding")}
+      titleStyle={isPhone ? undefined : {fontSize: 22}}
+      sub={isPhone ? "" : [m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
       onClose={onClose}
+      closeIcon={isPhone ? "arrow-left" : "x"}
       width={780}
-      footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
+      /* No Close bar on a phone: the page fills the screen, and the arrow in
+         its head is the way back — a second one pinned to the floor would eat
+         56px of every proceeding to say the same thing. */
+      footer={isPhone ? null : <button className="btn btn-secondary" onClick={onClose}>Close</button>}
     >
       <div className="col" style={{gap: 16}}>
-        {/* Summary strip — tinted by the proceeding type so it reads apart. */}
+        {isPhone ? (
+          <ProceedingIdentity m={m} section={section} docCount={docCount} hearingCount={hs.length}/>
+        ) : (
+        /* Summary strip — tinted by the proceeding type so it reads apart. */
         <div className="between" style={{alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 14px", background: accent.tint, borderRadius: 12, borderLeft: `4px solid ${accent.bar}`}}>
           <div className="center" style={{gap: 8, flexWrap: "wrap", justifyContent: "flex-start"}}>
             <span className="pill" style={{background: "white", color: accent.fg, fontWeight: 800}}>{m.type || "Matter"}</span>
@@ -2227,8 +2446,9 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             {hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}
           </div>
         </div>
+        )}
 
-        <div>
+        <div className="pm-sec">
           <div className="between" style={{marginBottom: 8, gap: 10}}>
             <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase"}}>Hearings</div>
             {/* A DATE THE PRACTITIONER ALREADY HAS. Hearings reach the app by
@@ -2248,7 +2468,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
           ) : (
             <div className="col" style={{gap: 8}}>
               {hs.map((h) => (
-                <div key={h.id} className="between" style={{gap: 10, fontSize: 12.5, padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
+                <div key={h.id} className="between pm-hearing" style={{gap: 10, fontSize: 12.5, padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
                   <div className="center" style={{gap: 10, justifyContent: "flex-start", flexWrap: "wrap"}}>
                     <Icon name="calendar" size={13} className="muted"/>
                     <span className="strong">{fmtDateLong(h.date)}</span>
@@ -2269,7 +2489,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
           )}
         </div>
 
-        <div>
+        <div className="pm-sec">
           <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Notices &amp; orders</div>
           {ns.length === 0
             ? <div className="muted" style={{fontSize: 12.5, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px dashed var(--p-line)"}}>No notices/orders synced for this proceeding yet.</div>
@@ -2419,6 +2639,62 @@ function NotesCard({ assessee, onSave }) {
   );
 }
 
+/* One of the four tiles at the foot of the phone's header. Icon, then what it
+   counts, then the count — read top to bottom in an 84px column, where a label
+   beside a number has nowhere to go. */
+function AStat({ icon, label, value, accent = "default" }) {
+  const c = {
+    default: { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
+    pink: { bg: "var(--p-pink)", fg: "#C13388" },
+    warn: { bg: "var(--p-amber)", fg: "#B07512" },
+  }[accent];
+  return (
+    <div className="astat">
+      <span className="astat-ico" style={{background: c.bg, color: c.fg}}><Icon name={icon} size={14}/></span>
+      <span className="astat-k">{label}</span>
+      <span className="astat-v">{value}</span>
+    </div>
+  );
+}
+
+/* The overflow control at the top right of the phone's header, and the sheet
+   it opens. Five actions that took two ragged rows of chrome above the only
+   thing the screen is about; here they are one 34px button until asked for.
+   A sheet rather than a dropdown: it comes up from the thumb's end of the
+   screen, and a 44px row is a target a thumb can hit. */
+function SheetMenu({ items, label }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  return (
+    <>
+      <button className="ahero-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(true)}>
+        <Icon name="more" size={18}/>
+      </button>
+      {open && createPortal(
+        <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div className="sheet animate-in" role="menu">
+            {items.map((it) => {
+              const inner = <><Icon name={it.icon} size={17}/>{it.label}</>;
+              return it.href ? (
+                <a key={it.key} className="sheet-item" role="menuitem" href={it.href} target={it.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" onClick={() => setOpen(false)}>{inner}</a>
+              ) : (
+                <button key={it.key} className={`sheet-item ${it.danger ? "danger" : ""}`} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}>{inner}</button>
+              );
+            })}
+            <button className="sheet-cancel" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function MiniStat({ label, value, icon, accent = "default" }) {
   const colors = {
     default: { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
@@ -2426,14 +2702,18 @@ function MiniStat({ label, value, icon, accent = "default" }) {
     warn:    { bg: "var(--p-amber)", fg: "#B07512" },
     success: { bg: "var(--p-mint)", fg: "#1B8C5C" },
   }[accent];
+  /* Classed rather than inline-styled, because the shape changes on a phone:
+     icon beside the number is a 34px box plus two lines of text in 180px of
+     width, and "Upcoming hearings" does not fit beside anything. See .ministat
+     in app.css — the desk tile is exactly what it was. */
   return (
-    <div style={{display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "white", borderRadius: 14, border: "1px solid var(--p-line-2)", flex: 1}}>
-      <div style={{width: 34, height: 34, borderRadius: 10, background: colors.bg, color: colors.fg, display: "grid", placeItems: "center"}}>
+    <div className="ministat">
+      <div className="ministat-ico" style={{background: colors.bg, color: colors.fg}}>
         <Icon name={icon} size={16}/>
       </div>
-      <div style={{minWidth: 0}}>
-        <div style={{fontSize: 11, color: "var(--p-text-3)", fontWeight: 600}}>{label}</div>
-        <div style={{fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em", color: "var(--p-text)"}}>{value}</div>
+      <div className="ministat-text">
+        <div className="ministat-label">{label}</div>
+        <div className="ministat-value">{value}</div>
       </div>
     </div>
   );

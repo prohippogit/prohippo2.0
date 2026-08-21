@@ -1318,19 +1318,20 @@ input, select, textarea { font-family: inherit; color: inherit; }
      nothing: the bar is fixed by the grid, the page scrolls beneath it. */
   .mob-appbar {
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    grid-template-columns: minmax(0, 1fr) 42px;
     align-items: center;
     gap: 8px;
-    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
     background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 100%);
     color: white;
     box-shadow: 0 2px 14px rgba(48, 32, 110, 0.22);
-    /* Above the drawer, not under it. The hamburger IS the close button — it
-       morphs into an X — and a control you have to slide a drawer back over to
-       reach is not one. The drawer starts below the bar for the same reason. */
-    z-index: 130;
+    /* Under the drawer, which slides over it. The bar no longer carries the
+       control that opens the drawer — the floating button in the corner does,
+       and it sits above everything — so there is nothing on this bar that has
+       to stay reachable while the drawer is open. */
+    z-index: 100;
   }
-  .mob-appbar-brand { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+  .mob-appbar-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .mob-appbar-mark { height: 28px; width: auto; flex-shrink: 0; }
   .mob-appbar-word {
     font-size: 18px; font-weight: 800; letter-spacing: -0.015em; color: white;
@@ -1354,17 +1355,6 @@ input, select, textarea { font-family: inherit; color: inherit; }
     font-size: 10px; font-weight: 800; line-height: 17px; text-align: center;
     box-shadow: 0 0 0 2px #5A4FD0;
   }
-
-  /* The hamburger, drawn rather than iconned so it can morph into the X that
-     closes the drawer — the same control, in both of its states. */
-  .mob-burger { flex-direction: column; gap: 4.5px; display: flex; align-items: center; justify-content: center; }
-  .mob-burger span {
-    display: block; width: 18px; height: 2px; border-radius: 2px; background: white;
-    transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s ease;
-  }
-  .mob-burger.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
-  .mob-burger.open span:nth-child(2) { opacity: 0; transform: scaleX(0.2); }
-  .mob-burger.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
 
   /* ---- tab bar ---------------------------------------------------------- */
   .mob-tabbar {
@@ -1638,6 +1628,24 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .page-title { font-size: 19px; }
   .page-sub { font-size: 12px; }
   .topbar { row-gap: 10px; }
+
+  /* THE TOP BOX.
+   *
+   * Three things shared one 390px line: the search field, the install button,
+   * and a chip carrying the practitioner's name over their firm's. The search
+   * is flex:1 with a zero basis, so it gave up all its width first and shrank
+   * to an icon and a sliver of placeholder, while the chip's two lines of text
+   * ran past the right edge of the screen.
+   *
+   * The search takes a row of its own — it is the one control here anybody
+   * uses on a phone. The chip goes: the line immediately above it already
+   * reads "Good morning, Dhiraj", and the firm's name is on the drawer's own
+   * card, so on this screen it was saying a third time what was already said
+   * twice. */
+  .topbar-actions { gap: 10px; }
+  .topbar-actions .search { flex: 1 1 100%; width: 100%; }
+  .topbar-actions .user-chip { display: none; }
+  .topbar-actions > .btn { flex: 1 1 auto; justify-content: center; min-width: 0; }
 
   /* Every card loses a little padding: 20px of chrome each side of a 390px
      screen is a fifth of it. */
@@ -1913,6 +1921,42 @@ input, select, textarea { font-family: inherit; color: inherit; }
     column-gap: 8px !important;
   }
   .pm-hearing > div:first-child { row-gap: 4px !important; }
+
+  /* A NOTICE'S SUBJECT, VISIBLE.
+   *
+   * The row is a PDF thumb, the text, and then "Get summary" and "PDF" as
+   * siblings. Those two buttons want about 155px; on a 390px phone, once the
+   * card's padding and the thumb are paid for, that leaves the text column
+   * roughly 130px — and since the subject is set nowrap-with-ellipsis, what
+   * rendered was two or three characters and a "…". The subject IS the notice.
+   *
+   * So the buttons wrap to a line of their own (they are already grouped in
+   * .pm-note-acts, which is display:contents everywhere else, so the desk row
+   * is byte-for-byte what it was), and the subject gets the full width with
+   * permission to run to a second line rather than be cut. */
+  .pm-note-row { flex-wrap: wrap; }
+  .pm-note-row > div:nth-child(2) { flex: 1 1 200px; }
+  .pm-note-acts {
+    display: flex;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .pm-note-head { flex-wrap: wrap; row-gap: 4px; }
+  .pm-note-subject {
+    white-space: normal !important;
+    overflow: visible !important;
+    line-height: 1.35;
+  }
+}
+
+/* Above 720px the wrapper is not there as far as layout is concerned — the two
+   buttons remain direct flex children of the notice row, exactly as before.
+   Written as its own min-width query rather than a bare rule so it cannot
+   depend on which of the two blocks the stylesheet happens to list last. */
+@media (min-width: 721px) {
+  .pm-note-acts { display: contents; }
 }
 
 /* An input under 16px makes iOS zoom the whole page on focus, and it never

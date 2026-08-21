@@ -226,8 +226,6 @@ function Shell() {
     <div className="app">
       <CalendarDeadlineMirror/>
       <MobileAppBar
-        menuOpen={menuOpen}
-        onMenu={() => setMenuOpen(o => !o)}
         /* The bell leads to the dashboard because that is where both of the
            queues it counts are already listed and worked — it is a way of
            noticing them from another page, not a page of its own. */

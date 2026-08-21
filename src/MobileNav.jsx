@@ -55,20 +55,12 @@ export function useOverdueCount() {
   }, [data]);
 }
 
-/* The bar: menu on the left, the brand in the middle, the bell on the right. */
-export function MobileAppBar({ onMenu, menuOpen, onBell, overdue = 0 }) {
+/* The bar: the brand, and the bell. No hamburger — the floating button in the
+   corner opens the drawer, and two controls doing the same thing on one 390px
+   bar is one too many. */
+export function MobileAppBar({ onBell, overdue = 0 }) {
   return (
     <header className="mob-appbar">
-      <button
-        type="button"
-        className={`mob-appbar-btn mob-burger ${menuOpen ? "open" : ""}`}
-        aria-label={menuOpen ? "Close menu" : "Open menu"}
-        aria-expanded={menuOpen}
-        onClick={onMenu}
-      >
-        <span/><span/><span/>
-      </button>
-
       {/* The mark on its own, beside a wordmark set in the app's own type.
           The full logo is drawn for a white ground and goes to mud on this
           one, and a 34px-tall lockup on a 390px bar is unreadable anyway. */}

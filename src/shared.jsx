@@ -246,11 +246,14 @@ export function CopyField({ text }) {
   );
 }
 
-export function FormField({ label, required, children, full }) {
+// `hint` is one line under the control for what the label cannot say on its own
+// — what an optional field does when it is filled in, mostly.
+export function FormField({ label, required, children, full, hint }) {
   return (
     <div className="field" style={{gridColumn: full ? "1 / -1" : "auto"}}>
       <label>{label}{required && <span style={{color: "var(--p-danger)"}}> *</span>}</label>
       {children}
+      {hint && <div className="muted" style={{fontSize: 11, marginTop: 4}}>{hint}</div>}
     </div>
   );
 }

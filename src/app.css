@@ -1079,7 +1079,12 @@ input, select, textarea { font-family: inherit; color: inherit; }
   font-size: 13px; font-weight: 600;
   display: flex; align-items: center; gap: 10px;
   box-shadow: 0 18px 40px -10px rgba(0,0,0,0.4);
-  z-index: 100;
+  /* Over everything, including a modal and the action sheet. A toast is the
+     app answering for something you just did — "Matter deleted" — and an
+     answer that arrives behind the thing you did it in is no answer. At 100
+     it was under the phone's tab bar (105) as well, at the same 22px off the
+     bottom the tab bar occupies, so on a phone it was invisible outright. */
+  z-index: 220;
 }
 
 /* Mini bar chart */
@@ -1289,6 +1294,28 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .app:has(.mob-appbar) { --mob-appbar-h: calc(58px + env(safe-area-inset-top)); }
   .app:has(.mob-tabbar) { --mob-tabbar-h: 62px; }
+
+  /* A MODAL IS ABOVE THE CHROME, NOT UNDER IT.
+   *
+   * The backdrop is z-index 80 and the phone's furniture is 100 (app bar),
+   * 105 (tab bar) and 135 (the floating button) — so every modal on a phone
+   * opened UNDERNEATH all three. On the full-screen ones this is not subtle:
+   * Matter Details puts its own purple head with the back arrow at the very
+   * top of the screen, which is exactly where the ProHippo bar is, so the way
+   * out of the page was painted over by the app bar. Lower down, the floating
+   * button sat on top of "Ask for documents".
+   *
+   * While a modal is open it owns the screen: nothing on the bar or the tab
+   * bar is meant to be reachable, and the backdrop covering them is the point.
+   * Above the drawer (120) too, and below the action sheet (200), which is
+   * opened FROM a modal and has to sit over it. */
+  .modal-backdrop { z-index: 150; }
+
+  /* And clear of the tab bar it used to appear behind. */
+  .toast {
+    bottom: calc(14px + var(--mob-tabbar-h, 0px) + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 28px);
+  }
 
   /* Sidebar becomes an off-canvas drawer, hung below the app bar. */
   .sidebar {

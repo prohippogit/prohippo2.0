@@ -527,15 +527,21 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
 
   const save = async () => { if (await persist()) notify("Draft saved."); };
 
-  const download = async (sections) => {
+  const download = async (sections = "both") => {
     try {
       const { buildItrBPDF, itrbFilename } = await import("./itrb/pdf.js");
-      const doc = buildItrBPDF({ draft, result, profile: data.profile });
+      // `sections` has to reach the builder as well as the filename, or all
+      // three buttons hand over the same document under three names.
+      const doc = buildItrBPDF({ draft, result, profile: data.profile, sections });
       saveBlob(doc.output("blob"), itrbFilename(draft, sections));
       // A document that has been handed over should correspond to something on
       // file, so the draft it was built from is saved with it.
       if (dirty) await persist();
-      notify(sections === "computation" ? "Computation downloaded." : "Mock ITR-B downloaded.");
+      notify(
+        sections === "computation" ? "Computation of income downloaded."
+          : sections === "return" ? "Transcription sheet downloaded."
+            : "Transcription sheet and computation downloaded."
+      );
     } catch (e) {
       console.error("itr-b: pdf", e);
       notify("Couldn't build the document.", "alert");

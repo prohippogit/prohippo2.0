@@ -18,6 +18,8 @@ import ConnectorDownload from './ConnectorDownload';
 import { useCalendarReturn } from './googleCalendar';
 import { CalendarDeadlineMirror } from './CalendarDeadlineMirror';
 import { tap, success, error as hapticError, setHapticsEnabled } from './haptics';
+import { MobileAppBar, MobileTabBar, useOverdueCount } from './MobileNav';
+import { useItatMail } from './itatEmail';
 
 function Splash({ label = "Loading your practice…" }) {
   return (
@@ -44,6 +46,12 @@ function Shell() {
   // notice an ITR-B is being built against.
   const [toolsSeed, setToolsSeed] = React.useState(null);
   const [menuOpen, setMenuOpen] = React.useState(false); // mobile drawer
+  /* Counted once, here, for everything that shows them: the sidebar's Hearings
+     badge, the phone's tab bar, the bell on the app bar. Each of these used to
+     work its own out — a second live listener on the Tribunal's mail and a
+     second walk of every order in the practice, on every session. */
+  const { pending: itatPending } = useItatMail();
+  const overdue = useOverdueCount();
 
   /* TOUCH FEEDBACK, WIRED ONCE.
    *
@@ -217,18 +225,17 @@ function Shell() {
   return (
     <div className="app">
       <CalendarDeadlineMirror/>
-      <div className="mobile-topbar">
-        <img src="/prohippo-logo.png" alt="ProHippo" style={{height: 34, width: "auto"}}/>
-      </div>
-      <Sidebar active={route} onNav={handleNav} open={menuOpen}/>
+      <MobileAppBar
+        menuOpen={menuOpen}
+        onMenu={() => setMenuOpen(o => !o)}
+        /* The bell leads to the dashboard because that is where both of the
+           queues it counts are already listed and worked — it is a way of
+           noticing them from another page, not a page of its own. */
+        onBell={() => handleNav("dashboard")}
+        overdue={overdue}
+      />
+      <Sidebar active={route} onNav={handleNav} open={menuOpen} itatCount={itatPending.length}/>
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)}/>}
-      <button
-        className={`fab-menu ${menuOpen ? "open" : ""}`}
-        aria-label={menuOpen ? "Close menu" : "Open menu"}
-        onClick={() => setMenuOpen(o => !o)}
-      >
-        <span/><span/><span/>
-      </button>
       <main className="main">
         {data.profile && !data.profile.phoneVerified && !(user && user.phoneNumber) && route !== "settings" && !linkDismissed && (
           <div className="animate-in" style={{ margin: "0 0 14px", padding: "10px 14px", borderRadius: 12, background: "var(--p-lavender-2, #EEE9FF)", border: "1px solid var(--p-primary-3, #C9BEF5)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -240,6 +247,14 @@ function Shell() {
         )}
         {content}
       </main>
+      <MobileTabBar
+        active={route}
+        menuOpen={menuOpen}
+        onNav={handleNav}
+        onMore={() => setMenuOpen(o => !o)}
+        overdue={overdue}
+        itatCount={itatPending.length}
+      />
       {toast && (
         <div className="toast animate-in">
           <div style={{width: 22, height: 22, borderRadius: "50%", background: toast.icon === "alert" ? "var(--p-danger)" : "var(--p-success)", display: "grid", placeItems: "center"}}>

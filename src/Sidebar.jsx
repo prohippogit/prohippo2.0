@@ -3,7 +3,6 @@ import { useData } from './store';
 import { useAuth } from './auth';
 import { appealableOrders } from './appeals';
 import { useAdminClaim } from './admin/useAdminClaim';
-import { useItatMail } from './itatEmail';
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -30,7 +29,7 @@ const NAV_BOTTOM = [
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 
-export default function Sidebar({ active, onNav, open }) {
+export default function Sidebar({ active, onNav, open, itatCount = 0 }) {
   const { data } = useData();
   const { user, signOutUser } = useAuth();
   /* Read the claim off the cached token rather than forcing a refresh — this
@@ -40,12 +39,15 @@ export default function Sidebar({ active, onNav, open }) {
   /* The Tribunal's emails wait on the Hearings page, so the count that says
      "something arrived" belongs on that link. Without it the queue is only
      found by someone who already went looking, which defeats the point of
-     receiving the mail at all. */
-  const { pending: itatPending } = useItatMail();
+     receiving the mail at all.
+
+     Subscribed once by the shell and passed in: the phone's tab bar shows the
+     same count, and two components asking for it opened two live listeners on
+     the same collection for every session, desktop included. */
   const badges = {
     assessees: data.assessees.length || null,
     appeals: appealableOrders(data).length || null,
-    hearings: itatPending.length || null,
+    hearings: itatCount || null,
   };
 
   return (

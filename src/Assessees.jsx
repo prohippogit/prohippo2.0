@@ -2103,8 +2103,11 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
   return (
     <>
       <div className="matters-surface" style={{overflowX: "auto"}}>
-        <div className="col" style={{gap: 10, minWidth: 640}}>
-          <div style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
+        <div className="col matters-list" style={{gap: 10, minWidth: 640}}>
+          {/* Column headings for the six-column row below. On a phone the row
+              is not six columns and there is nothing for them to head, so they
+              are hidden there — see .matters-head in app.css. */}
+          <div className="matters-head" style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
             <span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span><span/>
           </div>
           {ordered.map((m) => {
@@ -2426,14 +2429,18 @@ function MiniStat({ label, value, icon, accent = "default" }) {
     warn:    { bg: "var(--p-amber)", fg: "#B07512" },
     success: { bg: "var(--p-mint)", fg: "#1B8C5C" },
   }[accent];
+  /* Classed rather than inline-styled, because the shape changes on a phone:
+     icon beside the number is a 34px box plus two lines of text in 180px of
+     width, and "Upcoming hearings" does not fit beside anything. See .ministat
+     in app.css — the desk tile is exactly what it was. */
   return (
-    <div style={{display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "white", borderRadius: 14, border: "1px solid var(--p-line-2)", flex: 1}}>
-      <div style={{width: 34, height: 34, borderRadius: 10, background: colors.bg, color: colors.fg, display: "grid", placeItems: "center"}}>
+    <div className="ministat">
+      <div className="ministat-ico" style={{background: colors.bg, color: colors.fg}}>
         <Icon name={icon} size={16}/>
       </div>
-      <div style={{minWidth: 0}}>
-        <div style={{fontSize: 11, color: "var(--p-text-3)", fontWeight: 600}}>{label}</div>
-        <div style={{fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em", color: "var(--p-text)"}}>{value}</div>
+      <div className="ministat-text">
+        <div className="ministat-label">{label}</div>
+        <div className="ministat-value">{value}</div>
       </div>
     </div>
   );

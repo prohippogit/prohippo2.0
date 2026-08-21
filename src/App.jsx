@@ -236,6 +236,15 @@ function Shell() {
       />
       <Sidebar active={route} onNav={handleNav} open={menuOpen} itatCount={itatPending.length}/>
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)}/>}
+      {/* The whole drawer, one thumb-reach from the corner. The tab bar under
+          it carries the four registers; this is everything else. */}
+      <button
+        className={`fab-menu ${menuOpen ? "open" : ""}`}
+        aria-label={menuOpen ? "Close menu" : "Open menu"}
+        onClick={() => setMenuOpen(o => !o)}
+      >
+        <span/><span/><span/>
+      </button>
       <main className="main">
         {data.profile && !data.profile.phoneVerified && !(user && user.phoneNumber) && route !== "settings" && !linkDismissed && (
           <div className="animate-in" style={{ margin: "0 0 14px", padding: "10px 14px", borderRadius: 12, background: "var(--p-lavender-2, #EEE9FF)", border: "1px solid var(--p-primary-3, #C9BEF5)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

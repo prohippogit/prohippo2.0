@@ -348,6 +348,25 @@ input, select, textarea { font-family: inherit; color: inherit; }
   display: grid; place-items: center;
 }
 
+/* The small white tile on an assessee's (or a group's) purple header. Was
+   inline-styled on the component; classed so the phone can restack it. */
+.ministat {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--p-line-2);
+  flex: 1; min-width: 0;
+}
+.ministat-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+.ministat-text { min-width: 0; }
+.ministat-label { font-size: 11px; color: var(--p-text-3); font-weight: 600; }
+.ministat-value { font-weight: 800; font-size: 16px; letter-spacing: -0.02em; color: var(--p-text); }
+
+/* Shown only on a phone. For the one or two lines that earn their place on a
+   390px screen and would be noise on a 1440px one. */
+.mob-only { display: none; }
+
 /* Pills */
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
@@ -836,7 +855,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
    without either of them guessing. 8 + 42 + 8, plus whatever the notch takes.
    Zero by default: the admin console has no app bar and its drawer starts at
    the top of the screen, as it always did. */
-:root { --mob-appbar-h: 0px; }
+:root { --mob-appbar-h: 0px; --mob-tabbar-h: 0px; }
 
 /* ============================================================================
    THE PHONE'S OWN CHROME — app bar, tab bar
@@ -859,6 +878,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
      height while it scrolls under it. */
   .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .app:has(.mob-appbar) { --mob-appbar-h: calc(58px + env(safe-area-inset-top)); }
+  .app:has(.mob-tabbar) { --mob-tabbar-h: 62px; }
 
   /* Sidebar becomes an off-canvas drawer, hung below the app bar. */
   .sidebar {
@@ -1014,16 +1034,16 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .page-title { font-size: 20px; }
 }
 
-/* THE FLOATING HAMBURGER, AND WHO STILL HAS IT.
+/* THE FLOATING HAMBURGER.
  *
- * In the product app it is gone. It was the only door to any page other than
- * the one you were on, and it sat precisely where the tab bar now is — one
- * control, hiding ten destinations, on top of the last row of whatever list
- * you were reading.
+ * It stays. What it no longer has to be is the ONLY door to any page other
+ * than the one you are on — the tab bar carries the four places a practitioner
+ * moves between, and this opens the whole drawer over the top of them. It now
+ * floats ABOVE the tab bar rather than on top of the last row of whatever list
+ * you were reading, which is where it used to land.
  *
- * The admin console is a different shell with six pages and no tab bar, and it
- * still renders this button and the white .mobile-topbar above. Both rules stay
- * for it. The product app renders neither. */
+ * The admin console renders it too, with no tab bar under it, so its offset is
+ * the plain one. */
 .fab-menu { display: none; }
 
 @media (max-width: 920px) {
@@ -1034,15 +1054,17 @@ input, select, textarea { font-family: inherit; color: inherit; }
     align-items: center;
     gap: 5px;
     position: fixed;
-    right: 18px;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    width: 58px;
-    height: 58px;
+    right: 16px;
+    /* Clear of the tab bar where there is one (see --mob-tabbar-h), and clear
+       of the home indicator where there is not. */
+    bottom: calc(18px + var(--mob-tabbar-h, 0px) + env(safe-area-inset-bottom));
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     border: none;
     background: linear-gradient(135deg, #6C5CE7 0%, #8E7CFF 100%);
     box-shadow: 0 10px 28px rgba(83, 70, 198, 0.45);
-    z-index: 130;
+    z-index: 135;
     cursor: pointer;
     transition: transform 0.2s ease, background 0.25s ease;
   }
@@ -1222,6 +1244,90 @@ input, select, textarea { font-family: inherit; color: inherit; }
   }
 }
 
+/* ============================================================================
+   THE PHONE'S PAGES — dashboard, assessee, matter
+   ============================================================================
+
+   The desk layout is four stat cards across a 1440px row and a purple header
+   with a name on the left and five buttons on the right. Neither survives a
+   390px screen by being made narrower: a stat card at a quarter of its width
+   is a number with its own label overlapping its own icon, and a header that
+   was two halves becomes two squeezed halves rather than two rows.
+
+   What follows is those pages re-proportioned for a phone — the same cards,
+   the same violets, the same radii, laid out for one column and one thumb.
+   Every rule is inside a max-width query. The desk app is untouched.
+   ============================================================================ */
+@media (max-width: 720px) {
+  .mob-only { display: block; }
+
+  /* ---- stat cards (dashboard) -------------------------------------------
+     Two across, so the icon has to come out of the corner it shares with the
+     label, and the delta line has to be allowed to wrap rather than be cut. */
+  .stat { padding: 14px 14px 12px; border-radius: 18px; }
+  .stat-icon { width: 30px; height: 30px; border-radius: 10px; top: 12px; right: 12px; }
+  .stat-label { font-size: 11px; padding-right: 34px; line-height: 1.3; }
+  .stat-value { font-size: 24px; margin-top: 4px; }
+  .stat-delta {
+    font-size: 10.5px; padding: 3px 7px; margin-top: 8px;
+    line-height: 1.35; white-space: normal; text-align: left;
+  }
+  /* The hover affordance is a lie on a touch screen and it sits over the
+     delta line, which on two-across is the line that needs the room. */
+  .stat .stat-go { display: none; }
+
+  /* ---- the small tiles on a purple header (assessee, group) --------------
+     Icon over label over number. Beside each other they are a 34px box plus
+     "Upcoming hearings" plus a number in 170px, and the label wins by
+     truncating the thing the tile is for. */
+  .ministat { flex-direction: column; align-items: flex-start; gap: 9px; padding: 12px; border-radius: 16px; }
+  .ministat-ico { width: 32px; height: 32px; border-radius: 11px; }
+  .ministat-text { width: 100%; }
+  .ministat-label { font-size: 10.5px; line-height: 1.25; }
+  .ministat-value { font-size: 20px; margin-top: 1px; }
+
+  /* ---- the assessee's purple header -------------------------------------- */
+  .assessee-id { gap: 12px !important; }
+  .assessee-hero .assessee-id > div:last-child { min-width: 0; }
+
+  /* ---- MATTERS: a row of six columns becomes a card ----------------------
+     The desk row is type | proceeding | AY | section | status | view, held at
+     640px so the columns line up down the page. At 390px that is a sideways
+     scroll, and the first thing off the edge is the assessment year — which
+     is half of what identifies the matter. Reading a table sideways on a
+     phone is not reading, the same argument the notice tables lost.
+
+     So the same six cells are laid out as a card: what it is and where it
+     stands on the top line, what it is called under that, and the year, the
+     section and the way in along the foot. No markup changed — the cells are
+     placed by their own order. */
+  .matters-surface { overflow-x: visible !important; }
+  .matters-list { min-width: 0 !important; }
+  .matters-head { display: none !important; }
+
+  .matter-row {
+    grid-template-columns: auto 1fr auto !important;
+    grid-template-areas:
+      "type  .    status"
+      "title title title"
+      "ay    sec  view" !important;
+    column-gap: 10px !important;
+    row-gap: 9px !important;
+    padding: 14px 15px !important;
+    align-items: center;
+  }
+  .matter-row > *:nth-child(1) { grid-area: type; }
+  .matter-row > *:nth-child(2) { grid-area: title; }
+  .matter-row > *:nth-child(3) { grid-area: ay; font-size: 12px; color: var(--p-text-2); font-weight: 600; }
+  .matter-row > *:nth-child(4) { grid-area: sec; justify-self: start; }
+  .matter-row > *:nth-child(5) { grid-area: status; justify-self: end; }
+  .matter-row > *:nth-child(6) { grid-area: view; justify-self: end; }
+  /* The column heading said "AY"; without it the year is a bare number among
+     three other bare numbers. */
+  .matter-row > *:nth-child(3)::before { content: "AY "; color: var(--p-text-3); font-weight: 700; }
+  .matter-row > *:nth-child(2) .strong { white-space: normal !important; font-size: 13.5px !important; }
+}
+
 /* An input under 16px makes iOS zoom the whole page on focus, and it never
    zooms back out. Every form in the app is affected, so this is not per-field. */
 @media (max-width: 720px) {
@@ -1243,7 +1349,14 @@ input, select, textarea { font-family: inherit; color: inherit; }
     flex-wrap: wrap;
     justify-content: flex-start;
   }
-  .assessee-hero .assessee-actions .btn { flex: 1 1 auto; justify-content: center; }
+  /* Two to a row, equal width, rather than four sizes of button wrapping into
+     a ragged block. The delete button keeps its own square at the end. */
+  .assessee-hero .assessee-actions .btn { flex: 1 1 calc(50% - 22px); min-width: 0; justify-content: center; }
+  /* Delete keeps its own square and is pushed to the far end of whatever row
+     it lands on, so it reads as deliberate rather than left over — and it
+     never grows into a half-width target, which is not what you want the
+     biggest button on the card to be. */
+  .assessee-hero .assessee-actions .icon-btn { flex: 0 0 auto; margin-left: auto; }
   /* Contact details wrap to their own lines rather than being squeezed onto
      one — an email address is the longest string on the card. */
   .assessee-contact { flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }

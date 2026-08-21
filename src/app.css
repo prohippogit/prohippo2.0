@@ -454,10 +454,11 @@ input, select, textarea { font-family: inherit; color: inherit; }
    the record begins.
    --------------------------------------------------------------------------- */
 .ahero {
-  /* Out to the edges through .main's own padding, and up under the app bar's
-     shadow, so the violet meets the violet. */
-  margin: -16px -14px 0;
-  padding: 10px 16px 0;
+  /* Out to the edges through .main's own padding — exactly, so the violet
+     meets the app bar's violet with no seam and no overlap. .main is padded
+     14px on a phone; these are its negatives. */
+  margin: -14px -14px 0;
+  padding: 10px 16px 18px;
   background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 58%, #8E7CFF 100%);
   color: white;
   border-radius: 0 0 26px 26px;
@@ -488,6 +489,9 @@ input, select, textarea { font-family: inherit; color: inherit; }
   margin: 0;
   font-size: 21px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.2;
   color: white;
+  /* A company name can be one 40-character word, and it breaks rather than
+     runs off the violet. */
+  overflow-wrap: anywhere;
 }
 /* Inline with the last word of the name, not on a line of its own: it is an
    adjective on the name, and a 20px pill on its own line reads as a heading. */
@@ -512,27 +516,35 @@ input, select, textarea { font-family: inherit; color: inherit; }
 }
 .ahero-contact span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Four tiles across, hanging off the bottom of the violet. */
+/* Four tiles across, INSIDE the violet with its own padding under them. They
+   used to hang past its bottom edge, which cut the corner radius off and read
+   as the row bursting out of the header rather than sitting in it. */
 .ahero-stats {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin: 16px 0 -26px;
+  margin-top: 16px;
 }
 .astat {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  display: flex; flex-direction: column; align-items: flex-start;
   padding: 10px 9px 11px;
   background: white;
   border-radius: 16px;
   box-shadow: 0 8px 20px -10px rgba(20, 16, 50, 0.35);
   min-width: 0;
 }
-.astat-ico { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; }
-.astat-k { font-size: 10px; font-weight: 600; line-height: 1.25; color: var(--p-text-3); }
-.astat-v { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; color: var(--p-text); line-height: 1; }
+.astat-ico { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; margin-bottom: 7px; }
+/* Two lines of room whether the label needs them or not: "Outstanding" is one
+   word and "Upcoming hearings" is two lines, and without this the four numbers
+   sit at four different heights across one row. */
+.astat-k {
+  font-size: 10px; font-weight: 600; line-height: 1.25; color: var(--p-text-3);
+  min-height: 25px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.astat-v { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; color: var(--p-text); line-height: 1; margin-top: 3px; }
 
-/* The header eats the page's own top padding, so the tabs under it need the
-   space the tiles are hanging into. */
-.ahero + .utabs { margin-top: 38px !important; }
+/* The header runs to the page's edges, so what follows sets its own margin. */
+.ahero + .utabs { margin-top: 18px !important; }
 
 /* ---------------------------------------------------------------------------
    THE PHONE'S MATTER CARD
@@ -576,6 +588,10 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .mcard-sec { color: var(--p-text-2); font-weight: 600; }
 /* Status goes to the far end, whatever is beside it. */
 .mcard-foot > *:last-child { margin-left: auto; }
+/* A muted pill is tinted card-white, which is what this foot is tinted with —
+   "Closed" arrived as bare text while "Active" arrived as a chip. On the foot
+   it takes the white back so both read as the same kind of thing. */
+.mcard-foot .pill-muted { background: white; border: 1px solid var(--p-line); }
 
 /* ---------------------------------------------------------------------------
    THE ACTION SHEET
@@ -1209,9 +1225,10 @@ input, select, textarea { font-family: inherit; color: inherit; }
     position: fixed; left: 0; right: 0; bottom: 0;
     z-index: 105;
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-    background: rgba(255, 255, 255, 0.94);
-    -webkit-backdrop-filter: saturate(180%) blur(14px);
-    backdrop-filter: saturate(180%) blur(14px);
+    /* Opaque. Translucent, the list scrolled up underneath it and you could
+       read half a matter card through the labels — which looks exactly like
+       content spilling past the end of the page. */
+    background: var(--p-card);
     border-top: 1px solid var(--p-line);
     box-shadow: 0 -6px 24px rgba(48, 32, 110, 0.07);
   }
@@ -1477,7 +1494,12 @@ input, select, textarea { font-family: inherit; color: inherit; }
   /* Every card loses a little padding: 20px of chrome each side of a 390px
      screen is a fifth of it. */
   .card { padding: 14px; border-radius: 14px; }
-  .main { padding: 14px 14px calc(84px + env(safe-area-inset-bottom)); }
+  /* THE FLOOR OF EVERY PAGE. Two things float over it: the tab bar, 62px, and
+     the hamburger, which clears the bar by 18 and is 56 across. 136px of the
+     bottom of the screen therefore belongs to chrome, and a list that stops
+     short of it ends with its last row sliced by one and its last control
+     under the other. This is the dead space that buys the last row back. */
+  .main { padding: 14px 14px calc(142px + env(safe-area-inset-bottom)); }
 
   /* Room for the floating menu button, which otherwise sits on top of the last
      row of whatever list you were reading. */

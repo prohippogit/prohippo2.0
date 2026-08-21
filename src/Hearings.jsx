@@ -1,6 +1,6 @@
 /* ProHippo — Hearings calendar + list */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, Toggle, useIsPhone, titleCase, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, Toggle, Table, useIsPhone, titleCase, fmtDateLong, daysFromNow } from './shared';
 import { useData, downloadCSV, toISO, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
@@ -522,7 +522,11 @@ function ListView({ hearings, onEdit, onOpenHearing }) {
   const [adjourning, setAdjourning] = React.useState(null);
   return (
     <div className="card" style={{padding: 0}}>
-      <table className="tbl">
+      {/* <Table>, not a bare <table>: the wrapper copies each column's heading
+          onto its cells, which is what turns a row into a labelled card on a
+          phone. Without it this view stacked into a column of dates and names
+          with nothing saying which was which. */}
+      <Table>
         <thead><tr><th>Date / Time</th><th>Assessee</th><th>Authority</th><th>Bench / Officer</th><th>AY</th><th>Mode</th><th>Staff</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {hearings.map(h => (
@@ -562,7 +566,7 @@ function ListView({ hearings, onEdit, onOpenHearing }) {
           ))}
           {hearings.length === 0 && <tr><td colSpan="9" style={{textAlign: "center", padding: 40, color: "var(--p-text-3)"}}>No hearings recorded.</td></tr>}
         </tbody>
-      </table>
+      </Table>
       {adjourning && <AdjournModal hearing={adjourning} onClose={() => setAdjourning(null)} />}
     </div>
   );

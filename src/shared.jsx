@@ -135,8 +135,14 @@ export const StatusPill = ({ status }) => {
  *
  * Pass `wide` for a table whose columns are the point — a genuine matrix, where
  * stacking would destroy the comparison. Those scroll sideways as before.
+ *
+ * Pass `compact` for the other kind that must not stack: a small ledger — a
+ * computation adding up in three narrow columns — where the columns are just
+ * as much the point, but the whole thing already fits in 390px and forcing a
+ * 720px sideways scroll on it would be its own kind of wrong. It stays a
+ * table, at the width it has.
  */
-export function Table({ wide = false, className = "", children, ...rest }) {
+export function Table({ wide = false, compact = false, className = "", children, ...rest }) {
   const ref = React.useRef(null);
   // No dependency array on purpose: rows change as data arrives, and a new row
   // with no labels would render as unlabelled lines on a phone.
@@ -155,11 +161,77 @@ export function Table({ wide = false, className = "", children, ...rest }) {
     }
   });
   return (
-    <table ref={ref} className={`tbl${wide ? " tbl-wide" : ""}${className ? ` ${className}` : ""}`} {...rest}>
+    // `compact` carries tbl-wide too, so every `:not(.tbl-wide)` rule that
+    // turns rows into cards already skips it; tbl-compact only takes back the
+    // 720px floor that tbl-wide otherwise inherits.
+    <table ref={ref} className={`tbl${wide || compact ? " tbl-wide" : ""}${compact ? " tbl-compact" : ""}${className ? ` ${className}` : ""}`} {...rest}>
       {children}
     </table>
   );
 }
+
+/* The overflow control at the top right of the phone's header, and the sheet
+   it opens. Five actions that took two ragged rows of chrome above the only
+   thing the screen is about; here they are one 34px button until asked for.
+   A sheet rather than a dropdown: it comes up from the thumb's end of the
+   screen, and a 44px row is a target a thumb can hit.
+
+   `triggerClass` is what the assessee header's own button is styled as, and
+   stays the default so that call site is unchanged; the matter card passes
+   its own, because a 30px control on a card is not a 34px control on a
+   header. */
+export function SheetMenu({ items, label, triggerClass = "ahero-btn", size = 18 }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  return (
+    <>
+      <button
+        type="button"
+        className={triggerClass}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        /* The card underneath is itself a button that opens the matter. */
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+      >
+        <Icon name="more" size={size}/>
+      </button>
+      {open && createPortal(
+        <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div className="sheet animate-in" role="menu">
+            {items.map((it) => {
+              const inner = <><Icon name={it.icon} size={17}/>{it.label}</>;
+              return it.href ? (
+                <a key={it.key} className="sheet-item" role="menuitem" href={it.href} target={it.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" onClick={() => setOpen(false)}>{inner}</a>
+              ) : (
+                <button key={it.key} className={`sheet-item ${it.danger ? "danger" : ""}`} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}>{inner}</button>
+              );
+            })}
+            <button className="sheet-cancel" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+/* WHAT COLOUR IS A MATTER. Its forum: scrutiny amber, CIT(A) pink, ITAT the
+   brand violet, penalty coral. Held here rather than beside one of the two
+   screens that draw matter cards, because the same proceeding showing up in
+   two colours on two pages is worse than no colour at all. */
+const TYPE_ACCENT = {
+  Scrutiny: { bar: "#F39C12", tint: "var(--p-amber)", fg: "#B07512" },
+  "CIT(A)": { bar: "#C13388", tint: "var(--p-pink)", fg: "#C13388" },
+  ITAT: { bar: "var(--p-primary)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
+  Penalty: { bar: "#EE5A5A", tint: "var(--p-coral)", fg: "#B8463A" },
+};
+export const matterAccent = (t) => TYPE_ACCENT[t] || { bar: "var(--p-primary-3)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" };
 
 /* Is this a phone-width screen?
  *

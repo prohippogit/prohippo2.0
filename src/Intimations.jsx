@@ -43,7 +43,7 @@
  *   figures the department stated, and here the two must not be confusable.
  */
 import React from "react";
-import { Icon, EmptyState, Modal, Avatar, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
+import { Icon, EmptyState, Modal, Avatar, Table, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
 import { useData } from "./store";
 import { openFromStorage } from "./downloadFile";
 import { httpsCallable } from "firebase/functions";
@@ -718,7 +718,11 @@ function LadderPanel({ row }) {
   return (
     <div>
       <Eyebrow>How this adds up</Eyebrow>
-      <table className="tbl" style={{fontSize: 12.5}}>
+      {/* `compact`: this is a computation adding up, so the columns ARE the
+          reading — stacked into labelled lines it stops being a ladder. It
+          has three narrow columns and fits a phone as it is, which is what
+          `compact` says and `wide` (a 720px sideways scroll) would not. */}
+      <Table compact style={{fontSize: 12.5}}>
         <tbody>
           {rungs.map((r) => (
             <tr key={r.id}>
@@ -743,7 +747,7 @@ function LadderPanel({ row }) {
             <td/>
           </tr>
         </tbody>
-      </table>
+      </Table>
       <div className="muted" style={{fontSize: 10.5, marginTop: 6, lineHeight: 1.5}}>
         {final.interest
           ? <>Interest u/s 244A is compensation for the delay in paying the refund, so it sits outside the comparison — the flag measures only the middle line, where the return and CPC computed the same thing.</>
@@ -1218,7 +1222,9 @@ function ReadingPanel({ row, busy, readingNow, onRead, onTrack }) {
 
       {moved.length > 0 ? (
         <div style={{overflowX: "auto"}}>
-          <table className="tbl" style={{fontSize: 12}}>
+          {/* Returned against computed, side by side: the difference between
+              the two columns is the whole point of the panel. */}
+          <Table compact style={{fontSize: 12}}>
             <thead><tr><th>Head</th><th style={{textAlign: "right"}}>As returned</th><th style={{textAlign: "right"}}>As computed</th></tr></thead>
             <tbody>
               {moved.map((l, i) => (
@@ -1229,7 +1235,7 @@ function ReadingPanel({ row, busy, readingNow, onRead, onTrack }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </div>
       ) : (
         <div className="muted" style={{fontSize: 11.5}}>
@@ -1305,7 +1311,9 @@ function ArrearsPanel({ reading }) {
         )}
       </div>
       <div style={{overflowX: "auto"}}>
-        <table className="tbl" style={{fontSize: 12}}>
+        {/* Plain <Table>: a row here carries a long demand reference, which is
+            what a labelled card holds and three columns on a phone do not. */}
+        <Table style={{fontSize: 12}}>
           <thead><tr><th>A.Y.</th><th>Demand reference</th><th style={{textAlign: "right"}}>Amount</th><th></th></tr></thead>
           <tbody>
             {[...taken, ...owed].map((d, i) => (
@@ -1319,7 +1327,7 @@ function ArrearsPanel({ reading }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </div>
       <div className="muted" style={{fontSize: 10.5, marginTop: 6, lineHeight: 1.5}}>
         Read from this order's annexures. These belong to <b>other</b> assessment years and never enter this order's

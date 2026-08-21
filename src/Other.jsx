@@ -1,6 +1,6 @@
 /* ProHippo — Invoices, Communications, Matters, Reports, Settings */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, Table, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, Table, SheetMenu, matterAccent, useIsPhone, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { hapticsAvailable } from './haptics';
 import { WHATSAPP_MESSAGES, resolveWhatsAppSettings, userReachability, clientReachability, whatsAppEnabledFor, displayMobile } from './whatsappSettings';
 import { httpsCallable } from 'firebase/functions';
@@ -1120,6 +1120,7 @@ function SortHead({ sortKey, sort, onSort, children }) {
 
 export function Matters({ onOpenMatter }) {
   const { data, removeMatter, notify } = useData();
+  const isPhone = useIsPhone();
   const [tab, setTab] = React.useState("All");
   const [search, setSearch] = React.useState("");
   const [modal, setModal] = React.useState(null);
@@ -1179,7 +1180,10 @@ export function Matters({ onOpenMatter }) {
         </div>
       </div>
 
-      <div className="row" style={{marginBottom: 16, alignItems: "center", justifyContent: "space-between"}}>
+      {/* The chips scroll and the search sits beside them on a desk. On a
+          phone the chips alone are wider than the screen, so the search was
+          pushed off the right edge entirely — see .matters-filters. */}
+      <div className="row matters-filters" style={{marginBottom: 16, alignItems: "center", justifyContent: "space-between"}}>
         <div className="tabs">
           {["All", ...MATTER_TYPES, "Closed"].map(t => (
             <div key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</div>
@@ -1191,6 +1195,83 @@ export function Matters({ onOpenMatter }) {
         </div>
       </div>
 
+      {/* THE PHONE'S MATTERS REGISTER.
+       *
+       * The desk row is nine columns; on a phone the generic table-to-card
+       * fallback turned each matter into eight uppercase labels down the left
+       * with a value beside each, so one matter filled the screen and a list
+       * of eighteen was eight screens of ASSESSEE / AY / SECTION repeated.
+       *
+       * This is the same card the assessee's own Matters tab already uses, so
+       * a matter looks like itself wherever you meet it — with two things
+       * added that only make sense on a register spanning every client: the
+       * ASSESSEE is the title (here you are scanning across clients, and the
+       * name is what you are scanning for, with the reference below it), and
+       * the NEXT HEARING gets a line, because it is what this page is sorted
+       * by and the reason to open it at all.
+       *
+       * Edit and Delete are not dropped. This page is the only place in the
+       * app where a matter can be edited or deleted, so losing them here
+       * would lose the function on a phone entirely; they move into the same
+       * action sheet the assessee header uses. */}
+      {isPhone && filtered.length > 0 ? (
+        <div className="col" style={{gap: 10}}>
+          {sorted.map(m => {
+            const nh = nextHearingFor(m);
+            const days = nh ? daysFromNow(nh.date) : null;
+            const accent = matterAccent(m.type);
+            const sub = [m.ref, m.bench].filter(Boolean).join("  ·  ");
+            return (
+              <div
+                key={m.id}
+                className="mcard"
+                role="button"
+                tabIndex={0}
+                onClick={onOpenMatter ? () => onOpenMatter(m) : undefined}
+                onKeyDown={(e) => { if (onOpenMatter && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpenMatter(m); } }}
+                style={{borderLeftColor: accent.bar}}
+              >
+                <div className="mcard-body">
+                  <div className="mcard-top">
+                    <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span>
+                    {m.priority === "high" && <span className="mcard-urgent" title="High priority"/>}
+                    <span className="mcard-title">{titleCase(m.assessee)}</span>
+                    <Icon name="chevron-right" size={17} className="mcard-go"/>
+                  </div>
+                  {sub && <div className="mcard-sub">{sub}</div>}
+                  {/* The date the page is sorted by, said as a date and as a
+                      distance — "12 Sep" answers which day to keep free and
+                      "in 22 days" answers whether to worry today. */}
+                  {nh && (
+                    <div className="mcard-when">
+                      <Icon name="calendar" size={13}/>
+                      <b>{fmtDate(nh.date)}</b>
+                      <span>{days === 0 ? "today" : days === 1 ? "tomorrow" : days < 0 ? `${Math.abs(days)} days ago` : `in ${days} days`}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="mcard-foot">
+                  <span className="mcard-ay"><i>AY</i>{m.ay || "—"}</span>
+                  {m.section && <span className="mcard-sec">u/s {m.section}</span>}
+                  <span className="mcard-end">
+                    <StatusPill status={m.status}/>
+                    <SheetMenu
+                      label={`Actions for ${titleCase(m.assessee)}`}
+                      triggerClass="mcard-menu"
+                      size={16}
+                      items={[
+                        { key: "edit", icon: "edit", label: "Edit matter", onClick: () => setModal(m) },
+                        { key: "del", icon: "trash", label: "Delete matter", danger: true,
+                          onClick: () => { if (window.confirm("Delete this matter?")) { removeMatter(m.id); notify("Matter deleted"); } } },
+                      ]}
+                    />
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div className="card" style={{padding: 0}}>
         {filtered.length === 0 ? (
           <EmptyState
@@ -1252,6 +1333,7 @@ export function Matters({ onOpenMatter }) {
           </Table>
         )}
       </div>
+      )}
 
       {modal && <MatterModal initial={modal.id ? modal : undefined} onClose={() => setModal(null)}/>}
     </div>

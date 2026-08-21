@@ -593,6 +593,43 @@ input, select, textarea { font-family: inherit; color: inherit; }
    it takes the white back so both read as the same kind of thing. */
 .mcard-foot .pill-muted { background: white; border: 1px solid var(--p-line); }
 
+/* Additions for the Matters register, which draws the same card across every
+   client rather than inside one. */
+
+/* High priority: a dot, not a word. The desk table shows the same mark. */
+.mcard-urgent {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--p-danger);
+  flex-shrink: 0;
+}
+
+/* The next hearing. It is what the register is sorted by, so it gets a line of
+   its own rather than a fourth fragment on the meta line. */
+.mcard-when {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--p-text-2);
+}
+.mcard-when svg { color: var(--p-primary-2); flex-shrink: 0; }
+.mcard-when b { font-weight: 700; color: var(--p-text); }
+.mcard-when span { color: var(--p-text-3); }
+
+/* Status and the overflow menu travel together at the end of the foot, so the
+   foot's own "last child goes right" rule moves the pair, not just the menu. */
+.mcard-end { display: flex; align-items: center; gap: 4px; }
+.mcard-menu {
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  margin: -6px -4px -6px 0;
+  border: none; background: none;
+  border-radius: 9px;
+  color: var(--p-text-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mcard-menu:active { background: var(--p-line-2); }
+
 /* ---------------------------------------------------------------------------
    THE PHONE'S DASHBOARD HEAD
    ---------------------------------------------------------------------------
@@ -1438,6 +1475,8 @@ input, select, textarea { font-family: inherit; color: inherit; }
   /* Wide tables scroll sideways instead of squeezing */
   .card:has(.tbl) { overflow-x: auto !important; }
   .tbl { min-width: 720px; }
+  /* Except a small ledger, which keeps its columns AND already fits. */
+  .tbl-compact { min-width: 0; }
 
   /* Week calendar scrolls sideways */
   .week-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -1673,6 +1712,21 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .topbar-actions .search { flex: 1 1 100%; width: 100%; }
   .topbar-actions .user-chip { display: none; }
   .topbar-actions > .btn { flex: 1 1 auto; justify-content: center; min-width: 0; }
+
+  /* THE MATTERS FILTER ROW.
+   *
+   * Six scrolling chips and a 240px search field shared one line. The chips
+   * are already wider than the screen on their own, so `space-between` put
+   * the search at x=361 and ran it to x=565 — 175px past a 390px screen, on
+   * a page that does not scroll sideways. It was not merely awkward: you
+   * could not search matters on a phone at all.
+   *
+   * Two rows. The chips keep their sideways scroll; the search takes the
+   * width, because a register of every proceeding in the practice is a thing
+   * you arrive at looking for one. */
+  .matters-filters { flex-wrap: wrap; row-gap: 10px; }
+  .matters-filters .tabs { flex: 1 1 100%; min-width: 0; }
+  .matters-filters .search { width: 100% !important; flex: 1 1 100%; min-width: 0; }
 
   /* Every card loses a little padding: 20px of chrome each side of a 390px
      screen is a fifth of it. */

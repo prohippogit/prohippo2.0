@@ -1,6 +1,5 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
-import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Toggle, Table, useIsPhone, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Toggle, Table, SheetMenu, matterAccent, useIsPhone, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useAuth } from './auth';
 import { mobileTen, normaliseMobile, headConsent } from './whatsappSettings';
 import { useData, assesseeStats, upcomingHearings, invoiceStatus, invoiceOutstanding, fyOf, todayISO,
@@ -2160,13 +2159,9 @@ function ReturnsView({ returns, assessee, onSync, onFetchForm, onGenerateComputa
   );
 }
 
-const TYPE_ACCENT = {
-  Scrutiny: { bar: "#F39C12", tint: "var(--p-amber)", fg: "#B07512" },
-  "CIT(A)": { bar: "#C13388", tint: "var(--p-pink)", fg: "#C13388" },
-  ITAT: { bar: "var(--p-primary)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
-  Penalty: { bar: "#EE5A5A", tint: "var(--p-coral)", fg: "#B8463A" },
-};
-const accentFor = (t) => TYPE_ACCENT[t] || { bar: "var(--p-primary-3)", tint: "var(--p-lavender-2)", fg: "var(--p-primary-2)" };
+// The matter-type palette lives in shared.jsx — the Matters page draws the
+// same cards and the two must not disagree.
+const accentFor = matterAccent;
 
 /* Consolidated, proceeding-wise view: each matter (proceeding) is a distinct,
    clearly-separated card. Clicking one opens a full, scrollable pop-up card
@@ -2662,44 +2657,6 @@ function AStat({ icon, label, value, accent = "default" }) {
       <span className="astat-k">{label}</span>
       <span className="astat-v">{value}</span>
     </div>
-  );
-}
-
-/* The overflow control at the top right of the phone's header, and the sheet
-   it opens. Five actions that took two ragged rows of chrome above the only
-   thing the screen is about; here they are one 34px button until asked for.
-   A sheet rather than a dropdown: it comes up from the thumb's end of the
-   screen, and a 44px row is a target a thumb can hit. */
-function SheetMenu({ items, label }) {
-  const [open, setOpen] = React.useState(false);
-  React.useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-  return (
-    <>
-      <button className="ahero-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(true)}>
-        <Icon name="more" size={18}/>
-      </button>
-      {open && createPortal(
-        <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
-          <div className="sheet animate-in" role="menu">
-            {items.map((it) => {
-              const inner = <><Icon name={it.icon} size={17}/>{it.label}</>;
-              return it.href ? (
-                <a key={it.key} className="sheet-item" role="menuitem" href={it.href} target={it.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" onClick={() => setOpen(false)}>{inner}</a>
-              ) : (
-                <button key={it.key} className={`sheet-item ${it.danger ? "danger" : ""}`} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}>{inner}</button>
-              );
-            })}
-            <button className="sheet-cancel" onClick={() => setOpen(false)}>Cancel</button>
-          </div>
-        </div>,
-        document.body
-      )}
-    </>
   );
 }
 

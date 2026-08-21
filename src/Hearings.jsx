@@ -200,7 +200,7 @@ const colorFor = (h) => {
   return { bg: "var(--p-mint)", fg: "#1B8C5C", bar: "#20B978" };
 };
 
-function startOfWeek(d) {
+export function startOfWeek(d) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // back to Monday
@@ -282,7 +282,7 @@ function HearingSheet({ hearing: h, onOpenHearing, onEdit, onAdjourn, onClose })
  * dash where nothing is. A week with two hearings in it should be readable
  * without moving your thumb, and this is the shape that does that.
  */
-function MobileWeek({ hearings, onOpenHearing, weekStart, setWeekStart }) {
+export function MobileWeek({ hearings, onOpenHearing, weekStart, setWeekStart }) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);

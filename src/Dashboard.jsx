@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Icon, Avatar, titleCase, fmtINR, fmtDate, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, useIsPhone, titleCase, fmtINR, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { openFromStorage } from './downloadFile';
 import { InstallAppButton } from './InstallApp';
 import { useData, upcomingHearings, awaitingNotices, invoiceOutstanding, toISO, todayISO } from './store';
@@ -10,14 +10,105 @@ import { noticeDocumentCount } from './noticeDocs';
 import { noticesIssuedInLast24h, noticesAwaitingReply, countIssuedToday, countPastDue } from './noticeQueues';
 import { noticeDeadline } from './noticeDates';
 import { KeepBoard } from './Tasks';
+import { MobileWeek, startOfWeek } from './Hearings';
 
 /* How far back "no reply filed" looks. Fifteen days is the practical window: a
    compliance notice normally allows fifteen, so anything older than that is
    either answered, extended, or already a problem the appeals card is tracking. */
 const NO_REPLY_DAYS = 15;
 
+/* THE PHONE'S DASHBOARD HEAD.
+ *
+ * The desk row is four stat cards across a 1440px screen, each a number and a
+ * line under it. On a phone that row is the whole first screen, and what it
+ * spends it on is four numbers with no relationship to each other.
+ *
+ * A practitioner opening this on a phone is asking two questions, and this
+ * answers them in that order: what am I in this week, and what is late. The
+ * week itself follows underneath.
+ */
+function HearingsSummary({ hearings, onNav }) {
+  // Broken down by forum, because "five hearings" and "five ITAT hearings" are
+  // different weeks — one is a drive to Ahmedabad and the other is four.
+  const byForum = [];
+  for (const h of hearings) {
+    const k = h.authority || "Other";
+    const row = byForum.find((x) => x.k === k);
+    if (row) row.n += 1; else byForum.push({ k, n: 1, c: colorOf(k) });
+  }
+  byForum.sort((a, b) => b.n - a.n);
+  return (
+    <div className="dcard dcard-hear" role="button" tabIndex={0}
+      onClick={() => onNav("hearings")}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNav("hearings"); } }}>
+      <div className="dcard-head">
+        <span className="dcard-ico" style={{background: "var(--p-lavender-2)", color: "var(--p-primary-2)"}}><Icon name="calendar" size={16}/></span>
+        <span className="dcard-title">Upcoming hearings</span>
+        <Icon name="chevron-right" size={17} className="dcard-go"/>
+      </div>
+      <div className="dhear-body">
+        <div className="dhear-count">
+          <span className="dhear-n">{hearings.length}</span>
+          <span className="dhear-k">this week</span>
+        </div>
+        <div className="dhear-legend">
+          {byForum.length === 0 && <span className="muted" style={{fontSize: 12.5}}>Nothing listed this week.</span>}
+          {byForum.map((r) => (
+            <div key={r.k} className="dhear-row">
+              <i style={{background: r.c}}/>
+              <span className="dhear-row-k">{r.k}</span>
+              <span className="dhear-row-n">{r.n}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const colorOf = (k) => k === "ITAT" ? "var(--p-primary)" : k === "CIT(A)" ? "#C13388" : k === "Scrutiny" ? "#F39C12" : k === "Penalty" ? "#EE5A5A" : "#20B978";
+
+/* WHAT IS LATE, and the way to each of it.
+ *
+ * The four stat cards were the only door to the two notice queues — remove
+ * that row on a phone and nothing else opens them. So this is not a summary
+ * with a number on it: every line is the count AND the way in, which is what
+ * the row it replaces actually did. */
+function AlertsCard({ items }) {
+  const [open, setOpen] = React.useState(false);
+  const total = items.reduce((n, i) => n + i.n, 0);
+  if (!total) return null;
+  return (
+    <div className={`dcard dcard-alert ${open ? "open" : ""}`}>
+      <div className="dcard-head" role="button" tabIndex={0}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => !o); } }}>
+        <span className="dcard-ico" style={{background: "var(--p-coral)", color: "#B8463A"}}><Icon name="alert" size={16}/></span>
+        <div style={{minWidth: 0, flex: 1}}>
+          <div className="dcard-title">Alerts &amp; updates</div>
+          <div className="dalert-sub">{total} thing{total === 1 ? "" : "s"} need{total === 1 ? "s" : ""} your attention</div>
+        </div>
+        <span className={`dcard-go dcard-chev ${open ? "open" : ""}`}><Icon name="chevron-down" size={17}/></span>
+      </div>
+      {open && (
+        <div className="dalert-list">
+          {items.map((i) => (
+            <button key={i.key} className="dalert-row" onClick={i.onClick}>
+              <span className="dalert-n">{i.n}</span>
+              <span className="dalert-label">{i.label}</span>
+              <Icon name="chevron-right" size={15} className="dcard-go"/>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSearch }) {
   const { data, loadSampleData, addTodo, notify } = useData();
+  const isPhone = useIsPhone();
+  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
 
   // Turn a hearing or an appeal deadline into a task card on the board.
   const addTaskFromHearing = (h) => {
@@ -115,6 +206,27 @@ export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSea
         </div>
       )}
 
+      {isPhone ? (
+        <div className="col" style={{gap: 12, marginBottom: 16}}>
+          <HearingsSummary hearings={weekAhead} onNav={onNav}/>
+          <AlertsCard items={[
+            { key: "lapsed", n: appeals.filter((a) => a.daysLeft != null && a.daysLeft < 0).length, label: "appeals past their last date to file", onClick: () => onNav("appeals") },
+            { key: "soon", n: appeals.filter((a) => a.daysLeft != null && a.daysLeft >= 0 && a.daysLeft <= 15).length, label: "appeals due within 15 days", onClick: () => onNav("appeals") },
+            { key: "pastdue", n: pastDue, label: "notices past the date to reply", onClick: () => setQueue("noReply") },
+            { key: "noreply", n: Math.max(0, noReply.length - pastDue), label: `notices open, issued in the last ${NO_REPLY_DAYS} days`, onClick: () => setQueue("noReply") },
+            { key: "new", n: last24h.length, label: "notices arrived in the last 24 hours", onClick: () => setQueue("last24h") },
+            { key: "review", n: awaiting.length, label: "notices awaiting review", onClick: () => setShowNotices(true) },
+          ].filter((i) => i.n > 0)}/>
+          {/* The week itself, under the two questions it answers. The same
+              component the Hearings page uses — one week view, not two. */}
+          <MobileWeek
+            hearings={data.hearings}
+            weekStart={weekStart}
+            setWeekStart={setWeekStart}
+            onOpenHearing={(h) => onNav("hearings")}
+          />
+        </div>
+      ) : (
       <div className="grid-stats" style={{marginBottom: 18}}>
         <Stat label="Active matters" value={activeMatters.length} delta={`${data.matters.length} total`} deltaKind="neutral" icon="scale" iconBg="var(--p-lavender-2)" iconColor="var(--p-primary-2)"
           glow="rgba(108, 92, 231, 0.24)" goLabel="Matters" onClick={() => onNav("matters")}/>
@@ -132,6 +244,7 @@ export default function Dashboard({ onNav, onOpenNotice, onOpenProceeding, onSea
           deltaKind={pastDue ? "down" : "neutral"} icon="clock" iconBg="var(--p-mint)" iconColor="#1B8C5C"
           glow="rgba(74, 222, 164, 0.30)" goLabel="notices" onClick={() => setQueue("noReply")}/>
       </div>
+      )}
 
       <div className="grid-main">
         <div className="col" style={{gap: 18}}>

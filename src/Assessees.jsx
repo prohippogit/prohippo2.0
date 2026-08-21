@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, Avatar, StatusPill, EmptyState, Modal, FormField, TextInput, Toggle, Table, useIsPhone, titleCase, fmtINR, fmtDate, fmtDateLong, fmtDateTime, fmtLakhs, daysFromNow } from './shared';
 import { useAuth } from './auth';
 import { mobileTen, normaliseMobile, headConsent } from './whatsappSettings';
@@ -994,6 +995,7 @@ export function Assessees({ onOpen, initialSearch = "" }) {
 }
 
 export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMatterId }) {
+  const isPhone = useIsPhone();
   const { data, removeAssessee, updateAssessee, notify } = useData();
   const [tab, setTab] = React.useState(initialTab || "Overview");
   const [showEdit, setShowEdit] = React.useState(false);
@@ -1163,8 +1165,61 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
     }
   };
 
+  /* THE PHONE'S HEADER. A violet field that runs to the edges of the screen —
+     the page's own top, not a card sitting on a page — carrying the four
+     things a practitioner needs before anything else: who this is, what kind
+     of assessee, their PAN, and how to reach them. The four tiles sit at its
+     foot, half in the violet and half out of it, which is what marks the end
+     of the header and the beginning of the record.
+
+     The actions the desk header spreads across five buttons live behind the
+     one control at the top right: on 390px they were two ragged rows of
+     chrome above the only thing the screen is about. */
+  const heroActions = [
+    waLink ? { key: "wa", label: "WhatsApp", icon: "whatsapp", href: waLink } : null,
+    a.email ? { key: "mail", label: "Email", icon: "mail", href: `mailto:${a.email}` } : null,
+    { key: "matter", label: "New matter", icon: "plus", onClick: () => setShowMatter(true) },
+    { key: "edit", label: "Edit assessee", icon: "edit", onClick: () => setShowEdit(true) },
+    { key: "del", label: "Delete assessee", icon: "trash", onClick: doDelete, danger: true },
+  ].filter(Boolean);
+
+  const mobileHero = (
+    <div className="ahero">
+      <div className="ahero-bar">
+        <button className="ahero-btn" onClick={onBack} aria-label="Back to assessees"><Icon name="arrow-left" size={18}/></button>
+        <SheetMenu items={heroActions} label={`Actions for ${titleCase(a.name)}`}/>
+      </div>
+
+      <div className="ahero-id">
+        <Avatar name={a.name} color={a.color} round soft/>
+        <div className="ahero-who">
+          <h1 className="ahero-name">
+            {titleCase(a.name)}
+            <span className="ahero-chip">{a.status}</span>
+          </h1>
+          <div className="ahero-pan">{a.pan}</div>
+        </div>
+      </div>
+
+      {(a.mobile || a.email) && (
+        <div className="ahero-contact">
+          {a.mobile && <span><Icon name="phone" size={12}/>{a.mobile}</span>}
+          {a.email && <span><Icon name="mail" size={12}/>{a.email}</span>}
+        </div>
+      )}
+
+      <div className="ahero-stats">
+        <AStat icon="scale" label="Active matters" value={s.matters}/>
+        <AStat icon="calendar" label="Upcoming hearings" value={hearings.length} accent="pink"/>
+        <AStat icon="wallet" label="Outstanding" value={s.outstanding ? fmtLakhs(s.outstanding) : "—"} accent={s.outstanding > 100000 ? "warn" : "default"}/>
+        <AStat icon="doc" label="Notices on file" value={notices.length}/>
+      </div>
+    </div>
+  );
+
   return (
     <div className="animate-in">
+      {isPhone ? mobileHero : (<>
       <div className="center" style={{gap: 8, marginBottom: 16, fontSize: 13}}>
         <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrow-left" size={14}/>Back</button>
         <span className="muted">Assessees / </span>
@@ -1204,6 +1259,7 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
           <MiniStat label="Notices on file" value={notices.length} icon="doc"/>
         </div>
       </div>
+      </>)}
 
       <div className="utabs" style={{marginTop: 22}}>
         {["Overview","Returns","Matters","Hearings","Notices","Invoices","Communications","Notes"].map(t => (
@@ -2117,6 +2173,7 @@ const accentFor = (t) => TYPE_ACCENT[t] || { bar: "var(--p-primary-3)", tint: "v
    (ProceedingModal) with its hearings and notices/orders. Manual matters (no
    proceeding) open the same card — it simply has nothing synced to show yet. */
 function MattersView({ matters, notices, hearings, assesseeName, notify, focusReqId, openMatterId }) {
+  const isPhone = useIsPhone();
   const [openId, setOpenId] = React.useState(null);
   const [parsingId, setParsingId] = React.useState("");
 
@@ -2193,6 +2250,42 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
             const docCount = ns.length;
             const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
             const accent = accentFor(m.type);
+            /* THE PHONE'S MATTER CARD. Two zones, because a matter answers two
+               different questions: what proceeding is this (its kind, its name,
+               how much is in it) and where does it stand (which year, which
+               section, open or closed). The first is white and reads as the
+               card's subject; the second is a tinted foot, which is what keeps
+               five numbers off the same line as the title. */
+            if (isPhone) return (
+              <div
+                key={m.id}
+                className="mcard"
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenId(m.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(m.id); } }}
+                style={{borderLeftColor: accent.bar}}
+              >
+                <div className="mcard-body">
+                  <div className="mcard-top">
+                    <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span>
+                    <span className="mcard-title">{m.ref || m.proceedingName || "Matter"}</span>
+                    <Icon name="chevron-right" size={17} className="mcard-go"/>
+                  </div>
+                  <div className="mcard-sub">
+                    {[
+                      isPortal ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders` : "Manual matter",
+                      hs.length ? `${hs.length} hearing${hs.length === 1 ? "" : "s"}` : "",
+                    ].filter(Boolean).join("  ·  ")}
+                  </div>
+                </div>
+                <div className="mcard-foot">
+                  <span className="mcard-ay"><i>AY</i>{m.ay || "—"}</span>
+                  {section && <span className="mcard-sec">u/s {section}</span>}
+                  <StatusPill status={m.status}/>
+                </div>
+              </div>
+            );
             return (
               <div
                 key={m.id}
@@ -2543,6 +2636,62 @@ function NotesCard({ assessee, onSave }) {
         style={{width: "100%", minHeight: 180, border: "1px solid var(--p-line)", borderRadius: 12, padding: "12px 14px", fontSize: 13.5, fontFamily: "inherit", resize: "vertical", outline: "none"}}
       />
     </div>
+  );
+}
+
+/* One of the four tiles at the foot of the phone's header. Icon, then what it
+   counts, then the count — read top to bottom in an 84px column, where a label
+   beside a number has nowhere to go. */
+function AStat({ icon, label, value, accent = "default" }) {
+  const c = {
+    default: { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)" },
+    pink: { bg: "var(--p-pink)", fg: "#C13388" },
+    warn: { bg: "var(--p-amber)", fg: "#B07512" },
+  }[accent];
+  return (
+    <div className="astat">
+      <span className="astat-ico" style={{background: c.bg, color: c.fg}}><Icon name={icon} size={14}/></span>
+      <span className="astat-k">{label}</span>
+      <span className="astat-v">{value}</span>
+    </div>
+  );
+}
+
+/* The overflow control at the top right of the phone's header, and the sheet
+   it opens. Five actions that took two ragged rows of chrome above the only
+   thing the screen is about; here they are one 34px button until asked for.
+   A sheet rather than a dropdown: it comes up from the thumb's end of the
+   screen, and a 44px row is a target a thumb can hit. */
+function SheetMenu({ items, label }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  return (
+    <>
+      <button className="ahero-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(true)}>
+        <Icon name="more" size={18}/>
+      </button>
+      {open && createPortal(
+        <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div className="sheet animate-in" role="menu">
+            {items.map((it) => {
+              const inner = <><Icon name={it.icon} size={17}/>{it.label}</>;
+              return it.href ? (
+                <a key={it.key} className="sheet-item" role="menuitem" href={it.href} target={it.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" onClick={() => setOpen(false)}>{inner}</a>
+              ) : (
+                <button key={it.key} className={`sheet-item ${it.danger ? "danger" : ""}`} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}>{inner}</button>
+              );
+            })}
+            <button className="sheet-cancel" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 

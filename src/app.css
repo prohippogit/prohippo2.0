@@ -444,6 +444,175 @@ input, select, textarea { font-family: inherit; color: inherit; }
 
 .acard-go { color: #CFC7EE; flex-shrink: 0; }
 
+/* ---------------------------------------------------------------------------
+   THE PHONE'S ASSESSEE HEADER
+   ---------------------------------------------------------------------------
+   A violet field that runs to the edges of the screen — the page's own top,
+   not a card sitting on a page. It carries who this is, what kind of assessee,
+   their PAN and how to reach them, and then four tiles that sit half in the
+   violet and half out of it, which is what marks where the header ends and
+   the record begins.
+   --------------------------------------------------------------------------- */
+.ahero {
+  /* Out to the edges through .main's own padding, and up under the app bar's
+     shadow, so the violet meets the violet. */
+  margin: -16px -14px 0;
+  padding: 10px 16px 0;
+  background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 58%, #8E7CFF 100%);
+  color: white;
+  border-radius: 0 0 26px 26px;
+  position: relative;
+}
+.ahero-bar { display: flex; align-items: center; justify-content: space-between; }
+.ahero-btn {
+  display: grid; place-items: center;
+  width: 36px; height: 36px; border-radius: 12px;
+  border: 0; background: rgba(255, 255, 255, 0.15); color: white;
+  cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ahero-btn:active { transform: scale(0.92); background: rgba(255, 255, 255, 0.28); }
+
+.ahero-id { display: flex; align-items: center; gap: 15px; margin-top: 12px; }
+/* The avatar is the biggest thing on the screen after the name — this is the
+   one page in the app that is about a person rather than a record. */
+.ahero-id .avatar {
+  width: 74px !important; height: 74px !important;
+  font-size: 24px !important;
+  flex-shrink: 0;
+  box-shadow: 0 6px 20px rgba(20, 16, 50, 0.22);
+}
+.ahero-who { min-width: 0; }
+.ahero-name {
+  margin: 0;
+  font-size: 21px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.2;
+  color: white;
+}
+/* Inline with the last word of the name, not on a line of its own: it is an
+   adjective on the name, and a 20px pill on its own line reads as a heading. */
+.ahero-chip {
+  display: inline-block; vertical-align: 3px;
+  margin-left: 8px; padding: 3px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px; font-weight: 700; letter-spacing: 0;
+  white-space: nowrap;
+}
+.ahero-pan {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 6px;
+}
+.ahero-contact {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  margin-top: 12px;
+  font-size: 12.5px; color: rgba(255, 255, 255, 0.82);
+}
+.ahero-contact span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Four tiles across, hanging off the bottom of the violet. */
+.ahero-stats {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 -26px;
+}
+.astat {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 10px 9px 11px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 20px -10px rgba(20, 16, 50, 0.35);
+  min-width: 0;
+}
+.astat-ico { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; }
+.astat-k { font-size: 10px; font-weight: 600; line-height: 1.25; color: var(--p-text-3); }
+.astat-v { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; color: var(--p-text); line-height: 1; }
+
+/* The header eats the page's own top padding, so the tabs under it need the
+   space the tiles are hanging into. */
+.ahero + .utabs { margin-top: 38px !important; }
+
+/* ---------------------------------------------------------------------------
+   THE PHONE'S MATTER CARD
+   ---------------------------------------------------------------------------
+   Two zones, because a matter answers two different questions: what
+   proceeding is this, and where does it stand. The first is white and reads
+   as the card's subject; the second is a tinted foot, which is what keeps
+   the year, the section and the status off the title's line.
+   --------------------------------------------------------------------------- */
+.mcard {
+  background: white;
+  border: 1px solid var(--p-line-2);
+  border-left: 4px solid var(--p-primary-3);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: var(--p-shadow-sm);
+  transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mcard:active { transform: scale(0.99); }
+.mcard-body { padding: 12px 13px 11px; }
+.mcard-top { display: flex; align-items: center; gap: 9px; }
+.mcard-title {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 14px; font-weight: 700; letter-spacing: -0.012em; color: var(--p-text);
+  line-height: 1.3;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.mcard-go { color: #CFC7EE; flex-shrink: 0; }
+.mcard-sub { font-size: 11.5px; color: var(--p-text-3); margin-top: 5px; }
+.mcard-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 13px;
+  background: var(--p-card-tint);
+  border-top: 1px solid var(--p-line-2);
+  font-size: 12px;
+}
+.mcard-ay { font-weight: 700; color: var(--p-text-2); }
+.mcard-ay i { font-style: normal; font-weight: 700; color: var(--p-text-3); margin-right: 5px; }
+.mcard-sec { color: var(--p-text-2); font-weight: 600; }
+/* Status goes to the far end, whatever is beside it. */
+.mcard-foot > *:last-child { margin-left: auto; }
+
+/* ---------------------------------------------------------------------------
+   THE ACTION SHEET
+   --------------------------------------------------------------------------- */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: flex-end;
+  background: rgba(20, 16, 50, 0.45);
+  padding: 10px;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.sheet {
+  width: 100%;
+  background: white;
+  border-radius: 20px;
+  padding: 6px;
+  margin-bottom: env(safe-area-inset-bottom);
+  box-shadow: var(--p-shadow-lg);
+}
+.sheet-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px 14px;
+  border: 0; background: none; border-radius: 14px;
+  font: inherit; font-size: 14.5px; font-weight: 600; color: var(--p-text);
+  text-align: left; text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sheet-item + .sheet-item { border-top: 1px solid var(--p-line-2); border-radius: 0; }
+.sheet-item:active { background: var(--p-lavender); }
+.sheet-item.danger { color: var(--p-danger); }
+.sheet-cancel {
+  width: 100%; margin-top: 6px; padding: 14px;
+  border: 0; border-radius: 14px;
+  background: var(--p-lavender); color: var(--p-primary-2);
+  font: inherit; font-size: 14.5px; font-weight: 800; cursor: pointer;
+}
+
 /* Pills */
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
@@ -985,10 +1154,10 @@ input, select, textarea { font-family: inherit; color: inherit; }
      nothing: the bar is fixed by the grid, the page scrolls beneath it. */
   .mob-appbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 42px 42px;
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
     align-items: center;
     gap: 8px;
-    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
     background: linear-gradient(135deg, #4F46BE 0%, #6C5CE7 100%);
     color: white;
     box-shadow: 0 2px 14px rgba(48, 32, 110, 0.22);
@@ -997,7 +1166,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
        reach is not one. The drawer starts below the bar for the same reason. */
     z-index: 130;
   }
-  .mob-appbar-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .mob-appbar-brand { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
   .mob-appbar-mark { height: 28px; width: auto; flex-shrink: 0; }
   .mob-appbar-word {
     font-size: 18px; font-weight: 800; letter-spacing: -0.015em; color: white;

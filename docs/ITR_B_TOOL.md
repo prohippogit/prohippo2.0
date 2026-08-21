@@ -179,6 +179,14 @@ to reach `buildItrBPDF` as well as `itrbFilename` — passing it to the filename
 alone hands over the same document under three names, which is what happened
 until a test compared the page counts rather than the names.
 
+Both carry the practice's letterhead, drawn by `drawBrandHeader` from the
+**whole** `profile` — the users/{uid} document, with the firm's address and
+phone on it. `data.profile` is a two-field summary (owner and firm name) and
+passing that instead is why the letterhead here printed a name with nothing
+under it. The wordmark and its strapline are letter-spaced and right-aligned to
+the margin, which jsPDF cannot do on its own: it measures `charSpace`
+differently from the way it draws it, so `pdfText.js` does that alignment.
+
 ## Part C, and what its columns are not
 
 Column **[A]** is the undisclosed income declared for the year, and it is the

@@ -116,7 +116,11 @@ async function readStoredJson(path) {
 }
 
 export default function ItrB({ draftId, seedNotice, onBack }) {
-  const { data, notify, addItrbDraft, updateItrbDraft, removeItrbDraft } = useData();
+  /* `profile` is the whole users/{uid} document — the firm's address, its phone,
+     the invoice appearance settings. `data.profile` is a two-field summary of it
+     (owner and firm name), which is why the letterhead on this document carried
+     a name and nothing under it. */
+  const { data, profile, notify, addItrbDraft, updateItrbDraft, removeItrbDraft } = useData();
   const saved = draftId ? (data.itrbDrafts || []).find((d) => d.id === draftId) : null;
 
   const [draft, setDraft] = React.useState(() => {
@@ -532,7 +536,7 @@ export default function ItrB({ draftId, seedNotice, onBack }) {
       const { buildItrBPDF, itrbFilename } = await import("./itrb/pdf.js");
       // `sections` has to reach the builder as well as the filename, or all
       // three buttons hand over the same document under three names.
-      const doc = buildItrBPDF({ draft, result, profile: data.profile, sections });
+      const doc = buildItrBPDF({ draft, result, profile, sections });
       saveBlob(doc.output("blob"), itrbFilename(draft, sections));
       // A document that has been handed over should correspond to something on
       // file, so the draft it was built from is saved with it.

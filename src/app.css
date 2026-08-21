@@ -686,6 +686,92 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .matter-row:hover .matter-view,
 .matter-row:focus-visible .matter-view { background: var(--p-primary); color: #fff; }
 
+/* Year rows in the ITR-B block period — the same idiom as .matter-row above,
+   with one thing that row does not have to solve: it OPENS IN PLACE, and what
+   opens is a whole form. Seven white cards on a pale ground read fine while
+   they are all one line high; expand one to full height and its own body is the
+   same white as the page's cards, so the open year runs into the two either
+   side of it and nobody can see where it ends.
+   
+   So the open state is not just "the chevron turned". It lifts further than
+   hover, keeps a coloured edge the whole time it is open, tints its header, and
+   — the part that actually fixes it — puts the body on a different ground from
+   the card above and below. */
+.year-card {
+  background: white;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  box-shadow: var(--p-shadow-sm);
+  overflow: hidden;
+  /* transform and box-shadow only: both skip layout and paint. */
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+.year-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  cursor: pointer; flex-wrap: wrap;
+  transition: background 0.18s ease, padding 0.18s ease;
+  outline: none;
+}
+.year-head:focus-visible { box-shadow: inset 0 0 0 2px var(--p-primary-3); border-radius: var(--radius); }
+
+/* Hover is for pointers. A touch device fires it on tap, which would leave the
+   row looking hovered after the finger has gone. */
+@media (hover: hover) and (pointer: fine) {
+  .year-card:not(.is-open):hover {
+    border-color: var(--p-primary-3);
+    box-shadow: var(--p-shadow);
+    transform: translateY(-1px);
+  }
+  .year-card:not(.is-open):hover .year-head { background: linear-gradient(180deg, #FFFFFF 0%, var(--p-card-tint) 100%); }
+}
+/* Pressed. Subtler than a button's 0.97 — a full-width row shrinking that far
+   reads as the page moving rather than the row answering. */
+.year-head:active { transform: scale(0.997); }
+
+.year-card.is-open {
+  border-color: var(--p-primary-3);
+  box-shadow: var(--p-shadow-lg);
+  transform: translateY(-2px);
+}
+.year-card.is-open .year-head {
+  padding: 17px 18px;
+  background: linear-gradient(180deg, var(--p-lavender-2) 0%, var(--p-lavender) 100%);
+  border-bottom: 1px solid var(--p-primary-soft);
+}
+/* The body on its own ground. This is the fix: white-on-white is what made an
+   open year run into its neighbours. */
+.year-body {
+  padding: 0 18px 18px;
+  background: var(--p-card-tint);
+}
+
+.year-chevron {
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1), color 0.18s ease;
+  flex-shrink: 0;
+}
+.year-card.is-open .year-chevron { transform: rotate(90deg); color: var(--p-primary-2); }
+
+/* The body's own entrance. Opacity and transform only, 200 ms, ease-out: the
+   panel is tall, so it arrives rather than unfolds — animating its height would
+   be a layout pass per frame on a form of seventy fields.
+   Keyframes rather than a transition because this element mounts, and a mount
+   cannot be interrupted halfway by another mount of itself. */
+@keyframes year-body-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.year-body > * { animation: year-body-in 0.2s cubic-bezier(0.23, 1, 0.32, 1) both; }
+
+/* Motion sickness is a real thing and none of the above carries meaning that
+   the colour and the shadow do not already carry. The lift goes; the ground,
+   the edge and the tint stay. */
+@media (prefers-reduced-motion: reduce) {
+  .year-card, .year-card.is-open, .year-head:active { transform: none; }
+  .year-chevron { transition: color 0.18s ease; }
+  .year-body > * { animation: none; }
+}
+
 /* Clickable table rows (global Matters / Hearings list) + hearing chips. */
 .row-link:hover { background: var(--p-lavender) !important; }
 .hearing-clickable { transition: filter 0.12s ease, transform 0.12s ease; }

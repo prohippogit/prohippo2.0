@@ -912,10 +912,20 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
           const ret = syncedReturn(y.ay);
           const expanded = open === y.key;
           return (
-            <div key={y.key} className="card" style={{padding: 0, overflow: "hidden"}}>
+            <div key={y.key} className={`year-card${expanded ? " is-open" : ""}`}>
+              {/* A row that opens a form is a control, so it answers to the
+                  keyboard and says what it does — seven of these are the spine
+                  of the screen and reaching them by tab should not require a
+                  mouse. */}
               <div
+                className="year-head"
+                role="button" tabIndex={0}
+                aria-expanded={expanded}
+                aria-label={`A.Y. ${y.ay}${expanded ? " — collapse" : " — expand"}`}
                 onClick={() => setOpen(expanded ? "" : y.key)}
-                style={{display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", cursor: "pointer", flexWrap: "wrap"}}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(expanded ? "" : y.key); }
+                }}
               >
                 <div style={{minWidth: 116, display: "flex", gap: 9, alignItems: "baseline"}}>
                   {/* The form's own row name, so the two sheets read alike. */}
@@ -948,11 +958,14 @@ function BlockTab({ draft, result, editYear, period, busyYear, syncedReturn, onF
                 </div>
                 {ret?.jsonPath && !y.declaredSource && <span className="pill pill-success" style={{fontSize: 10.5}}>Return on file</span>}
                 {y.floored && <span className="pill pill-warning" style={{fontSize: 10.5}} title="Heads net to a loss; the year is carried at nil — s.158BB(4)">Loss disregarded</span>}
-                <Icon name={expanded ? "chevron-down" : "chevron-right"} size={16}/>
+                {/* One chevron that turns, not two that swap. A swap is a
+                    cut; a turn is the same object moving, and the eye reads
+                    the second as the row responding to the press. */}
+                <Icon name="chevron-right" size={16} className="year-chevron"/>
               </div>
 
               {expanded && (
-                <div style={{padding: "0 18px 18px", borderTop: "1px solid var(--p-line)"}}>
+                <div className="year-body">
                   <YearPanel
                     year={draft.years.find((row) => row.key === y.key) || y}
                     computed={y}

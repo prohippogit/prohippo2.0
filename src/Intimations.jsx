@@ -43,7 +43,7 @@
  *   figures the department stated, and here the two must not be confusable.
  */
 import React from "react";
-import { Icon, EmptyState, Modal, Avatar, Table, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
+import { Icon, EmptyState, Modal, Avatar, Table, useIsPhone, titleCase, fmtINR, fmtDate, fmtDateLong } from "./shared";
 import { useData } from "./store";
 import { openFromStorage } from "./downloadFile";
 import { httpsCallable } from "firebase/functions";
@@ -399,7 +399,9 @@ export default function Intimations() {
           </span>
         </div>
         {!client && (
-          <div className="center" style={{gap: 8}}>
+          /* Search and the three views. On a phone a 230px field beside three
+             chips is 490px of content in 362px of screen — see .int-views. */
+          <div className="center int-views" style={{gap: 8}}>
             <div className="search" style={{minWidth: 230}}>
               <Icon name="search" size={15}/>
               <input placeholder="Search assessee or PAN…" value={search} onChange={(e) => setSearch(e.target.value)}/>
@@ -502,6 +504,7 @@ function Stat({ label, value, sub, colour }) {
 const CLIENT_GRID = "minmax(170px, 1fr) 126px 76px 150px 116px 96px 96px";
 
 function ClientList({ clients, search, onOpen }) {
+  const isPhone = useIsPhone();
   if (clients.length === 0) {
     return (
       <div className="card">
@@ -509,6 +512,53 @@ function ClientList({ clients, search, onOpen }) {
       </div>
     );
   }
+  /* THE PHONE'S CLIENT CARD. Seven columns held at 720px meant a 390px screen
+     showed half a row and you had to swipe sideways to learn whose it was.
+     Same card the rest of the app uses. The order of the lines is the order of
+     the questions: whose, then how much is at stake, then how much is left to
+     decide — the last being the only thing that turns into work today. */
+  if (isPhone) return (
+    <div className="col" style={{gap: 10}}>
+      {clients.map((c) => {
+        const bar = c.pending ? "#E0A93B" : c.atStake ? "#B23B3B" : "#8E7CFF";
+        const years = c.years.slice(0, 4).join(", ") + (c.years.length > 4 ? ` +${c.years.length - 4}` : "");
+        return (
+          <div
+            key={c.key}
+            className="mcard"
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpen(c)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(c); } }}
+            style={{borderLeftColor: bar}}
+          >
+            <div className="mcard-body">
+              <div className="mcard-top">
+                <span className="mcard-title">{titleCase(c.assessee) || "—"}</span>
+                <Icon name="chevron-right" size={17} className="mcard-go"/>
+              </div>
+              <div className="mcard-sub">{c.pan || "—"}  ·  A.Y. {years}</div>
+              <div className="mcard-money">
+                {c.atStake > 0
+                  ? <span className="pill" style={{background: "#FDECEC", color: "#B23B3B", fontWeight: 700}}>{fmtINR(c.atStake)} more payable</span>
+                  : <span className="muted" style={{fontSize: 12}}>Nothing adverse</span>}
+              </div>
+            </div>
+            <div className="mcard-foot">
+              <span className="mcard-ay">{c.count} order{c.count === 1 ? "" : "s"}</span>
+              <StaffCell staff={c.staff} unallocated={c.unallocated}/>
+              <span className="mcard-end">
+                {c.pending
+                  ? <span className="pill" style={{background: "#FFF3D6", color: "#B07512", fontWeight: 700}}>{c.pending} to decide</span>
+                  : <span className="pill pill-muted">All done</span>}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="matters-surface" style={{overflowX: "auto"}}>
       <div className="col" style={{gap: 10, minWidth: 720}}>
@@ -765,8 +815,68 @@ function LadderPanel({ row }) {
 const ORDER_GRID = "104px 68px 82px minmax(180px, 1fr) 118px 104px 122px 92px";
 
 function OrderList({ client, readingKey, onOpen }) {
+  const isPhone = useIsPhone();
   const ordered = [...client.rows].sort((a, b) =>
     (b.ay || "").localeCompare(a.ay || "") || (b.orderDate || "").localeCompare(a.orderDate || ""));
+
+  /* THE PHONE'S ORDER CARD. Eight columns held at 960px — two and a half
+     screens wide — so the swipe to reach "what it did" left the year behind.
+     Inside one assessee an order is identified by its year and its section,
+     so those are the title; what it did is a sentence and gets a line to be
+     one in; the money is the foot, because it is what the row is for. */
+  if (isPhone) return (
+    <div className="col" style={{gap: 10}}>
+      {ordered.map((r) => {
+        const accent = accentFor(r.section);
+        const clocks = clocksFor(r);
+        const at = appealTone(clocks.appeal);
+        const refund = refundPosition(r);
+        const live = r.variance?.flag === "red" && r.decision === "pending" && at?.loud;
+        const flags = [
+          r.variance?.adjusted ? { k: "adj", el: <span className="pill pill-muted" style={{fontSize: 10}}>adjusted u/s 245</span> } : null,
+          live ? { k: "ap", el: <span style={{fontSize: 10.5, fontWeight: 700, color: at.colour}}>appeal {clocks.appeal.daysLeft < 0 ? "just closed" : `${clocks.appeal.daysLeft}d left`}</span> } : null,
+          refund.state === "overdue" ? { k: "rf", el: <span style={{fontSize: 10.5, fontWeight: 700, color: "#B23B3B"}}>refund not received</span> } : null,
+          readingKey === r.key ? { k: "rd", el: <span className="muted" style={{fontSize: 10.5}}>reading…</span> } : null,
+        ].filter(Boolean);
+        return (
+          <div
+            key={r.key}
+            className="mcard"
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpen(r)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(r); } }}
+            style={{borderLeftColor: accent.bar}}
+          >
+            <div className="mcard-body">
+              <div className="mcard-top">
+                <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>u/s {r.section}</span>
+                <span className="mcard-title">A.Y. {r.ay || "—"}</span>
+                <Icon name="chevron-right" size={17} className="mcard-go"/>
+              </div>
+              {/* What the order did — a sentence, so it wraps rather than being
+                  cut at the width a column used to give it. */}
+              <div className="mcard-said">{describeVariance(r.variance)}</div>
+              <div className="mcard-sub">
+                {r.orderDate ? `Dated ${fmtDate(r.orderDate)}` : "Date not stated"}
+                {r.reading && readingTrust(r.reading) === "ok" && r.reading.headline ? `  ·  ${r.reading.headline}` : ""}
+              </div>
+              {flags.length > 0 && (
+                <div className="mcard-flags">{flags.map((f) => <React.Fragment key={f.k}>{f.el}</React.Fragment>)}</div>
+              )}
+            </div>
+            <div className="mcard-foot">
+              <CpcAmount row={r} size={14}/>
+              <span className="mcard-end">
+                <span className="mcard-decision">{DECISION_LABEL[r.decision]}</span>
+                <StaffCell staff={r.assignedTo ? [r.assignedTo] : []} unallocated={0}/>
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="matters-surface" style={{overflowX: "auto"}}>

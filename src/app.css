@@ -1976,6 +1976,24 @@ input, select, textarea { font-family: inherit; color: inherit; }
     overflow: visible !important;
     line-height: 1.35;
   }
+
+  /* A SUBJECT THAT IS A FILENAME.
+   *
+   * Where the portal sent no subject, the card falls back to the document's
+   * own name, and those run to sixty characters with no spaces in them:
+   *   7000000096224746_127066629_2025_APL_AWOPG5212A...250_08042025.pdf
+   * On the desk that is harmless — the subject is nowrap-with-ellipsis and
+   * gets cut. On a phone it is now allowed to wrap, but a token with nothing
+   * to wrap AT is one long word: it pushed past the card, past the modal, and
+   * scrolled the whole screen sideways, taking the app bar and every other
+   * card with it.
+   *
+   * `anywhere` rather than `break-word` on purpose — only `anywhere` reduces
+   * the element's min-content width, which is what lets the flex item shrink
+   * inside the row instead of forcing the row wider. Applied to the text
+   * column as a whole, so a DIN, an ARN or an attachment name cannot do the
+   * same thing from one line lower down. */
+  .pm-note-row > div:nth-child(2), .pm-note-subject { overflow-wrap: anywhere; }
 }
 
 /* Above 720px the wrapper is not there as far as layout is concerned — the two

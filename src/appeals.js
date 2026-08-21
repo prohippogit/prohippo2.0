@@ -21,6 +21,11 @@
  * decides may relate to AY 2017-18. This engine used to key the choice off the
  * AY, which left a June-2026 order counting 60 days from the date of service.
  *
+ * A FORM 35 IS THE APPEAL. Where one is on file for this assessee, this year
+ * and this order — identified by the date of the order it was filed against, or
+ * its DIN — the appeal has been filed and the order is kept off this page
+ * before anything else is worked out.
+ *
  * AN ASSESSMENT YEAR IS NOT AN APPEAL. A contested year holds as many orders as
  * the department passes in it — the assessment and its penalty, a set-aside and
  * the fresh assessment made in its place, a first-appeal order on the quantum
@@ -178,9 +183,55 @@ export function appealRoute(notice) {
   return ROUTE_BY_DOCTYPE[orderDocType(notice)] || APPEAL_ROUTE[notice.authority] || null;
 }
 
+/* ---------------- one date, however it was written ----------------
+ *
+ * Two records of the same order do not have to spell its date the same way. The
+ * portal's notice list is normalised to YYYY-MM-DD on the way in; a Form 35
+ * carries what the appellant typed into ITBA ("23-Nov-2024", "23/11/2024"), an
+ * AI read off a PDF gives its own, and a record synced before the normaliser
+ * understood a format kept the raw string. Comparing those as strings finds
+ * nothing, and "nothing" here reads as "no appeal has been filed" — which is
+ * exactly the wrong answer to give a practitioner.
+ *
+ * So every date is reduced to YYYY-MM-DD before it is compared to another.
+ * Day-first on the numeric forms: these come from an Indian portal, and
+ * 03/04/2025 there is 3 April. */
+const MONTH3 = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const pad2 = (n) => String(n).padStart(2, "0");
+
+export function toISODate(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number" || /^\d{10,}$/.test(String(v))) {
+    const d = new Date(Number(v));
+    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = /^(\d{1,2})[-/ ]([A-Za-z]{3,})[-/ ](\d{4})$/.exec(s);
+  if (m && MONTH3[m[2].slice(0, 3).toLowerCase()]) return `${m[3]}-${pad2(MONTH3[m[2].slice(0, 3).toLowerCase()])}-${pad2(m[1])}`;
+  m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(s);
+  if (m && +m[1] >= 1 && +m[1] <= 31 && +m[2] >= 1 && +m[2] <= 12) return `${m[3]}-${pad2(m[2])}-${pad2(m[1])}`;
+  return "";
+}
+
 /* The date an order bears. `date` is what the portal sent (issued, else
    served); a PDF uploaded by hand may carry only what was read off it. */
-export const orderDate = (n) => (n && (n.date || (n.parsed && n.parsed.orderDate) || n.servedOn)) || "";
+export const orderDate = (n) => (n && (toISODate(n.date) || toISODate(n.parsed && n.parsed.orderDate) || toISODate(n.servedOn))) || "";
+
+/* EVERY date this one order bears. The date of an order is recorded more than
+   once and not always identically — the portal lists when it was issued, the
+   PDF prints when it was passed, service is a third day — and a Form 35 names
+   whichever the appellant put on the form. Any of them identifying the same
+   order is an exact match on the date of that order. */
+export function orderDates(n) {
+  const out = [];
+  for (const v of [n && n.date, n && n.servedOn, n && n.appealServedDate, n && n.parsed && n.parsed.orderDate]) {
+    const iso = toISODate(v);
+    if (iso && !out.includes(iso)) out.push(iso);
+  }
+  return out;
+}
 
 // PAN + assessment year. The year is where two different orders MEET, never
 // where they become one — see the attribution note below.
@@ -188,24 +239,62 @@ const partyKey = (r) => `${String((r && r.pan) || "").toUpperCase()}|${(r && r.a
 
 const byOrderDate = (a, b) => String(orderDate(a)).localeCompare(String(orderDate(b)));
 
-// Does a filed Form 35 NAME this order? Same PAN and AY to begin with, then the
-// date of the order appealed against, corroborated where the form carries it by
-// the order's DIN or section.
-//
-// A form that carries no order metadata at all names nothing — it used to be
-// read as a match for every order in the year, which is exactly how a second
-// order for the same year disappeared. Such a form is still evidence that an
-// appeal was taken; which order it answers is settled by date, below.
+/* ---------------- the Form 35 test ----------------
+ *
+ * A Form 35 IS the first appeal. If one is on file for this assessee, this
+ * assessment year and this order, the appeal has been filed and the order has
+ * no business on a page headed by a filing deadline — whatever else the records
+ * do or do not say. So this is asked FIRST, of every order, before any of the
+ * inference below runs.
+ *
+ * What makes it this order and not another of the same year is the identifier
+ * the form carries: the DATE OF THE ORDER appealed against, or its DIN. Both are
+ * exact. The assessment year alone is not — that is the fault this whole file
+ * exists to keep out — and neither is the section, which an assessment and the
+ * order remaking it after a set-aside share.
+ */
 export function form35Matches(order, form) {
+  if (!form || !form.isAppealForm) return false;
   if ((form.pan || "").toUpperCase() !== (order.pan || "").toUpperCase()) return false;
   if ((form.ay || "") !== (order.ay || "")) return false;
   const meta = form.appeal || {};
-  return namesOrder({ date: meta.dateOrder || "", din: meta.orderDin || "", section: meta.orderSection || "" }, order);
+  const on = toISODate(meta.dateOrder);
+  if (on && orderDates(order).includes(on)) return true;
+  return Boolean(meta.orderDin && order.din && String(meta.orderDin).trim() === String(order.din).trim());
 }
 
+/* The Form 35 filed against this order, or null. Exported for the page, which
+   names the acknowledgement rather than making a practitioner take "filed" on
+   trust. */
+export function form35For(order, allNotices) {
+  return (allNotices || []).find((n) => n.isAppealForm && form35Matches(order, n)) || null;
+}
+
+/* Forms filed for the same assessee and year that do NOT answer this order.
+   Worth showing: a year with a Form 35 on it and an order still open is either
+   a second order that genuinely needs its own appeal, or a form whose order
+   details never came down from the portal — and the practitioner is the one who
+   can tell which. */
+export function otherYearForms(order, allNotices) {
+  return (allNotices || [])
+    .filter((n) => n.isAppealForm
+      && (n.pan || "").toUpperCase() === (order.pan || "").toUpperCase()
+      && (n.ay || "") === (order.ay || "")
+      && !form35Matches(order, n))
+    .map((n) => ({
+      ackNum: (n.appeal && n.appeal.ackNum) || "",
+      dateOrder: toISODate(n.appeal && n.appeal.dateOrder),
+      dateFiling: toISODate((n.appeal && n.appeal.dateFiling) || n.date),
+      orderSection: (n.appeal && n.appeal.orderSection) || "",
+    }));
+}
+
+// Weaker than the Form 35 test above, and used only to attribute evidence that
+// is already known to be about SOME order of this year: section is allowed in
+// here as a last resort, where it is not allowed to decide "already filed".
 const namesOrder = (names, order) => Boolean(
-  (names.date && orderDate(order) && names.date === orderDate(order))
-  || (names.din && order.din && String(names.din) === String(order.din))
+  (names.date && orderDates(order).includes(toISODate(names.date)))
+  || (names.din && order.din && String(names.din).trim() === String(order.din).trim())
   || (names.section && order.section && String(names.section) === String(order.section))
 );
 
@@ -251,7 +340,7 @@ const namesOrder = (names, order) => Boolean(
 // the same year. So each decision is paired with the latest filing that
 // precedes it, and what survives is the filing's date and the order it names,
 // which place the appeal more tightly than the decision does.
-function appealSteps(route, pool, matters) {
+function appealSteps(route, pool, matters, spent) {
   const filed = [];
   const decided = [];
   if (route === "CIT(A)") {
@@ -259,9 +348,10 @@ function appealSteps(route, pool, matters) {
       if (n.isAppealForm) {
         const meta = n.appeal || {};
         filed.push({
-          on: meta.dateFiling || n.date || meta.ackDt || "",
+          on: toISODate(meta.dateFiling) || toISODate(n.date) || toISODate(meta.ackDt) || "",
           names: { date: meta.dateOrder || "", din: meta.orderDin || "", section: meta.orderSection || "" },
           penalty: PENALTY_RE.test(String(meta.orderSection || "")) || null,
+          form: n,
         });
       } else if (isAppealableOrder(n) && orderDocType(n) === "appealOrder") {
         decided.push({ on: orderDate(n), names: null, penalty: isPenaltyAppeal(n) });
@@ -278,13 +368,17 @@ function appealSteps(route, pool, matters) {
       // A matter carries no filing date unless somebody typed one; an undated
       // matter is still one appeal, and is attributed as one.
       filed.push({
-        on: m.filedOn || m.dateFiling || m.date || "",
+        on: toISODate(m.filedOn) || toISODate(m.dateFiling) || toISODate(m.date) || "",
         names: null,
         penalty: PENALTY_RE.test(String(m.section || "")) || null,
+        form: null,
       });
     }
   }
-  return pairFilingsWithDecisions(filed, decided);
+  /* An appeal already settled by the Form 35 test is spent: neither the form
+     nor the order that decided it may go on to silence a second order. Pairing
+     happens first so the decision leaves with the filing it belongs to. */
+  return pairFilingsWithDecisions(filed, decided).filter((s) => !(s.form && spent && spent.has(s.form)));
 }
 
 const byOn = (a, b) => String(a.on).localeCompare(String(b.on));
@@ -304,7 +398,7 @@ function pairFilingsWithDecisions(filed, decided) {
     const i = field[field.length - 1];
     open.splice(open.indexOf(i), 1);
     const f = filed[i];
-    steps.push({ on: f.on || d.on, names: f.names, penalty: f.penalty == null ? d.penalty : f.penalty });
+    steps.push({ on: f.on || d.on, names: f.names, penalty: f.penalty == null ? d.penalty : f.penalty, form: f.form });
   }
   for (const i of open) steps.push(filed[i]);
   return steps;
@@ -381,7 +475,21 @@ export function appealedOrders(data) {
     const pool = byParty.get(g.party) || [];
     const mine = mattersByParty.get(g.party) || [];
     g.orders.sort(byOrderDate);
-    for (const o of attribute(g.orders, appealSteps(g.route, pool, mine))) answered.add(o);
+
+    /* THE FORM 35 TEST, BEFORE ANYTHING IS INFERRED. A first appeal against
+       this very order is on file, so it is filed — no date arithmetic, no
+       attribution, nothing to argue with. One form answers one order: it is
+       spent afterwards, and so is the appellate order that decided it. */
+    const spent = new Set();
+    const open = [];
+    for (const o of g.orders) {
+      const form = g.route === "CIT(A)"
+        ? pool.find((n) => n.isAppealForm && !spent.has(n) && form35Matches(o, n))
+        : null;
+      if (form) { spent.add(form); answered.add(o); } else open.push(o);
+    }
+
+    for (const o of attribute(open, appealSteps(g.route, pool, mine, spent))) answered.add(o);
   }
   return answered;
 }
@@ -490,6 +598,10 @@ export function appealableOrders(data, opts = {}) {
         ayCount: siblings.length,
         ayIndex: siblings.indexOf(n) + 1,
         ayLatest: siblings[siblings.length - 1] === n,
+        // Forms filed for this year against some OTHER order. This order has no
+        // Form 35 of its own — it would not be on this list if it had — so this
+        // is the practitioner's cue to check the year rather than the page's.
+        yearForms: appealRoute(n) === "CIT(A)" ? otherYearForms(n, notices) : [],
       };
     })
     .filter((x) => x.route)

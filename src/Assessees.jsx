@@ -833,10 +833,13 @@ export function Assessees({ onOpen, initialSearch = "" }) {
               </label>
             </div>
           </div>
-          <div className="card" style={{padding: 0, overflow: "hidden"}}>
-            <div style={{overflowX: "auto"}}>
-              <div style={{minWidth: 820}}>
-                <div style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
+          <div className="card ass-card" style={{padding: 0, overflow: "hidden"}}>
+            <div className="ass-scroll" style={{overflowX: "auto"}}>
+              <div className="ass-list" style={{minWidth: 820}}>
+                {/* Column headings for the eight-column row below. A phone gets
+                    the same eight cells laid out as a card, with nothing for
+                    these to head — see .ass-row in app.css. */}
+                <div className="ass-head" style={{display: "grid", gridTemplateColumns: ASS_GRID, gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: "1px solid var(--p-line-2)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--p-text-3)"}}>
                   <span><input type="checkbox" checked={allPageSelected()} onChange={toggleAllPage} title="Select all on this page with a portal login"/></span>
                   <span>Assessee</span>
                   <span>PAN</span>
@@ -2209,6 +2212,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
   const fileCount = ns.reduce((s, n) => s + noticeDocumentCount(n), 0);
   return (
     <Modal
+      className="pm-full"
       title={m.ref || m.proceedingName || "Proceeding"}
       titleStyle={{fontSize: 22}}
       sub={[m.type || "Matter", m.ay ? `AY ${m.ay}` : "", section ? `u/s ${section}` : ""].filter(Boolean).join("  ·  ")}
@@ -2217,6 +2221,18 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
       footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
     >
       <div className="col" style={{gap: 16}}>
+        {/* THE FOUR FACTS, on a phone. On a desk they are already in the
+            modal's subtitle, on one line beside the reference; under a 22px
+            title on a 390px screen that same line reads as small print. Here
+            each is labelled and given its own column, which is what makes a
+            proceeding identifiable at a glance rather than a paragraph. */}
+        <div className="pm-facts mob-only">
+          <div><span className="pm-facts-k">AY</span><span className="pm-facts-v">{m.ay || "—"}</span></div>
+          <div><span className="pm-facts-k">Section</span><span className="pm-facts-v">{section ? `u/s ${section}` : "—"}</span></div>
+          <div><span className="pm-facts-k">Notices</span><span className="pm-facts-v">{docCount}</span></div>
+          <div><span className="pm-facts-k">Hearings</span><span className="pm-facts-v">{hs.length}</span></div>
+        </div>
+
         {/* Summary strip — tinted by the proceeding type so it reads apart. */}
         <div className="between" style={{alignItems: "center", flexWrap: "wrap", gap: 10, padding: "12px 14px", background: accent.tint, borderRadius: 12, borderLeft: `4px solid ${accent.bar}`}}>
           <div className="center" style={{gap: 8, flexWrap: "wrap", justifyContent: "flex-start"}}>
@@ -2224,7 +2240,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
             <StatusPill status={m.status}/>
             {m.bench && <span className="muted" style={{fontSize: 12}}>{m.bench}</span>}
           </div>
-          <div style={{fontSize: 12.5, fontWeight: 700, color: accent.fg}}>
+          <div className="pm-strip-counts" style={{fontSize: 12.5, fontWeight: 700, color: accent.fg}}>
             {docCount} notice{docCount === 1 ? "" : "s"}/orders
             {fileCount > docCount ? ` · ${fileCount} files` : ""}
             {hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}
@@ -2251,7 +2267,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
           ) : (
             <div className="col" style={{gap: 8}}>
               {hs.map((h) => (
-                <div key={h.id} className="between" style={{gap: 10, fontSize: 12.5, padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
+                <div key={h.id} className="between pm-hearing" style={{gap: 10, fontSize: 12.5, padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
                   <div className="center" style={{gap: 10, justifyContent: "flex-start", flexWrap: "wrap"}}>
                     <Icon name="calendar" size={13} className="muted"/>
                     <span className="strong">{fmtDateLong(h.date)}</span>

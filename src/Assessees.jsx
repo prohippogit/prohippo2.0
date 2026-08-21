@@ -2508,12 +2508,12 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                   const tileBd = appealable ? "#F3E6C4" : enclosure ? "var(--p-line-2)" : "#E6DDF7";
                   return (
                     <div key={n.id} style={{padding: "11px 13px", background: tileBg, borderRadius: 12, border: `1px solid ${tileBd}`}}>
-                      <div className="center" style={{gap: 10, alignItems: "flex-start"}}>
+                      <div className="center pm-note-row" style={{gap: 10, alignItems: "flex-start"}}>
                         <div style={{width: 30, height: 38, borderRadius: 5, background: appeal ? "var(--p-lavender-2)" : appealable ? "var(--p-amber)" : enclosure ? "var(--p-card-tint)" : "var(--p-pink)", display: "grid", placeItems: "center", color: appeal ? "var(--p-primary-2)" : appealable ? "#B07512" : enclosure ? "var(--p-text-3)" : "#C13388", fontSize: 8, fontWeight: 800, flexShrink: 0}}>PDF</div>
                         <div style={{flex: 1, minWidth: 0}}>
-                          <div className="center" style={{gap: 6, justifyContent: "flex-start"}}>
+                          <div className="center pm-note-head" style={{gap: 6, justifyContent: "flex-start"}}>
                             <span className={`pill ${appeal ? "pill-primary" : appealable ? "pill-warning" : enclosure ? "pill-info" : "pill-muted"}`} style={{fontSize: 10}}>{appeal ? "Appeal · Form 35" : dt ? DOC_TYPE_LABEL[dt] : "Notice"}</span>
-                            <span className="strong" style={{fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
+                            <span className="strong pm-note-subject" style={{fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{n.subject || n.din || "Notice"}</span>
                           </div>
                           <div className="muted" style={{fontSize: 11, marginTop: 2}}>
                             {appeal
@@ -2549,19 +2549,27 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                             a model read the PDF, which is where that belongs —
                             on the output a practitioner has to check, not on the
                             control. */}
+                        {/* THE TWO BUTTONS AS ONE BLOCK. On the desk this
+                            wrapper is display:contents, so the buttons stay the
+                            row's own children and nothing about that layout
+                            changes. On a 390px phone the pair drops to a line of
+                            its own instead of eating the width the subject needs
+                            — which is why the subject was rendering as a couple
+                            of characters and an ellipsis. */}
                         {!appeal && n.storagePath && (
-                          <button className="btn btn-ghost btn-xs" title="Read this PDF and summarise what it says" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); onParse(n); }}>
-                            <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Summarising…" : (n.aiSummary ? "Refresh summary" : "Get summary")}
-                          </button>
-                        )}
-                        {/* The notice's own document. Where the portal served a
-                            SET — a s.148 notice comes with its approval, set
-                            note and search print — the whole set is listed
-                            below rather than hidden behind this one button. */}
-                        {!appeal && n.storagePath && (
-                          <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={(e) => { e.stopPropagation(); downloadDoc(n.storagePath, noticeFilename(n, n.assessee)); }}>
-                            <Icon name="doc" size={12}/>PDF
-                          </button>
+                          <div className="pm-note-acts">
+                            <button className="btn btn-ghost btn-xs" title="Read this PDF and summarise what it says" disabled={parsingId === n.id} onClick={(e) => { e.stopPropagation(); onParse(n); }}>
+                              <Icon name="sparkle" size={12}/>{parsingId === n.id ? "Summarising…" : (n.aiSummary ? "Refresh summary" : "Get summary")}
+                            </button>
+                            {/* The notice's own document. Where the portal served
+                                a SET — a s.148 notice comes with its approval,
+                                set note and search print — the whole set is
+                                listed below rather than hidden behind this one
+                                button. */}
+                            <button className="btn btn-ghost btn-xs" title="Download the portal PDF" onClick={(e) => { e.stopPropagation(); downloadDoc(n.storagePath, noticeFilename(n, n.assessee)); }}>
+                              <Icon name="doc" size={12}/>PDF
+                            </button>
+                          </div>
                         )}
                       </div>
                       {!appeal && <NoticeDocuments notice={n} assesseeName={n.assessee}/>}

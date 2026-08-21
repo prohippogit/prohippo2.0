@@ -594,6 +594,98 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .mcard-foot .pill-muted { background: white; border: 1px solid var(--p-line); }
 
 /* ---------------------------------------------------------------------------
+   THE WEEK, AS A COLUMN OF DAYS
+   ---------------------------------------------------------------------------
+   The desk view is seven columns held at 960px. Here each day is a row: the
+   day in the margin, what is listed that day beside it, a dash where nothing
+   is. See MobileWeek in Hearings.jsx.
+   --------------------------------------------------------------------------- */
+.mweek { background: white; border: 1px solid var(--p-line-2); border-radius: 20px; padding: 14px 14px 6px; box-shadow: var(--p-shadow-sm); }
+/* Title and the week's controls on ONE line — at 34px arrows and a 15px title
+   the pair came to 341px in 334 and the controls dropped to a second row,
+   left-aligned under the title, reading as a separate block. */
+.mweek-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.mweek-title { font-size: 15px; font-weight: 800; letter-spacing: -0.025em; min-width: 0; }
+.mweek-nav { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.mweek-arrow {
+  display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 10px;
+  border: 1px solid var(--p-line); background: white; color: var(--p-text-2);
+  cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.mweek-arrow:active { background: var(--p-lavender); }
+.mweek-today {
+  height: 32px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--p-line); background: white;
+  font: inherit; font-size: 12.5px; font-weight: 700; color: var(--p-text);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mweek-today:active { background: var(--p-lavender); }
+
+.mday {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--p-line-2);
+}
+.mday:first-child { border-top: none; }
+/* A day with nothing in it is one line, not a slot the height of a card. */
+.mday.empty { padding: 7px 0; align-items: center; }
+.mday-when { display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+.mday.empty .mday-when { padding-top: 0; }
+.mday-dow { font-size: 9.5px; font-weight: 800; letter-spacing: 0.09em; color: var(--p-text-3); }
+.mday-num { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; color: var(--p-text); line-height: 1.15; }
+.mday-none { color: #CFC7EE; font-size: 15px; font-weight: 700; }
+.mday-list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* Today is the row you are looking for when you open this page. */
+.mday.today {
+  background: var(--p-lavender);
+  border-radius: 14px;
+  padding: 10px 10px 10px 0;
+  margin: 2px -2px;
+  border-top-color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--p-primary-3);
+}
+.mday.today + .mday { border-top-color: transparent; }
+.mday.today .mday-num { color: var(--p-primary-2); }
+.mday.today .mday-dow { color: var(--p-primary-2); }
+
+.mhear {
+  border-radius: 12px;
+  border-left: 4px solid var(--p-primary);
+  padding: 9px 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mhear:active { transform: scale(0.99); }
+.mhear-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mhear-time { font-size: 12.5px; font-weight: 800; letter-spacing: -0.01em; }
+.mhear-who { font-size: 13.5px; font-weight: 700; letter-spacing: -0.012em; color: var(--p-text); margin-top: 3px; line-height: 1.3; }
+.mhear-meta { font-size: 11px; color: var(--p-text-2); margin-top: 2px; }
+
+/* ---------------------------------------------------------------------------
+   ONE HEARING
+   --------------------------------------------------------------------------- */
+.hsheet-id { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; }
+.hsheet-name { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; color: var(--p-text); overflow-wrap: anywhere; }
+.hsheet-sub { font-size: 13px; color: var(--p-text-3); margin-top: -4px; }
+.hsheet-facts {
+  background: white; border: 1px solid var(--p-line-2); border-radius: 18px;
+  padding: 4px 14px; box-shadow: var(--p-shadow-sm);
+}
+.hsheet-fact {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 0;
+  font-size: 13.5px; font-weight: 600; color: var(--p-text);
+}
+.hsheet-fact + .hsheet-fact { border-top: 1px solid var(--p-line-2); }
+.hsheet-fact-ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 11px; background: var(--p-lavender-2); color: var(--p-primary-2); flex-shrink: 0; }
+
+/* ---------------------------------------------------------------------------
    THE ACTION SHEET
    --------------------------------------------------------------------------- */
 .sheet-backdrop {
@@ -1686,6 +1778,21 @@ input, select, textarea { font-family: inherit; color: inherit; }
     width: 34px !important; height: 34px !important; border-radius: 11px;
   }
   .pm-full .modal-body { padding: 16px 14px; }
+  /* The three things you can do to a hearing, on the floor of the page: at the
+     end of a screen you have scrolled, the next step should not be back up it. */
+  .hsheet .modal-body { display: flex; flex-direction: column; }
+  .hsheet-actions {
+    position: sticky; bottom: 0;
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    gap: 8px;
+    margin: auto -14px -16px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    background: var(--p-card);
+    border-top: 1px solid var(--p-line-2);
+  }
+  /* Three equal thirds of 362px is 115 each, and a button that has to carry
+     an icon and a word inside that cannot also carry its usual padding. */
+  .hsheet-actions .btn { justify-content: center; padding: 12px 6px; font-size: 12.5px; gap: 6px; white-space: nowrap; }
   .pm-full .modal-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 
   /* ---- the identity card ------------------------------------------------

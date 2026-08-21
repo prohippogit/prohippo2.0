@@ -85,23 +85,54 @@ function partHead(ctx, p, accent, letter, title, sub) {
   p.y += 11 + 5;
 }
 
-/* A label/value grid, two pairs to a line. Part A is nearly all of these. */
+/* A label/value grid, two pairs to a line. Part A is nearly all of these.
+ *
+ * A value too long for its half of the line WRAPS; it is not cut off. This
+ * grid holds the assessee's address, and an address truncated to "SATILLITE,
+ * AH…" has lost the town, the state and the pincode — the parts that identify
+ * the premises. The pair of fields on a line share the taller one's height, so
+ * the two columns stay level and the rule under them stays straight.
+ *
+ * Three lines is the ceiling. Past that the value is not an address but a
+ * pasted paragraph, and the row would push the rest of the part off the page;
+ * what does not fit is folded into the last line and clipped there, so the
+ * ellipsis appears only where there is genuinely no room. */
+const VALUE_LINES = 3;
+const LINE_STEP = 3.9;
+
 function fieldGrid(ctx, p, rows) {
-  const { text, line } = ctx;
-  const colW = W / 2;
+  const { text, line, wrap } = ctx;
+  const colW = W / 2, valueW = colW - 6;
+  const weightOf = (f) => (f.strong ? "bold" : "medium");
+
   for (let i = 0; i < rows.length; i += 2) {
-    p.need(10);
     const pair = rows.slice(i, i + 2);
+    const lines = pair.map((f) => {
+      if (f.rule) return [];
+      const all = wrap(f.value || "—", valueW, 8.6, weightOf(f));
+      if (all.length <= VALUE_LINES) return all;
+      const kept = all.slice(0, VALUE_LINES);
+      kept[VALUE_LINES - 1] = clipText(ctx, all.slice(VALUE_LINES - 1).join(" "), valueW, 8.6, weightOf(f));
+      return kept;
+    });
+    const tallest = Math.max(1, ...lines.map((ls) => ls.length));
+    const rowH = 11 + (tallest - 1) * LINE_STEP;
+    p.need(rowH);
+
     pair.forEach((f, c) => {
       const x = L + c * colW;
       text(f.label, x, p.y + 3.4, { size: 6.6, weight: "semibold", color: MUTED, spacing: 0.3 });
       // A field to be signed by hand gets a rule to sign on, not an em dash
       // saying the value is missing — it is supposed to be missing here.
       if (f.rule) { ctx.line(x, p.y + 8.6, x + colW - 12, p.y + 8.6, LINE, 0.4); return; }
-      const value = clipText(ctx, f.value || "—", colW - 6, 8.6, f.mono ? "semibold" : "medium");
-      text(value, x, p.y + 8.4, { size: 8.6, weight: f.strong ? "bold" : "medium", color: f.strong ? INK : BODY });
+      let vy = p.y + 8.4;
+      lines[c].forEach((ln) => {
+        text(ln, x, vy, { size: 8.6, weight: weightOf(f), color: f.strong ? INK : BODY });
+        vy += LINE_STEP;
+      });
     });
-    p.y += 11;
+
+    p.y += rowH;
     line(L, p.y - 1.5, R, p.y - 1.5, LINE, 0.2);
   }
   p.y += 3;
@@ -193,16 +224,31 @@ export function buildItrBPDF({ draft, result, profile, settings, sections = "bot
   p.y = newPage();
   mockBanner(ctx, p);
 
-  /* ---- who and what ---- */
-  rrect(L, p.y, W, 18, 4, "F", [248, 247, 251]);
+  /* ---- who and what ----
+   *
+   * The assessee's address sits under the name, on both documents. A block
+   * return names a person and a period, and the person on it has to be
+   * identifiable beyond a name: two assessees of a family very often share
+   * one, and the sheet is read beside a panchnama that carries the premises.
+   *
+   * It gets the whole width of the panel: it sits on its own rows UNDER the
+   * PAN and the block period, not beside them, so there is nothing to clear —
+   * and at 106mm an Ahmedabad address wrapped with the pincode alone on the
+   * second line. */
+  const ADDR_W = W - 12;
+  const addrLines = draft.address ? wrap(draft.address, ADDR_W, 7.4, "medium").slice(0, 3) : [];
+  const panelH = 18 + (addrLines.length ? addrLines.length * 3.5 + 1.5 : 0);
+  rrect(L, p.y, W, panelH, 4, "F", [248, 247, 251]);
   text("ASSESSEE", L + 6, p.y + 6, { size: 6.6, weight: "semibold", color: accent, spacing: 0.5 });
   text(clipText(ctx, draft.assessee || "—", 118, 12.5, "bold"), L + 6, p.y + 12.6, { size: 12.5, weight: "bold", color: INK });
+  let ay = p.y + 17.4;
+  addrLines.forEach((ln) => { text(ln, L + 6, ay, { size: 7.4, weight: "medium", color: MUTED }); ay += 3.5; });
   text(`PAN ${draft.pan || "—"}`, R - 6, p.y + 6, { size: 8, weight: "semibold", color: BODY, align: "right" });
   text(
     draft.blockFrom ? `Block period  ${fmtDate(draft.blockFrom)} to ${fmtDate(draft.blockTo)}` : "Block period not set",
     R - 6, p.y + 12.4, { size: 8, weight: "medium", color: MUTED, align: "right" }
   );
-  p.y += 18 + 7;
+  p.y += panelH + 7;
 
   if (wantReturn) {
     /* ---------------- PART A — GENERAL ---------------- */

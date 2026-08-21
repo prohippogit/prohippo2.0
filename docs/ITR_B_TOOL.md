@@ -187,6 +187,14 @@ under it. The wordmark and its strapline are letter-spaced and right-aligned to
 the margin, which jsPDF cannot do on its own: it measures `charSpace`
 differently from the way it draws it, so `pdfText.js` does that alignment.
 
+Under the assessee's name on both documents sits the assessee's **address**,
+and in Part A the address field wraps rather than clipping. A block return
+names a person and a period, and an address cut to "SATILLITE, AH…" has lost
+the town, the state and the pincode — the parts that identify the premises the
+panchnama was drawn at. `fieldGrid` gives a pair of fields the taller one's
+height so the rule under them stays straight, and stops at three lines so a
+pasted paragraph cannot walk the rest of the part off the page.
+
 ## Part C, and what its columns are not
 
 Column **[A]** is the undisclosed income declared for the year, and it is the

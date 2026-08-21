@@ -21,6 +21,13 @@
  * decides may relate to AY 2017-18. This engine used to key the choice off the
  * AY, which left a June-2026 order counting 60 days from the date of service.
  *
+ * AN ASSESSMENT YEAR IS NOT AN APPEAL. A contested year holds as many orders as
+ * the department passes in it — the assessment and its penalty, a set-aside and
+ * the fresh assessment made in its place, a first-appeal order on the quantum
+ * and another on the penalty — and every one of them carries its own limitation.
+ * So an appeal already taken is attributed to ONE order, by date; a year's first
+ * appellate step is never allowed to answer for every order in the year.
+ *
  * BOTH computations are always returned, never just the operative one. A
  * limitation date shown LATER than the true one is the error that costs an
  * appeal, so the UI presents the pair, marks which is being relied on, and lets
@@ -152,45 +159,239 @@ export function regimeForAy(ay) {
   return regimeFor({ ay });
 }
 
-// Does a filed Form 35 appeal correspond to this assessment/penalty order?
-// Match the Form 35 metadata the way a practitioner would: assessment year
-// first, then the date of the order appealed against (corroborated, where the
-// form carries it, by the order's DIN or section). A Form 35 for the same
-// PAN + AY that carries no order metadata at all is still treated as a match.
-export function form35Matches(order, form) {
-  if ((form.pan || "").toUpperCase() !== (order.pan || "").toUpperCase()) return false;
-  if ((form.ay || "") !== (order.ay || "")) return false; // 1) assessment year
-  const meta = form.appeal || {};
-  const dateOrder = meta.dateOrder || "";
-  const orderDin = meta.orderDin || "";
-  const orderSection = meta.orderSection || "";
-  if (dateOrder || orderDin || orderSection) {              // 2) date of order (or DIN/section)
-    return (dateOrder && order.date && dateOrder === order.date)
-      || (orderDin && order.din && String(orderDin) === String(order.din))
-      || (orderSection && order.section && String(orderSection) === String(order.section));
-  }
-  return true; // PAN + AY match, no corroborating metadata on the form
+/* ---------------- which forum an order goes to ----------------
+ *
+ * Read from the DOCUMENT first, and only then from the proceeding it sits
+ * under. `authority` is derived from the portal's proceeding NAME, and the
+ * portal names a first-appeal proceeding a dozen ways; anything unrecognised
+ * lands in "Other", which is not a key of APPEAL_ROUTE. An order the app itself
+ * badges "CIT(A) order" then never reached this page at all — not because it
+ * had been appealed, but because nobody could say where its appeal would go.
+ */
+const ROUTE_BY_DOCTYPE = { assessmentOrder: "CIT(A)", penaltyOrder: "CIT(A)", appealOrder: "ITAT" };
+
+export function appealRoute(notice) {
+  if (!notice) return null;
+  // A Tribunal order is appealed to the High Court — out of scope here — and
+  // its text quotes s.250 often enough to be misread as a first-appeal order.
+  if (notice.authority === "ITAT") return null;
+  return ROUTE_BY_DOCTYPE[orderDocType(notice)] || APPEAL_ROUTE[notice.authority] || null;
 }
 
-// Has this order already been appealed? Manual flag wins; otherwise infer from
-// a filed Form 35 (metadata-matched) or a later-stage order for the same PAN+AY.
+/* The date an order bears. `date` is what the portal sent (issued, else
+   served); a PDF uploaded by hand may carry only what was read off it. */
+export const orderDate = (n) => (n && (n.date || (n.parsed && n.parsed.orderDate) || n.servedOn)) || "";
+
+// PAN + assessment year. The year is where two different orders MEET, never
+// where they become one — see the attribution note below.
+const partyKey = (r) => `${String((r && r.pan) || "").toUpperCase()}|${(r && r.ay) || ""}`;
+
+const byOrderDate = (a, b) => String(orderDate(a)).localeCompare(String(orderDate(b)));
+
+// Does a filed Form 35 NAME this order? Same PAN and AY to begin with, then the
+// date of the order appealed against, corroborated where the form carries it by
+// the order's DIN or section.
+//
+// A form that carries no order metadata at all names nothing — it used to be
+// read as a match for every order in the year, which is exactly how a second
+// order for the same year disappeared. Such a form is still evidence that an
+// appeal was taken; which order it answers is settled by date, below.
+export function form35Matches(order, form) {
+  if ((form.pan || "").toUpperCase() !== (order.pan || "").toUpperCase()) return false;
+  if ((form.ay || "") !== (order.ay || "")) return false;
+  const meta = form.appeal || {};
+  return namesOrder({ date: meta.dateOrder || "", din: meta.orderDin || "", section: meta.orderSection || "" }, order);
+}
+
+const namesOrder = (names, order) => Boolean(
+  (names.date && orderDate(order) && names.date === orderDate(order))
+  || (names.din && order.din && String(names.din) === String(order.din))
+  || (names.section && order.section && String(names.section) === String(order.section))
+);
+
+/* ---------------- has this order already been appealed? ----------------
+ *
+ * The evidence that an appeal was taken — a Form 35 on file, a CIT(A) order
+ * that decided one, an ITAT matter — is held against the PAN and the assessment
+ * year, and for a long time that was all this asked. One year, one appeal.
+ *
+ * That is wrong whenever an assessment year carries MORE THAN ONE order, which
+ * is the ordinary shape of a contested year: an assessment order and the
+ * penalty that follows it; a set-aside and the fresh assessment made in its
+ * place; a first-appeal order on the quantum and another on the penalty.
+ * Matching on PAN + AY alone let the first appellate step in a year answer for
+ * every order in it, so the newest order — the one whose limitation is actually
+ * running — vanished behind a step taken a year earlier, with nothing on screen
+ * to say it existed.
+ *
+ * So each piece of evidence is ATTRIBUTED to ONE order, never spread across a
+ * year, and the date of the order is what tells them apart:
+ *
+ *   1. evidence that names its order (a Form 35 carrying the date / DIN /
+ *      section of the order appealed against) takes that order;
+ *   2. dated evidence takes the latest still-unanswered order passed ON OR
+ *      BEFORE it — an appeal decided in July 2026 cannot be the answer to an
+ *      order passed after it, and dated evidence with no order before it at all
+ *      answers nothing on file;
+ *   3. undated evidence — an ITAT matter typed in by hand carries no date —
+ *      takes the earliest still-unanswered order, and only that one. One
+ *      appeal silences one order.
+ *
+ * Where both sides say so, a penalty appeal is attributed to a penalty order
+ * and a quantum appeal to a quantum order in preference to the date alone.
+ */
+
+// One appellate step: when it happened, which order it names (if any), and
+// whether it was a penalty appeal (null when the evidence does not say).
+//
+// The evidence comes in two shapes — an appeal FILED (a Form 35 on file, an
+// ITAT matter opened) and an appeal DECIDED (the appellate order itself) — and
+// for a decided appeal both are usually on file. They are ONE appeal. Counted
+// twice they would silence two orders: the one appealed and its neighbour in
+// the same year. So each decision is paired with the latest filing that
+// precedes it, and what survives is the filing's date and the order it names,
+// which place the appeal more tightly than the decision does.
+function appealSteps(route, pool, matters) {
+  const filed = [];
+  const decided = [];
+  if (route === "CIT(A)") {
+    for (const n of pool) {
+      if (n.isAppealForm) {
+        const meta = n.appeal || {};
+        filed.push({
+          on: meta.dateFiling || n.date || meta.ackDt || "",
+          names: { date: meta.dateOrder || "", din: meta.orderDin || "", section: meta.orderSection || "" },
+          penalty: PENALTY_RE.test(String(meta.orderSection || "")) || null,
+        });
+      } else if (isAppealableOrder(n) && orderDocType(n) === "appealOrder") {
+        decided.push({ on: orderDate(n), names: null, penalty: isPenaltyAppeal(n) });
+      }
+    }
+  } else if (route === "ITAT") {
+    for (const n of pool) {
+      if (n.authority === "ITAT" && isAppealableOrder(n)) {
+        decided.push({ on: orderDate(n), names: null, penalty: isPenaltyAppeal(n) });
+      }
+    }
+    for (const m of matters) {
+      if (m.type !== "ITAT") continue;
+      // A matter carries no filing date unless somebody typed one; an undated
+      // matter is still one appeal, and is attributed as one.
+      filed.push({
+        on: m.filedOn || m.dateFiling || m.date || "",
+        names: null,
+        penalty: PENALTY_RE.test(String(m.section || "")) || null,
+      });
+    }
+  }
+  return pairFilingsWithDecisions(filed, decided);
+}
+
+const byOn = (a, b) => String(a.on).localeCompare(String(b.on));
+
+// Each decision takes the latest filing that could have started it — one filed
+// before it was passed, and about the same kind of order where both say. What
+// is left on either side is an appeal in its own right: a filing not yet
+// decided, or a decision whose paperwork never reached the app.
+function pairFilingsWithDecisions(filed, decided) {
+  const open = filed.map((_, i) => i);
+  const steps = [];
+  for (const d of [...decided].sort(byOn)) {
+    const cands = open.filter((i) => !filed[i].on || !d.on || filed[i].on <= d.on);
+    const fit = cands.filter((i) => filed[i].penalty == null || d.penalty == null || filed[i].penalty === d.penalty);
+    const field = fit.length ? fit : cands;
+    if (!field.length) { steps.push(d); continue; }
+    const i = field[field.length - 1];
+    open.splice(open.indexOf(i), 1);
+    const f = filed[i];
+    steps.push({ on: f.on || d.on, names: f.names, penalty: f.penalty == null ? d.penalty : f.penalty });
+  }
+  for (const i of open) steps.push(filed[i]);
+  return steps;
+}
+
+/* Attribute the steps to the orders, one to one. `orders` is one party's
+   appealable orders on one route, oldest first (undated first: an order with no
+   date on it cannot be placed in the sequence, so it is never allowed to
+   displace one that can). Returns the orders that are answered. */
+function attribute(orders, steps) {
+  const open = orders.map((_, i) => i);
+  const answered = [];
+  const claim = (i) => { answered.push(orders[i]); open.splice(open.indexOf(i), 1); };
+
+  // Prefer a candidate whose penalty/quantum character matches the step's,
+  // when both are known; otherwise take the whole field.
+  const pick = (cands, step, end) => {
+    if (!cands.length) return undefined;
+    const fit = step.penalty == null ? cands : cands.filter((i) => isPenaltyAppeal(orders[i]) === step.penalty);
+    const field = fit.length ? fit : cands;
+    return end === "last" ? field[field.length - 1] : field[0];
+  };
+
+  // 1) evidence that names its order.
+  const unnamed = [];
+  for (const s of steps) {
+    if (!s.names) { unnamed.push(s); continue; }
+    const i = open.find((j) => namesOrder(s.names, orders[j]));
+    if (i === undefined) unnamed.push({ ...s, names: null });
+    else claim(i);
+  }
+
+  // 2) dated evidence, earliest first so each takes the order nearest below it.
+  for (const s of unnamed.filter((x) => x.on).sort((a, b) => a.on.localeCompare(b.on))) {
+    const i = pick(open.filter((j) => !orderDate(orders[j]) || orderDate(orders[j]) <= s.on), s, "last");
+    // No order on file that this step could be about — it answers nothing here.
+    if (i !== undefined) claim(i);
+  }
+
+  // 3) undated evidence takes the earliest order still unanswered.
+  for (const s of unnamed.filter((x) => !x.on)) {
+    const i = pick(open, s, "first");
+    if (i !== undefined) claim(i);
+  }
+  return answered;
+}
+
+/* Every appealable order in `data` that already has its appeal. A Set of the
+   very notice objects passed in — records reach this engine before they have an
+   id of their own, and identity invented from PAN + AY is the bug this fixes. */
+export function appealedOrders(data) {
+  const notices = (data && data.notices) || [];
+  const matters = (data && data.matters) || [];
+  const answered = new Set();
+  // Bucketed once. This runs on every render of the dashboard, the sidebar
+  // count and this page, over every notice in the practice.
+  const groups = new Map();
+  const byParty = new Map();
+  const mattersByParty = new Map();
+  const push = (map, key, v) => { const l = map.get(key); if (l) l.push(v); else map.set(key, [v]); };
+  for (const m of matters) push(mattersByParty, partyKey(m), m);
+  for (const n of notices) {
+    const party = partyKey(n);
+    push(byParty, party, n);
+    const route = isAppealableOrder(n) ? appealRoute(n) : null;
+    if (!route) continue;
+    // The practitioner's own word beats anything inferred, either way.
+    if (n.appealStatus === "filed" || n.appealStatus === "dismissed") answered.add(n);
+    const key = `${party}|${route}`;
+    if (!groups.has(key)) groups.set(key, { route, party, orders: [] });
+    groups.get(key).orders.push(n);
+  }
+  for (const g of groups.values()) {
+    const pool = byParty.get(g.party) || [];
+    const mine = mattersByParty.get(g.party) || [];
+    g.orders.sort(byOrderDate);
+    for (const o of attribute(g.orders, appealSteps(g.route, pool, mine))) answered.add(o);
+  }
+  return answered;
+}
+
+// Has this one order already been appealed? Kept for callers that hold a single
+// order; the answer is still worked out over the whole set, because which order
+// a year's appeal belongs to cannot be decided one order at a time.
 export function isAppealed(notice, allNotices, matters) {
   if (notice.appealStatus === "filed" || notice.appealStatus === "dismissed") return true;
-  const pan = (notice.pan || "").toUpperCase();
-  const ay = notice.ay || "";
-  const sameParty = (r) => (r.pan || "").toUpperCase() === pan && r.ay === ay;
-  const route = APPEAL_ROUTE[notice.authority];
-  if (route === "CIT(A)") {
-    // A first appeal is filed if a matching Form 35 exists, or a CIT(A)
-    // appellate order has already been passed for this PAN + AY (appeal done).
-    return allNotices.some((n) => n.isAppealForm && form35Matches(notice, n))
-      || allNotices.some((n) => sameParty(n) && orderDocType(n) === "appealOrder");
-  }
-  if (route === "ITAT") {
-    return (matters || []).some((m) => m.type === "ITAT" && sameParty(m))
-      || allNotices.some((n) => sameParty(n) && n.isOrder && n.authority === "ITAT" && isAppealableOrder(n));
-  }
-  return false;
+  return appealedOrders({ notices: allNotices || [notice], matters }).has(notice);
 }
 
 /* The two ways the same order's limitation can be counted. Both are always
@@ -213,9 +414,9 @@ function limitationBases(route, served) {
 
 // Compute the appeal position for one order: forum, regime, deadline, urgency.
 export function appealFor(notice) {
-  const route = APPEAL_ROUTE[notice.authority];
+  const route = appealRoute(notice);
   if (!route) return null;
-  const served = notice.appealServedDate || notice.date || "";
+  const served = notice.appealServedDate || orderDate(notice);
   const reg = regimeFor({ ay: notice.ay, communicatedOn: served });
 
   const bases = limitationBases(route, served);
@@ -254,15 +455,43 @@ function withinWindow(dateISO, withinDays) {
   return daysUntil(dateISO) >= -withinDays;
 }
 
-// Every appealable order in the practice, nearest deadline first.
-// opts.withinDays: date-of-order cutoff (default 365; null = no cutoff).
+/* Every appealable order in the practice, nearest deadline first.
+ * opts.withinDays: date-of-order cutoff (default 365; null = no cutoff).
+ *
+ * Each row also carries where its order stands among the orders the same
+ * assessee holds for the same assessment year (`ayIndex` of `ayCount`,
+ * `ayLatest`). Two orders in one year are two appeals with two deadlines, and
+ * on a list keyed by assessee and year they read as duplicates unless the page
+ * says which is which. */
 export function appealableOrders(data, opts = {}) {
   const withinDays = opts.withinDays === undefined ? DEFAULT_WINDOW_DAYS : opts.withinDays;
   const notices = data.notices || [];
-  const matters = data.matters || [];
+  const appealed = appealedOrders(data);
+
+  // Every appealable order of the year, appealed or not — the sequence a
+  // practitioner sees on the assessee's page, which is what the position on the
+  // card has to agree with.
+  const inYear = new Map();
+  for (const n of notices) {
+    if (!isAppealableOrder(n) || !appealRoute(n)) continue;
+    const k = partyKey(n);
+    if (!inYear.has(k)) inYear.set(k, []);
+    inYear.get(k).push(n);
+  }
+  for (const list of inYear.values()) list.sort(byOrderDate);
+
   return notices
-    .filter((n) => isAppealableOrder(n) && APPEAL_ROUTE[n.authority] && !isAppealed(n, notices, matters) && withinWindow(n.date, withinDays))
-    .map((n) => ({ notice: n, ...appealFor(n) }))
+    .filter((n) => isAppealableOrder(n) && appealRoute(n) && !appealed.has(n) && withinWindow(orderDate(n), withinDays))
+    .map((n) => {
+      const siblings = inYear.get(partyKey(n)) || [n];
+      return {
+        notice: n,
+        ...appealFor(n),
+        ayCount: siblings.length,
+        ayIndex: siblings.indexOf(n) + 1,
+        ayLatest: siblings[siblings.length - 1] === n,
+      };
+    })
     .filter((x) => x.route)
     .sort((a, b) => (a.daysLeft == null ? 1e9 : a.daysLeft) - (b.daysLeft == null ? 1e9 : b.daysLeft));
 }
@@ -311,17 +540,53 @@ export const FEE_SLABS = {
 
 /* ---------------- document checklist ---------------- */
 
+/* ---------------- documents that belong to ONE order ----------------
+ *
+ * The enclosures of a year are not interchangeable either. A demand notice
+ * belongs to the order it arrived with, and where a year holds two assessments
+ * the underlying order of a CIT(A) order is the one that CIT(A) actually
+ * decided — the last one passed before it, not whichever the year happens to
+ * hold. Ticking the checklist off the wrong document tells a practitioner they
+ * have a paper they have never seen.
+ */
+
+// An enclosure travels with its order: same portal proceeding, failing that the
+// same date, failing that the year holds only one and there is nothing to
+// confuse it with.
+function companionOf(order, allNotices, docType) {
+  const pool = (allNotices || []).filter((m) => partyKey(m) === partyKey(order) && orderDocType(m) === docType);
+  if (!pool.length) return null;
+  const mine = pool.filter((m) => order.proceedingReqId && m.proceedingReqId === order.proceedingReqId);
+  if (mine.length) return mine[0];
+  // The order's own proceeding is known and none of these came from it.
+  const stray = pool.filter((m) => !(order.proceedingReqId && m.proceedingReqId && m.proceedingReqId !== order.proceedingReqId));
+  const sameDay = stray.filter((m) => orderDate(m) && orderDate(m) === orderDate(order));
+  if (sameDay.length) return sameDay[0];
+  // Nothing left to tell them apart by: accept one, refuse a choice between two.
+  const open = stray.filter((m) => !orderDate(m) || !orderDate(order));
+  return open.length === 1 ? open[0] : null;
+}
+
+// The order an appellate order was passed ON: the latest one of its kind in the
+// year that predates it.
+function underlyingOrderFor(order, allNotices, docType) {
+  const on = orderDate(order);
+  const pool = (allNotices || [])
+    .filter((m) => partyKey(m) === partyKey(order) && orderDocType(m) === docType)
+    .sort(byOrderDate);
+  const before = pool.filter((m) => !on || !orderDate(m) || orderDate(m) <= on);
+  const field = before.length ? before : pool;
+  return field.length ? field[field.length - 1] : null;
+}
+
 // Items marked auto:true are already satisfied from records on file.
 export function checklistFor(x, allNotices) {
   const n = x.notice;
-  const pan = (n.pan || "").toUpperCase();
-  const ay = n.ay || "";
   const hasOrderPdf = Boolean(n.storagePath);
   const items = [];
-  const sameParty = (m) => (m.pan || "").toUpperCase() === pan && m.ay === ay;
   if (x.route === "CIT(A)") {
     items.push({ key: "order", label: "Certified copy of the order appealed against", auto: hasOrderPdf });
-    const demand = (allNotices || []).some((m) => sameParty(m) && orderDocType(m) === "demandNotice");
+    const demand = Boolean(companionOf(n, allNotices, "demandNotice"));
     items.push({ key: "demand", label: "Notice of demand u/s 156", auto: demand });
     items.push({ key: "gof", label: "Grounds of Appeal & Statement of Facts" });
     items.push({ key: "challan", label: "Appeal fee challan (Major Head 0021)" });
@@ -329,8 +594,8 @@ export function checklistFor(x, allNotices) {
     if (x.reg.newAct) items.push({ key: "predeposit", label: "Proof of pre-deposit of tax on returned income" });
   } else {
     items.push({ key: "citorder", label: "Certified copy of CIT(A) / NFAC order u/s 250", auto: hasOrderPdf });
-    const asmt = (allNotices || []).some((m) => sameParty(m) && orderDocType(m) === "assessmentOrder" && m.storagePath);
-    items.push({ key: "asmt", label: "Copy of the underlying assessment order", auto: asmt });
+    const asmt = underlyingOrderFor(n, allNotices, "assessmentOrder");
+    items.push({ key: "asmt", label: "Copy of the underlying assessment order", auto: Boolean(asmt && asmt.storagePath) });
     items.push({ key: "gof", label: "Grounds of Appeal & Statement of Facts" });
     items.push({ key: "challan", label: "Tribunal fee challan" });
     items.push({ key: "dsc", label: "Digital Signature Certificate (DSC) — valid" });

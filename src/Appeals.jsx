@@ -229,6 +229,19 @@ function OrderRow({ o, open, onToggle, allNotices, onOpenNotice }) {
                 <Icon name="alert" size={10}/>two possible dates
               </span>
             )}
+            {/* A contested year holds more than one order — the assessment and
+                its penalty, a set-aside and the fresh assessment, the appeal on
+                the quantum and the one on the penalty. Each is its own appeal
+                with its own deadline, and on a list read by assessee and year
+                they look like duplicates unless the card says which is which. */}
+            {o.ayCount > 1 && (
+              <span
+                className="pill pill-info"
+                title={`${o.ayCount} appealable orders on file for AY ${n.ay || "—"} — separate orders, separate appeals, separate deadlines. This is the ${o.ayIndex}${o.ayIndex === 1 ? "st" : o.ayIndex === 2 ? "nd" : o.ayIndex === 3 ? "rd" : "th"} by date of order.`}
+              >
+                order {o.ayIndex} of {o.ayCount} this year{o.ayLatest ? " · latest" : ""}
+              </span>
+            )}
           </div>
         </div>
 

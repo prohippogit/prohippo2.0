@@ -498,9 +498,17 @@ exports.ingestPortalProceedings = onCall({ region: REGIONS, maxInstances: 10, mi
 
 // --- helpers for mapping portal notice data into the app's own entities ---
 
-// Portal dates are epoch-millis (numbers/numeric strings); also tolerate ISO and
-// "DD-MMM-YYYY". Returns "YYYY-MM-DD" or "".
+/* Portal dates are epoch-millis (numbers/numeric strings); also tolerate ISO,
+   "DD-MMM-YYYY" and the day-first numeric forms. Returns "YYYY-MM-DD" or "".
+
+   The numeric forms matter more than they look. A date this cannot read is
+   stored EMPTY, and an empty date on a Form 35 is not a cosmetic loss: it is
+   the identifier that says which order the appeal was against, and without it
+   the appeals page cannot tell that the appeal has been filed at all. Day
+   first on the ambiguous ones — these come from an Indian portal, where
+   03/04/2025 is 3 April. */
 const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const pad2 = (n) => String(n).padStart(2, "0");
 function parsePortalDate(v) {
   if (v == null || v === "") return "";
   if (typeof v === "number" || /^\d{10,}$/.test(String(v))) {
@@ -510,10 +518,14 @@ function parsePortalDate(v) {
   const s = String(v).trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(s);
-  if (m && MONTHS[m[2].toLowerCase()] != null) {
-    const d = new Date(Date.UTC(Number(m[3]), MONTHS[m[2].toLowerCase()], Number(m[1])));
+  m = /^(\d{1,2})[-/ ]([A-Za-z]{3,})[-/ ](\d{4})$/.exec(s);
+  if (m && MONTHS[m[2].slice(0, 3).toLowerCase()] != null) {
+    const d = new Date(Date.UTC(Number(m[3]), MONTHS[m[2].slice(0, 3).toLowerCase()], Number(m[1])));
     return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+  }
+  m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(s);
+  if (m && Number(m[1]) >= 1 && Number(m[1]) <= 31 && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+    return `${m[3]}-${pad2(m[2])}-${pad2(m[1])}`;
   }
   return "";
 }

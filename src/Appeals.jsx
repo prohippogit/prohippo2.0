@@ -234,6 +234,19 @@ function OrderRow({ o, open, onToggle, allNotices, onOpenNotice }) {
                 the quantum and the one on the penalty. Each is its own appeal
                 with its own deadline, and on a list read by assessee and year
                 they look like duplicates unless the card says which is which. */}
+            {/* No Form 35 answers THIS order — an order with one never reaches
+                this list — but the year has one against another order. Either
+                that order is genuinely a different appeal, or the form's order
+                details never came down from the portal. The practitioner is the
+                one who can tell, so say it rather than guess. */}
+            {o.yearForms && o.yearForms.length > 0 && (
+              <span
+                className="pill pill-warning"
+                title={`Form 35 on file for AY ${n.ay || "—"}, but against ${o.yearForms.length === 1 ? "another order" : "other orders"}: ${o.yearForms.map((f) => [f.dateOrder ? `order of ${fmtDateLong(f.dateOrder)}` : "no order date on the form", f.ackNum ? `ack ${f.ackNum}` : ""].filter(Boolean).join(", ")).join("; ")}. Check this order is not that same appeal before filing again.`}
+              >
+                <Icon name="alert" size={10}/>Form 35 filed this year
+              </span>
+            )}
             {o.ayCount > 1 && (
               <span
                 className="pill pill-info"

@@ -14,7 +14,9 @@ import {
   appealRoute,
   appealedOrders,
   checklistFor,
+  form35For,
   isAppealed,
+  toISODate,
 } from "../src/appeals.js";
 
 const PAN = "CUXPS9996L";
@@ -184,4 +186,96 @@ test("an ITAT matter and the Tribunal order that closed it are one appeal", () =
   const matter = { type: "ITAT", pan: PAN, ay: AY, ref: "ITA No. 1244/Ahd/2024" };
   const data = { notices: [first, second, itatOrder], matters: [matter] };
   assert.deepEqual(listed(data), [second.id]);
+});
+
+/* ---------------- the Form 35 test ----------------
+   A Form 35 IS the first appeal. Where one is on file for this assessee, this
+   year and this order, the order is filed and does not belong on a page headed
+   by a filing deadline. */
+
+const form35 = (appeal, extra = {}) => ({
+  id: `f${++seq}`, pan: PAN, ay: AY, isAppealForm: true, isOrder: false,
+  subject: "Form 35 — Appeal to CIT(A)", appeal, ...extra,
+});
+
+test("an order with its own Form 35 on file never reaches the page", () => {
+  const asmt = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny", din: "AAA1" });
+  const f = form35({ ackNum: "123456789012345", dateFiling: "2024-04-10", dateOrder: "2024-03-11" });
+  const data = { notices: [asmt, f], matters: [] };
+  assert.deepEqual(listed(data), []);
+  assert.equal(form35For(asmt, data.notices), f);
+});
+
+test("the DIN identifies the order just as exactly as its date", () => {
+  const asmt = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny", din: "ITBA/AST/S/143(3)/2024-25/1055" });
+  const f = form35({ ackNum: "1", dateFiling: "2024-04-10", orderDin: "ITBA/AST/S/143(3)/2024-25/1055" });
+  assert.deepEqual(listed({ notices: [asmt, f], matters: [] }), []);
+});
+
+test("the date is compared as a date, not as a string", () => {
+  // The portal writes what the appellant typed. Every one of these is the same
+  // day as the order, and none of them is the string the notice carries.
+  for (const written of ["11-Mar-2024", "11/03/2024", "11-03-2024", "2024-03-11", "11.03.2024"]) {
+    const asmt = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny" });
+    const f = form35({ ackNum: "1", dateFiling: "2024-04-10", dateOrder: written });
+    assert.deepEqual(listed({ notices: [asmt, f], matters: [] }), [], `dateOrder written as ${written}`);
+  }
+});
+
+test("a Form 35 against the order as SERVED still answers it", () => {
+  // The portal lists when the order was issued; the appellant fills in the day
+  // it reached them. One order, two dates on file, and both are its own.
+  const asmt = order({ date: "2024-03-11", servedOn: "2024-03-14", docType: "assessmentOrder", authority: "Scrutiny" });
+  const f = form35({ ackNum: "1", dateFiling: "2024-04-10", dateOrder: "2024-03-14" });
+  assert.deepEqual(listed({ notices: [asmt, f], matters: [] }), []);
+});
+
+test("the year alone is not the test — a form against another order leaves this one open", () => {
+  const first = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny" });
+  const fresh = order({ date: "2026-06-30", docType: "assessmentOrder", authority: "Scrutiny" });
+  const f = form35({ ackNum: "1", dateFiling: "2024-04-10", dateOrder: "2024-03-11" });
+  const data = { notices: [first, fresh, f], matters: [] };
+  assert.deepEqual(listed(data), [fresh.id]);
+  // and the page can say a form for the year is on file against another order
+  const row = appealableOrders(data, { withinDays: null })[0];
+  assert.deepEqual(row.yearForms, [{ ackNum: "1", dateOrder: "2024-03-11", dateFiling: "2024-04-10", orderSection: "" }]);
+});
+
+test("one Form 35 is one appeal — it cannot answer two orders", () => {
+  const asmt = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny" });
+  const pen = order({ date: "2024-09-20", docType: "penaltyOrder", authority: "Penalty", section: "271(1)(c)" });
+  const f = form35({ ackNum: "1", dateFiling: "2024-04-10", dateOrder: "2024-03-11" });
+  assert.deepEqual(listed({ notices: [asmt, pen, f], matters: [] }), [pen.id]);
+});
+
+test("the order that decided a matched Form 35 leaves with it", () => {
+  // Assessment appealed and decided; the penalty of the same year was never
+  // appealed. The CIT(A) order belongs to the assessment's appeal, so it must
+  // not stand in for a second one.
+  const asmt = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny" });
+  const pen = order({ date: "2024-09-20", docType: "penaltyOrder", authority: "Penalty", section: "271(1)(c)" });
+  const f = form35({ ackNum: "1", dateFiling: "2024-04-10", dateOrder: "2024-03-11" });
+  const decided = order({ date: "2025-10-16", docType: "appealOrder", authority: "CIT(A)", section: "250" });
+  const data = { notices: [asmt, pen, f, decided], matters: [] };
+  assert.deepEqual(listed(data).sort(), [pen.id, decided.id].sort());
+});
+
+test("a Form 35 for another assessee or another year is not this order's", () => {
+  const asmt = order({ date: "2024-03-11", docType: "assessmentOrder", authority: "Scrutiny" });
+  const wrongPan = form35({ ackNum: "1", dateFiling: "2024-04-10", dateOrder: "2024-03-11" }, { pan: "AAAPZ1111Z" });
+  const wrongAy = form35({ ackNum: "2", dateFiling: "2024-04-10", dateOrder: "2024-03-11" }, { ay: "2017-18" });
+  assert.equal(form35For(asmt, [wrongPan, wrongAy]), null);
+});
+
+test("toISODate reads the shapes the portal and the readers actually produce", () => {
+  assert.equal(toISODate("2024-03-11"), "2024-03-11");
+  assert.equal(toISODate("11-Mar-2024"), "2024-03-11");
+  assert.equal(toISODate("11-March-2024"), "2024-03-11");
+  assert.equal(toISODate("11/03/2024"), "2024-03-11"); // day first — Indian portal
+  assert.equal(toISODate("3/4/2025"), "2025-04-03");
+  assert.equal(toISODate(1710115200000), "2024-03-11");
+  assert.equal(toISODate("not a date"), "");
+  assert.equal(toISODate(""), "");
+  assert.equal(toISODate(null), "");
+  assert.equal(toISODate("13/13/2024"), "");
 });

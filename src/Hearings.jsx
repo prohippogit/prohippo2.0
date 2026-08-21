@@ -1,6 +1,6 @@
 /* ProHippo — Hearings calendar + list */
 import React from 'react';
-import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, Toggle, titleCase, fmtDateLong, daysFromNow } from './shared';
+import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, EmptyState, Toggle, useIsPhone, titleCase, fmtDateLong, daysFromNow } from './shared';
 import { useData, downloadCSV, toISO, todayISO } from './store';
 import { AssesseeModal, AssesseeRequiredNote } from './AssesseeModal';
 import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googleCalendar';
@@ -191,11 +191,157 @@ export function AdjournModal({ hearing, onClose }) {
   );
 }
 
+/* One colour per forum, used by every view of a hearing. Was a closure inside
+   the week grid; the phone's views need the same three fields. */
+const colorFor = (h) => {
+  if (h.authority === "ITAT") return { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)", bar: "var(--p-primary)" };
+  if (h.authority === "CIT(A)") return { bg: "var(--p-pink)", fg: "#C13388", bar: "#C13388" };
+  if (h.authority === "Scrutiny") return { bg: "var(--p-amber)", fg: "#B07512", bar: "#F39C12" };
+  return { bg: "var(--p-mint)", fg: "#1B8C5C", bar: "#20B978" };
+};
+
 function startOfWeek(d) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // back to Monday
   return x;
+}
+
+/* THE HEARING, ON A PHONE.
+ *
+ * Tapping a hearing used to jump straight to the proceeding it belongs to,
+ * which is the right destination from a desk — the calendar is beside the
+ * record there. On a phone it is a jump out of the calendar into a different
+ * page of a different assessee, and what was actually wanted nine times out of
+ * ten was the four lines this shows: when, where, under what, and who is
+ * taking it.
+ *
+ * WHAT IS NOT HERE. Everything on this screen is a field the hearing carries.
+ * There are no reminders to toggle, no per-hearing sync state and no notes,
+ * because the record has none of those — a screen that draws them would be
+ * drawing controls that answer to nothing. The three actions at its foot are
+ * the three that exist: open the proceeding, move the date, edit the record.
+ */
+function HearingSheet({ hearing: h, onOpenHearing, onEdit, onAdjourn, onClose }) {
+  const c = colorFor(h);
+  const day = h.date ? new Date(h.date) : null;
+  const facts = [
+    { icon: "calendar", value: h.date ? `${day.toLocaleString("en-IN", { weekday: "short" })}, ${fmtDateLong(h.date)}` : "No date" },
+    { icon: "clock", value: [h.time, h.mode].filter(Boolean).join("  ·  ") || "—" },
+    { icon: "scale", value: [h.authority, h.bench].filter(Boolean).join(" — ") || "—" },
+    h.section || h.ita ? { icon: "doc", value: [h.ita, h.section ? `u/s ${h.section}` : ""].filter(Boolean).join("  ·  ") } : null,
+    h.staff ? { icon: "user", value: h.staff } : null,
+  ].filter(Boolean);
+
+  return (
+    <Modal
+      className="pm-full hsheet"
+      title="Hearing Details"
+      closeIcon="arrow-left"
+      onClose={onClose}
+      width={620}
+      footer={null}
+    >
+      <div className="col" style={{gap: 16}}>
+        <div className="hsheet-id">
+          <span className="pill" style={{background: c.bg, color: c.fg, fontWeight: 800}}>{h.authority} hearing</span>
+          <h2 className="hsheet-name">{titleCase(h.assessee || "—")}</h2>
+          <div className="hsheet-sub">{[h.ay ? `AY ${h.ay}` : "", h.pan].filter(Boolean).join("  ·  ")}</div>
+          <StatusPill status={h.date && h.date < todayISO() && h.status === "Upcoming" ? "Completed" : h.status}/>
+        </div>
+
+        <div className="hsheet-facts">
+          {facts.map((f, i) => (
+            <div key={i} className="hsheet-fact">
+              <span className="hsheet-fact-ico"><Icon name={f.icon} size={16}/></span>
+              <span>{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pinned to the floor: on a page you have scrolled to the end of, the
+          thing you do next should not be somewhere back up it. */}
+      <div className="hsheet-actions">
+        {onOpenHearing && <button className="btn btn-secondary" onClick={() => { onClose(); onOpenHearing(h); }}><Icon name="scale" size={14}/>Matter</button>}
+        {h.status !== "Adjourned" && <button className="btn btn-secondary" onClick={() => { onClose(); onAdjourn(h); }}><Icon name="clock" size={14}/>Adjourn</button>}
+        <button className="btn btn-primary" onClick={() => { onClose(); onEdit(h); }}><Icon name="edit" size={14}/>Edit</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* THE WEEK, ON A PHONE.
+ *
+ * The desk view is seven columns held at 960px, which is right for a wall of
+ * a screen and is a sideways scroll on 390px — you can see Monday and half of
+ * Tuesday, and finding Friday means swiping past three days you did not want.
+ *
+ * The week does not stop being a week when it is a column. Each day is a row:
+ * the day on the left in the margin, what is listed that day beside it, and a
+ * dash where nothing is. A week with two hearings in it should be readable
+ * without moving your thumb, and this is the shape that does that.
+ */
+function MobileWeek({ hearings, onOpenHearing, weekStart, setWeekStart }) {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return { date: d.getDate(), dow: d.toLocaleString("en-IN", { weekday: "short" }), iso: toISO(d), today: toISO(d) === todayISO() };
+  });
+  const shift = (n) => setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() + n * 7); return d; });
+
+  return (
+    <div className="mweek">
+      <div className="mweek-head">
+        <div className="mweek-title">Week of {fmtDateLong(toISO(weekStart))}</div>
+        <div className="mweek-nav">
+          <button className="mweek-arrow" aria-label="Previous week" onClick={() => shift(-1)}><Icon name="chevron-left" size={15}/></button>
+          <button className="mweek-today" onClick={() => setWeekStart(startOfWeek(new Date()))}>Today</button>
+          <button className="mweek-arrow" aria-label="Next week" onClick={() => shift(1)}><Icon name="chevron-right" size={15}/></button>
+        </div>
+      </div>
+
+      <div className="mweek-days">
+        {days.map((day) => {
+          const list = hearings.filter((h) => h.date === day.iso).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+          return (
+            <div key={day.iso} className={`mday ${day.today ? "today" : ""} ${list.length ? "" : "empty"}`}>
+              <div className="mday-when">
+                <span className="mday-dow">{day.dow.toUpperCase()}</span>
+                <span className="mday-num">{day.date}</span>
+              </div>
+              <div className="mday-list">
+                {list.length === 0 && <span className="mday-none">—</span>}
+                {list.map((h) => {
+                  const c = colorFor(h);
+                  return (
+                    <div
+                      key={h.id}
+                      className="mhear"
+                      role="button"
+                      tabIndex={0}
+                      style={{background: c.bg, borderLeftColor: c.bar}}
+                      onClick={() => onOpenHearing && onOpenHearing(h)}
+                      onKeyDown={(e) => { if (onOpenHearing && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpenHearing(h); } }}
+                    >
+                      <div className="mhear-top">
+                        <span className="mhear-time" style={{color: c.fg}}>{h.time}</span>
+                        <span className="pill" style={{background: "white", color: c.fg, fontWeight: 700}}>{h.authority}</span>
+                      </div>
+                      <div className="mhear-who">{titleCase(h.assessee || "—")}</div>
+                      <div className="mhear-meta">
+                        {[h.ay ? `AY ${h.ay}` : "", h.mode === "Video Conference" ? "VC" : h.bench || ""].filter(Boolean).join("  ·  ")}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /* The week grid. `weekStart` is owned by the page rather than by this view,
@@ -208,13 +354,6 @@ function WeekView({ hearings, onOpenHearing, weekStart, setWeekStart }) {
     return { date: d.getDate(), dow: d.toLocaleString("en-IN", { weekday: "short" }), iso: toISO(d), today: toISO(d) === todayISO() };
   });
   const shift = (n) => setWeekStart(w => { const d = new Date(w); d.setDate(d.getDate() + n * 7); return d; });
-
-  const colorFor = (h) => {
-    if (h.authority === "ITAT") return { bg: "var(--p-lavender-2)", fg: "var(--p-primary-2)", bar: "var(--p-primary)" };
-    if (h.authority === "CIT(A)") return { bg: "var(--p-pink)", fg: "#C13388", bar: "#C13388" };
-    if (h.authority === "Scrutiny") return { bg: "var(--p-amber)", fg: "#B07512", bar: "#F39C12" };
-    return { bg: "var(--p-mint)", fg: "#1B8C5C", bar: "#20B978" };
-  };
 
   return (
     <div className="card week-scroll" style={{padding: 18}}>
@@ -657,10 +796,17 @@ function CauseListModal({ weekStart, authority, onClose }) {
 
 export default function Hearings({ onOpenHearing, onNav }) {
   const { data } = useData();
+  const isPhone = useIsPhone();
   const [view, setView] = React.useState("Week");
   const [filterAuthority, setFilterAuthority] = React.useState("All");
   const [modal, setModal] = React.useState(null); // null | {} | hearing record
   const [causeList, setCauseList] = React.useState(false);
+  /* On a phone a hearing opens its own details first; from a desk it still
+     jumps straight to the proceeding, where the calendar sits beside the
+     record anyway. */
+  const [sheet, setSheet] = React.useState(null);
+  const [adjourning, setAdjourning] = React.useState(null);
+  const openHearing = isPhone ? setSheet : onOpenHearing;
   // Owned here, not in WeekView, so "the week shown" is something the cause
   // list can offer — see WeekView.
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
@@ -711,12 +857,24 @@ export default function Hearings({ onOpenHearing, onNav }) {
         </div>
       </div>
 
-      {view === "Week" && <WeekView hearings={filtered} onOpenHearing={onOpenHearing} weekStart={weekStart} setWeekStart={setWeekStart}/>}
-      {view === "Calendar" && <CalendarView hearings={filtered} onOpenHearing={onOpenHearing}/>}
-      {view === "List" && <ListView hearings={[...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))} onEdit={(h) => setModal(h)} onOpenHearing={onOpenHearing}/>}
-      {view === "Authority-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="authority" onOpenHearing={onOpenHearing}/>}
-      {view === "Staff-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="staff" onOpenHearing={onOpenHearing}/>}
+      {view === "Week" && (isPhone
+        ? <MobileWeek hearings={filtered} onOpenHearing={openHearing} weekStart={weekStart} setWeekStart={setWeekStart}/>
+        : <WeekView hearings={filtered} onOpenHearing={onOpenHearing} weekStart={weekStart} setWeekStart={setWeekStart}/>)}
+      {view === "Calendar" && <CalendarView hearings={filtered} onOpenHearing={openHearing}/>}
+      {view === "List" && <ListView hearings={[...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))} onEdit={(h) => setModal(h)} onOpenHearing={openHearing}/>}
+      {view === "Authority-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="authority" onOpenHearing={openHearing}/>}
+      {view === "Staff-wise" && <GroupedView hearings={filtered.filter(h => h.date >= todayISO())} groupBy="staff" onOpenHearing={openHearing}/>}
 
+      {sheet && (
+        <HearingSheet
+          hearing={sheet}
+          onOpenHearing={onOpenHearing}
+          onEdit={(h) => setModal(h)}
+          onAdjourn={(h) => setAdjourning(h)}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {adjourning && <AdjournModal hearing={adjourning} onClose={() => setAdjourning(null)}/>}
       {modal && <HearingModal initial={modal.id ? modal : undefined} onClose={() => setModal(null)}/>}
       {causeList && (
         <CauseListModal

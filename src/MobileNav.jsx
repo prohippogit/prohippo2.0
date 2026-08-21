@@ -55,19 +55,12 @@ export function useOverdueCount() {
   }, [data]);
 }
 
-export function MobileAppBar({ onMenu, menuOpen, onBell, overdue = 0 }) {
+/* The bar: the brand on the left, then search and the bell on the right. No
+   hamburger — the floating button in the corner opens the drawer, and two
+   controls that do the same thing on one 390px bar is one too many. */
+export function MobileAppBar({ onSearch, onBell, overdue = 0 }) {
   return (
     <header className="mob-appbar">
-      <button
-        type="button"
-        className={`mob-appbar-btn mob-burger ${menuOpen ? "open" : ""}`}
-        aria-label={menuOpen ? "Close menu" : "Open menu"}
-        aria-expanded={menuOpen}
-        onClick={onMenu}
-      >
-        <span/><span/><span/>
-      </button>
-
       {/* The mark on its own, beside a wordmark set in the app's own type.
           The full logo is drawn for a white ground and goes to mud on this
           one, and a 34px-tall lockup on a 390px bar is unreadable anyway. */}
@@ -75,6 +68,10 @@ export function MobileAppBar({ onMenu, menuOpen, onBell, overdue = 0 }) {
         <img src="/prohippo-mark.png" alt="" aria-hidden="true" className="mob-appbar-mark"/>
         <span className="mob-appbar-word">ProHippo</span>
       </div>
+
+      <button type="button" className="mob-appbar-btn" aria-label="Search assessees" onClick={onSearch}>
+        <Icon name="search" size={19}/>
+      </button>
 
       <button type="button" className="mob-appbar-btn" aria-label={overdue ? `${overdue} items past their date` : "Nothing overdue"} onClick={onBell}>
         <Icon name="bell" size={19}/>

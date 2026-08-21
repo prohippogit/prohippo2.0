@@ -11,7 +11,7 @@ import { MatterModal } from './Other';
 import DocumentRequestComposer, { RequestStatusPill } from './DocumentRequest';
 import { AskDocsButton } from './askForDocuments';
 import { AssesseeModal } from './AssesseeModal';
-import { AdjournModal } from './Hearings';
+import { AdjournModal, HearingModal } from './Hearings';
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { functions, storage } from './firebase';
@@ -2127,10 +2127,15 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                 <span><span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span></span>
                 <span style={{minWidth: 0}}>
                   <span className="strong" style={{fontSize: 13, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{m.ref || m.proceedingName || "Matter"}</span>
+                  {/* A matter opened by hand still has hearings once a date is
+                      put on it, and reading "Manual matter" beside a listed
+                      appeal is what sends a practitioner looking for the date
+                      on another screen. */}
                   <span className="muted" style={{fontSize: 11}}>
-                    {isPortal
-                      ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders${hs.length ? ` · ${hs.length} hearing${hs.length === 1 ? "" : "s"}` : ""}`
-                      : "Manual matter"}
+                    {[
+                      isPortal ? `${docCount} notice${docCount === 1 ? "" : "s"}/orders` : "Manual matter",
+                      hs.length ? `${hs.length} hearing${hs.length === 1 ? "" : "s"}` : "",
+                    ].filter(Boolean).join(" · ")}
                   </span>
                 </span>
                 <span>{m.ay || "—"}</span>
@@ -2159,10 +2164,39 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
   );
 }
 
+/* What the hearing form should already know when it is opened from a matter.
+ *
+ * The appeal number is the load-bearing one: hearingsFor() ties a hearing back
+ * to a manual matter by that number alone (a matter opened by hand has no
+ * portal proceeding to link through), so a date typed in without it lands on
+ * the assessee's Hearings tab attached to nothing. Copied here rather than left
+ * to be retyped, because retyping it is precisely how the link is lost.
+ *
+ * The forum list on a hearing is narrower than the list of matter types — a
+ * High Court or rectification matter has no bucket of its own — so anything
+ * outside it becomes "Other" rather than a value the form cannot show. */
+const HEARING_AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty"];
+function hearingSeed(m) {
+  return {
+    assessee: m.assessee || "",
+    pan: m.pan || "",
+    ay: m.ay || "",
+    authority: HEARING_AUTHORITIES.includes(m.type) ? m.type : "Other",
+    bench: m.bench || "",
+    section: m.section || "",
+    ita: m.ref || "",
+    staff: m.staff || "",
+    // Kept when there is one: an exact link beats a matched appeal number.
+    proceedingReqId: m.proceedingReqId || "",
+    mode: m.type === "ITAT" || m.type === "High Court" ? "Physical" : "e-Proceeding",
+  };
+}
+
 /* Full, scrollable pop-up card for a single proceeding — its hearings and every
    notice / order / appeal filed against it, with the assessee's responses. */
 function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onParse, onClose }) {
   const [adjourning, setAdjourning] = React.useState(null);
+  const [adding, setAdding] = React.useState(false);
   const accent = accentFor(m.type);
   const section = m.section || ns.map((n) => n.section).find(Boolean) || "";
   const docCount = ns.length;
@@ -2194,9 +2228,24 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
           </div>
         </div>
 
-        {hs.length > 0 && (
-          <div>
-            <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Hearings</div>
+        <div>
+          <div className="between" style={{marginBottom: 8, gap: 10}}>
+            <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase"}}>Hearings</div>
+            {/* A DATE THE PRACTITIONER ALREADY HAS. Hearings reach the app by
+                themselves — a portal notice with a response date, a notice from
+                the Tribunal read out of the inbox — and until one of those
+                arrives there was nowhere to put a date that is already known.
+                An appeal filed today is listed months before either route says
+                so, and a matter opened by hand has no route at all. */}
+            <button className="btn btn-secondary btn-xs" onClick={() => setAdding(true)}>
+              <Icon name="plus" size={12}/>Add hearing date
+            </button>
+          </div>
+          {hs.length === 0 ? (
+            <div className="muted" style={{fontSize: 12.5, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px dashed var(--p-line)"}}>
+              No hearing on file for this proceeding. One arrives on its own with the next portal notice or Tribunal e-mail — put the date in by hand when you have it first.
+            </div>
+          ) : (
             <div className="col" style={{gap: 8}}>
               {hs.map((h) => (
                 <div key={h.id} className="between" style={{gap: 10, fontSize: 12.5, padding: "9px 11px", background: "#E7EEFD", borderRadius: 12, border: "1px solid #D3E0FB", flexWrap: "wrap"}}>
@@ -2217,8 +2266,8 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div>
           <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Notices &amp; orders</div>
@@ -2347,6 +2396,7 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
         </div>
       </div>
       {adjourning && <AdjournModal hearing={adjourning} onClose={() => setAdjourning(null)}/>}
+      {adding && <HearingModal initial={hearingSeed(m)} onClose={() => setAdding(false)}/>}
     </Modal>
   );
 }

@@ -999,13 +999,26 @@ export function Invoices() {
 const MATTER_TYPES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty", "Rectification", "High Court"];
 const MATTER_STATUSES = ["Active", "Pending", "Submitted", "Decided", "Closed"];
 
+/* The forum list on a hearing is narrower than the list of matter types; a
+   High Court or rectification matter has no bucket of its own. */
+const HEARING_AUTHORITIES = ["Scrutiny", "CIT(A)", "ITAT", "Penalty"];
+
 export function MatterModal({ initial, onClose }) {
-  const { data, addMatter, updateMatter, notify } = useData();
+  const { data, addMatter, updateMatter, addHearing, notify } = useData();
   const [form, setForm] = React.useState({
     type: "Scrutiny", assessee: "", pan: "", ay: "", section: "", ref: "", bench: "",
     status: "Active", priority: "medium", staff: "",
     ...initial,
   });
+  /* THE DATE OF HEARING, AT THE MOMENT THE MATTER IS OPENED.
+     Hearings otherwise reach the app only by themselves — a portal notice
+     carrying a response date, a notice from the Tribunal read out of the inbox
+     — and an appeal is listed long before either says so. A matter opened by
+     hand has neither route. Kept out of the matter record: a hearing is its own
+     record, on the calendar and the dashboard, and writing the date onto the
+     matter would put it somewhere nothing else reads. */
+  const [hearingDate, setHearingDate] = React.useState("");
+  const [hearingTime, setHearingTime] = React.useState("11:00");
   const [showAddAssessee, setShowAddAssessee] = React.useState(false);
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const pickAssessee = (name) => {
@@ -1024,6 +1037,19 @@ export function MatterModal({ initial, onClose }) {
     } else {
       addMatter(rec);
       notify(`${rec.type} matter added for ${rec.assessee}`);
+    }
+    if (hearingDate) {
+      /* `ita` is what ties the hearing back to THIS matter on a proceeding with
+         no portal id of its own — the same reference the matter carries. */
+      addHearing({
+        assessee: rec.assessee, pan: rec.pan, ay: rec.ay,
+        authority: HEARING_AUTHORITIES.includes(rec.type) ? rec.type : "Other",
+        bench: rec.bench || "", section: rec.section || "",
+        date: hearingDate, time: hearingTime || "11:00",
+        mode: rec.type === "ITAT" || rec.type === "High Court" ? "Physical" : "e-Proceeding",
+        status: "Upcoming", ita: rec.ref || "", staff: rec.staff || "",
+      });
+      notify(`Hearing added — ${fmtDateLong(hearingDate)}`);
     }
     onClose();
   };
@@ -1056,6 +1082,8 @@ export function MatterModal({ initial, onClose }) {
         <FormField label="Status"><SelectInput value={form.status} onChange={set("status")} options={MATTER_STATUSES}/></FormField>
         <FormField label="Priority"><SelectInput value={form.priority} onChange={set("priority")} options={["high", "medium", "low"]}/></FormField>
         <FormField label="Staff"><TextInput value={form.staff} onChange={set("staff")} placeholder="Assigned staff"/></FormField>
+        <FormField label="Date of hearing" hint="Optional — creates a hearing on the calendar"><TextInput type="date" value={hearingDate} onChange={setHearingDate}/></FormField>
+        <FormField label="Time"><TextInput type="time" value={hearingTime} onChange={setHearingTime}/></FormField>
       </div>
       {showAddAssessee && (
         <AssesseeModal

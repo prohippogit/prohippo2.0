@@ -1295,6 +1295,53 @@ input, select, textarea { font-family: inherit; color: inherit; }
 
 /* Soft-violet surface behind the assessee's Matters cards — the coloured
    ground lifts the white proceeding cards off the page so each one reads. */
+/* ---------------------------------------------------------------------------
+   THE MATTERS TAB'S TOOLBAR
+   ---------------------------------------------------------------------------
+   Chips on the left for the kind of proceeding — at most four, and a chip can
+   carry its own count. Selects on the right for the year, the state and the
+   order, because those are lists rather than a choice of four. The two groups
+   sit at either end of one line and each wraps within itself, so the chips
+   never push a select off the row.
+   --------------------------------------------------------------------------- */
+.mv-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.mv-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+/* The count inside a chip: present, but never louder than the label it counts. */
+.mv-chips .fchip b { font-weight: 800; opacity: 0.55; font-size: 11.5px; }
+.mv-chips .fchip.active b { opacity: 0.75; }
+.mv-sels { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Sized to sit level with a .fchip, so the row reads as one control strip. */
+.mv-sel {
+  font-family: inherit;
+  font-size: 12.5px; font-weight: 600; color: var(--p-text-2);
+  background: white;
+  border: 1px solid var(--p-line);
+  border-radius: 11px;
+  padding: 8px 10px;
+  cursor: pointer;
+  max-width: 100%;
+}
+.mv-sel:hover { border-color: var(--p-primary-3); color: var(--p-text); }
+
+/* How many of how many, and the way back. Only rendered while a filter is on. */
+.mv-count {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: -4px 0 12px 2px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--p-text-3);
+}
+.mv-clear {
+  border: none; background: none; padding: 0;
+  font: inherit; text-transform: none; letter-spacing: 0;
+  color: var(--p-primary-2); font-weight: 700;
+  cursor: pointer;
+}
+.mv-clear:hover { text-decoration: underline; }
+
 .matters-surface {
   background: linear-gradient(160deg, #D9CFFA 0%, #C7BAF6 100%);
   border-radius: var(--radius-lg);
@@ -1760,6 +1807,26 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .int-views { flex-wrap: wrap; row-gap: 8px; }
   .int-views .search { flex: 1 1 100%; min-width: 0 !important; }
   .int-views .fchip { flex: 1 1 auto; text-align: center; }
+
+  /* THE MATTERS TAB'S TOOLBAR ON A PHONE. The chips scroll sideways on one
+     line — four of them stacked is four rows of chrome above the list they
+     filter — and the three selects share the row beneath, each taking a third
+     rather than wrapping raggedly. */
+  .mv-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    padding-bottom: 2px;
+  }
+  .mv-chips .fchip { flex: 0 0 auto; }
+  .mv-sels { width: 100%; }
+  /* Each select sized by its own longest option rather than forced to a third
+     of the row. A native select shows its widest option, and at the 16px the
+     anti-zoom rule imposes, three of them in 362px cut "A.Y. — newest first"
+     down to "A.Y. — n", which says nothing about what the list is sorted by.
+     Let them wrap to a second line and stay readable instead. */
+  .mv-sel { flex: 0 1 auto; min-width: 0; }
 
   /* Every card loses a little padding: 20px of chrome each side of a 390px
      screen is a fifth of it. */

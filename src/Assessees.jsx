@@ -2171,6 +2171,21 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
   const isPhone = useIsPhone();
   const [openId, setOpenId] = React.useState(null);
   const [parsingId, setParsingId] = React.useState("");
+  /* WHAT A PRACTITIONER NARROWS THIS LIST BY. Not "everything is filterable" —
+     three questions, which are the three this tab gets asked:
+
+       what KIND of proceeding — only the appeals, only the penalties;
+       which YEAR — an assessee with eight matters across four years is really
+         four stories, and a s.271AAC penalty means nothing without the
+         assessment it came out of;
+       and is it still LIVE.
+
+     Sorting defaults to what the list already did — most recently active
+     first — so nobody who never touches these controls sees a different page. */
+  const [fType, setFType] = React.useState("All");
+  const [fYear, setFYear] = React.useState("All");
+  const [fStatus, setFStatus] = React.useState("All");
+  const [sortBy, setSortBy] = React.useState("activity");
 
   const byDateDesc = (arr) => [...arr].sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   const noticesFor = (m) => byDateDesc(notices.filter((n) => m.proceedingReqId && n.proceedingReqId === m.proceedingReqId));
@@ -2201,7 +2216,35 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
     const dated = [ns[0]?.date, hs[0]?.date].filter(Boolean).sort();
     return dated.length ? dated[dated.length - 1] : ("0000-" + (m.createdAt || m.portalSyncedAt || ""));
   };
-  const ordered = [...matters].sort((x, y) => lastActivity(y).localeCompare(lastActivity(x)));
+  /* The type chips are built from the matters this assessee actually has. A
+     practitioner with no Tribunal appeal should not be offered an ITAT chip
+     that can only ever empty the list. */
+  const typeCounts = matters.reduce((acc, m) => {
+    const k = m.type || "Other";
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  const types = Object.keys(typeCounts).sort();
+  const years = [...new Set(matters.map((m) => m.ay).filter(Boolean))].sort().reverse();
+  const isClosed = (m) => ["Closed", "Decided"].includes(m.status);
+
+  const shown = matters.filter((m) => {
+    if (fType !== "All" && (m.type || "Other") !== fType) return false;
+    if (fYear !== "All" && m.ay !== fYear) return false;
+    if (fStatus === "Active" && isClosed(m)) return false;
+    if (fStatus === "Closed" && !isClosed(m)) return false;
+    return true;
+  });
+  const filtered = fType !== "All" || fYear !== "All" || fStatus !== "All";
+
+  const SORTS = {
+    activity: { label: "Recent activity", fn: (x, y) => lastActivity(y).localeCompare(lastActivity(x)) },
+    ayDesc: { label: "A.Y. — newest first", fn: (x, y) => (y.ay || "").localeCompare(x.ay || "") },
+    ayAsc: { label: "A.Y. — oldest first", fn: (x, y) => (x.ay || "").localeCompare(y.ay || "") },
+    type: { label: "Type", fn: (x, y) => (x.type || "").localeCompare(y.type || "") || (y.ay || "").localeCompare(x.ay || "") },
+    docs: { label: "Notices — most first", fn: (x, y) => noticesFor(y).length - noticesFor(x).length },
+  };
+  const ordered = [...shown].sort(SORTS[sortBy].fn);
 
   const parse = async (n) => {
     setParsingId(n.id);
@@ -2224,12 +2267,66 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
     );
   }
 
-  const selected = ordered.find((m) => m.id === openId) || null;
+  /* Looked up in every matter rather than in what is on screen: a filter that
+     hides the row must not close the card the user is reading. */
+  const selected = matters.find((m) => m.id === openId) || null;
 
   // type | proceeding (flex) | AY | section (no-wrap) | status | view chip
   const GRID = "96px minmax(170px, 1fr) 70px 128px 96px 104px";
   return (
     <>
+      {/* The toolbar. Chips for the kind of proceeding, because there are four
+          of them at most and a chip says its own count; selects for the year,
+          the state and the order, because those are lists rather than a choice
+          of four. It renders only where there is something to narrow — one
+          matter does not need filtering, and two rows of controls above it
+          would be the loudest thing on the tab. */}
+      {matters.length > 2 && (
+        <div className="mv-bar">
+          <div className="mv-chips">
+            <span className={`fchip ${fType === "All" ? "active" : ""}`} onClick={() => setFType("All")}>All<b>{matters.length}</b></span>
+            {types.map((t) => (
+              <span key={t} className={`fchip ${fType === t ? "active" : ""}`} onClick={() => setFType(t)}>{t}<b>{typeCounts[t]}</b></span>
+            ))}
+          </div>
+          <div className="mv-sels">
+            {years.length > 1 && (
+              <select className="mv-sel" value={fYear} onChange={(e) => setFYear(e.target.value)} title="Assessment year">
+                <option value="All">All years</option>
+                {years.map((y) => <option key={y} value={y}>A.Y. {y}</option>)}
+              </select>
+            )}
+            <select className="mv-sel" value={fStatus} onChange={(e) => setFStatus(e.target.value)} title="Status">
+              <option value="All">Open and closed</option>
+              <option value="Active">Open only</option>
+              <option value="Closed">Closed only</option>
+            </select>
+            <select className="mv-sel" value={sortBy} onChange={(e) => setSortBy(e.target.value)} title="Sort by">
+              {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Only while something is filtered. Unfiltered, the count is already the
+          number of rows underneath it. */}
+      {filtered && (
+        <div className="mv-count">
+          {ordered.length} of {matters.length} proceedings
+          <button type="button" className="mv-clear" onClick={() => { setFType("All"); setFYear("All"); setFStatus("All"); }}>Clear filters</button>
+        </div>
+      )}
+
+      {ordered.length === 0 ? (
+        <div className="card" style={{padding: 0}}>
+          <EmptyState
+            icon="scale"
+            title="No proceedings match these filters"
+            sub={`${assesseeName} has ${matters.length} proceeding${matters.length === 1 ? "" : "s"} on file.`}
+            action={<button className="btn btn-secondary" onClick={() => { setFType("All"); setFYear("All"); setFStatus("All"); }}>Clear filters</button>}
+          />
+        </div>
+      ) : (
       <div className="matters-surface" style={{overflowX: "auto"}}>
         <div className="col matters-list" style={{gap: 10, minWidth: 640}}>
           {/* Column headings for the six-column row below. On a phone the row
@@ -2316,6 +2413,7 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
           })}
         </div>
       </div>
+      )}
 
       {selected && (
         <ProceedingModal

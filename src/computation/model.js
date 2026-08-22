@@ -32,6 +32,46 @@ export const subtotal = (label, amount, opts = {}) => clean({ kind: "subtotal", 
 export const total = (label, amount, opts = {}) => clean({ kind: "total", label, amount, ...opts });
 export const columnHeader = (label, cols) => clean({ kind: "columnHeader", label, amount: null, cols });
 
+/* A SCHEDULE — a grid with a column per thing and a line per figure.
+ *
+ * The three-column working states one figure per line, and for almost every head
+ * that is the right shape: the reader is following an argument down the page.
+ *
+ * A property sale is not that shape. The reader is comparing one asset against
+ * another — this consideration against that one, this indexed cost against that
+ * one, this exemption against that one — and a working interleaves them into a
+ * ribbon of "property 1 / property 2 / property 1" that cannot be read across.
+ * An assessee who sold two plots and claimed six deductions under s.54B against
+ * them gets twenty-odd rows in no discernible order.
+ *
+ * So the model gains a kind rather than the renderer a branch (§2, §3): a matrix
+ * carries its own column headings and its own lines, and the renderer rules it
+ * like the schedule it is. A cell is a number (formatted as an amount, 0 being
+ * an em dash), a string (a date, a name, a PAN — printed as given), or null
+ * (structurally blank, the same distinction §3 draws for `amount`).
+ *
+ * `lines[].kind` is the same vocabulary as a row's: 'sub' by default, with
+ * 'subtotal' and 'total' banded as they are anywhere else.
+ */
+export const matrix = (label, opts = {}) => clean({
+  kind: "matrix",
+  label,
+  // A matrix has no single amount: every figure in it sits in a cell. Stated
+  // explicitly because the renderer and finalise() both read `amount` on every
+  // row, and a missing key is not the same as a declared null (§3).
+  amount: null,
+  ref: opts.ref,
+  note: opts.note,
+  // Cleaned like any other row: a column built as `{ label, note: undefined }`
+  // is not deep-equal to the one that comes back from a golden file, where
+  // JSON.stringify dropped the key (see `clean` above).
+  columns: (opts.columns || []).filter(Boolean).map((c) => clean({ ...c })),
+  lines: (opts.lines || []).filter(Boolean),
+});
+
+/** One line of a matrix. `cells` is positional against `columns`. */
+export const matrixLine = (label, cells, opts = {}) => clean({ label, cells, ...opts });
+
 /* A section of the computation. `letter` is assigned later — see finalise().
  *
  * `layout` says what SHAPE the section is, not what it looks like — the look is
@@ -68,6 +108,18 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const isNil = (v) => v === null || v === undefined || Number(v) === 0;
 
+/* Does this row put a figure on the page? What decides whether a head-specific
+   section is dropped for having nothing to say.
+
+   A matrix declares `amount: null` — every figure it carries is in a cell — so
+   reading `amount` alone would drop a capital gains section holding a two-crore
+   property schedule. Only NUMERIC cells count: a matrix whose only content is
+   dates and buyers' names has no figure in it, and the same rule that drops a
+   nil head should drop that too. */
+const rowHasFigure = (r) => (r.kind === "matrix"
+  ? (r.lines || []).some((l) => (l.cells || []).some((c) => typeof c === "number" && c !== 0))
+  : !isNil(r.amount));
+
 /* An id missing from SECTION_ORDER sorts LAST, not first. indexOf returns -1
    for an unknown id, which would put a newly added section ahead of every head
    — silently, and only visibly wrong to someone who knows what the order
@@ -87,7 +139,7 @@ const order = (id) => {
 export function finalise(sections) {
   const kept = sections
     .filter(Boolean)
-    .filter((s) => ALWAYS.has(s.id) || !s.omitIfAllNil || s.rows.some((r) => !isNil(r.amount)))
+    .filter((s) => ALWAYS.has(s.id) || !s.omitIfAllNil || s.rows.some(rowHasFigure))
     .sort((a, b) => order(a.id) - order(b.id));
   kept.forEach((s, i) => { s.letter = LETTERS[i] || String(i + 1); });
   return kept;

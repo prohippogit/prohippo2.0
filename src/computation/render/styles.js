@@ -214,6 +214,64 @@ table.rows.grid tr:first-child td { border-top: 0; }
 table.rows.grid tr.r-sub:nth-child(even) td { background: transparent; }
 table.rows.grid tr.r-sub.nil td { background: transparent; }
 
+/* ---- schedule blocks (a 'matrix' row) -----------------------------------
+ *
+ * A working reads DOWN; a schedule reads down and across at once. Two plots
+ * sold on the same day have to be comparable line by line — this consideration
+ * against that one, this indexed cost against that one — so every cell is ruled
+ * and the figure columns are equal width, whatever is in them.
+ *
+ * The label column is the only elastic one. Property addresses and buyers'
+ * names go in the cells and are allowed to wrap; amounts never are.
+ */
+.mtx { margin: 4px 0 10px; break-inside: avoid; page-break-inside: avoid; }
+.mtx .m-ref { font-size: 8pt; color: var(--muted); text-align: right; margin-bottom: 3px; }
+.mtx .m-foot { font-size: 8.5pt; color: var(--muted); margin-top: 6px; padding: 0 4px; }
+.m-frame { border: 1px solid var(--hairline); border-radius: 16px; overflow: hidden; }
+table.m-t { width: 100%; border-collapse: collapse; border-spacing: 0; }
+table.m-t th, table.m-t td {
+  padding: 7px 11px; text-align: right; vertical-align: top;
+  border-bottom: 1px solid var(--hairline);
+}
+table.m-t th + th, table.m-t td + td { border-left: 1px solid var(--hairline); }
+table.m-t tr:last-child th, table.m-t tr:last-child td { border-bottom: 0; }
+
+/* The first column carries the caption of the line, so it reads left. */
+table.m-t .m-l { text-align: left; width: auto; }
+table.m-t .m-note { font-size: 8pt; color: var(--muted); margin-top: 2px; font-weight: 500; }
+
+/* The heading band, and the caption of the schedule sitting in its corner. */
+table.m-t tr.m-head th {
+  background: var(--row-bg); color: var(--navy-700);
+  font-size: 8pt; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  padding: 9px 11px;
+}
+table.m-t tr.m-head th.m-l { font-size: 8.5pt; letter-spacing: .05em; }
+table.m-t tr.m-head .m-cn {
+  font-size: 7.5pt; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--muted); margin-top: 2px;
+}
+
+/* Amounts never wrap and always line up; text wraps and does not have to. The
+   label column keeps a floor so a schedule of long addresses cannot squeeze
+   "Full value of consideration adopted u/s 50C" into a column of single words. */
+table.m-t .m-l { min-width: 150px; }
+table.m-t td.m-c { width: 108px; }
+table.m-t td.m-c.num { white-space: nowrap; font-weight: 600; font-size: 9.5pt; }
+/* A survey number is punctuation with no spaces in it; without this it sets one
+   unbreakable line and pushes every amount off the page. */
+table.m-t td.m-c.text { overflow-wrap: anywhere; }
+table.m-t td.m-c.num.nil { color: var(--nil); font-weight: 500; }
+table.m-t td.m-c.num.loss { color: var(--loss); }
+table.m-t td.m-c.text { font-size: 8.5pt; font-weight: 500; }
+
+table.m-t tr.m-subtotal td { background: var(--gold-bg); font-weight: 700; }
+table.m-t tr.m-subtotal td.m-c.num.nil { color: #9C8642; }
+table.m-t tr.m-total td { background: var(--navy-900); color: #fff; font-weight: 700; }
+table.m-t tr.m-total td.m-c.num.nil { color: rgba(255,255,255,.78); }
+table.m-t tr.m-total td.m-c.num.loss { color: #FFC9C9; }
+table.m-t tr.m-total .m-note { color: rgba(255,255,255,.7); }
+
 /* ---- particulars ------------------------------------------------------- */
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 18px; }
 .fact .k { font-size: 8pt; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }

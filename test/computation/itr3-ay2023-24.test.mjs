@@ -69,10 +69,18 @@ test("unmapped is empty", () => {
 test("a sale below indexed cost is captioned a LOSS, not a gain", () => {
   const { doc } = build();
   const cg = section(doc, "CG");
-  assert.equal(row(doc, "CG", /^Full value of consideration — land or building/).amount, 4590000);
-  const cost = row(doc, "CG", /^Less: Indexed cost of acquisition/);
-  assert.equal(cost.amount, 5473972);
-  assert.match(cost.note, /Cost 33,07,536, indexed/);
+  /* One property, so the schedule is a single column captioned "Amount" — and
+     the raw cost and the indexed cost are separate lines rather than a figure
+     with the other in a note. Both belong on the page: the indexation is what
+     turns a 45,90,000 sale of a 33,07,536 asset into a loss, and a reader who
+     cannot see the number it started from cannot check it. */
+  const m = cg.rows.find((r) => r.kind === "matrix" && /land or building/.test(r.label));
+  const cell = (re) => (m.lines.find((l) => re.test(l.label)) || {}).cells;
+  assert.deepEqual(m.columns.map((c) => c.label), ["Amount"]);
+  assert.deepEqual(cell(/^Full value of consideration$/), [4590000]);
+  assert.deepEqual(cell(/^Cost of acquisition$/), [3307536]);
+  assert.deepEqual(cell(/^Less: Indexed cost of acquisition$/), [5473972]);
+  assert.deepEqual(cell(/^Long-term capital gain$/), [-883972]);
 
   // The renderer parenthesises a negative either way; the caption must also say
   // the right word. "Total Long-term Capital Gains (8,83,972)" is wrong English

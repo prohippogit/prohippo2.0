@@ -176,14 +176,73 @@
      "amount": 5804021
     },
     {
-     "kind": "sub",
-     "label": "Full value of consideration — land or building",
-     "amount": 1652400
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 900565
+     "kind": "matrix",
+     "label": "Sale of land or building — short term",
+     "amount": null,
+     "columns": [
+      {
+       "label": "Amount"
+      }
+     ],
+     "lines": [
+      {
+       "label": "Property",
+       "cells": [
+        "SAMPLE PLACE 8"
+       ]
+      },
+      {
+       "label": "Purchaser",
+       "cells": [
+        "SAMPLE NAME 11 · 46%; SAMPLE NAME 12 · 33%; SAMPLE NAME 13 · 16%; SAMPLE NAME 14 · 5%"
+       ]
+      },
+      {
+       "label": "Date of sale",
+       "cells": [
+        "18 Sep 2023"
+       ]
+      },
+      {
+       "label": "Date of acquisition",
+       "cells": [
+        "13 Sep 2022"
+       ]
+      },
+      {
+       "label": "Full value of consideration",
+       "cells": [
+        1652400
+       ]
+      },
+      {
+       "label": "Less: Cost of acquisition",
+       "cells": [
+        900565
+       ]
+      },
+      {
+       "label": "Total deductions u/s 48",
+       "cells": [
+        900565
+       ],
+       "kind": "subtotal"
+      },
+      {
+       "label": "Short-term capital gain",
+       "cells": [
+        751835
+       ],
+       "kind": "subtotal"
+      },
+      {
+       "label": "Short-term capital gain chargeable to tax",
+       "cells": [
+        751835
+       ],
+       "kind": "total"
+      }
+     ]
     },
     {
      "kind": "subtotal",
@@ -219,26 +278,107 @@
      "amount": 1836985
     },
     {
-     "kind": "sub",
-     "label": "Full value of consideration — property 1",
-     "amount": 174900
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of acquisition",
-     "amount": 50982,
-     "note": "Cost 29,300, indexed"
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 2",
-     "amount": 560000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of acquisition",
-     "amount": 327858,
-     "note": "Cost 1,88,424, indexed"
+     "kind": "matrix",
+     "label": "Sale of land or building — long term",
+     "amount": null,
+     "columns": [
+      {
+       "label": "Property 1",
+       "note": "13 Jun 2023"
+      },
+      {
+       "label": "Property 2",
+       "note": "13 Apr 2023"
+      },
+      {
+       "label": "Total"
+      }
+     ],
+     "lines": [
+      {
+       "label": "Property",
+       "cells": [
+        "SAMPLE PLACE 9",
+        "SAMPLE PLACE 10",
+        null
+       ]
+      },
+      {
+       "label": "Purchaser",
+       "cells": [
+        "SAMPLE NAME 15 · PAN AAAPZ1006A · 30%; SAMPLE NAME 16 · PAN AAAPZ1007A · 30%; SAMPLE NAME 17 · PAN AAAPZ1008A · 10%; SAMPLE NAME 18 · PAN AAAPZ1009A · 20%; SAMPLE NAME 19 · PAN AAAPZ1010A · 10%",
+        "SAMPLE NAME 20 · PAN AAATZ1003A",
+        null
+       ]
+      },
+      {
+       "label": "Date of sale",
+       "cells": [
+        "13 Jun 2023",
+        "13 Apr 2023",
+        null
+       ]
+      },
+      {
+       "label": "Date of acquisition",
+       "cells": [
+        "25 Sep 2012",
+        "25 Sep 2012",
+        null
+       ]
+      },
+      {
+       "label": "Full value of consideration",
+       "cells": [
+        174900,
+        560000,
+        734900
+       ]
+      },
+      {
+       "label": "Cost of acquisition",
+       "cells": [
+        29300,
+        188424,
+        217724
+       ]
+      },
+      {
+       "label": "Less: Indexed cost of acquisition",
+       "cells": [
+        50982,
+        327858,
+        378840
+       ]
+      },
+      {
+       "label": "Total deductions u/s 48",
+       "cells": [
+        50982,
+        327858,
+        378840
+       ],
+       "kind": "subtotal"
+      },
+      {
+       "label": "Long-term capital gain",
+       "cells": [
+        123918,
+        232142,
+        356060
+       ],
+       "kind": "subtotal"
+      },
+      {
+       "label": "Long-term capital gain chargeable to tax",
+       "cells": [
+        123918,
+        232142,
+        356060
+       ],
+       "kind": "total"
+      }
+     ]
     },
     {
      "kind": "subtotal",

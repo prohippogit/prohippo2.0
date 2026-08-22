@@ -75,6 +75,17 @@ export function longDate(iso) {
   return `${m[3]} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
 }
 
+/* "2023-07-28" → "28 Jul 2023". The same date, for a cell that has to share its
+   row with three others. `longDate` is right on a signature block, where there
+   is one date and room for it; in a schedule column it forces a wrap that puts
+   the year under the month on every row. */
+const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3));
+export function shortDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || "").trim());
+  if (!m) return String(iso || "");
+  return `${m[3]} ${MONTHS_SHORT[Number(m[2]) - 1]} ${m[1]}`;
+}
+
 /** The portal's AY start year → the form the spec mandates: 2025 → "2025-26". */
 export function ayLabel(startYear) {
   const y = Number(startYear);

@@ -151,6 +151,14 @@ export function anonymise(json) {
       if (PLACE_KEYS.has(key) && isProse(node)) return where(node);
       if (SCOPED_PLACE_KEYS.has(`${parentKey}.${key}`) && isProse(node)) return where(node);
       if ((OPAQUE_KEYS.has(key) || AADHAAR_KEY.test(key)) && node.trim()) return /^EmailAddress/.test(key) ? "sample@example.com" : mask(node);
+      /* A NUMERIC ID IS NOT ALWAYS A NUMBER. `PhoneNo` is handled below as a
+         number, and on the ITR-3 that brought this to light the portal had put
+         it in as the STRING "9825045098" — so the numeric branch never ran, the
+         string branch had no rule for it, and a real landline went through into
+         a fixture. Anonymise by field name, in every type the field arrives in
+         (CLAUDE.md rule 5): the same digits, in the same shape, none of them
+         the client's. */
+      if (NUMERIC_ID_KEYS.has(key) && node.trim()) return "9".repeat(node.replace(/\D/g, "").length || node.length);
       let s = node;
       for (const [from, to] of Object.entries(ids)) if (s.includes(from)) s = s.split(from).join(to);
       return s;

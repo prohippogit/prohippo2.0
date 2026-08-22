@@ -23,8 +23,8 @@
  * builder therefore walks every sub-block its schedule can carry and emits rows
  * for whichever ones the assessee actually used.
  */
-import { sub, subtotal, total, columnHeader } from "../../model.js";
-import { longDate } from "../../format.js";
+import { sub, subtotal, total, columnHeader, matrix, matrixLine } from "../../model.js";
+import { longDate, shortDate } from "../../format.js";
 import {
   specialRateLabel, viaLabel, viaOrder, viaRef, tdsSection, tdsNature,
   salaryComponent, salaryComponentOrder, exemptAllowanceLabel, headOfIncome,
@@ -255,45 +255,45 @@ const LTCG_BLOCKS = [
   [["NRISaleofForeignAsset"], "assets acquired in foreign currency"],
 ];
 
-/* Land and building is the one class that does not share the s.48 shape.
+/* Land and building is the one class that does not share the s.48 shape, and the
+ * one that does not fit a working at all.
  *
  * It carries the stamp-duty valuation alongside the consideration, because s.50C
  * substitutes the higher of the two; an indexed cost of acquisition rather than a
- * plain one; and the buyer's details, which are particulars rather than figures.
- * A computation that showed only "full value of consideration" would hide a s.50C
- * substitution, which is the single most contested figure in a property sale.
+ * plain one; the dates of sale and of acquisition; and the buyer's details.
+ *
+ * THIS USED TO BE A WORKING, and it was the wrong shape for it. Every figure
+ * became a row, so an assessee who sold two plots and claimed six deductions
+ * under s.54B against them got twenty rows reading "property 1, property 2,
+ * property 1, property 2" with no way to compare one against the other. The
+ * dates and the buyers were not printed at all — they were claimed as a
+ * disclosure and dropped — and those are the "sale and purchase details" that
+ * make a property schedule worth reading.
+ *
+ * So it is a schedule: a column per property, a line per figure, read across.
+ * See the `matrix` row kind in model.js.
  */
-function landAndBuildingWorking(src, base, indexed, rows) {
+const propTotal = (props, pick) => props.reduce((a, p) => a + (pick(p) || 0), 0);
+
+function landAndBuildingSchedule(src, base, indexed, rows) {
   const list = src.peek(`${base}.SaleofLandBuildDtls`) || [];
-  let total = 0;
+  const props = [];
+
   list.forEach((_, i) => {
     const at = `${base}.SaleofLandBuildDtls[${i}]`;
     const gain = src.num(`${at}.CapgainonAssets`);
     const consideration = src.num(`${at}.FullConsideration`);
-    if (!gain && !consideration) return;
-    total += gain;
+    const adopted = src.num(`${at}.FullConsideration50C`);
+    const exempt = src.num(`${at}.ExemptionOrDednUs54.ExemptionGrandTotal`);
+    /* A PROPERTY WHOSE GAIN IS NIL IS STILL A PROPERTY THAT WAS SOLD. The gate
+       used to be the gain and the consideration alone, which is fine until an
+       assessee reinvests the whole gain: two plots sold for 2.36 crore, 2.15
+       crore of s.54B claimed against them, chargeable gain nil — and the
+       computation said nothing whatever about any of it. */
+    if (!gain && !consideration && !adopted && !exempt) return;
 
     const stamp = src.num(`${at}.PropertyValuation`);
-    const adopted = src.num(`${at}.FullConsideration50C`);
-    const label = list.length > 1 ? `Full value of consideration — property ${i + 1}` : "Full value of consideration — land or building";
-    rows.push(sub(label, adopted || consideration, {
-      // s.50C only bites when the stamp value is the higher figure. Saying so
-      // where it happens, and staying quiet where it does not, is the whole
-      // point of carrying both numbers.
-      note: stamp > consideration
-        ? `Stamp-duty value ${inr(stamp)} adopted u/s 50C in place of the consideration of ${inr(consideration)}`
-        : undefined,
-    }));
 
-    const cost = src.num(`${at}.AquisitCost`);
-    const costIndexed = src.num(`${at}.AquisitCostIndex`);
-    if (indexed && costIndexed) {
-      rows.push(sub("Less: Indexed cost of acquisition", costIndexed, {
-        note: cost && cost !== costIndexed ? `Cost ${inr(cost)}, indexed` : undefined,
-      }));
-    } else if (cost) {
-      rows.push(sub("Less: Cost of acquisition", cost));
-    }
     /* Cost of improvement, which the return states TWICE and in two shapes.
      *
      * `ImproveCost` on the detail itself is the figure that enters `TotalDedn` —
@@ -305,9 +305,8 @@ function landAndBuildingWorking(src, base, indexed, rows) {
      * understates it by the indexation on a document somebody signs.
      *
      * The itemised block, `CostOfImprovements.CostOfImprovementsDtls[]`, carries
-     * the raw cost, the year it was incurred and the indexed figure — which is
-     * where the note comes from, and which is read by name so nothing in it
-     * surfaces for review (§8). */
+     * the raw cost, the year it was incurred and the indexed figure — read by
+     * name so nothing in it surfaces for review (§8). */
     const improvements = (src.claim(`${at}.CostOfImprovements.CostOfImprovementsDtls`) || [])
       .map((d, k) => ({
         raw: src.num(`${at}.CostOfImprovements.CostOfImprovementsDtls[${k}].ImproveCost`),
@@ -317,40 +316,264 @@ function landAndBuildingWorking(src, base, indexed, rows) {
         slno: src.num(`${at}.CostOfImprovements.CostOfImprovementsDtls[${k}].slno`),
       }))
       .filter((d) => d.raw || d.idx);
-    const improve = src.num(`${at}.ImproveCost`);
-    const improveIndexed = src.num(`${at}.ImproveCostIndex`);
-    const shown = improveIndexed || improve;
-    if (shown) {
-      // Indexed if the return says so — either by carrying the indexed field, or
-      // by the itemised block indexing to the figure the deduction total used.
-      const isIndexed = Boolean(improveIndexed) || improvements.some((d) => d.idx === shown && d.raw !== shown);
-      const detail = improvements
-        .map((d) => [d.raw && d.raw !== shown ? inr(d.raw) : "", d.when].filter(Boolean).join(" in "))
-        .filter(Boolean)
-        .join(", ");
-      rows.push(sub(isIndexed ? "Less: Indexed cost of improvement" : "Less: Cost of improvement", shown, {
-        note: detail ? `Improvement of ${detail}${isIndexed ? ", indexed" : ""}` : undefined,
-      }));
-    }
-    const expense = src.num(`${at}.ExpOnTrans`);
-    if (expense) rows.push(sub("Less: Expenditure on transfer", expense));
+    const improveShown = src.num(`${at}.ImproveCostIndex`) || src.num(`${at}.ImproveCost`);
+    const improveRaw = improvements.reduce((a, d) => a + (d.raw || 0), 0);
 
-    /* THE EXEMPTIONS, which were not printed at all until a return arrived
-       claiming 9,67,09,854 of them across four properties. Their absence did not
-       break the head total — that comes from the return's own field — so the
-       page simply stated a subtotal 9.67 crore below what its own rows added to,
-       and said nothing about the s.54F and s.54EC claims that are the most
-       examined figures in any property sale. Same helper the other classes of
-       asset use; the schedule is the same shape here. */
-    exemptionRows(src, at, rows);
-
-    // The buyers, their shares and the amounts against them restate the
-    // consideration already shown; they are a disclosure, not a step in the
-    // working.
+    // The buyers, and where the property is. Particulars, not steps — but they
+    // are what tells one line of a two-property schedule from the other.
+    const buyers = (src.peek(`${at}.TrnsfImmblPrprty.TrnsfImmblPrprtyDtls`) || []).map((b) => ({
+      name: String((b && b.NameOfBuyer) || "").trim(),
+      pan: String((b && b.PANofBuyer) || "").trim(),
+      share: Number((b && b.PercentageShare) || 0),
+    }));
+    const address = String(((src.peek(`${at}.TrnsfImmblPrprty.TrnsfImmblPrprtyDtls`) || [])[0] || {}).AddressOfProperty || "").trim();
     src.claim(`${at}.TrnsfImmblPrprty`);
-    src.restate([`${at}.TotalDedn`, `${at}.Balance`, `${at}.DeductionUs54F`]);
+
+    const claims = (src.claim(`${at}.ExemptionOrDednUs54.ExemptionOrDednUs54Dtls`) || [])
+      .map((e) => ({ code: String((e && e.ExemptionSecCode) || "").trim(), amount: Number((e && e.ExemptionAmount) || 0) }))
+      .filter((e) => e.amount);
+
+    src.restate([`${at}.DeductionUs54F`]);
+
+    props.push({
+      address, buyers,
+      saleDate: String(src.claim(`${at}.DateofSale`) || ""),
+      buyDate: String(src.claim(`${at}.DateofPurchase`) || ""),
+      consideration, stamp, adopted,
+      cost: src.num(`${at}.AquisitCost`),
+      costIndexed: src.num(`${at}.AquisitCostIndex`),
+      improveShown, improveRaw, improvements,
+      expense: src.num(`${at}.ExpOnTrans`),
+      deductions: src.num(`${at}.TotalDedn`),
+      balance: src.num(`${at}.Balance`),
+      claims, exempt, gain,
+    });
   });
-  return total;
+
+  if (!props.length) return 0;
+
+  const caption = indexed ? "Sale of land or building — long term" : "Sale of land or building — short term";
+  const gainWord = indexed ? "Long-term capital gain" : "Short-term capital gain";
+  const particulars = (p) => [
+    p.buyDate ? `Acquired ${shortDate(p.buyDate)}` : "",
+    p.address,
+    p.buyers.length ? `Sold to ${p.buyers.map((b) => b.name).filter(Boolean).join(", ")}` : "",
+  ].filter(Boolean).join(" · ") || undefined;
+
+  /* s.50C only bites when the stamp-duty value is the higher figure. Where it
+     does, all three figures are stated — what was received, what the stamp
+     authority valued, and which of them the return adopted — because the
+     substitution is the single most contested number in a property sale. Where
+     it does not, one line says the same thing without implying an addition. */
+  const substituted = props.some((p) => p.stamp > p.consideration);
+  const codes = [...new Set(props.flatMap((p) => p.claims.map((c) => c.code)).filter(Boolean))];
+  const claimed = (p, code) => p.claims.filter((c) => c.code === code).reduce((a, c) => a + c.amount, 0) || null;
+  // A claim the return did not attribute to a section still comes off the gain,
+  // and the grand total is what it actually deducted. Never silently dropped.
+  const unattributed = props.some((p) => p.exempt !== p.claims.reduce((a, c) => a + c.amount, 0));
+  const anyExempt = props.some((p) => p.exempt);
+
+  /* WHICH WAY ROUND THE SCHEDULE GOES.
+   *
+   * Two or three properties read best side by side: a column each, a line per
+   * figure, and the eye compares this indexed cost against that one. That is the
+   * shape a practitioner draws by hand.
+   *
+   * Ten do not. A column per property is eleven columns of eight-digit figures,
+   * which does not fit across A4 at any font a person would sign — and the
+   * fixture that proved it is real: ten small plots sold in one year at a net
+   * loss of 2,58,720. Past four, the schedule turns: a row per property, and the
+   * columns become the figures. The particulars that were their own lines — the
+   * address, the buyer, the date of acquisition — move under the row label,
+   * because they are what identifies the row rather than what is being compared
+   * across it. */
+  if (props.length > 4) {
+    const cols = [
+      { label: "Date of sale", pick: (p) => (p.saleDate ? shortDate(p.saleDate) : null) },
+      substituted ? { label: "Consideration", pick: (p) => p.consideration } : null,
+      substituted ? { label: "Stamp-duty value", note: "u/s 50C", pick: (p) => p.stamp || null } : null,
+      { label: substituted ? "Adopted u/s 50C" : "Full value of consideration", pick: (p) => p.adopted || p.consideration },
+      { label: "Deductions u/s 48", note: indexed ? "indexed cost, improvement, transfer expenses" : "cost, improvement, transfer expenses", pick: (p) => p.deductions || null },
+      { label: gainWord, pick: (p) => p.balance },
+      /* The exemption and what survives it, only where something was claimed.
+         With no exemption the gain IS the chargeable figure, and a second column
+         repeating it to the rupee teaches the reader that the columns do not
+         each mean something. */
+      anyExempt ? { label: "Less: Exemption", note: codes.length ? `u/s ${codes.join(", ")}` : undefined, pick: (p) => p.exempt || null } : null,
+      anyExempt ? { label: "Chargeable", pick: (p) => p.gain } : null,
+    ].filter(Boolean);
+
+    const lines = props.map((p, i) => matrixLine(`Property ${i + 1}`, cols.map((c) => c.pick(p)), { note: particulars(p) }));
+    lines.push(matrixLine("Total", cols.map((c) => (props.some((p) => typeof c.pick(p) === "number")
+      ? props.reduce((a, p) => a + (Number(c.pick(p)) || 0), 0)
+      : null)), { kind: "total" }));
+
+    // No `ref`: the column header directly above the schedule already says
+    // "Sch. CG", and a second one on the frame beneath it is furniture.
+    rows.push(matrix(caption, { columns: cols.map(({ label, note }) => ({ label, note })), lines }));
+    return propTotal(props, (p) => p.gain);
+  }
+
+  /* The columns: one per property, and a total where there is more than one to
+     add up. That total is an addition of figures the return itself states, not a
+     recomputation of any of them (§1) — and the head subtotal below the schedule
+     still comes from the return's own field, so the two disagreeing would be
+     visible on the page rather than reconciled away here. */
+  const many = props.length > 1;
+  const columns = props.map((p, i) => ({
+    label: many ? `Property ${i + 1}` : "Amount",
+    note: many && p.saleDate ? shortDate(p.saleDate) : undefined,
+  }));
+  if (many) columns.push({ label: "Total" });
+
+  const lines = [];
+  /* A line is emitted only where at least one property has something to put in
+     it: a schedule with a blank "cost of improvement" row on both columns is a
+     row of dashes asserting nothing. */
+  const line = (label, pick, opts = {}) => {
+    const cells = props.map(pick);
+    /* Absent, not nil. Every `pick` above turns a figure the return does not
+       carry into null, so this drops a line nothing has anything to say on. A
+       ZERO stays: "Long-term capital gain chargeable to tax — nil" is the whole
+       point of a schedule whose gain was reinvested, and dropping it would leave
+       a page of workings with no answer at the bottom (§3). */
+    if (!cells.some((c) => c !== null && c !== undefined && c !== "")) return;
+    /* The total is read off whether ANY property put a figure in this line, not
+       off the first one. Judging by the first left an exemption claimed only
+       against the third property with a blank total beside 50,00,000 of it. */
+    if (many) {
+      cells.push(opts.noTotal || !cells.some((c) => typeof c === "number")
+        ? null
+        : props.reduce((a, p) => a + (Number(pick(p)) || 0), 0));
+    }
+    lines.push(matrixLine(label, cells, opts));
+  };
+
+  line("Property", (p) => p.address || null);
+  line("Purchaser", (p) => (p.buyers.length
+    ? p.buyers.map((b) => [b.name, b.pan && `PAN ${b.pan}`, b.share && b.share !== 100 ? `${b.share}%` : ""].filter(Boolean).join(" · ")).join("; ")
+    : null));
+  line("Date of sale", (p) => (p.saleDate ? shortDate(p.saleDate) : null));
+  line("Date of acquisition", (p) => (p.buyDate ? shortDate(p.buyDate) : null));
+
+  if (substituted) {
+    line("Consideration received", (p) => p.consideration);
+    line("Stamp-duty value of the property", (p) => p.stamp || null);
+    line("Full value of consideration adopted u/s 50C", (p) => p.adopted || p.consideration, { kind: "subtotal" });
+  } else {
+    line("Full value of consideration", (p) => p.adopted || p.consideration);
+  }
+
+  if (indexed && props.some((p) => p.costIndexed)) {
+    line("Cost of acquisition", (p) => p.cost || null);
+    line("Less: Indexed cost of acquisition", (p) => p.costIndexed || null);
+  } else {
+    line("Less: Cost of acquisition", (p) => p.cost || null);
+  }
+
+  // Indexed if the return says so — either by carrying the indexed field, or by
+  // the itemised block indexing to the figure the deduction total used.
+  const improveIndexed = props.some((p) => p.improveRaw && p.improveRaw !== p.improveShown);
+  if (improveIndexed) line("Cost of improvement", (p) => p.improveRaw || null);
+  line(improveIndexed ? "Less: Indexed cost of improvement" : "Less: Cost of improvement", (p) => p.improveShown || null, {
+    note: props.some((p) => p.improvements.some((d) => d.when))
+      ? `Incurred in ${[...new Set(props.flatMap((p) => p.improvements.map((d) => d.when)).filter(Boolean))].join(", ")}`
+      : undefined,
+  });
+  line("Less: Expenditure on transfer", (p) => p.expense || null);
+  line("Total deductions u/s 48", (p) => p.deductions || null, { kind: "subtotal" });
+  line(gainWord, (p) => p.balance, { kind: "subtotal" });
+
+  /* THE EXEMPTIONS, which were not printed at all until a return arrived
+     claiming 9,67,09,854 of them across four properties. Their absence did not
+     break the head total — that comes from the return's own field — so the page
+     stated a subtotal 9.67 crore below what its own rows added to, and said
+     nothing about the claims that are the most examined figures in any property
+     sale. One line per section claimed; where a section is claimed more than
+     once against one property the parts are in the deductions schedule below,
+     with the dates and the new asset each one was bought against. */
+  for (const code of codes) line(`Less: Exemption u/s ${code}`, (p) => claimed(p, code));
+  if (unattributed) line("Less: Exemption claimed against the gain", (p) => p.exempt || null);
+
+  line(`${gainWord} chargeable to tax`, (p) => p.gain, { kind: "total" });
+
+  rows.push(matrix(caption, { lines, columns }));
+  return propTotal(props, (p) => p.gain);
+}
+
+/* The deductions claimed under ss.54, and what they were claimed against.
+ *
+ * Schedule CG states each claim twice: once as a figure coming off a particular
+ * property's gain, and once here with the substance of it — the date of the
+ * transfer, what was bought with the proceeds, when, and how much of it went
+ * into a Capital Gains Account Scheme deposit instead. The second is what an
+ * officer asks about and what a practitioner has to be able to answer, and it
+ * was claimed as a subtree and never shown.
+ *
+ * The columns are read from the data rather than listed here, because the field
+ * names differ by section — s.54B buys agricultural land, s.54F a residential
+ * house, s.54EC bonds — and a fixed list would silently drop whichever section
+ * we had not seen yet.
+ */
+const CLAIM_LABEL = {
+  DateofTransfer: "Date of transfer",
+  CostofNewAgriLand: "Cost of new agricultural land",
+  CostofNewResHouse: "Cost of new residential house",
+  CostofNewAssets: "Cost of the new asset",
+  AmtInvested: "Amount invested",
+  DateofInvestment: "Date of investment",
+  DateofPurchase: "Date of purchase / construction",
+  AmtDeposited: "Deposited in the CGAS",
+  AmtDeducted: "Deduction claimed",
+};
+const CLAIM_ORDER = Object.keys(CLAIM_LABEL);
+// "CostofNewAgriLand" → "Cost of new agri land". A section whose fields we have
+// not met before is printed under a readable version of its own name rather
+// than left out — a deduction nobody can see is worse than an ugly caption.
+const deCamel = (k) => String(k)
+  .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+  .replace(/^./, (c) => c.toUpperCase());
+
+function deductionClaimSchedules(src, rows) {
+  const info = src.peek("ScheduleCGFor23.DeducClaimInfo");
+  if (!info || typeof info !== "object") return;
+  for (const key of Object.keys(info)) {
+    const m = /^DeducClaimDtlsUs(\w+)$/.exec(key);
+    const list = m && Array.isArray(info[key]) ? info[key] : null;
+    if (!list || !list.length) continue;
+    const section = m[1];
+
+    // Whichever fields this section actually uses, in a settled order, with
+    // anything unrecognised kept at the end rather than dropped.
+    const keys = [...new Set(list.flatMap((c) => Object.keys(c || {})))];
+    const ordered = [
+      ...CLAIM_ORDER.filter((k) => keys.includes(k)),
+      ...keys.filter((k) => !CLAIM_ORDER.includes(k)),
+    ];
+    if (!ordered.length) continue;
+
+    const columns = ordered.map((k) => ({ label: CLAIM_LABEL[k] || deCamel(k) }));
+    const lines = list.map((c, i) => matrixLine(`Claim ${i + 1}`, ordered.map((k) => {
+      const v = (c || {})[k];
+      if (v === null || v === undefined || v === "") return null;
+      if (typeof v === "number") return src.num(`ScheduleCGFor23.DeducClaimInfo.${key}[${i}].${k}`);
+      src.claim(`ScheduleCGFor23.DeducClaimInfo.${key}[${i}].${k}`);
+      return /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? shortDate(v) : String(v);
+    })));
+
+    const totalKey = ordered.includes("AmtDeducted") ? "AmtDeducted" : "";
+    if (totalKey && list.length > 1) {
+      lines.push(matrixLine("Total", ordered.map((k) => (k === totalKey
+        ? list.reduce((a, c) => a + Number((c || {})[k] || 0), 0)
+        : null)), { kind: "total" }));
+    }
+    rows.push(matrix(`Deduction claimed u/s ${section}`, {
+      ref: "Sch. CG", columns, lines,
+      note: `Particulars of the exemption u/s ${section} already deducted in the working above.`,
+    }));
+  }
+  // The schedule's own grand total, and anything else the block carries.
+  src.claim("ScheduleCGFor23.DeducClaimInfo");
 }
 
 /* Where a block's asset details actually sit.
@@ -521,27 +744,44 @@ function rateSplit(src, block, buckets, rows) {
 export function capitalGainsRows(src) {
   const rows = [];
 
+  /* A HEAD IS SHOWN WHEN THERE WAS A TRANSACTION, NOT WHEN THERE IS A GAIN.
+   *
+   * Both blocks below used to be gated on the head total — `if (stcgTotal)`,
+   * `if (ltcgTotal)` — and that is wrong in the one case where a capital gains
+   * schedule matters most. An assessee who sells two plots for 2.36 crore and
+   * reinvests the whole gain under s.54B has a chargeable long-term gain of
+   * nil, so the gate was false, so NONE of it was printed: not the sale, not the
+   * indexed cost, not the 2.15 crore of exemption. Twenty-six figures went
+   * straight to "items requiring review" and the computation was silent about
+   * the largest thing in the return.
+   *
+   * So the working is built first and the gate asks what it produced. A head
+   * with nothing in it still prints nothing; a head whose gain nets to nil
+   * prints how it got there. */
+
   /* -- short term -- */
+  const st = [];
   const stcgTotal = src.num("ScheduleCGFor23.ShortTermCapGainFor23.TotalSTCG");
-  if (stcgTotal) {
+  for (const mf of src.peek("ScheduleCGFor23.ShortTermCapGainFor23.EquityMFonSTT") || []) {
+    const i = (src.peek("ScheduleCGFor23.ShortTermCapGainFor23.EquityMFonSTT") || []).indexOf(mf);
+    const at = `ScheduleCGFor23.ShortTermCapGainFor23.EquityMFonSTT[${i}]`;
+    assetWorking(src, `${at}.EquityMFonSTTDtls_BE`, "equity shares / units (STT paid, before 23 July 2024)", st);
+    assetWorking(src, `${at}.EquityMFonSTTDtls`, "equity shares / units (STT paid)", st);
+    src.restate([`${at}.TotalCapGainonassets`]);
+  }
+  landAndBuildingSchedule(src, "ScheduleCGFor23.ShortTermCapGainFor23.SaleofLandBuild", false, st);
+  slumpSaleWorking(src, "ScheduleCGFor23.ShortTermCapGainFor23.SlumpSaleInStcg", st);
+  for (const [names, caption] of STCG_BLOCKS) {
+    const base = blockBase(src, "ScheduleCGFor23.ShortTermCapGainFor23", names);
+    for (const d of base ? assetDetails(src, base) : []) assetWorking(src, d.path, caption, st, d.when);
+  }
+  const stDeemed = src.num("ScheduleCGFor23.ShortTermCapGainFor23.TotalAmtDeemedStcg");
+  if (stDeemed) st.push(sub("Deemed short-term capital gain", stDeemed));
+  const stPassThrough = src.num("ScheduleCGFor23.ShortTermCapGainFor23.PassThrIncNatureSTCG");
+  if (stPassThrough) st.push(sub("Pass-through short-term capital gain", stPassThrough));
+  if (st.length || stcgTotal) {
     rows.push(columnHeader("Short-term capital gains", { ref: "Sch. CG" }));
-    for (const mf of src.peek("ScheduleCGFor23.ShortTermCapGainFor23.EquityMFonSTT") || []) {
-      const i = (src.peek("ScheduleCGFor23.ShortTermCapGainFor23.EquityMFonSTT") || []).indexOf(mf);
-      const at = `ScheduleCGFor23.ShortTermCapGainFor23.EquityMFonSTT[${i}]`;
-      assetWorking(src, `${at}.EquityMFonSTTDtls_BE`, "equity shares / units (STT paid, before 23 July 2024)", rows);
-      assetWorking(src, `${at}.EquityMFonSTTDtls`, "equity shares / units (STT paid)", rows);
-      src.restate([`${at}.TotalCapGainonassets`]);
-    }
-    landAndBuildingWorking(src, "ScheduleCGFor23.ShortTermCapGainFor23.SaleofLandBuild", false, rows);
-    slumpSaleWorking(src, "ScheduleCGFor23.ShortTermCapGainFor23.SlumpSaleInStcg", rows);
-    for (const [names, caption] of STCG_BLOCKS) {
-      const base = blockBase(src, "ScheduleCGFor23.ShortTermCapGainFor23", names);
-      for (const d of base ? assetDetails(src, base) : []) assetWorking(src, d.path, caption, rows, d.when);
-    }
-    const deemed = src.num("ScheduleCGFor23.ShortTermCapGainFor23.TotalAmtDeemedStcg");
-    if (deemed) rows.push(sub("Deemed short-term capital gain", deemed));
-    const passThrough = src.num("ScheduleCGFor23.ShortTermCapGainFor23.PassThrIncNatureSTCG");
-    if (passThrough) rows.push(sub("Pass-through short-term capital gain", passThrough));
+    rows.push(...st);
     // A negative total is a LOSS, and the caption must say so — the renderer
     // parenthesises the figure either way, but "Total Short-term Capital Gains
     // (8,83,972)" is the wrong noun on a document somebody signs.
@@ -553,36 +793,38 @@ export function capitalGainsRows(src) {
   }
 
   /* -- long term -- */
+  const lt = [];
   const ltcgTotal = src.num("ScheduleCGFor23.LongTermCapGain23.TotalLTCG");
-  if (ltcgTotal) {
-    const s112a = src.peek("Schedule112A") || {};
+  const s112a = src.peek("Schedule112A") || {};
+  if (s112a.SaleValue112A) {
+    lt.push(sub("Full value of consideration — equity shares / units u/s 112A", Number(s112a.SaleValue112A)));
+    lt.push(sub("Less: Cost of acquisition", Number(s112a.Deductions112A || 0)));
+  }
+  landAndBuildingSchedule(src, "ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild", true, lt);
+  const slump = blockBase(src, "ScheduleCGFor23.LongTermCapGain23", ["SlumpSaleInLtcgDtls.SlumpSaleInLtcg", "SlumpSaleInLtcg"]);
+  if (slump) slumpSaleWorking(src, slump, lt);
+  for (const [names, caption] of LTCG_BLOCKS) {
+    const base = blockBase(src, "ScheduleCGFor23.LongTermCapGain23", names);
+    for (const d of base ? assetDetails(src, base) : []) assetWorking(src, d.path, caption, lt, d.when);
+  }
+  const ltDeemed = src.num("ScheduleCGFor23.LongTermCapGain23.TotalAmtDeemedLtcg");
+  if (ltDeemed) lt.push(sub("Deemed long-term capital gain", ltDeemed));
+  const ltPassThrough = src.num("ScheduleCGFor23.LongTermCapGain23.PassThrIncNatureLTCG");
+  if (ltPassThrough) lt.push(sub("Pass-through long-term capital gain", ltPassThrough));
+  if (lt.length || ltcgTotal) {
     rows.push(columnHeader("Long-term capital gains", { ref: s112a.SaleValue112A ? "Sch. 112A" : "Sch. CG" }));
-    if (s112a.SaleValue112A) {
-      rows.push(sub("Full value of consideration — equity shares / units u/s 112A", Number(s112a.SaleValue112A)));
-      rows.push(sub("Less: Cost of acquisition", Number(s112a.Deductions112A || 0)));
-    }
-    landAndBuildingWorking(src, "ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild", true, rows);
-    const slump = blockBase(src, "ScheduleCGFor23.LongTermCapGain23", ["SlumpSaleInLtcgDtls.SlumpSaleInLtcg", "SlumpSaleInLtcg"]);
-    if (slump) slumpSaleWorking(src, slump, rows);
-    for (const [names, caption] of LTCG_BLOCKS) {
-      const base = blockBase(src, "ScheduleCGFor23.LongTermCapGain23", names);
-      for (const d of base ? assetDetails(src, base) : []) assetWorking(src, d.path, caption, rows, d.when);
-    }
-    const deemed = src.num("ScheduleCGFor23.LongTermCapGain23.TotalAmtDeemedLtcg");
-    if (deemed) rows.push(sub("Deemed long-term capital gain", deemed));
-    const passThrough = src.num("ScheduleCGFor23.LongTermCapGain23.PassThrIncNatureLTCG");
-    if (passThrough) rows.push(sub("Pass-through long-term capital gain", passThrough));
-
+    rows.push(...lt);
     rows.push(subtotal(
       ltcgTotal < 0 ? "Total Long-term Capital Loss" : "Total Long-term Capital Gains",
       Math.abs(ltcgTotal), { isLoss: ltcgTotal < 0 || undefined }
     ));
     rateSplit(src, "LongTerm", LT_BUCKETS, rows);
-    src.restate([
-      "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferBE",
-      "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferAE",
-    ]);
   }
+  src.restate([
+    "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferBE",
+    "ScheduleCGFor23.LongTermCapGain23.SaleOfEquityShareUs112A.CapgainonAssetsTransferAE",
+  ]);
+
   // Deliberately NOT claiming the two subtrees wholesale. A class of asset this
   // builder does not recognise must surface in the review block (§8) rather than
   // vanish behind a blanket claim — that is the difference between a computation
@@ -607,10 +849,16 @@ export function capitalGainsRows(src) {
     ));
   }
 
+  /* The substance behind the exemptions deducted above — what was bought with
+     the proceeds, when, and how much went into a Capital Gains Account Scheme
+     deposit instead. AFTER the head total, deliberately: it is supporting
+     detail, and a schedule of figures sitting between a subtotal and a total
+     reads as though it were being deducted a second time. */
+  deductionClaimSchedules(src, rows);
+
   src.num("ScheduleCGFor23.SumOfCGIncm");
   src.claim("ScheduleCGFor23.CurrYrLosses");
   src.claim("ScheduleCGFor23.AccruOrRecOfCG");
-  src.claim("ScheduleCGFor23.DeducClaimInfo");
   src.claim("Schedule112A");
   src.claim("Schedule115AD");
   return rows;

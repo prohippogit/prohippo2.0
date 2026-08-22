@@ -2,17 +2,17 @@
  "ITR": {
   "ITR3": {
    "CreationInfo": {
-    "SWVersionNo": "22.E.07",
+    "SWVersionNo": "24.E.09",
     "SWCreatedBy": "XX00000000",
     "JSONCreatedBy": "XX00000000",
-    "JSONCreationDate": "2022-12-31",
+    "JSONCreationDate": "2024-07-26",
     "IntermediaryCity": "SAMPLE PLACE 1",
-    "Digest": "XXXXX00XXXX0XXXXXX0X0XXXXXX+XXXXXXXXXX0XXXX="
+    "Digest": "XXXXXXXXXXXXXX0X+XXXXXXX/XXXXXX0XXXXX0XXXXX="
    },
    "Form_ITR3": {
     "FormName": "ITR-3",
-    "Description": "For indls and HUFs having income from  a proprietory business or profession",
-    "AssessmentYear": "2022",
+    "Description": "For indls and HUFs having income from a proprietory business or profession",
+    "AssessmentYear": "2024",
     "SchemaVer": "Ver1.0",
     "FormVer": "Ver1.0"
    },
@@ -23,49 +23,41 @@
       "MiddleName": "SAMPLE NAME 2",
       "SurNameOrOrgName": "SAMPLE NAME 3"
      },
-     "PAN": "AAAPZ1007A",
+     "PAN": "AAAPZ1002A",
      "Address": {
-      "ResidenceNo": "E 90 ",
-      "ResidenceName": "SAMPLE PLACE 2",
-      "RoadOrStreet": "SAMPLE PLACE 3",
-      "LocalityOrArea": "SAMPLE PLACE 4",
+      "ResidenceNo": "SAMPLE PLACE 2",
+      "ResidenceName": "SAMPLE PLACE 3",
+      "RoadOrStreet": "SAMPLE PLACE 4",
+      "LocalityOrArea": "SAMPLE PLACE 5",
       "CityOrTownOrDistrict": "SAMPLE PLACE 1",
       "StateCode": "11",
       "CountryCode": "91",
-      "PinCode": 380050,
+      "PinCode": 382213,
       "Phone": {
        "STDcode": 99,
-       "PhoneNo": "99999999"
+       "PhoneNo": "9999999999"
       },
       "CountryCodeMobile": 91,
       "MobileNo": 9800000001,
-      "EmailAddress": "sample@example.com",
-      "EmailAddressSec": "sample@example.com"
+      "EmailAddress": "sample@example.com"
      },
-     "DOB": "1978-12-11",
+     "DOB": "1992-07-08",
      "Status": "I",
      "AadhaarCardNo": "000000000000"
     },
     "FilingStatus": {
-     "ReturnFileSec": 12,
-     "NewTaxRegime": "N",
-     "OptingNewTaxRegime": 2,
+     "ReturnFileSec": 11,
+     "OptOutNewTaxRegime": "N",
      "SeventhProvisio139": "N",
      "ResidentialStatus": "RES",
      "ConditionsResStatus": "1",
      "BenefitUs115HFlg": "N",
      "PortugeseCC5A": "N",
      "AsseseeRepFlg": "N",
+     "ItrFilingDueDate": "2024-07-31",
+     "FiiFpiFlag": "N",
      "CompDirectorPrvYrFlg": "N",
-     "PartnerInFirmFlg": "Y",
-     "PartnerInFirm": {
-      "PartnerInFirmDtls": [
-       {
-        "NameOfFirm": "SAMPLE NAME 4",
-        "PAN": "AAAFZ1000A"
-       }
-      ]
-     },
+     "PartnerInFirmFlg": "N",
      "HeldUnlistedEqShrPrYrFlg": "N",
      "NriPEinIndia": "N",
      "NriSEPinIndia": "N",
@@ -78,13 +70,19 @@
      "IncDclrdUs": "N",
      "TotalSalesExcOneCr": "N",
      "LiableSec44ABflg": "N",
+     "Cndnfor44AB": "biii",
      "LiableSec92Eflg": "N",
-     "AccountAuditFlag": "N"
+     "AccountAuditFlag": "N",
+     "AuditDetails": [
+      {
+       "OthAuditDtls": "N"
+      }
+     ]
     },
     "NatOfBus": {
      "NatureOfBusiness": [
       {
-       "Code": "00001",
+       "Code": "04097",
        "TradeName1": "SAMPLE NAME 4"
       }
      ]
@@ -93,7 +91,7 @@
    "PARTA_BS": {
     "FundSrc": {
      "PropFund": {
-      "PropCap": 235122789,
+      "PropCap": 4470764,
       "ResrNSurp": {
        "RevResr": 0,
        "CapResr": 0,
@@ -101,35 +99,40 @@
        "OthResr": 0,
        "TotResrNSurp": 0
       },
-      "TotPropFund": 235122789
+      "TotPropFund": 4470764
      },
      "LoanFunds": {
       "SecrLoan": {
        "ForeignCurrLoan": 0,
        "RupeeLoan": {
-        "FrmBank": 0,
+        "FrmBank": 716181,
         "FrmOthrs": 0,
-        "TotRupeeLoan": 0
+        "TotRupeeLoan": 716181
        },
-       "TotSecrLoan": 0
+       "TotSecrLoan": 716181
       },
       "UnsecrLoan": {
        "FrmBank": 0,
-       "FrmOthrs": 7055971,
-       "TotUnSecrLoan": 7055971
+       "FrmOthrs": 4788500,
+       "TotUnSecrLoan": 4788500
       },
-      "TotLoanFund": 7055971
+      "TotLoanFund": 5504681
      },
      "DeferredTax": 0,
-     "TotFundSrc": 242178760
+     "Advances": {
+      "FromPrsn": 0,
+      "FromOthers": 0,
+      "TotalAdvances": 0
+     },
+     "TotFundSrc": 9975445
     },
     "FundApply": {
      "FixedAsset": {
-      "GrossBlock": 35960138,
-      "Depreciation": 0,
-      "NetBlock": 35960138,
+      "GrossBlock": 2277623,
+      "Depreciation": 38401,
+      "NetBlock": 2239222,
       "CapWrkProg": 0,
-      "TotFixedAsset": 35960138
+      "TotFixedAsset": 2239222
      },
      "Investments": {
       "LongTermInv": {
@@ -151,42 +154,42 @@
         "StoresConsumables": 0,
         "RawMatl": 0,
         "StkInProcess": 0,
-        "FinOrTradGood": 0,
-        "TotInventries": 0
+        "FinOrTradGood": 6657413,
+        "TotInventries": 6657413
        },
-       "SndryDebtors": 0,
+       "SndryDebtors": 3405882,
        "CashOrBankBal": {
-        "CashinHand": 1624216,
-        "BankBal": 29434572,
-        "TotCashOrBankBal": 31058788
+        "CashinHand": 5010,
+        "BankBal": 917456,
+        "TotCashOrBankBal": 922466
        },
-       "OthCurrAsset": 0,
-       "TotCurrAsset": 31058788
+       "OthCurrAsset": 174105,
+       "TotCurrAsset": 11159866
       },
       "LoanAdv": {
        "AdvRecoverable": 0,
-       "Deposits": 179832834,
+       "Deposits": 0,
        "BalWithRevAuth": 0,
-       "TotLoanAdv": 179832834
+       "TotLoanAdv": 0
       },
-      "TotCurrAssetLoanAdv": 210891622,
+      "TotCurrAssetLoanAdv": 11159866,
       "CurrLiabilitiesProv": {
        "CurrLiabilities": {
-        "SundryCred": 0,
+        "SundryCred": 3402643,
         "LiabForLeasedAsset": 0,
         "AccrIntonLeasedAsset": 0,
         "AccrIntNotDue": 0,
-        "TotCurrLiabilities": 0
+        "TotCurrLiabilities": 3402643
        },
        "Provisions": {
         "ITProvision": 0,
         "ELSuperAnnGratProvision": 0,
-        "OthProvision": 4673000,
-        "TotProvisions": 4673000
+        "OthProvision": 21000,
+        "TotProvisions": 21000
        },
-       "TotCurrLiabilitiesProvision": 4673000
+       "TotCurrLiabilitiesProvision": 3423643
       },
-      "NetCurrAsset": 206218622
+      "NetCurrAsset": 7736223
      },
      "MiscAdjust": {
       "MiscExpndr": 0,
@@ -194,7 +197,7 @@
       "AccumaltedLosses": 0,
       "TotMiscAdjust": 0
      },
-     "TotFundApply": 242178760
+     "TotFundApply": 9975445
     },
     "NoBooksOfAccBS": {
      "TotSundryDbtAmt": 0,
@@ -231,10 +234,10 @@
     "CostOfGoodsPrdcd": 0
    },
    "TradingAccount": {
-    "SaleOfGoods": 0,
+    "SaleOfGoods": 8765773,
     "SaleOfServices": 0,
     "OperatingRevenueTotal": 0,
-    "SalesGrossReceiptsTotal": 0,
+    "SalesGrossReceiptsTotal": 8765773,
     "GrossRcptFromProfession": 0,
     "ExciseCustomsVAT": {
      "UnionExciseDuty": 0,
@@ -247,11 +250,11 @@
      "OthDutyTaxCess": 0,
      "TotExciseCustomsVAT": 0
     },
-    "TotRevenueFrmOperations": 0,
-    "ClsngStckOfFinishedStcks": 0,
-    "TardingAccTotCred": 0,
-    "OpngStckOfFinishedStcks": 0,
-    "Purchases": 0,
+    "TotRevenueFrmOperations": 8765773,
+    "ClsngStckOfFinishedStcks": 6657413,
+    "TardingAccTotCred": 15423186,
+    "OpngStckOfFinishedStcks": 5720906,
+    "Purchases": 8285539,
     "DirectExpenses": 0,
     "CarriageInward": 0,
     "PowerAndFuel": 0,
@@ -273,11 +276,13 @@
      }
     },
     "GoodsCostPrdcdFrmMA": 0,
-    "GrossProfitFrmBusProf": 0
+    "GrossProfitFrmBusProf": 1416741,
+    "TurnoverIntradayTrd": 0,
+    "IncomeIntradayTrd": 0
    },
    "PARTA_PL": {
     "CreditsToPL": {
-     "GrossProfitTrnsfFrmTrdAcc": 0,
+     "GrossProfitTrnsfFrmTrdAcc": 1416741,
      "OthIncome": {
       "RentInc": 0,
       "Comissions": 0,
@@ -292,17 +297,17 @@
       "MiscOthIncome": 0,
       "TotOthIncome": 0
      },
-     "TotCreditsToPL": 0
+     "TotCreditsToPL": 1416741
     },
     "DebitsToPL": {
-     "Freight": 0,
+     "Freight": 2146,
      "ConsumptionOfStores": 0,
-     "PowerFuel": 0,
+     "PowerFuel": 18562,
      "RentExpdr": 0,
      "RepairsBldg": 0,
      "RepairMach": 0,
      "EmployeeComp": {
-      "SalsWages": 0,
+      "SalsWages": 530000,
       "Bonus": 0,
       "MedExpReimb": 0,
       "LeaveEncash": 0,
@@ -312,7 +317,7 @@
       "ContToGratFund": 0,
       "ContToOthFund": 0,
       "OthEmpBenftExpdr": 0,
-      "TotEmployeeComp": 0,
+      "TotEmployeeComp": 530000,
       "AnyCompPaidToNonRes": "N",
       "AmtPaidToNonRes": 0
      },
@@ -341,14 +346,14 @@
      },
      "ProfessionalConstDtls": {
       "NonResOtherCompany": 0,
-      "Others": 0,
-      "Total": 0
+      "Others": 8000,
+      "Total": 8000
      },
      "HotelBoardLodge": 0,
      "TravelExp": 0,
      "ForeignTravelExp": 0,
      "ConveyanceExp": 0,
-     "TelephoneExp": 0,
+     "TelephoneExp": 8452,
      "GuestHouseExp": 0,
      "ClubExp": 0,
      "FestivalCelebExp": 0,
@@ -370,7 +375,21 @@
       }
      },
      "AuditFee": 0,
-     "OtherExpenses": 0,
+     "OtherExpensesDtls": [
+      {
+       "ExpenseNature": "SAMPLE NAME 5",
+       "Amount": 13000
+      },
+      {
+       "ExpenseNature": "SAMPLE NAME 6",
+       "Amount": 1029
+      },
+      {
+       "ExpenseNature": "SAMPLE NAME 7",
+       "Amount": 6214
+      }
+     ],
+     "OtherExpenses": 20243,
      "BadDebtDtls": {
       "BadDebtAmtDtlsTotal": 0,
       "OthersPANNotAvlblDtlTotal": 0,
@@ -379,27 +398,28 @@
      },
      "ProvForBadDoubtDebt": 0,
      "OthProvisionsExpdr": 0,
-     "PBIDTA": 0,
+     "PBIDTA": 829338,
      "InterestExpdrtDtls": {
       "NonResOtherCompany": 0,
-      "Others": 0,
-      "InterestExpdr": 0
+      "Others": 87675,
+      "InterestExpdr": 87675
      },
-     "DepreciationAmort": 0,
-     "PBT": 0
+     "DepreciationAmort": 38401,
+     "PBT": 703262
     },
     "TaxProvAppr": {
      "ProvForCurrTax": 0,
      "ProvDefTax": 0,
-     "ProfitAfterTax": 0,
+     "ProfitAfterTax": 703262,
      "BalBFPrevYr": 0,
-     "AmtAvlAppr": 0,
+     "AmtAvlAppr": 703262,
      "TrfToReserves": 0,
-     "ProprietorAccBalTrf": 0
+     "ProprietorAccBalTrf": 703262
     },
     "PersumptiveInc44AD": {
      "GrsTrnOverOrReceipt": 0,
      "GrsTrnOverBank": 0,
+     "GrsTotalTrnOverInCash": 0,
      "GrsTrnOverAnyOthMode": 0,
      "TotPersumptiveInc44AD": 0,
      "PersumptiveInc44AD6Per": 0,
@@ -426,10 +446,17 @@
     "NetIncomeFrmSpecActivity": 0
    },
    "PARTA_OI": {
-    "MethodOfAcct": "CASH",
+    "MethodOfAcct": "MERC",
     "ChangeInAcctMethFlg": "N",
     "ProfDeviatDueAcctMeth": 0,
     "DecProOrIncLossUs145_2": 0,
+    "MethodOfValClgStk": {
+     "ValRawMaterial": "1",
+     "ValFinishedGoods": "1",
+     "ChngStockValMetFlg": "N",
+     "EffectOnPL": 0,
+     "DecProOrIncLossUs145_A": 0
+    },
     "NoCredToPLAmt": {
      "Section28Items": 0,
      "ProformaCreditsDue": 0,
@@ -502,6 +529,7 @@
       "IntPayaleToFISchBank": 0,
       "LeaveEncashPayable": 0,
       "RailwayAssetsPayable": 0,
+      "MSEPayable": 0,
       "TotAmtUs43b": 0
      }
     },
@@ -515,6 +543,7 @@
       "IntPayaleToFISchBank": 0,
       "LeaveEncashPayable": 0,
       "RailwayAssetsPayable": 0,
+      "MSEPayable": 0,
       "TotAmtUs43b": 0
      }
     },
@@ -541,7 +570,7 @@
    },
    "ITR3ScheduleBP": {
     "BusinessIncOthThanSpec": {
-     "ProfBfrTaxPL": 0,
+     "ProfBfrTaxPL": 703262,
      "NetPLFromSpecBus": 0,
      "NetPLFromSpecifiedBus": 0,
      "IncRecCredPLOthHeadDtls": {
@@ -552,7 +581,8 @@
       "Dividend": 0,
       "OtherThanDividend": 0,
       "Us115BBF": 0,
-      "Us115BBG": 0
+      "Us115BBG": 0,
+      "115BBH": 0
      },
      "PLUs44sChapXIIG": 0,
      "ProfitLossInclRefrdSec": {
@@ -578,26 +608,27 @@
       "OthExempInc": 0,
       "TotExempIncPL": 0
      },
-     "BalancePLOthThanSpecBus": 0,
+     "BalancePLOthThanSpecBus": 703262,
      "ExpDebToPLOthHeadDtls": {
       "Salary": 0,
       "HouseProperty": 0,
       "CapitalGains": 0,
       "OtherSources": 0,
       "Us115BBF": 0,
-      "Us115BBG": 0
+      "Us115BBG": 0,
+      "115BBH": 0
      },
      "ExpDebToPLExemptInc": 0,
      "ExpDebToPLExemptIncDisAllwUs14A": 0,
      "TotExpDebPL": 0,
-     "AdjustedPLOthThanSpecBus": 0,
-     "DepreciationDebPLCosAct": 0,
+     "AdjustedPLOthThanSpecBus": 703262,
+     "DepreciationDebPLCosAct": 38401,
      "DepreciationAllowITAct32": {
-      "DepreciationAllowUs32_1_ii": 0,
+      "DepreciationAllowUs32_1_ii": 38401,
       "DepreciationAllowUs32_1_i": 0,
-      "TotDeprAllowITAct": 0
+      "TotDeprAllowITAct": 38401
      },
-     "AdjustPLAfterDeprOthSpecInc": 0,
+     "AdjustPLAfterDeprOthSpecInc": 703262,
      "AmtDebPLDisallowUs36": 0,
      "AmtDebPLDisallowUs37": 0,
      "AmtDebPLDisallowUs40": 0,
@@ -617,14 +648,14 @@
      "DeemIncUs80IA": 0,
      "DeemIncUs43CA": 0,
      "OthItemDisallowUs28To44DA": 0,
-     "AnyOthIncNotInclInExpDisallowPL": 186660,
-     "AnyOthIncNotInclInSalary": 50000,
+     "AnyOthIncNotInclInExpDisallowPL": 0,
+     "AnyOthIncNotInclInSalary": 0,
      "AnyOthIncNotInclInBonus": 0,
      "AnyOthIncNotInclInCommission": 0,
-     "AnyOthIncNotInclInInterest": 136660,
+     "AnyOthIncNotInclInInterest": 0,
      "AnyOthIncNotInclInOthers": 0,
      "IncProfDecLossAccICDSAdj": 0,
-     "TotAfterAddToPLDeprOthSpecInc": 186660,
+     "TotAfterAddToPLDeprOthSpecInc": 0,
      "DeductUs32_1_iii": 0,
      "DebPLUs35ExcessAmt": 0,
      "AmtDisallUs40NowAllow": 0,
@@ -632,7 +663,7 @@
      "AnyOthAmtAllDeduct": 0,
      "DecProfIncLossAccICDSAdj": 0,
      "TotDeductionAmts": 0,
-     "PLAftAdjDedBusOthThanSpec": 186660,
+     "PLAftAdjDedBusOthThanSpec": 703262,
      "DeemedProfitBusUs": {
       "Section44AD": 0,
       "Section44ADA": 0,
@@ -643,14 +674,14 @@
       "Section44DA": 0,
       "TotDeemedProfitBusUs": 0
      },
-     "NetPLAftAdjBusOthThanSpec": 186660,
-     "NetPLBusOthThanSpec7A7B7C": 186660,
+     "NetPLAftAdjBusOthThanSpec": 703262,
+     "NetPLBusOthThanSpec7A7B7C": 703262,
      "ChrgblIncUndrRule7": 0,
      "DeemedChrgblIncUndrRule7A": 0,
      "DeemedChrgblIncUndrRule7B1": 0,
      "DeemedChrgblIncUndrRule7B1A": 0,
      "DeemedChrgblIncUndrRule8": 0,
-     "IncomeOtherThanRule": 186660,
+     "IncomeOtherThanRule": 703262,
      "BalIncDeemedFrmAgri": 0
     },
     "SpecBusinessInc": {
@@ -667,7 +698,7 @@
      "DeductionUs35AD": 0,
      "PLFrmSpecifiedBus": 0
     },
-    "IncChrgUnHdProftGain": 186660,
+    "IncChrgUnHdProftGain": 703262,
     "BusSetoffCurrYr": {
      "LossSetOffOnBusLoss": 0,
      "SpeculativeInc": {
@@ -684,378 +715,103 @@
      "LossRemainSetOffOnBus": 0
     }
    },
+   "ScheduleDPM": {
+    "PlantMachinery": {
+     "Rate15": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 212773,
+       "AdjustmentSec115BAC": 0,
+       "Total": 212773,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 212773,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 31916,
+       "DepreciationAtHalfRate": 0,
+       "AddlnDeprOnGT180DayAdditions": 0,
+       "AddlnDeprOnLessThan180DayAdditions": 0,
+       "AddlnDeprOnAssetLessThan180Days": 0,
+       "TotalDepreciation": 31916,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 31916,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 180857
+      }
+     }
+    }
+   },
+   "ScheduleDOA": {
+    "FurnitureFittings": {
+     "Rate10": {
+      "DepreciationDetail": {
+       "WDVFirstDay": 64850,
+       "AdditionsGrThan180Days": 0,
+       "RealizationTotalPeriod": 0,
+       "FullRateDeprAmt": 64850,
+       "AdditionsLessThan180Days": 0,
+       "RealizationPeriodLessThan180days": 0,
+       "HalfRateDeprAmt": 0,
+       "DepreciationAtFullRate": 6485,
+       "DepreciationAtHalfRate": 0,
+       "TotalDepreciation": 6485,
+       "DepDisAllowUs38_2": 0,
+       "NetAggregateDepreciation": 6485,
+       "ProportionateAggDepreciation": 0,
+       "ExpdrOnTrforSaleAsset": 0,
+       "CapGainUs50": 0,
+       "WDVLastDay": 58365
+      }
+     }
+    }
+   },
+   "ScheduleDEP": {
+    "SummaryFromDeprSch": {
+     "PlantMachinerySummary": {
+      "DeprBlockTot15Percent": 31916,
+      "DeprBlockTot30Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "DeprBlockTot45Percent": 0,
+      "TotPlntMach": 31916
+     },
+     "BuildingSummary": {
+      "DeprBlockTot5Percent": 0,
+      "DeprBlockTot10Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "TotBuildng": 0
+     },
+     "FurnitureSummary": 6485,
+     "IntangibleAssetSummary": 0,
+     "ShipsSummary": 0,
+     "TotalDepreciation": 38401
+    }
+   },
+   "ScheduleDCG": {
+    "SummaryFromDeprSchCG": {
+     "PlantMachinerySummaryCG": {
+      "DeprBlockTot15Percent": 0,
+      "DeprBlockTot30Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "DeprBlockTot45Percent": 0,
+      "TotPlntMach": 0
+     },
+     "BuildingSummaryCG": {
+      "DeprBlockTot5Percent": 0,
+      "DeprBlockTot10Percent": 0,
+      "DeprBlockTot40Percent": 0,
+      "TotBuildng": 0
+     },
+     "FurnitureSummary": 0,
+     "IntangibleAssetSummary": 0,
+     "ShipsSummary": 0,
+     "TotalDepreciation": 0
+    }
+   },
    "ScheduleCGFor23": {
     "ShortTermCapGainFor23": {
-     "SaleofLandBuild": {
-      "SaleofLandBuildDtls": [
-       {
-        "DateofPurchase": "2021-06-11",
-        "DateofSale": "2021-10-28",
-        "FullConsideration": 1400000,
-        "PropertyValuation": 1400000,
-        "FullConsideration50C": 1400000,
-        "AquisitCost": 1509575,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 1509575,
-        "Balance": -109575,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": -109575,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 5",
-           "PANofBuyer": "AAAPZ1009A",
-           "PercentageShare": 20,
-           "Amount": 855000,
-           "AddressOfProperty": "SAMPLE PLACE 5",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "382715"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 6",
-           "PercentageShare": 20,
-           "Amount": 78750,
-           "AddressOfProperty": "SAMPLE PLACE 6",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "382715"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 7",
-           "PercentageShare": 20,
-           "Amount": 78750,
-           "AddressOfProperty": "SAMPLE PLACE 5",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "382715"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 8",
-           "PercentageShare": 20,
-           "Amount": 150000,
-           "AddressOfProperty": "SAMPLE PLACE 5",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "382715"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 9",
-           "PercentageShare": 20,
-           "Amount": 237500,
-           "AddressOfProperty": "SAMPLE PLACE 5",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "382715"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2021-10-31",
-        "FullConsideration": 318000,
-        "PropertyValuation": 318000,
-        "FullConsideration50C": 318000,
-        "AquisitCost": 318100,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 318100,
-        "Balance": -100,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": -100,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 10",
-           "PANofBuyer": "AAAPZ1008A",
-           "PercentageShare": 100,
-           "Amount": 318000,
-           "AddressOfProperty": "SAMPLE PLACE 7",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2021-12-31",
-        "FullConsideration": 1050000,
-        "PropertyValuation": 1050000,
-        "FullConsideration50C": 1050000,
-        "AquisitCost": 1059400,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 1059400,
-        "Balance": -9400,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": -9400,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 10",
-           "PANofBuyer": "AAAPZ1008A",
-           "PercentageShare": 100,
-           "Amount": 1050000,
-           "AddressOfProperty": "SAMPLE PLACE 8",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2021-12-31",
-        "FullConsideration": 1202000,
-        "PropertyValuation": 1202000,
-        "FullConsideration50C": 1202000,
-        "AquisitCost": 1200598,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 1200598,
-        "Balance": 1402,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": 1402,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 11",
-           "PANofBuyer": "AAAPZ1004A",
-           "PercentageShare": 100,
-           "Amount": 1202000,
-           "AddressOfProperty": "SAMPLE PLACE 9",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2022-01-07",
-        "FullConsideration": 1136000,
-        "PropertyValuation": 1136000,
-        "FullConsideration50C": 1136000,
-        "AquisitCost": 1114104,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 1114104,
-        "Balance": 21896,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": 21896,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 12",
-           "PANofBuyer": "AAAPZ1004A",
-           "PercentageShare": 100,
-           "Amount": 1136000,
-           "AddressOfProperty": "SAMPLE PLACE 10",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-08-11",
-        "DateofSale": "2021-12-31",
-        "FullConsideration": 4650000,
-        "PropertyValuation": 4650000,
-        "FullConsideration50C": 4650000,
-        "AquisitCost": 4641948,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 4641948,
-        "Balance": 8052,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": 8052,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 13",
-           "PANofBuyer": "AAAPZ1008A",
-           "PercentageShare": 100,
-           "Amount": 4650000,
-           "AddressOfProperty": "SAMPLE PLACE 11",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2022-02-16",
-        "FullConsideration": 661000,
-        "PropertyValuation": 661000,
-        "FullConsideration50C": 661000,
-        "AquisitCost": 660531,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 660531,
-        "Balance": 469,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": 469,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 14",
-           "PANofBuyer": "AAAPZ1006A",
-           "PercentageShare": 100,
-           "Amount": 661000,
-           "AddressOfProperty": "SAMPLE PLACE 12",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2022-02-16",
-        "FullConsideration": 725000,
-        "PropertyValuation": 725000,
-        "FullConsideration50C": 725000,
-        "AquisitCost": 723997,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 723997,
-        "Balance": 1003,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": 1003,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 15",
-           "PANofBuyer": "AAAPZ1006A",
-           "PercentageShare": 100,
-           "Amount": 725000,
-           "AddressOfProperty": "SAMPLE PLACE 13",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-22",
-        "DateofSale": "2021-12-31",
-        "FullConsideration": 718000,
-        "PropertyValuation": 718000,
-        "FullConsideration50C": 718000,
-        "AquisitCost": 716994,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 716994,
-        "Balance": 1006,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": 1006,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 13",
-           "PANofBuyer": "AAAPZ1008A",
-           "PercentageShare": 50,
-           "Amount": 230000,
-           "AddressOfProperty": "SAMPLE PLACE 14",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 14",
-           "PANofBuyer": "AAAPZ1006A",
-           "PercentageShare": 50,
-           "Amount": 488000,
-           "AddressOfProperty": "SAMPLE PLACE 14",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2021-07-27",
-        "DateofSale": "2021-12-31",
-        "FullConsideration": 4077000,
-        "PropertyValuation": 4077000,
-        "FullConsideration50C": 4077000,
-        "AquisitCost": 4250473,
-        "ImproveCost": 0,
-        "ExpOnTrans": 0,
-        "TotalDedn": 4250473,
-        "Balance": -173473,
-        "ExemptionOrDednUs54": {
-         "ExemptionGrandTotal": 0
-        },
-        "CapgainonAssets": -173473,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 13",
-           "PANofBuyer": "AAAPZ1008A",
-           "PercentageShare": 33.33,
-           "Amount": 2403000,
-           "AddressOfProperty": "SAMPLE PLACE 15",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 14",
-           "PANofBuyer": "AAAPZ1006A",
-           "PercentageShare": 33.33,
-           "Amount": 898000,
-           "AddressOfProperty": "SAMPLE PLACE 16",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          },
-          {
-           "NameOfBuyer": "SAMPLE NAME 16",
-           "PANofBuyer": "AAAPZ1004A",
-           "PercentageShare": 33.34,
-           "Amount": 7776000,
-           "AddressOfProperty": "SAMPLE PLACE 16",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "ZipCode": "380059"
-          }
-         ]
-        }
-       }
-      ]
-     },
      "SlumpSaleInStcg": {
       "FMV11UAEii": 0,
       "FMV11UAEiii": 0,
@@ -1136,16 +892,6 @@
       "CapgainonAssets": 0
      },
      "UnutilizedStcgFlag": "X",
-     "UnutilizedCg": {
-      "UnutilizedCgPrvYrDtls": [
-       {
-        "PrvYrInWhichAsstTrnsfrd": "2019-20",
-        "SectionClmd": "54B",
-        "AmtUtilized": 0,
-        "AmtUnutilized": 0
-       }
-      ]
-     },
      "AmtDeemedStcg": 0,
      "TotalAmtDeemedStcg": 0,
      "PassThrIncNatureSTCG": 0,
@@ -1154,177 +900,99 @@
      "PassThrIncNatureSTCGAppRate": 0,
      "TotalAmtNotTaxUsDTAAStcg": 0,
      "TotalAmtTaxUsDTAAStcg": 0,
-     "TotalSTCG": -258720
+     "TotalSTCG": 0
     },
     "LongTermCapGain23": {
      "SaleofLandBuild": {
       "SaleofLandBuildDtls": [
        {
-        "DateofPurchase": "2000-04-01",
-        "DateofSale": "2021-07-17",
-        "FullConsideration": 74205000,
-        "PropertyValuation": 74205000,
-        "FullConsideration50C": 74205000,
-        "AquisitCost": 2633760,
-        "AquisitCostIndex": 8349019,
-        "ImproveCost": 1789799,
-        "CostOfImprovements": {
-         "CostOfImprovementsDtls": [
-          {
-           "slno": 1,
-           "ImproveCost": 1699462,
-           "ImproveDate": "2020-21",
-           "CostOfImpIndex": 1789799
-          }
-         ]
-        },
-        "ExpOnTrans": 32500,
-        "TotalDedn": 10171318,
-        "Balance": 64033682,
-        "ExemptionOrDednUs54": {
-         "ExemptionOrDednUs54Dtls": [
-          {
-           "ExemptionSecCode": "54F",
-           "ExemptionAmount": 16139820
-          },
-          {
-           "ExemptionSecCode": "54F",
-           "ExemptionAmount": 12536810
-          }
-         ],
-         "ExemptionGrandTotal": 28676630
-        },
-        "CapgainonAssets": 35357052,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 17",
-           "PANofBuyer": "AAAFZ1005A",
-           "AaadhaarOfBuyer": "000000000000",
-           "PercentageShare": 100,
-           "Amount": 74205000,
-           "AddressOfProperty": "SAMPLE PLACE 17",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "PinCode": 380054
-          }
-         ]
-        }
-       },
-       {
         "DateofPurchase": "2001-04-01",
-        "DateofSale": "2021-07-17",
-        "FullConsideration": 51270000,
-        "PropertyValuation": 51270000,
-        "FullConsideration50C": 51270000,
-        "AquisitCost": 2633760,
-        "AquisitCostIndex": 8349019,
-        "ImproveCost": 0,
-        "ExpOnTrans": 4673000,
-        "TotalDedn": 13022019,
-        "Balance": 38247981,
-        "ExemptionOrDednUs54": {
-         "ExemptionOrDednUs54Dtls": [
-          {
-           "ExemptionSecCode": "54F",
-           "ExemptionAmount": 5055900
-          }
-         ],
-         "ExemptionGrandTotal": 5055900
-        },
-        "CapgainonAssets": 33192081,
-        "TrnsfImmblPrprty": {
-         "TrnsfImmblPrprtyDtls": [
-          {
-           "NameOfBuyer": "SAMPLE NAME 17",
-           "PANofBuyer": "AAAFZ1005A",
-           "AaadhaarOfBuyer": "000000000000",
-           "PercentageShare": 100,
-           "Amount": 51270000,
-           "AddressOfProperty": "SAMPLE PLACE 18",
-           "StateCode": "11",
-           "CountryCode": "91",
-           "PinCode": 380058
-          }
-         ]
-        }
-       },
-       {
-        "DateofPurchase": "2001-04-01",
-        "DateofSale": "2021-08-18",
-        "FullConsideration": 78700000,
-        "PropertyValuation": 78700000,
-        "FullConsideration50C": 78700000,
-        "AquisitCost": 5923480,
-        "AquisitCostIndex": 18777432,
+        "DateofSale": "2023-07-28",
+        "FullConsideration": 11875000,
+        "PropertyValuation": 11875000,
+        "FullConsideration50C": 11875000,
+        "AquisitCost": 291550,
+        "AquisitCostIndex": 1014594,
         "ImproveCost": 0,
         "ExpOnTrans": 0,
-        "TotalDedn": 18777432,
-        "Balance": 59922568,
+        "TotalDedn": 1014594,
+        "Balance": 10860406,
         "ExemptionOrDednUs54": {
          "ExemptionOrDednUs54Dtls": [
           {
-           "ExemptionSecCode": "54EC",
-           "ExemptionAmount": 5000000
+           "ExemptionSecCode": "54B",
+           "ExemptionAmount": 4275000
           },
           {
-           "ExemptionSecCode": "54F",
-           "ExemptionAmount": 51977324
+           "ExemptionSecCode": "54B",
+           "ExemptionAmount": 1060625
+          },
+          {
+           "ExemptionSecCode": "54B",
+           "ExemptionAmount": 5524781
           }
          ],
-         "ExemptionGrandTotal": 56977324
+         "ExemptionGrandTotal": 10860406
         },
-        "CapgainonAssets": 2945244,
+        "CapgainonAssets": 0,
         "TrnsfImmblPrprty": {
          "TrnsfImmblPrprtyDtls": [
           {
-           "NameOfBuyer": "SAMPLE NAME 18",
-           "PANofBuyer": "AAAFZ1002A",
+           "NameOfBuyer": "SAMPLE NAME 8",
+           "PANofBuyer": "AAAPZ1000A",
            "AaadhaarOfBuyer": "000000000000",
            "PercentageShare": 100,
-           "Amount": 78700000,
-           "AddressOfProperty": "SAMPLE PLACE 19",
+           "Amount": 11875000,
+           "AddressOfProperty": "SAMPLE PLACE 6",
            "StateCode": "11",
            "CountryCode": "91",
-           "PinCode": 380058
+           "PinCode": 382210
           }
          ]
         }
        },
        {
         "DateofPurchase": "2001-04-01",
-        "DateofSale": "2021-07-17",
-        "FullConsideration": 29475000,
-        "PropertyValuation": 29475000,
-        "FullConsideration50C": 29475000,
-        "AquisitCost": 2230760,
-        "AquisitCostIndex": 7071509,
+        "DateofSale": "2023-07-28",
+        "FullConsideration": 11775000,
+        "PropertyValuation": 11775000,
+        "FullConsideration50C": 11775000,
+        "AquisitCost": 303800,
+        "AquisitCostIndex": 1057224,
         "ImproveCost": 0,
         "ExpOnTrans": 0,
-        "TotalDedn": 7071509,
-        "Balance": 22403491,
+        "TotalDedn": 1057224,
+        "Balance": 10717776,
         "ExemptionOrDednUs54": {
          "ExemptionOrDednUs54Dtls": [
           {
-           "ExemptionSecCode": "54F",
-           "ExemptionAmount": 6000000
+           "ExemptionSecCode": "54B",
+           "ExemptionAmount": 3475219
+          },
+          {
+           "ExemptionSecCode": "54B",
+           "ExemptionAmount": 3125000
+          },
+          {
+           "ExemptionSecCode": "54B",
+           "ExemptionAmount": 4117557
           }
          ],
-         "ExemptionGrandTotal": 6000000
+         "ExemptionGrandTotal": 10717776
         },
-        "CapgainonAssets": 16403491,
+        "CapgainonAssets": 0,
         "TrnsfImmblPrprty": {
          "TrnsfImmblPrprtyDtls": [
           {
-           "NameOfBuyer": "SAMPLE NAME 19",
-           "PANofBuyer": "AAAFZ1003A",
+           "NameOfBuyer": "SAMPLE NAME 9",
+           "PANofBuyer": "AAAPZ1001A",
            "AaadhaarOfBuyer": "000000000000",
            "PercentageShare": 100,
-           "Amount": 29475000,
-           "AddressOfProperty": "SAMPLE PLACE 20",
+           "Amount": 11775000,
+           "AddressOfProperty": "SAMPLE PLACE 7",
            "StateCode": "11",
            "CountryCode": "91",
-           "PinCode": 380058
+           "PinCode": 382210
           }
          ]
         }
@@ -1486,7 +1154,7 @@
      "UnutilizedCg": {
       "UnutilizedCgPrvYrDtls": [
        {
-        "PrvYrInWhichAsstTrnsfrd": "2019-20",
+        "PrvYrInWhichAsstTrnsfrd": "2021-22",
         "SectionClmd": "54B",
         "AmtUtilized": 0,
         "AmtUnutilized": 0
@@ -1501,62 +1169,62 @@
      "PassThrIncNatureLTCG20Per": 0,
      "TotalAmtNotTaxUsDTAALtcg": 0,
      "TotalAmtTaxUsDTAALtcg": 0,
-     "TotalLTCG": 87897868
+     "TotalLTCG": 0
     },
-    "TotScheduleCGFor23": 87639148,
+    "SumOfCGIncm": 0,
+    "IncmFromVDATrnsf": 0,
+    "TotScheduleCGFor23": 0,
     "DeducClaimInfo": {
-     "DeducClaimDtlsUs54EC": [
+     "DeducClaimDtlsUs54B": [
       {
-       "DateofTransfer": "2022-03-31",
-       "AmtInvested": 5000000,
-       "DateofInvestment": "2022-03-31",
-       "AmtDeducted": 5000000
+       "DateofTransfer": "2023-07-28",
+       "CostofNewAgriLand": 17100000,
+       "DateofPurchase": "2023-04-07",
+       "AmtDeposited": 0,
+       "AmtDeducted": 4275000
+      },
+      {
+       "DateofTransfer": "2023-07-28",
+       "CostofNewAgriLand": 4242500,
+       "DateofPurchase": "2023-08-05",
+       "AmtDeposited": 0,
+       "AmtDeducted": 1060625
+      },
+      {
+       "DateofTransfer": "2023-07-28",
+       "CostofNewAgriLand": 36000000,
+       "DateofPurchase": "2023-08-08",
+       "AmtDeposited": 0,
+       "AmtDeducted": 5524781
+      },
+      {
+       "DateofTransfer": "2023-07-28",
+       "CostofNewAgriLand": 36000000,
+       "DateofPurchase": "2023-08-08",
+       "AmtDeposited": 0,
+       "AmtDeducted": 3475219
+      },
+      {
+       "DateofTransfer": "2023-07-28",
+       "CostofNewAgriLand": 12500000,
+       "DateofPurchase": "2023-09-27",
+       "AmtDeposited": 0,
+       "AmtDeducted": 3125000
+      },
+      {
+       "DateofTransfer": "2023-07-28",
+       "CostofNewAgriLand": 0,
+       "AmtDeposited": 0,
+       "AmtDeducted": 4117557
       }
      ],
-     "DeducClaimDtlsUs54F": [
-      {
-       "DateofTransfer": "2021-10-06",
-       "CostofNewResHouse": 16139820,
-       "DateofPurchase": "2021-10-06",
-       "AmtDeposited": 16139820,
-       "AmtDeducted": 16139820
-      },
-      {
-       "DateofTransfer": "2022-03-28",
-       "CostofNewResHouse": 12536810,
-       "DateofPurchase": "2022-03-28",
-       "AmtDeposited": 12536810,
-       "AmtDeducted": 12536810
-      },
-      {
-       "DateofTransfer": "2022-03-25",
-       "CostofNewResHouse": 5055900,
-       "DateofPurchase": "2022-03-25",
-       "AmtDeposited": 5055900,
-       "AmtDeducted": 5055900
-      },
-      {
-       "DateofTransfer": "2022-03-28",
-       "CostofNewResHouse": 51977324,
-       "DateofPurchase": "2022-03-28",
-       "AmtDeposited": 51977324,
-       "AmtDeducted": 51977324
-      },
-      {
-       "DateofTransfer": "2022-02-21",
-       "CostofNewResHouse": 6000000,
-       "DateofPurchase": "2022-02-21",
-       "AmtDeposited": 6000000,
-       "AmtDeducted": 6000000
-      }
-     ],
-     "TotDeductClaim": 96709854
+     "TotDeductClaim": 21578182
     },
     "CurrYrLosses": {
      "InLossSetOff": {
       "StclSetoff15Per": 0,
       "StclSetoff30Per": 0,
-      "StclSetoffAppRate": 258720,
+      "StclSetoffAppRate": 0,
       "StclSetoffDTAARate": 0,
       "LtclSetOff10Per": 0,
       "LtclSetOff20Per": 0,
@@ -1601,14 +1269,14 @@
       "CurrYrCapGain": 0
      },
      "InLtcg20Per": {
-      "CurrYearIncome": 87897868,
+      "CurrYearIncome": 0,
       "StclSetoff15Per": 0,
       "StclSetoff30Per": 0,
-      "StclSetoffAppRate": 258720,
+      "StclSetoffAppRate": 0,
       "StclSetoffDTAARate": 0,
       "LtclSetOff10Per": 0,
       "LtclSetOffDTAARate": 0,
-      "CurrYrCapGain": 87639148
+      "CurrYrCapGain": 0
      },
      "InLtcgDTAARate": {
       "CurrYearIncome": 0,
@@ -1623,7 +1291,7 @@
      "TotLossSetOff": {
       "StclSetoff15Per": 0,
       "StclSetoff30Per": 0,
-      "StclSetoffAppRate": 258720,
+      "StclSetoffAppRate": 0,
       "StclSetoffDTAARate": 0,
       "LtclSetOff10Per": 0,
       "LtclSetOff20Per": 0,
@@ -1688,7 +1356,7 @@
      "LongTermUnder20Per": {
       "DateRange": {
        "Upto15Of6": 0,
-       "Upto15Of9": 87639148,
+       "Upto15Of9": 0,
        "Up16Of9To15Of12": 0,
        "Up16Of12To15Of3": 0,
        "Up16Of3To31Of3": 0
@@ -1702,25 +1370,34 @@
        "Up16Of12To15Of3": 0,
        "Up16Of3To31Of3": 0
       }
+     },
+     "VDATrnsfGainsUnder30Per": {
+      "DateRange": {
+       "Upto15Of6": 0,
+       "Upto15Of9": 0,
+       "Up16Of9To15Of12": 0,
+       "Up16Of12To15Of3": 0,
+       "Up16Of3To31Of3": 0
+      }
      }
     }
    },
    "ScheduleOS": {
     "IncOthThanOwnRaceHorse": {
-     "GrossIncChrgblTaxAtAppRate": 420007,
+     "GrossIncChrgblTaxAtAppRate": 172519,
      "DividendGross": 0,
      "DividendOthThan22e": 0,
      "Dividend22e": 0,
-     "InterestGross": 420007,
-     "IntrstFrmSavingBank": 266583,
-     "IntrstFrmTermDeposit": 0,
+     "InterestGross": 172519,
+     "IntrstFrmSavingBank": 168045,
+     "IntrstFrmTermDeposit": 4474,
      "IntrstFrmIncmTaxRefund": 0,
      "NatofPassThrghIncome": 0,
      "IntrstSec10XIFirstProviso": 0,
      "IntrstSec10XISecondProviso": 0,
      "IntrstSec10XIIFirstProviso": 0,
      "IntrstSec10XIISecondProviso": 0,
-     "IntrstFrmOthers": 153424,
+     "IntrstFrmOthers": 0,
      "RentFromMachPlantBldgs": 0,
      "Tot562x": 0,
      "Aggrtvaluewithoutcons562x": 0,
@@ -1731,9 +1408,11 @@
      "FamilyPension": 0,
      "IncomeNotified89AOS": 0,
      "IncomeNotifiedOther89AOS": 0,
+     "IncomeNotifiedPrYr89AOS": 0,
      "AnyOtherIncome": 0,
      "IncChargeableSpecialRates": 0,
      "LtryPzzlChrgblUs115BB": 0,
+     "IncChrgblUs115BBJ": 0,
      "IncChrgblUs115BBE": 0,
      "CashCreditsUs68": 0,
      "UnExplndInvstmntsUs69": 0,
@@ -1758,9 +1437,9 @@
      "AmtNotDeductibleUs58": 0,
      "ProfitChargTaxUs59": 0,
      "Increliefus89AOS": 0,
-     "BalanceNoRaceHorse": 420007
+     "BalanceNoRaceHorse": 172519
     },
-    "TotOthSrcNoRaceHorse": 420007,
+    "TotOthSrcNoRaceHorse": 172519,
     "IncFromOwnHorse": {
      "Receipts": 0,
      "DeductSec57": 0,
@@ -1768,7 +1447,7 @@
      "ProfitChargTaxUs59": 0,
      "BalanceOwnRaceHorse": 0
     },
-    "IncChargeable": 420007,
+    "IncChargeable": 172519,
     "DividendIncUs115BBDA": {
      "DateRange": {
       "Upto15Of6": 0,
@@ -1782,6 +1461,24 @@
      "DateRange": {
       "Upto15Of6": 0,
       "Up16Of6To15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "IncFrmOnGames": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Upto15Of9": 0,
+      "Up16Of9To15Of12": 0,
+      "Up16Of12To15Of3": 0,
+      "Up16Of3To31Of3": 0
+     }
+    },
+    "DividendIncUs115A1aA": {
+     "DateRange": {
+      "Upto15Of6": 0,
+      "Upto15Of9": 0,
       "Up16Of9To15Of12": 0,
       "Up16Of12To15Of3": 0,
       "Up16Of3To31Of3": 0
@@ -1861,10 +1558,10 @@
     },
     "BusProfExclSpecProf": {
      "IncCYLA": {
-      "IncOfCurYrUnderThatHead": 186660,
+      "IncOfCurYrUnderThatHead": 703262,
       "HPlossCurYrSetoff": 0,
       "OthSrcLossNoRaceHorseSetoff": 0,
-      "IncOfCurYrAfterSetOff": 186660
+      "IncOfCurYrAfterSetOff": 703262
      }
     },
     "SpeculativeInc": {
@@ -1930,11 +1627,11 @@
     },
     "LTCG20Per": {
      "IncCYLA": {
-      "IncOfCurYrUnderThatHead": 87639148,
+      "IncOfCurYrUnderThatHead": 0,
       "HPlossCurYrSetoff": 0,
       "BusLossSetoff": 0,
       "OthSrcLossNoRaceHorseSetoff": 0,
-      "IncOfCurYrAfterSetOff": 87639148
+      "IncOfCurYrAfterSetOff": 0
      }
     },
     "LTCGDTAARate": {
@@ -1948,10 +1645,10 @@
     },
     "OthSrcExclRaceHorse": {
      "IncCYLA": {
-      "IncOfCurYrUnderThatHead": 420007,
+      "IncOfCurYrUnderThatHead": 172519,
       "HPlossCurYrSetoff": 0,
       "BusLossSetoff": 0,
-      "IncOfCurYrAfterSetOff": 420007
+      "IncOfCurYrAfterSetOff": 172519
      }
     },
     "OthSrcRaceHorse": {
@@ -1996,11 +1693,11 @@
     },
     "BusProfExclSpecProf": {
      "IncBFLA": {
-      "IncOfCurYrUndHeadFromCYLA": 186660,
+      "IncOfCurYrUndHeadFromCYLA": 703262,
       "BFlossPrevYrUndSameHeadSetoff": 0,
       "BFUnabsorbedDeprSetoff": 0,
       "BFAllUs35Cl4Setoff": 0,
-      "IncOfCurYrAfterSetOffBFLosses": 186660
+      "IncOfCurYrAfterSetOffBFLosses": 703262
      }
     },
     "SpeculativeInc": {
@@ -2068,11 +1765,11 @@
     },
     "LTCG20Per": {
      "IncBFLA": {
-      "IncOfCurYrUndHeadFromCYLA": 87639148,
+      "IncOfCurYrUndHeadFromCYLA": 0,
       "BFlossPrevYrUndSameHeadSetoff": 0,
       "BFUnabsorbedDeprSetoff": 0,
       "BFAllUs35Cl4Setoff": 0,
-      "IncOfCurYrAfterSetOffBFLosses": 87639148
+      "IncOfCurYrAfterSetOffBFLosses": 0
      }
     },
     "LTCGDTAARate": {
@@ -2086,10 +1783,10 @@
     },
     "OthSrcExclRaceHorse": {
      "IncBFLA": {
-      "IncOfCurYrUndHeadFromCYLA": 420007,
+      "IncOfCurYrUndHeadFromCYLA": 172519,
       "BFUnabsorbedDeprSetoff": 0,
       "BFAllUs35Cl4Setoff": 0,
-      "IncOfCurYrAfterSetOffBFLosses": 420007
+      "IncOfCurYrAfterSetOffBFLosses": 172519
      }
     },
     "OthSrcRaceHorse": {
@@ -2106,7 +1803,7 @@
      "TotUnabsorbedDeprSetoff": 0,
      "TotAllUs35cl4Setoff": 0
     },
-    "IncomeOfCurrYrAftCYLABFLA": 88245815
+    "IncomeOfCurrYrAftCYLABFLA": 875781
    },
    "ScheduleCFL": {
     "TotalOfBFLossesEarlierYrs": {
@@ -2114,6 +1811,7 @@
       "TotalHPPTILossCF": 0,
       "BusLossOthThanSpecLossCF": 0,
       "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
       "TotalSTCGPTILossCF": 0,
       "TotalLTCGPTILossCF": 0,
       "OthSrcLossRaceHorseCF": 0
@@ -2124,6 +1822,7 @@
       "TotalHPPTILossCF": 0,
       "BusLossOthThanSpecLossCF": 0,
       "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
       "TotalSTCGPTILossCF": 0,
       "TotalLTCGPTILossCF": 0,
       "OthSrcLossRaceHorseCF": 0
@@ -2134,6 +1833,7 @@
       "TotalHPPTILossCF": 0,
       "BusLossOthThanSpecLossCF": 0,
       "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
       "TotalSTCGPTILossCF": 0,
       "TotalLTCGPTILossCF": 0,
       "OthSrcLossRaceHorseCF": 0
@@ -2144,6 +1844,7 @@
       "TotalHPPTILossCF": 0,
       "BusLossOthThanSpecLossCF": 0,
       "LossFrmSpecBusCF": 0,
+      "LossFrmSpecifiedBusCF": 0,
       "TotalSTCGPTILossCF": 0,
       "TotalLTCGPTILossCF": 0,
       "OthSrcLossRaceHorseCF": 0
@@ -2151,7 +1852,7 @@
     }
    },
    "ITR3ScheduleUD": {
-    "CurrAssYr": "2022-23",
+    "CurrAssYr": "2024-25",
     "CurBalCFNY": 0,
     "CurAllowBalCFNY": 0,
     "TotBFUDepritAmt": 0,
@@ -2162,142 +1863,10 @@
     "TotCurYrAllowSetoffInc": 0,
     "TotalBalCFNY": 0
    },
-   "Schedule80G": {
-    "Don50PercentApprReqd": {
-     "DoneeWithPan": [
-      {
-       "DoneeWithPanName": "SAMPLE NAME 20",
-       "DoneePAN": "AAATZ1001A",
-       "AddressDetail": {
-        "AddrDetail": "SAMPLE PLACE 21",
-        "CityOrTownOrDistrict": "SAMPLE PLACE 1",
-        "StateCode": "11",
-        "PinCode": 380052
-       },
-       "DonationAmtCash": 0,
-       "DonationAmtOtherMode": 450000,
-       "DonationAmt": 450000,
-       "EligibleDonationAmt": 21576
-      }
-     ],
-     "TotDon50PercentApprReqdCash": 0,
-     "TotDon50PercentApprReqdOtherMode": 450000,
-     "TotDon50PercentApprReqd": 450000,
-     "TotEligibleDon50PercentApprReqd": 21576
-    },
-    "TotalDonationsUs80GCash": 0,
-    "TotalDonationsUs80GOtherMode": 450000,
-    "TotalDonationsUs80G": 450000,
-    "TotalEligibleDonationsUs80G": 21576
-   },
-   "Schedule80D": {
-    "Sec80DSelfFamSrCtznHealth": {
-     "SeniorCitizenFlag": "N",
-     "SelfAndFamily": 15141,
-     "HealthInsPremSlfFam": 15141,
-     "PrevHlthChckUpSlfFam": 0,
-     "SelfAndFamilySeniorCitizen": 0,
-     "HlthInsPremSlfFamSrCtzn": 0,
-     "PrevHlthChckUpSlfFamSrCtzn": 0,
-     "MedicalExpSlfFamSrCtzn": 0,
-     "ParentsSeniorCitizenFlag": "P",
-     "Parents": 0,
-     "HlthInsPremParents": 0,
-     "PrevHlthChckUpParents": 0,
-     "ParentsSeniorCitizen": 0,
-     "HlthInsPremParentsSrCtzn": 0,
-     "PrevHlthChckUpParentsSrCtzn": 0,
-     "MedicalExpParentsSrCtzn": 0,
-     "EligibleAmountOfDedn": 15141
-    }
-   },
-   "ScheduleVIA": {
-    "UsrDeductUndChapVIA": {
-     "Section80C": 167850,
-     "Section80CCC": 0,
-     "Section80CCDEmployeeOrSE": 0,
-     "Section80CCD1B": 0,
-     "Section80CCDEmployer": 0,
-     "Section80D": 15141,
-     "Section80DD": 0,
-     "Section80DDB": 0,
-     "Section80E": 0,
-     "Section80EE": 0,
-     "Section80EEA": 0,
-     "Section80EEB": 0,
-     "Section80G": 21576,
-     "Section80GG": 0,
-     "Section80GGA": 0,
-     "Section80GGC": 0,
-     "TotPartBchapterVIA": 204567,
-     "Section80IA": 0,
-     "Section80IAB": 0,
-     "Section80IB": 0,
-     "Section80IBA": 0,
-     "Section80IC": 0,
-     "Section80JJA": 0,
-     "Section80JJAA": 0,
-     "Section80QQB": 0,
-     "Section80RRB": 0,
-     "TotPartCchapterVIA": 0,
-     "Section80TTA": 266583,
-     "Section80TTB": 0,
-     "Section80U": 0,
-     "TotPartCAandDchapterVIA": 266583,
-     "TotalChapVIADeductions": 471150
-    },
-    "DeductUndChapVIA": {
-     "Section80C": 150000,
-     "Section80CCC": 0,
-     "Section80CCDEmployeeOrSE": 0,
-     "Section80CCD1B": 0,
-     "Section80CCDEmployer": 0,
-     "Section80D": 15141,
-     "Section80DD": 0,
-     "Section80DDB": 0,
-     "Section80E": 0,
-     "Section80EE": 0,
-     "Section80EEA": 0,
-     "Section80EEB": 0,
-     "Section80G": 21576,
-     "Section80GG": 0,
-     "Section80GGA": 0,
-     "Section80GGC": 0,
-     "TotPartBchapterVIA": 186717,
-     "Section80IA": 0,
-     "Section80IAB": 0,
-     "Section80IB": 0,
-     "Section80IBA": 0,
-     "Section80IC": 0,
-     "Section80JJA": 0,
-     "Section80JJAA": 0,
-     "Section80QQB": 0,
-     "Section80RRB": 0,
-     "TotPartCchapterVIA": 0,
-     "Section80TTA": 10000,
-     "Section80TTB": 0,
-     "Section80U": 0,
-     "TotPartCAandDchapterVIA": 10000,
-     "TotalChapVIADeductions": 196717
-    }
-   },
-   "ScheduleAMT": {
-    "TotalIncItem11": 88049100,
-    "AdjustmentSec115JC": {
-     "DeductClaimSec6A": 0,
-     "DeductClaimSec10AA": 0,
-     "DeductClaimSec35AD": 0,
-     "Total": 0
-    },
-    "AdjustedUnderSec115JC": 88049100,
-    "AdjustedUnderSec115JCIFSC": 0,
-    "AdjustedUnderSec115JCOther": 88049100,
-    "TaxPayableUnderSec115JC": 0
-   },
    "ScheduleAMTC": {
     "TaxSection115JC": 0,
-    "TaxOthProvisions": 24985047,
-    "AmtTaxCreditAvailable": 24985047,
+    "TaxOthProvisions": 44281,
+    "AmtTaxCreditAvailable": 44281,
     "ScheduleAMTCDtls": [
      {
       "AssYr": "2013-14",
@@ -2370,9 +1939,25 @@
       "AmtCreditBalBroughtFwd": 0,
       "AmtCreditUtilized": 0,
       "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2022-23",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
+     },
+     {
+      "AssYr": "2023-24",
+      "AmtCreditFwd": 0,
+      "AmtCreditSetOfEy": 0,
+      "AmtCreditBalBroughtFwd": 0,
+      "AmtCreditUtilized": 0,
+      "BalAmtCreditCarryFwd": 0
      }
     ],
-    "CurrAssYr": "2022-23",
+    "CurrAssYr": "2024-25",
     "CurrYrAmtCreditFwd": 0,
     "CurrYrCreditCarryFwd": 0,
     "TotAMTGross": 0,
@@ -2400,8 +1985,8 @@
      {
       "SecCode": "21",
       "SplRatePercent": 20,
-      "SplRateInc": 87639148,
-      "SplRateIncTax": 17527830
+      "SplRateInc": 0,
+      "SplRateIncTax": 0
      },
      {
       "SecCode": "22",
@@ -2462,46 +2047,16 @@
       "SplRatePercent": 1,
       "SplRateInc": 0,
       "SplRateIncTax": 0
-     }
-    ],
-    "TotSplRateInc": 87639148,
-    "TotSplRateIncTax": 17527830
-   },
-   "ScheduleIF": {
-    "PartnerFirmDetails": [
+     },
      {
-      "FirmName": "SAMPLE NAME 4",
-      "FirmPAN": "AAAFZ1000A",
-      "IsLiableToAudit": "Y",
-      "Sec92EFirmFlag": "N",
-      "ProfitSharePercent": 50,
-      "ProfitShareAmt": 43012,
-      "FirmCapBalOn31Mar": 1338919
+      "SecCode": "5BBJ",
+      "SplRatePercent": 30,
+      "SplRateInc": 0,
+      "SplRateIncTax": 0
      }
     ],
-    "TotalProfitShareAmt": 43012,
-    "TotalFirmCapBalOn31Mar": 1338919
-   },
-   "ScheduleEI": {
-    "InterestInc": 90163,
-    "GrossAgriRecpt": 0,
-    "ExpIncAgri": 0,
-    "UnabAgriLossPrev8": 0,
-    "AgriIncRule7and8": 0,
-    "NetAgriIncOrOthrIncRule7": 0,
-    "OthersInc": {
-     "OthersIncDtls": [
-      {
-       "NatureDesc": "OTH",
-       "OthNatOfInc": "SAMPLE NAME 21",
-       "OthAmount": 43012
-      }
-     ]
-    },
-    "Others": 43012,
-    "IncChrgblAsPerDTAA": 0,
-    "PassThrIncNotChrgblTax": 0,
-    "TotalExemptInc": 133175
+    "TotSplRateInc": 0,
+    "TotSplRateIncTax": 0
    },
    "ScheduleTPSA": {
     "AmtPrimaryAdjUs92CE_2A": 0,
@@ -2531,11 +2086,11 @@
     "Salaries": 0,
     "IncomeFromHP": 0,
     "ProfBusGain": {
-     "ProfGainNoSpecBus": 186660,
+     "ProfGainNoSpecBus": 703262,
      "ProfGainSpecBus": 0,
      "ProfGainSpecifiedBus": 0,
      "ProfIncome115BBF": 0,
-     "TotProfBusGain": 186660
+     "TotProfBusGain": 703262
     },
     "CapGain": {
      "ShortTerm": {
@@ -2547,36 +2102,38 @@
      },
      "LongTerm": {
       "LongTerm10Per": 0,
-      "LongTerm20Per": 87639148,
+      "LongTerm20Per": 0,
       "LongTermSplRateDTAA": 0,
-      "TotalLongTerm": 87639148
+      "TotalLongTerm": 0
      },
-     "TotalCapGains": 87639148
+     "ShortTermLongTermTotal": 0,
+     "CapGains30Per115BBH": 0,
+     "TotalCapGains": 0
     },
     "IncFromOS": {
-     "OtherSrcThanOwnRaceHorse": 420007,
+     "OtherSrcThanOwnRaceHorse": 172519,
      "IncChargblSplRate": 0,
      "FromOwnRaceHorse": 0,
-     "TotIncFromOS": 420007
+     "TotIncFromOS": 172519
     },
-    "TotalTI": 88245815,
+    "TotalTI": 875781,
     "CurrentYearLoss": 0,
-    "BalanceAfterSetoffLosses": 88245815,
+    "BalanceAfterSetoffLosses": 875781,
     "BroughtFwdLossesSetoff": 0,
-    "GrossTotalIncome": 88245815,
-    "IncChargeTaxSplRate111A112": 87639148,
+    "GrossTotalIncome": 875781,
+    "IncChargeTaxSplRate111A112": 0,
     "DeductionsUndSchVIADtl": {
-     "PartBchapterVIA": 196717,
+     "PartBchapterVIA": 0,
      "PartCchapterVIA": 0,
-     "TotDeductUndSchVIA": 196717
+     "TotDeductUndSchVIA": 0
     },
     "DeductionsUnder10Aor10AA": 0,
-    "TotalIncome": 88049100,
-    "IncChargeableTaxSplRates": 87639148,
+    "TotalIncome": 875780,
+    "IncChargeableTaxSplRates": 0,
     "NetAgricultureIncomeOrOtherIncomeForRate": 0,
-    "AggregateIncome": 409952,
+    "AggregateIncome": 875780,
     "LossesOfCurrentYearCarriedFwd": 0,
-    "DeemedIncomeUs115JC": 88049100
+    "DeemedIncomeUs115JC": 0
    },
    "PartB_TTI": {
     "ComputationOfTaxLiability": {
@@ -2587,132 +2144,111 @@
       "TotalTax": 0
      },
      "TaxPayableOnTI": {
-      "TaxAtNormalRatesOnAggrInc": 7998,
-      "TaxAtSpecialRates": 17527830,
+      "TaxAtNormalRatesOnAggrInc": 42578,
+      "TaxAtSpecialRates": 0,
       "RebateOnAgriInc": 0,
-      "TaxPayableOnTotInc": 17535828,
+      "TaxPayableOnTotInc": 42578,
       "Rebate87A": 0,
-      "TaxPayableOnRebate": 17535828,
+      "TaxPayableOnRebate": 42578,
       "Surcharge25ofSI": 0,
       "Surcharge25ofSIBeforeMarginal": 0,
       "SurchargeOnAboveCroreBeforeMarginal": 0,
-      "SurchargeOnAboveCrore": 6488256,
-      "TotalSurcharge": 6488256,
-      "EducationCess": 960963,
-      "GrossTaxLiability": 24985047
+      "SurchargeOnAboveCrore": 0,
+      "TotalSurcharge": 0,
+      "EducationCess": 1703,
+      "GrossTaxLiability": 44281
      },
-     "GrossTaxPayable": 24985047,
+     "GrossTaxPayable": 44281,
      "GrossTaxPay": {
-      "TaxInc17": 24985047,
+      "TaxInc17": 44281,
       "TaxDeferred17": 0,
       "TaxDeferredPayableCY": 0
      },
      "CreditUS115JD": 0,
-     "TaxPayAfterCreditUs115JD": 24985047,
+     "TaxPayAfterCreditUs115JD": 44281,
      "TaxRelief": {
       "Section89": 0,
       "Section90": 0,
       "Section91": 0,
       "TotTaxRelief": 0
      },
-     "NetTaxLiability": 24985047,
+     "NetTaxLiability": 44281,
      "IntrstPay": {
-      "IntrstPayUs234A": 418710,
-      "IntrstPayUs234B": 1884195,
-      "IntrstPayUs234C": 1078030,
-      "LateFilingFee234F": 5000,
-      "TotalIntrstPay": 3385935
+      "IntrstPayUs234A": 0,
+      "IntrstPayUs234B": 0,
+      "IntrstPayUs234C": 0,
+      "LateFilingFee234F": 0,
+      "TotalIntrstPay": 0
      },
-     "AggregateTaxInterestLiability": 28370982
+     "AggregateTaxInterestLiability": 44281
     },
     "TaxPaid": {
      "TaxesPaid": {
-      "AdvanceTax": 2500000,
-      "TDS": 1549500,
-      "TCS": 0,
-      "SelfAssessmentTax": 24321480,
-      "TotalTaxesPaid": 28370980
+      "AdvanceTax": 0,
+      "TDS": 117750,
+      "TCS": 2717,
+      "SelfAssessmentTax": 0,
+      "TotalTaxesPaid": 120467
      },
      "BalTaxPayable": 0
     },
     "Refund": {
-     "RefundDue": 0,
+     "RefundDue": 76190,
      "BankAccountDtls": {
       "BankDtlsFlag": "Y",
       "AddtnlBankDetails": [
        {
         "IFSCCode": "XXXX0000000",
-        "BankName": "SAMPLE NAME 22",
-        "BankAccountNo": "00000000000",
-        "UseForRefund": "true"
+        "BankName": "SAMPLE NAME 10",
+        "BankAccountNo": "000000000000000",
+        "AccountType": "SB"
        }
       ]
      }
     },
     "AssetOutIndiaFlag": "NO"
    },
-   "ScheduleIT": {
-    "TaxPayment": [
-     {
-      "BSRCode": "0000000",
-      "DateDep": "2022-03-25",
-      "SrlNoOfChaln": 999,
-      "Amt": 2500000
-     },
-     {
-      "BSRCode": "0000000",
-      "DateDep": "2022-12-31",
-      "SrlNoOfChaln": 9999,
-      "Amt": 24321480
-     }
-    ],
-    "TotalTaxPayments": 26821480
-   },
    "ScheduleTDS3": {
     "TDS3onOthThanSalDtls": [
      {
       "TDSCreditName": "S",
-      "PANOfBuyerTenant": "AAAFZ1003A",
+      "PANOfBuyerTenant": "AAAPZ1001A",
       "TaxDeductCreditDtls": {
-       "TaxDeductedOwnHands": 294750,
-       "TaxClaimedOwnHands": 294750
+       "TaxDeductedOwnHands": 117750,
+       "TaxClaimedOwnHands": 117750
       },
-      "GrossAmount": 29475000,
-      "HeadOfIncome": "CG",
-      "AmtCarriedFwd": 0
-     },
-     {
-      "TDSCreditName": "S",
-      "PANOfBuyerTenant": "AAAFZ1005A",
-      "TaxDeductCreditDtls": {
-       "TaxDeductedOwnHands": 512700,
-       "TaxClaimedOwnHands": 512700
-      },
-      "GrossAmount": 51270000,
-      "HeadOfIncome": "CG",
-      "AmtCarriedFwd": 0
-     },
-     {
-      "TDSCreditName": "S",
-      "PANOfBuyerTenant": "AAAFZ1005A",
-      "TaxDeductCreditDtls": {
-       "TaxDeductedOwnHands": 742050,
-       "TaxClaimedOwnHands": 742050
-      },
-      "GrossAmount": 74205000,
+      "GrossAmount": 11775000,
       "HeadOfIncome": "CG",
       "AmtCarriedFwd": 0
      }
     ],
-    "TotalTDS3OnOthThanSal": 1549500
+    "TotalTDS3OnOthThanSal": 117750
+   },
+   "ScheduleTCS": {
+    "TCS": [
+     {
+      "TCSCreditOwner": "1",
+      "EmployerOrDeductorOrCollectTAN": "AAAA00000A",
+      "TCSCurrFYDtls": {
+       "TCSAmtCollOwnHand": 2717
+      },
+      "TCSClaimedThisYearDtls": {
+       "TCSAmtCollOwnHand": 2717
+      },
+      "AmtCarriedFwd": 0
+     }
+    ],
+    "TotalSchTCS": 2717
    },
    "Verification": {
     "Declaration": {
-     "AssesseeVerName": "SAMPLE NAME 23",
-     "FatherName": "SAMPLE NAME 24",
-     "AssesseeVerPAN": "AAAPZ1007A"
+     "AssesseeVerName": "SAMPLE NAME 11",
+     "FatherName": "SAMPLE NAME 12",
+     "AssesseeVerPAN": "AAAPZ1002A"
     },
-    "Capacity": "S"
+    "Capacity": "S",
+    "Date": "2024-07-26",
+    "Place": "SAMPLE PLACE 1"
    }
   }
  }

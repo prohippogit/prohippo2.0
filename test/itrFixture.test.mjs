@@ -134,6 +134,24 @@ test("a second contact is scrubbed too, whoever it belongs to", () => {
   assert.ok(!values.join("\n").includes("someone.else@gmail.com"));
 });
 
+test("a contact number is scrubbed whether the portal sent it as a number or a string", () => {
+  /* `PhoneNo` was catalogued, and catalogued as a NUMBER. On the ITR-3 that
+     brought this to light the portal had put the landline in as the string
+     "9825045098" — so the numeric rule never ran, the string rules had nothing
+     for the key, and a real number went through into a fixture headed for a
+     public repository. A field is personal data in whatever type it arrives in.
+
+     (One had already got through: the A.Y. 2022-23 land-and-building fixture
+     carried an eight-digit landline as a string. It is scrubbed now, and this is
+     the test that stops the next one.) */
+  const withPhone = JSON.parse(JSON.stringify(RETURN));
+  withPhone.ITR.ITR3.PartA_GEN1.PersonalInfo.Address.Phone = { STDcode: 79, PhoneNo: "27561992" };
+  const { clean, values } = anonymise(withPhone);
+  const phone = clean.ITR.ITR3.PartA_GEN1.PersonalInfo.Address.Phone;
+  assert.equal(phone.PhoneNo, "99999999", "same shape, none of it theirs");
+  assert.ok(!values.join("\n").includes("27561992"));
+});
+
 test("an Aadhaar is scrubbed however the department spells the field", () => {
   /* A catalogue of exact names missed `AaadhaarOfBuyer` — three a's, ITD's own
      typo — which is where a property sale records the BUYER's Aadhaar. Four

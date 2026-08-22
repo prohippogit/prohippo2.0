@@ -106,104 +106,136 @@
      }
     },
     {
-     "kind": "sub",
-     "label": "Full value of consideration — property 1",
-     "amount": 1400000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 1509575
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 2",
-     "amount": 318000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 318100
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 3",
-     "amount": 1050000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 1059400
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 4",
-     "amount": 1202000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 1200598
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 5",
-     "amount": 1136000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 1114104
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 6",
-     "amount": 4650000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 4641948
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 7",
-     "amount": 661000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 660531
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 8",
-     "amount": 725000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 723997
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 9",
-     "amount": 718000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 716994
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 10",
-     "amount": 4077000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Cost of acquisition",
-     "amount": 4250473
+     "kind": "matrix",
+     "label": "Sale of land or building — short term",
+     "amount": null,
+     "columns": [
+      {
+       "label": "Date of sale"
+      },
+      {
+       "label": "Full value of consideration"
+      },
+      {
+       "label": "Deductions u/s 48",
+       "note": "cost, improvement, transfer expenses"
+      },
+      {
+       "label": "Short-term capital gain"
+      }
+     ],
+     "lines": [
+      {
+       "label": "Property 1",
+       "cells": [
+        "28 Oct 2021",
+        1400000,
+        1509575,
+        -109575
+       ],
+       "note": "Acquired 11 Jun 2021 · SAMPLE PLACE 5 · Sold to SAMPLE NAME 5, SAMPLE NAME 6, SAMPLE NAME 7, SAMPLE NAME 8, SAMPLE NAME 9"
+      },
+      {
+       "label": "Property 2",
+       "cells": [
+        "31 Oct 2021",
+        318000,
+        318100,
+        -100
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 7 · Sold to SAMPLE NAME 10"
+      },
+      {
+       "label": "Property 3",
+       "cells": [
+        "31 Dec 2021",
+        1050000,
+        1059400,
+        -9400
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 8 · Sold to SAMPLE NAME 10"
+      },
+      {
+       "label": "Property 4",
+       "cells": [
+        "31 Dec 2021",
+        1202000,
+        1200598,
+        1402
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 9 · Sold to SAMPLE NAME 11"
+      },
+      {
+       "label": "Property 5",
+       "cells": [
+        "07 Jan 2022",
+        1136000,
+        1114104,
+        21896
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 10 · Sold to SAMPLE NAME 12"
+      },
+      {
+       "label": "Property 6",
+       "cells": [
+        "31 Dec 2021",
+        4650000,
+        4641948,
+        8052
+       ],
+       "note": "Acquired 11 Aug 2021 · SAMPLE PLACE 11 · Sold to SAMPLE NAME 13"
+      },
+      {
+       "label": "Property 7",
+       "cells": [
+        "16 Feb 2022",
+        661000,
+        660531,
+        469
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 12 · Sold to SAMPLE NAME 14"
+      },
+      {
+       "label": "Property 8",
+       "cells": [
+        "16 Feb 2022",
+        725000,
+        723997,
+        1003
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 13 · Sold to SAMPLE NAME 15"
+      },
+      {
+       "label": "Property 9",
+       "cells": [
+        "31 Dec 2021",
+        718000,
+        716994,
+        1006
+       ],
+       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 14 · Sold to SAMPLE NAME 13, SAMPLE NAME 14"
+      },
+      {
+       "label": "Property 10",
+       "cells": [
+        "31 Dec 2021",
+        4077000,
+        4250473,
+        -173473
+       ],
+       "note": "Acquired 27 Jul 2021 · SAMPLE PLACE 15 · Sold to SAMPLE NAME 13, SAMPLE NAME 14, SAMPLE NAME 16"
+      },
+      {
+       "label": "Total",
+       "cells": [
+        null,
+        15937000,
+        16195720,
+        -258720
+       ],
+       "kind": "total"
+      }
+     ]
     },
     {
      "kind": "subtotal",
@@ -220,89 +252,186 @@
      }
     },
     {
-     "kind": "sub",
-     "label": "Full value of consideration — property 1",
-     "amount": 74205000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of acquisition",
-     "amount": 8349019,
-     "note": "Cost 26,33,760, indexed"
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of improvement",
-     "amount": 1789799,
-     "note": "Improvement of 16,99,462 in 2020-21, indexed"
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Expenditure on transfer",
-     "amount": 32500
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Exemption u/s 54F",
-     "amount": 28676630,
-     "ref": "Sec. 54F",
-     "note": "2 claims: 1,61,39,820 + 1,25,36,810"
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 2",
-     "amount": 51270000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of acquisition",
-     "amount": 8349019,
-     "note": "Cost 26,33,760, indexed"
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Expenditure on transfer",
-     "amount": 4673000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Exemption u/s 54F",
-     "amount": 5055900,
-     "ref": "Sec. 54F"
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 3",
-     "amount": 78700000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of acquisition",
-     "amount": 18777432,
-     "note": "Cost 59,23,480, indexed"
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Exemption claimed against the gain",
-     "amount": 56977324,
-     "note": "Under s.54EC 50,00,000, s.54F 5,19,77,324"
-    },
-    {
-     "kind": "sub",
-     "label": "Full value of consideration — property 4",
-     "amount": 29475000
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Indexed cost of acquisition",
-     "amount": 7071509,
-     "note": "Cost 22,30,760, indexed"
-    },
-    {
-     "kind": "sub",
-     "label": "Less: Exemption u/s 54F",
-     "amount": 6000000,
-     "ref": "Sec. 54F"
+     "kind": "matrix",
+     "label": "Sale of land or building — long term",
+     "amount": null,
+     "columns": [
+      {
+       "label": "Property 1",
+       "note": "17 Jul 2021"
+      },
+      {
+       "label": "Property 2",
+       "note": "17 Jul 2021"
+      },
+      {
+       "label": "Property 3",
+       "note": "18 Aug 2021"
+      },
+      {
+       "label": "Property 4",
+       "note": "17 Jul 2021"
+      },
+      {
+       "label": "Total"
+      }
+     ],
+     "lines": [
+      {
+       "label": "Property",
+       "cells": [
+        "SAMPLE PLACE 17",
+        "SAMPLE PLACE 18",
+        "SAMPLE PLACE 19",
+        "SAMPLE PLACE 20",
+        null
+       ]
+      },
+      {
+       "label": "Purchaser",
+       "cells": [
+        "SAMPLE NAME 17 · PAN AAAFZ1005A",
+        "SAMPLE NAME 17 · PAN AAAFZ1005A",
+        "SAMPLE NAME 18 · PAN AAAFZ1002A",
+        "SAMPLE NAME 19 · PAN AAAFZ1003A",
+        null
+       ]
+      },
+      {
+       "label": "Date of sale",
+       "cells": [
+        "17 Jul 2021",
+        "17 Jul 2021",
+        "18 Aug 2021",
+        "17 Jul 2021",
+        null
+       ]
+      },
+      {
+       "label": "Date of acquisition",
+       "cells": [
+        "01 Apr 2000",
+        "01 Apr 2001",
+        "01 Apr 2001",
+        "01 Apr 2001",
+        null
+       ]
+      },
+      {
+       "label": "Full value of consideration",
+       "cells": [
+        74205000,
+        51270000,
+        78700000,
+        29475000,
+        233650000
+       ]
+      },
+      {
+       "label": "Cost of acquisition",
+       "cells": [
+        2633760,
+        2633760,
+        5923480,
+        2230760,
+        13421760
+       ]
+      },
+      {
+       "label": "Less: Indexed cost of acquisition",
+       "cells": [
+        8349019,
+        8349019,
+        18777432,
+        7071509,
+        42546979
+       ]
+      },
+      {
+       "label": "Cost of improvement",
+       "cells": [
+        1699462,
+        null,
+        null,
+        null,
+        1699462
+       ]
+      },
+      {
+       "label": "Less: Indexed cost of improvement",
+       "cells": [
+        1789799,
+        null,
+        null,
+        null,
+        1789799
+       ],
+       "note": "Incurred in 2020-21"
+      },
+      {
+       "label": "Less: Expenditure on transfer",
+       "cells": [
+        32500,
+        4673000,
+        null,
+        null,
+        4705500
+       ]
+      },
+      {
+       "label": "Total deductions u/s 48",
+       "cells": [
+        10171318,
+        13022019,
+        18777432,
+        7071509,
+        49042278
+       ],
+       "kind": "subtotal"
+      },
+      {
+       "label": "Long-term capital gain",
+       "cells": [
+        64033682,
+        38247981,
+        59922568,
+        22403491,
+        184607722
+       ],
+       "kind": "subtotal"
+      },
+      {
+       "label": "Less: Exemption u/s 54F",
+       "cells": [
+        28676630,
+        5055900,
+        51977324,
+        6000000,
+        91709854
+       ]
+      },
+      {
+       "label": "Less: Exemption u/s 54EC",
+       "cells": [
+        null,
+        null,
+        5000000,
+        null,
+        5000000
+       ]
+      },
+      {
+       "label": "Long-term capital gain chargeable to tax",
+       "cells": [
+        35357052,
+        33192081,
+        2945244,
+        16403491,
+        87897868
+       ],
+       "kind": "total"
+      }
+     ]
     },
     {
      "kind": "subtotal",
@@ -313,6 +442,125 @@
      "kind": "total",
      "label": "Income chargeable under the head Capital Gains",
      "amount": 87639148
+    },
+    {
+     "kind": "matrix",
+     "label": "Deduction claimed u/s 54EC",
+     "amount": null,
+     "ref": "Sch. CG",
+     "note": "Particulars of the exemption u/s 54EC already deducted in the working above.",
+     "columns": [
+      {
+       "label": "Date of transfer"
+      },
+      {
+       "label": "Amount invested"
+      },
+      {
+       "label": "Date of investment"
+      },
+      {
+       "label": "Deduction claimed"
+      }
+     ],
+     "lines": [
+      {
+       "label": "Claim 1",
+       "cells": [
+        "31 Mar 2022",
+        5000000,
+        "31 Mar 2022",
+        5000000
+       ]
+      }
+     ]
+    },
+    {
+     "kind": "matrix",
+     "label": "Deduction claimed u/s 54F",
+     "amount": null,
+     "ref": "Sch. CG",
+     "note": "Particulars of the exemption u/s 54F already deducted in the working above.",
+     "columns": [
+      {
+       "label": "Date of transfer"
+      },
+      {
+       "label": "Cost of new residential house"
+      },
+      {
+       "label": "Date of purchase / construction"
+      },
+      {
+       "label": "Deposited in the CGAS"
+      },
+      {
+       "label": "Deduction claimed"
+      }
+     ],
+     "lines": [
+      {
+       "label": "Claim 1",
+       "cells": [
+        "06 Oct 2021",
+        16139820,
+        "06 Oct 2021",
+        16139820,
+        16139820
+       ]
+      },
+      {
+       "label": "Claim 2",
+       "cells": [
+        "28 Mar 2022",
+        12536810,
+        "28 Mar 2022",
+        12536810,
+        12536810
+       ]
+      },
+      {
+       "label": "Claim 3",
+       "cells": [
+        "25 Mar 2022",
+        5055900,
+        "25 Mar 2022",
+        5055900,
+        5055900
+       ]
+      },
+      {
+       "label": "Claim 4",
+       "cells": [
+        "28 Mar 2022",
+        51977324,
+        "28 Mar 2022",
+        51977324,
+        51977324
+       ]
+      },
+      {
+       "label": "Claim 5",
+       "cells": [
+        "21 Feb 2022",
+        6000000,
+        "21 Feb 2022",
+        6000000,
+        6000000
+       ]
+      },
+      {
+       "label": "Total",
+       "cells": [
+        null,
+        null,
+        null,
+        null,
+        91709854
+       ],
+       "kind": "total"
+      }
+     ]
     }
    ],
    "footnote": "",

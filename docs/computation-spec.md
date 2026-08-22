@@ -118,6 +118,7 @@ src/computation/
   render/
     styles.js          design tokens (§6)
     template.js        HTML string builder
+    matrix.js          the schedule block — a `matrix` row (§3)
 functions/
   computation.js       headless Chromium → PDF (§13)
 ```
@@ -241,7 +242,7 @@ export interface Section {
 }
 
 export interface Row {
-  kind:    'head' | 'sub' | 'subtotal' | 'total' | 'columnHeader';
+  kind:    'head' | 'sub' | 'subtotal' | 'total' | 'columnHeader' | 'matrix';
   label:   string;             // statutory language — see §5
   note?:   string;             // small grey second line
   ref?:    string;             // 'Sch. BP', 'Sec. 57', 'Part A-P&L'
@@ -251,6 +252,19 @@ export interface Row {
   // `cols` marks a row whose middle column is data, not a source reference.
   // `cols.amt` captions the amount column, which a column header cannot do
   // through `amount` — that is a figure and renders as one (0 is an em dash).
+
+  // kind 'matrix' only — a schedule with its own columns. See below.
+  columns?: MatrixColumn[];
+  lines?:   MatrixLine[];
+}
+
+export interface MatrixColumn { label: string; note?: string; }
+export interface MatrixLine {
+  label:   string;
+  note?:   string;
+  kind?:   'sub' | 'subtotal' | 'total';   // default 'sub'
+  isLoss?: boolean;
+  cells:   (number | string | null)[];     // positional against `columns`
 }
 
 export interface RefundBlock {
@@ -285,6 +299,46 @@ The mapper states the shape, the renderer decides what the shape looks like, and
 neither knows which *form* it is looking at — which is the rule §2 exists to
 keep. It is the same move §2 prescribes for rows: when the document needs a new
 kind of thing, the model gains a kind, not the renderer a branch.
+
+### `kind: 'matrix'` — a schedule inside a working
+
+A working states one figure per line and reads **down** the page. Most heads are
+that shape.
+
+A property sale is not. The reader is comparing one asset against another — this
+consideration against that one, this indexed cost against that one, this
+exemption against that one — and a working interleaves them into a ribbon of
+"property 1 / property 2 / property 1" that cannot be read across. An assessee
+who sold two plots and claimed six deductions under s.54B against them got
+twenty-odd rows in no discernible order, and the dates, the buyers and the
+reinvestment particulars were not printed at all.
+
+So a `matrix` row carries **its own columns and its own lines**, and the section
+renders as: the rows before it, the schedule, the rows after it. A cell is one of
+three things, and the three stay different for the same reason `amount` is
+three-valued:
+
+| cell        | prints                                          |
+|-------------|-------------------------------------------------|
+| `number`    | an amount, Indian-grouped; `0` is an em dash      |
+| `string`    | as given — a date, a buyer's name, a PAN          |
+| `null`      | nothing at all; the cell is structurally blank    |
+
+`lines[].kind` uses the same vocabulary as a row's, and a `subtotal` or `total`
+line is banded exactly as a subtotal or total row is.
+
+**Which way round is the mapper's decision, not the renderer's.** Up to four
+properties read best side by side: a column each, a line per figure. Ten do not —
+eleven columns of eight-digit figures does not fit across A4 at any font a person
+would sign — so past four the schedule turns: a line per property, the figures as
+columns, and the particulars that identify each one under its label. Both are the
+same `matrix`; only the mapper differs.
+
+`finalise()` counts a matrix's **numeric cells** when deciding whether a
+head-specific section is empty. A matrix declares `amount: null` — all its
+figures are in cells — so reading `amount` alone would drop a capital gains
+section holding a two-crore property schedule. A matrix carrying only dates and
+names has no figure in it and does not keep a head alive.
 
 ### Why `amount: number | null`
 
@@ -469,6 +523,20 @@ blocked document, and it is written per working:
 `test/computation/itr3-landbuilding-54f.test.mjs` walks every property sale in
 the fixture set and requires each to net to the gain the return states for it.
 When another working gains this class of fault, add its walk there too.
+
+There is a second thing they cannot see, and it is worse: **a head that is not
+printed at all ties perfectly.** Check 8 compares a section's closing total to
+its row in `TI`, and a section that does not exist is not compared to anything.
+An assessee sold two plots for 2.36 crore, reinvested the whole gain under s.54B
+and had a chargeable capital gain of nil — the head was gated on `TotalLTCG`,
+which was 0, so nothing about the sale was printed and all eight checks passed
+over a computation that was silent about the largest transaction in the return.
+
+The rule that follows: **a head is shown when there was a TRANSACTION, not when
+there is a taxable figure.** Build the working first and ask what it produced; do
+not gate it on a total the return states after the exemptions. The 26 figures
+that went to "items requiring review" instead were the only visible symptom, and
+§8 is the reason there was any symptom at all.
 
 On ITR-1, checks 1 and 2 read the same figure: the form has no total-of-heads
 field distinct from gross total income, because it allows no set-off between the
@@ -891,12 +959,37 @@ Recorded so nobody has to rediscover them.
   regime. Verified on the both-`"N"` case the same way §10 requires everywhere
   else: 2,09,250 on an aggregate of 20,37,001 is the s.115BAC(1A) table for
   A.Y. 2026-27 and nothing else — the old-regime slabs give 4,21,100.
+- Schedule CG's `DeducClaimInfo` names its fields per SECTION. See the note on
+  the deduction-claim block below.
 - Schedule CG moved the "other assets" block again. See the note on
   `SaleofAssetNA` below; the mapper discovers the shape rather than reading a
   path.
 - `TotAfterAddToPLDeprOthSpecInc` is left nil on a return whose adjusted profit
   is 16,65,434. A nil subtotal there is a field the utility did not fill, not a
   nil profit, so it is not printed.
+
+**`DeducClaimInfo` — the substance behind a s.54 exemption, named per section**
+
+Schedule CG states each s.54 claim twice: once as a figure coming off a
+particular property's gain (`ExemptionOrDednUs54Dtls[]`), and once in
+`DeducClaimInfo` with what was actually done — the date of the transfer, what was
+bought with the proceeds, when, and how much went into a Capital Gains Account
+Scheme deposit instead. The second is what an officer asks about.
+
+The field names differ by section, because the sections buy different things:
+
+| block                     | the new asset          | dates                              |
+|---------------------------|------------------------|------------------------------------|
+| `DeducClaimDtlsUs54B`     | `CostofNewAgriLand`    | `DateofTransfer`, `DateofPurchase` |
+| `DeducClaimDtlsUs54F`     | `CostofNewResHouse`    | `DateofTransfer`, `DateofPurchase` |
+| `DeducClaimDtlsUs54EC`    | `AmtInvested`          | `DateofTransfer`, `DateofInvestment` |
+
+So the columns are read from the DATA, not from a list in the mapper: any
+`DeducClaimDtlsUs<section>` key is a schedule, its columns are whatever fields
+its rows carry, and a field with no caption in the table gets a de-camel-cased
+one rather than being dropped. A fixed list would silently omit whichever section
+we had not met yet — which is the same failure mode §8 exists to prevent, in a
+place §8 cannot see because the block was being claimed as a subtree.
 
 **Schedule CG's "other assets" block moves between years**
 - A.Y. 2024-25 carries it flat as `LongTermCapGain23.SaleofAssetNA`; 2025-26
@@ -1073,6 +1166,7 @@ test/fixtures/
   itr3-books-surcharge-unqshares-ay2026-27.json // full books, surcharge over ₹1cr, s.50CA shares
   itr3-oldregime-marginal-relief-ay2022-23.json // NewTaxRegime, marginal relief, VI-A subtotals
   itr3-landbuilding-54f-ay2022-23.json          // 4 property sales, s.54F + s.54EC, indexed improvement
+  itr3-landsale-54b-ay2024-25.json              // 2 plots, gain FULLY exempt u/s 54B, 6 reinvestments
   itr3-partner-cgloss-tds3-ay2023-24.json       // capital LOSS + losses c/f, Sch. TDS3, TCS, refund
   itr3-fno-busloss-unabsdepr-ay2024-25.json     // BUSINESS LOSS, 6 years of loss c/f, Schedule UD
   itr3-fno-bfloss-setoff-ay2026-27.json         // b/f loss set off u/s 72, depreciation fully absorbed

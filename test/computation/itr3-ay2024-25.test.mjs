@@ -98,18 +98,29 @@ test("Schedule SI code 21 is long-term gain u/s 112, not short-term u/s 111A", (
 test("land and building shows the indexed cost, and says when s.50C substitutes", () => {
   const { doc } = build();
   const cg = section(doc, "CG");
-  const indexed = cg.rows.filter((r) => /Indexed cost of acquisition/.test(r.label));
-  assert.equal(indexed.length, 2, "both long-term properties");
-  assert.equal(indexed[0].amount, 50982);
-  assert.match(indexed[0].note, /Cost 29,300, indexed/);
-  assert.equal(indexed[1].amount, 327858);
+  const sched = (re) => cg.rows.find((r) => r.kind === "matrix" && re.test(r.label));
+  const cell = (m, re) => (m.lines.find((l) => re.test(l.label)) || {}).cells;
+
+  // Two long-term properties, side by side, with the raw cost above the indexed
+  // one so a reader can see what the indexation did.
+  const lt = sched(/long term$/);
+  assert.deepEqual(lt.columns.map((c) => c.label), ["Property 1", "Property 2", "Total"]);
+  assert.deepEqual(cell(lt, /^Cost of acquisition$/), [29300, 188424, 217724]);
+  assert.deepEqual(cell(lt, /^Less: Indexed cost of acquisition$/), [50982, 327858, 378840]);
 
   // The short-term property is not indexed — indexation is a long-term relief.
-  const shortTermCost = cg.rows.find((r) => r.label === "Less: Cost of acquisition" && r.amount === 900565);
-  assert.ok(shortTermCost, "the short-term land sale deducts a plain cost");
+  const st = sched(/short term$/);
+  assert.deepEqual(cell(st, /^Less: Cost of acquisition$/), [900565]);
+  assert.equal(cell(st, /Indexed/), undefined, "no indexation on a short-term gain");
 
-  // Stamp value equals consideration in this return, so no s.50C note is due.
-  assert.ok(!cg.rows.some((r) => /50C/.test(r.note || "")));
+  /* Stamp value equals consideration throughout this return, so the schedule
+     states ONE consideration line. Where s.50C actually substitutes, all three
+     figures appear instead; saying it where it did not happen is as wrong as
+     staying quiet where it did. */
+  for (const m of [lt, st]) {
+    assert.ok(m.lines.some((l) => l.label === "Full value of consideration"));
+    assert.ok(!m.lines.some((l) => /50C|Stamp-duty/.test(l.label)));
+  }
 });
 
 /* ---------------- the business head ---------------- */

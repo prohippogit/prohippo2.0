@@ -14,6 +14,7 @@
  * below is where it lands.
  */
 import { amountText, inWords, longDate, esc, inr } from "../format.js";
+import { renderMatrix } from "./matrix.js";
 import { stylesheet } from "./styles.js";
 
 /** The render function replaces this with the base64 @font-face rules. */
@@ -61,11 +62,30 @@ function renderSection(s) {
      not a radius on the table — a table with collapsed borders cannot round its
      own corners in Chromium, so the frame clips them instead. */
   const ledger = s.layout === "table";
-  const table = `<table class="rows${ledger ? " grid" : ""}">${s.rows.map(renderRow).join("\n")}</table>`;
+  const wrap = (rows) => {
+    const table = `<table class="rows${ledger ? " grid" : ""}">${rows.map(renderRow).join("\n")}</table>`;
+    return ledger ? `<div class="grid-frame">${table}</div>` : table;
+  };
+
+  /* A schedule interrupts the working rather than joining it.
+   *
+   * A matrix has its own columns, so it cannot be a `<tr>` in the section's
+   * three-column table. The rows either side of it still can — and still
+   * should: a capital gains section reads "here is the head, here is the
+   * property schedule, here is what it totals to". So the rows are emitted in
+   * order, in as many tables as it takes, with each matrix standing between
+   * them. */
+  const blocks = [];
+  let run = [];
+  const flush = () => { if (run.length) { blocks.push(wrap(run)); run = []; } };
+  for (const r of s.rows) {
+    if (r.kind === "matrix") { flush(); blocks.push(renderMatrix(r)); } else run.push(r);
+  }
+  flush();
 
   return `<div class="card">
   <div class="pill ${s.tone === "gold" ? "gold" : s.tone === "slate" ? "slate" : ""}">${esc(s.letter)} · ${esc(s.title)}</div>
-  ${ledger ? `<div class="grid-frame">${table}</div>` : table}
+  ${blocks.join("\n")}
   ${footnote ? `<div class="footnote">${esc(footnote)}</div>` : ""}
 </div>`;
 }

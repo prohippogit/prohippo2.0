@@ -181,63 +181,45 @@
      "amount": null,
      "columns": [
       {
-       "label": "Amount"
+       "label": "Sold",
+       "note": "date of transfer"
+      },
+      {
+       "label": "Acquired",
+       "note": "date of purchase"
+      },
+      {
+       "label": "Full value",
+       "note": "of consideration"
+      },
+      {
+       "label": "Cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Deductions",
+       "note": "u/s 48"
+      },
+      {
+       "label": "Capital gain",
+       "note": "short-term"
       }
      ],
      "lines": [
       {
-       "label": "Property",
-       "cells": [
-        "SAMPLE PLACE 8"
-       ]
+       "label": "Property 1 · SAMPLE PLACE 8",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 11 · 46%; SAMPLE NAME 12 · 33%; SAMPLE NAME 13 · 16%; SAMPLE NAME 14 · 5%"
       },
       {
-       "label": "Purchaser",
+       "label": "1",
        "cells": [
-        "SAMPLE NAME 11 · 46%; SAMPLE NAME 12 · 33%; SAMPLE NAME 13 · 16%; SAMPLE NAME 14 · 5%"
-       ]
-      },
-      {
-       "label": "Date of sale",
-       "cells": [
-        "18 Sep 2023"
-       ]
-      },
-      {
-       "label": "Date of acquisition",
-       "cells": [
-        "13 Sep 2022"
-       ]
-      },
-      {
-       "label": "Full value of consideration",
-       "cells": [
-        1652400
-       ]
-      },
-      {
-       "label": "Less: Cost of acquisition",
-       "cells": [
-        900565
-       ]
-      },
-      {
-       "label": "Total deductions u/s 48",
-       "cells": [
-        900565
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Short-term capital gain",
-       "cells": [
-        751835
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Short-term capital gain chargeable to tax",
-       "cells": [
+        "18 Sep 2023",
+        "13 Sep 2022",
+        1652400,
+        900565,
+        900565,
         751835
        ],
        "kind": "total"
@@ -283,97 +265,80 @@
      "amount": null,
      "columns": [
       {
-       "label": "Property 1",
-       "note": "13 Jun 2023"
+       "label": "Sold",
+       "note": "date of transfer"
       },
       {
-       "label": "Property 2",
-       "note": "13 Apr 2023"
+       "label": "Acquired",
+       "note": "date of purchase"
       },
       {
-       "label": "Total"
+       "label": "Full value",
+       "note": "of consideration"
+      },
+      {
+       "label": "Cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Indexed cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Deductions",
+       "note": "u/s 48"
+      },
+      {
+       "label": "Capital gain",
+       "note": "long-term"
       }
      ],
      "lines": [
       {
-       "label": "Property",
-       "cells": [
-        "SAMPLE PLACE 9",
-        "SAMPLE PLACE 10",
-        null
-       ]
+       "label": "Property 1 · SAMPLE PLACE 9",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 15 · PAN AAAPZ1006A · 30%; SAMPLE NAME 16 · PAN AAAPZ1007A · 30%; SAMPLE NAME 17 · PAN AAAPZ1008A · 10%; SAMPLE NAME 18 · PAN AAAPZ1009A · 20%; SAMPLE NAME 19 · PAN AAAPZ1010A · 10%"
       },
       {
-       "label": "Purchaser",
-       "cells": [
-        "SAMPLE NAME 15 · PAN AAAPZ1006A · 30%; SAMPLE NAME 16 · PAN AAAPZ1007A · 30%; SAMPLE NAME 17 · PAN AAAPZ1008A · 10%; SAMPLE NAME 18 · PAN AAAPZ1009A · 20%; SAMPLE NAME 19 · PAN AAAPZ1010A · 10%",
-        "SAMPLE NAME 20 · PAN AAATZ1003A",
-        null
-       ]
-      },
-      {
-       "label": "Date of sale",
+       "label": "1",
        "cells": [
         "13 Jun 2023",
-        "13 Apr 2023",
-        null
-       ]
-      },
-      {
-       "label": "Date of acquisition",
-       "cells": [
         "25 Sep 2012",
-        "25 Sep 2012",
-        null
-       ]
-      },
-      {
-       "label": "Full value of consideration",
-       "cells": [
         174900,
-        560000,
-        734900
-       ]
-      },
-      {
-       "label": "Cost of acquisition",
-       "cells": [
         29300,
+        50982,
+        50982,
+        123918
+       ]
+      },
+      {
+       "label": "Property 2 · SAMPLE PLACE 10",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 20 · PAN AAATZ1003A"
+      },
+      {
+       "label": "2",
+       "cells": [
+        "13 Apr 2023",
+        "25 Sep 2012",
+        560000,
         188424,
-        217724
+        327858,
+        327858,
+        232142
        ]
       },
       {
-       "label": "Less: Indexed cost of acquisition",
+       "label": "Total",
        "cells": [
-        50982,
-        327858,
-        378840
-       ]
-      },
-      {
-       "label": "Total deductions u/s 48",
-       "cells": [
-        50982,
-        327858,
-        378840
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Long-term capital gain",
-       "cells": [
-        123918,
-        232142,
-        356060
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Long-term capital gain chargeable to tax",
-       "cells": [
-        123918,
-        232142,
+        null,
+        null,
+        734900,
+        217724,
+        378840,
+        378840,
         356060
        ],
        "kind": "total"

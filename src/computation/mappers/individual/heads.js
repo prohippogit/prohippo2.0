@@ -353,151 +353,135 @@ function landAndBuildingSchedule(src, base, indexed, rows) {
   if (!props.length) return 0;
 
   const caption = indexed ? "Sale of land or building — long term" : "Sale of land or building — short term";
-  const gainWord = indexed ? "Long-term capital gain" : "Short-term capital gain";
-  const particulars = (p) => [
-    p.buyDate ? `Acquired ${shortDate(p.buyDate)}` : "",
-    p.address,
-    p.buyers.length ? `Sold to ${p.buyers.map((b) => b.name).filter(Boolean).join(", ")}` : "",
-  ].filter(Boolean).join(" · ") || undefined;
-
-  /* s.50C only bites when the stamp-duty value is the higher figure. Where it
-     does, all three figures are stated — what was received, what the stamp
-     authority valued, and which of them the return adopted — because the
-     substitution is the single most contested number in a property sale. Where
-     it does not, one line says the same thing without implying an addition. */
   const substituted = props.some((p) => p.stamp > p.consideration);
   const codes = [...new Set(props.flatMap((p) => p.claims.map((c) => c.code)).filter(Boolean))];
   const claimed = (p, code) => p.claims.filter((c) => c.code === code).reduce((a, c) => a + c.amount, 0) || null;
   // A claim the return did not attribute to a section still comes off the gain,
   // and the grand total is what it actually deducted. Never silently dropped.
   const unattributed = props.some((p) => p.exempt !== p.claims.reduce((a, c) => a + c.amount, 0));
+
+  /* WHICH WAY ROUND THE SCHEDULE GOES: A LINE PER PROPERTY.
+   *
+   * It was a column per property first, and that is the shape a practitioner
+   * draws by hand for two or three — but only for the figures. A property sale
+   * carries two long strings as well, the address and the buyers, and in a
+   * narrow per-property column "307 SARTHIK SQ BODAKDEV ABAD" sets four lines
+   * and three joint buyers with their PANs and shares set fourteen. The
+   * particulars are the part a reader identifies the row BY, and they were the
+   * worst-served part of the page.
+   *
+   * Turned, they get a column each and the width to be read: one line per
+   * property, the address and the buyers on the left, the figures across. It
+   * also scales, which the other way round did not — ten small plots sold in one
+   * year is eleven columns of eight-digit figures, which does not fit across A4
+   * at any font a person would sign.
+   *
+   * Nothing is dropped in the turn. Every figure the return states for a
+   * property still has a column: the raw cost beside the indexed one, the
+   * improvement beside its indexation, each section's exemption named
+   * separately. A column appears when at least one property has something to put
+   * in it, and not otherwise.
+   *
+   * The captions lose their "Less:" here, deliberately. Down a column the prefix
+   * is what tells a reader the figure is being taken off; across a heading it is
+   * noise, and the layout already says it. */
+  const col = (label, pick, opts = {}) => (props.some((p) => {
+    const v = pick(p);
+    return v !== null && v !== undefined && v !== "";
+  }) ? { label, pick, ...opts } : null);
+
+  const improveIndexed = props.some((p) => p.improveRaw && p.improveRaw !== p.improveShown);
   const anyExempt = props.some((p) => p.exempt);
 
-  /* WHICH WAY ROUND THE SCHEDULE GOES.
-   *
-   * Two or three properties read best side by side: a column each, a line per
-   * figure, and the eye compares this indexed cost against that one. That is the
-   * shape a practitioner draws by hand.
-   *
-   * Ten do not. A column per property is eleven columns of eight-digit figures,
-   * which does not fit across A4 at any font a person would sign — and the
-   * fixture that proved it is real: ten small plots sold in one year at a net
-   * loss of 2,58,720. Past four, the schedule turns: a row per property, and the
-   * columns become the figures. The particulars that were their own lines — the
-   * address, the buyer, the date of acquisition — move under the row label,
-   * because they are what identifies the row rather than what is being compared
-   * across it. */
-  if (props.length > 4) {
-    const cols = [
-      { label: "Date of sale", pick: (p) => (p.saleDate ? shortDate(p.saleDate) : null) },
-      substituted ? { label: "Consideration", pick: (p) => p.consideration } : null,
-      substituted ? { label: "Stamp-duty value", note: "u/s 50C", pick: (p) => p.stamp || null } : null,
-      { label: substituted ? "Adopted u/s 50C" : "Full value of consideration", pick: (p) => p.adopted || p.consideration },
-      { label: "Deductions u/s 48", note: indexed ? "indexed cost, improvement, transfer expenses" : "cost, improvement, transfer expenses", pick: (p) => p.deductions || null },
-      { label: gainWord, pick: (p) => p.balance },
-      /* The exemption and what survives it, only where something was claimed.
-         With no exemption the gain IS the chargeable figure, and a second column
-         repeating it to the rupee teaches the reader that the columns do not
-         each mean something. */
-      anyExempt ? { label: "Less: Exemption", note: codes.length ? `u/s ${codes.join(", ")}` : undefined, pick: (p) => p.exempt || null } : null,
-      anyExempt ? { label: "Chargeable", pick: (p) => p.gain } : null,
-    ].filter(Boolean);
+  /* A HEADING IS TWO LINES, and the second one is where the long word goes.
+     Across eleven columns the widest WORD in a heading sets the column, not the
+     widest figure under it: "consideration" is 78px of a 670px page and the
+     amount beneath it needs 60. So each heading is a short caption with its
+     qualifier under it — "Full value / of consideration", "Indexed cost / of
+     acquisition" — which says the same thing in the same words and gives the
+     page back a column's worth of room. */
+  const cols = [
+    col("Sold", (p) => (p.saleDate ? shortDate(p.saleDate) : null), { note: "date of transfer" }),
+    col("Acquired", (p) => (p.buyDate ? shortDate(p.buyDate) : null), { note: "date of purchase" }),
+    /* s.50C only bites when the stamp-duty value is the higher figure. Where it
+       does, all three figures are stated — what was received, what the stamp
+       authority valued, and which of them the return adopted — because the
+       substitution is the single most contested number in a property sale. Where
+       it does not, one column says the same thing without implying an addition. */
+    substituted ? col("Received", (p) => p.consideration, { note: "consideration" }) : null,
+    substituted ? col("Stamp-duty", (p) => p.stamp || null, { note: "value u/s 50C" }) : null,
+    substituted
+      ? col("Adopted", (p) => p.adopted || p.consideration, { note: "u/s 50C" })
+      : col("Full value", (p) => p.adopted || p.consideration, { note: "of consideration" }),
+    col("Cost", (p) => p.cost || null, { note: "of acquisition" }),
+    indexed ? col("Indexed cost", (p) => p.costIndexed || null, { note: "of acquisition" }) : null,
+    improveIndexed ? col("Improvement", (p) => p.improveRaw || null, { note: "cost incurred" }) : null,
+    // Indexed if the return says so — either by carrying the indexed field, or
+    // by the itemised block indexing to the figure the deduction total used.
+    col(improveIndexed ? "Indexed" : "Improvement", (p) => p.improveShown || null, {
+      note: [improveIndexed ? "cost of improvement" : "cost",
+        props.some((p) => p.improvements.some((d) => d.when))
+          ? `incurred ${[...new Set(props.flatMap((p) => p.improvements.map((d) => d.when)).filter(Boolean))].join(", ")}`
+          : ""].filter(Boolean).join(", "),
+    }),
+    col("Transfer", (p) => p.expense || null, { note: "expenditure" }),
+    col("Deductions", (p) => p.deductions || null, { note: "u/s 48" }),
+    // The gain before any exemption. "Capital gain" with the term under it,
+    // rather than "Long-term capital gain" across the heading: the qualifier is
+    // the same on every line of the schedule and the caption is not the place
+    // for a word that never varies within it.
+    col("Capital gain", (p) => p.balance, { note: indexed ? "long-term" : "short-term" }),
+    /* THE EXEMPTIONS, which were not printed at all until a return arrived
+       claiming 9,67,09,854 of them across four properties. Their absence did not
+       break the head total — that comes from the return's own field — so the page
+       stated a subtotal 9.67 crore below what its own rows added to, and said
+       nothing about the claims that are the most examined figures in any
+       property sale. A column per section claimed; where a section is claimed
+       more than once against one property the parts are in the deductions
+       schedule below, with the dates and the new asset each was bought against. */
+    ...codes.map((code) => col("Exemption", (p) => claimed(p, code), { note: `u/s ${code}` })),
+    // A claim the return did not attribute to a section still comes off the
+    // gain, and the grand total is what it actually deducted. Never dropped.
+    unattributed ? col("Exemption", (p) => p.exempt || null, { note: "claimed" }) : null,
+    /* What survives the exemption, only where one was claimed. With none the
+       gain IS the chargeable figure, and a second column repeating it to the
+       rupee teaches a reader that the columns do not each mean something. */
+    anyExempt ? col("Chargeable", (p) => p.gain, { note: "gain" }) : null,
+  ].filter(Boolean);
 
-    const lines = props.map((p, i) => matrixLine(`Property ${i + 1}`, cols.map((c) => c.pick(p)), { note: particulars(p) }));
+  /* Each property is a banner naming it, then its figures. The banner is where
+     the address and the buyers go: given the width of the page they set a line
+     or two, and squeezed into a column beside eight amounts they set fourteen.
+     That squeeze is what was reported — "so that the property details and
+     purchaser details can be displayed well". */
+  const buyerText = (p) => (p.buyers.length
+    ? "Sold to " + p.buyers
+      .map((b) => [b.name, b.pan && `PAN ${b.pan}`, b.share && b.share !== 100 ? `${b.share}%` : ""].filter(Boolean).join(" · "))
+      .join("; ")
+    : "");
+  const lines = [];
+  props.forEach((p, i) => {
+    const title = [`Property ${i + 1}`, p.address].filter(Boolean).join(" · ");
+    if (p.address || p.buyers.length) lines.push(matrixLine(title, [], { span: true, note: buyerText(p) || undefined }));
+    lines.push(matrixLine(`${i + 1}`, cols.map((c) => c.pick(p))));
+  });
+  /* The total line adds figures the return itself states; it does not recompute
+     any of them (§1). The head subtotal below the schedule still comes from the
+     return's own field, so the two disagreeing would be visible on the page
+     rather than reconciled away here. */
+  if (props.length > 1) {
     lines.push(matrixLine("Total", cols.map((c) => (props.some((p) => typeof c.pick(p) === "number")
       ? props.reduce((a, p) => a + (Number(c.pick(p)) || 0), 0)
       : null)), { kind: "total" }));
-
-    // No `ref`: the column header directly above the schedule already says
-    // "Sch. CG", and a second one on the frame beneath it is furniture.
-    rows.push(matrix(caption, { columns: cols.map(({ label, note }) => ({ label, note })), lines }));
-    return propTotal(props, (p) => p.gain);
-  }
-
-  /* The columns: one per property, and a total where there is more than one to
-     add up. That total is an addition of figures the return itself states, not a
-     recomputation of any of them (§1) — and the head subtotal below the schedule
-     still comes from the return's own field, so the two disagreeing would be
-     visible on the page rather than reconciled away here. */
-  const many = props.length > 1;
-  const columns = props.map((p, i) => ({
-    label: many ? `Property ${i + 1}` : "Amount",
-    note: many && p.saleDate ? shortDate(p.saleDate) : undefined,
-  }));
-  if (many) columns.push({ label: "Total" });
-
-  const lines = [];
-  /* A line is emitted only where at least one property has something to put in
-     it: a schedule with a blank "cost of improvement" row on both columns is a
-     row of dashes asserting nothing. */
-  const line = (label, pick, opts = {}) => {
-    const cells = props.map(pick);
-    /* Absent, not nil. Every `pick` above turns a figure the return does not
-       carry into null, so this drops a line nothing has anything to say on. A
-       ZERO stays: "Long-term capital gain chargeable to tax — nil" is the whole
-       point of a schedule whose gain was reinvested, and dropping it would leave
-       a page of workings with no answer at the bottom (§3). */
-    if (!cells.some((c) => c !== null && c !== undefined && c !== "")) return;
-    /* The total is read off whether ANY property put a figure in this line, not
-       off the first one. Judging by the first left an exemption claimed only
-       against the third property with a blank total beside 50,00,000 of it. */
-    if (many) {
-      cells.push(opts.noTotal || !cells.some((c) => typeof c === "number")
-        ? null
-        : props.reduce((a, p) => a + (Number(pick(p)) || 0), 0));
-    }
-    lines.push(matrixLine(label, cells, opts));
-  };
-
-  line("Property", (p) => p.address || null);
-  line("Purchaser", (p) => (p.buyers.length
-    ? p.buyers.map((b) => [b.name, b.pan && `PAN ${b.pan}`, b.share && b.share !== 100 ? `${b.share}%` : ""].filter(Boolean).join(" · ")).join("; ")
-    : null));
-  line("Date of sale", (p) => (p.saleDate ? shortDate(p.saleDate) : null));
-  line("Date of acquisition", (p) => (p.buyDate ? shortDate(p.buyDate) : null));
-
-  if (substituted) {
-    line("Consideration received", (p) => p.consideration);
-    line("Stamp-duty value of the property", (p) => p.stamp || null);
-    line("Full value of consideration adopted u/s 50C", (p) => p.adopted || p.consideration, { kind: "subtotal" });
   } else {
-    line("Full value of consideration", (p) => p.adopted || p.consideration);
+    // One property: its own line closes the schedule, so it is the total.
+    const last = lines.length - 1;
+    lines[last] = matrixLine(lines[last].label, lines[last].cells, { kind: "total" });
   }
 
-  if (indexed && props.some((p) => p.costIndexed)) {
-    line("Cost of acquisition", (p) => p.cost || null);
-    line("Less: Indexed cost of acquisition", (p) => p.costIndexed || null);
-  } else {
-    line("Less: Cost of acquisition", (p) => p.cost || null);
-  }
-
-  // Indexed if the return says so — either by carrying the indexed field, or by
-  // the itemised block indexing to the figure the deduction total used.
-  const improveIndexed = props.some((p) => p.improveRaw && p.improveRaw !== p.improveShown);
-  if (improveIndexed) line("Cost of improvement", (p) => p.improveRaw || null);
-  line(improveIndexed ? "Less: Indexed cost of improvement" : "Less: Cost of improvement", (p) => p.improveShown || null, {
-    note: props.some((p) => p.improvements.some((d) => d.when))
-      ? `Incurred in ${[...new Set(props.flatMap((p) => p.improvements.map((d) => d.when)).filter(Boolean))].join(", ")}`
-      : undefined,
-  });
-  line("Less: Expenditure on transfer", (p) => p.expense || null);
-  line("Total deductions u/s 48", (p) => p.deductions || null, { kind: "subtotal" });
-  line(gainWord, (p) => p.balance, { kind: "subtotal" });
-
-  /* THE EXEMPTIONS, which were not printed at all until a return arrived
-     claiming 9,67,09,854 of them across four properties. Their absence did not
-     break the head total — that comes from the return's own field — so the page
-     stated a subtotal 9.67 crore below what its own rows added to, and said
-     nothing about the claims that are the most examined figures in any property
-     sale. One line per section claimed; where a section is claimed more than
-     once against one property the parts are in the deductions schedule below,
-     with the dates and the new asset each one was bought against. */
-  for (const code of codes) line(`Less: Exemption u/s ${code}`, (p) => claimed(p, code));
-  if (unattributed) line("Less: Exemption claimed against the gain", (p) => p.exempt || null);
-
-  line(`${gainWord} chargeable to tax`, (p) => p.gain, { kind: "total" });
-
-  rows.push(matrix(caption, { lines, columns }));
+  // No `ref`: the column header directly above the schedule already says
+  // "Sch. CG", and a second one on the frame beneath it is furniture.
+  rows.push(matrix(caption, { columns: cols.map(({ label, note }) => ({ label, note })), lines }));
   return propTotal(props, (p) => p.gain);
 }
 

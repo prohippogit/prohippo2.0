@@ -264,6 +264,7 @@ export interface MatrixLine {
   note?:   string;
   kind?:   'sub' | 'subtotal' | 'total';   // default 'sub'
   isLoss?: boolean;
+  span?:   boolean;                        // a banner — see below
   cells:   (number | string | null)[];     // positional against `columns`
 }
 
@@ -327,12 +328,34 @@ three-valued:
 `lines[].kind` uses the same vocabulary as a row's, and a `subtotal` or `total`
 line is banded exactly as a subtotal or total row is.
 
-**Which way round is the mapper's decision, not the renderer's.** Up to four
-properties read best side by side: a column each, a line per figure. Ten do not —
-eleven columns of eight-digit figures does not fit across A4 at any font a person
-would sign — so past four the schedule turns: a line per property, the figures as
-columns, and the particulars that identify each one under its label. Both are the
-same `matrix`; only the mapper differs.
+**A line per THING, and the figures as columns.** A property schedule is one
+line per sale: the columns are consideration, cost, indexed cost, the s.48
+deductions, the gain, a column for each section of exemption claimed, and what
+survives it. It was a column per property first, and that was wrong for the same
+reason a working was wrong — the reader was reported to want "a horizontal
+property wise data" — and it does not scale: eleven columns of eight-digit
+figures does not fit across A4 at any font a person would sign.
+
+**`span: true` makes a line a banner** — one cell across the whole schedule,
+carrying no figures. It exists because two of a property sale's particulars are
+long strings: the address, and three joint buyers with their PANs and their
+shares. In a column narrow enough for the figures to fit beside them they set
+fourteen lines apiece; given the width of the page they set one or two, and they
+are what a reader identifies the line below them by.
+
+**A heading is two lines, and the long word goes in the second.** Across a dozen
+columns the widest WORD in a heading sets the column, not the widest figure
+under it — "consideration" is 78px of a 670px page and the amount beneath it
+needs 60. So a heading is a short caption with its qualifier under it: "Full
+value / of consideration", "Indexed cost / of acquisition", "Exemption / u/s
+54B". The statutory words are all there (§5); none of them sets a column's
+width on its own.
+
+**How wide is the renderer's business.** It counts the columns it was given and
+steps the type down (`wide`, `xwide`), and past thirteen lays the schedule out
+at its natural width and scales the block to fit rather than dropping a column.
+The mapper decides WHICH columns exist; it does not know what the document is
+printed on (§2).
 
 `finalise()` counts a matrix's **numeric cells** when deciding whether a
 head-specific section is empty. A matrix declares `amount: null` — all its

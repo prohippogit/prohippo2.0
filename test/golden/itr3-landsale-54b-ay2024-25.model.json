@@ -107,105 +107,94 @@
      "amount": null,
      "columns": [
       {
-       "label": "Property 1",
-       "note": "28 Jul 2023"
+       "label": "Sold",
+       "note": "date of transfer"
       },
       {
-       "label": "Property 2",
-       "note": "28 Jul 2023"
+       "label": "Acquired",
+       "note": "date of purchase"
       },
       {
-       "label": "Total"
+       "label": "Full value",
+       "note": "of consideration"
+      },
+      {
+       "label": "Cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Indexed cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Deductions",
+       "note": "u/s 48"
+      },
+      {
+       "label": "Capital gain",
+       "note": "long-term"
+      },
+      {
+       "label": "Exemption",
+       "note": "u/s 54B"
+      },
+      {
+       "label": "Chargeable",
+       "note": "gain"
       }
      ],
      "lines": [
       {
-       "label": "Property",
-       "cells": [
-        "SAMPLE PLACE 6",
-        "SAMPLE PLACE 7",
-        null
-       ]
+       "label": "Property 1 · SAMPLE PLACE 6",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 8 · PAN AAAPZ1000A"
       },
       {
-       "label": "Purchaser",
-       "cells": [
-        "SAMPLE NAME 8 · PAN AAAPZ1000A",
-        "SAMPLE NAME 9 · PAN AAAPZ1001A",
-        null
-       ]
-      },
-      {
-       "label": "Date of sale",
+       "label": "1",
        "cells": [
         "28 Jul 2023",
-        "28 Jul 2023",
-        null
-       ]
-      },
-      {
-       "label": "Date of acquisition",
-       "cells": [
         "01 Apr 2001",
-        "01 Apr 2001",
-        null
-       ]
-      },
-      {
-       "label": "Full value of consideration",
-       "cells": [
         11875000,
-        11775000,
-        23650000
-       ]
-      },
-      {
-       "label": "Cost of acquisition",
-       "cells": [
         291550,
+        1014594,
+        1014594,
+        10860406,
+        10860406,
+        0
+       ]
+      },
+      {
+       "label": "Property 2 · SAMPLE PLACE 7",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 9 · PAN AAAPZ1001A"
+      },
+      {
+       "label": "2",
+       "cells": [
+        "28 Jul 2023",
+        "01 Apr 2001",
+        11775000,
         303800,
-        595350
-       ]
-      },
-      {
-       "label": "Less: Indexed cost of acquisition",
-       "cells": [
-        1014594,
         1057224,
-        2071818
-       ]
-      },
-      {
-       "label": "Total deductions u/s 48",
-       "cells": [
-        1014594,
         1057224,
-        2071818
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Long-term capital gain",
-       "cells": [
-        10860406,
         10717776,
-        21578182
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Less: Exemption u/s 54B",
-       "cells": [
-        10860406,
         10717776,
-        21578182
+        0
        ]
       },
       {
-       "label": "Long-term capital gain chargeable to tax",
+       "label": "Total",
        "cells": [
-        0,
-        0,
+        null,
+        null,
+        23650000,
+        595350,
+        2071818,
+        2071818,
+        21578182,
+        21578182,
         0
        ],
        "kind": "total"

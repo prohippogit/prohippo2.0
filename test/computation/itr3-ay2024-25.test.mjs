@@ -99,27 +99,30 @@ test("land and building shows the indexed cost, and says when s.50C substitutes"
   const { doc } = build();
   const cg = section(doc, "CG");
   const sched = (re) => cg.rows.find((r) => r.kind === "matrix" && re.test(r.label));
-  const cell = (m, re) => (m.lines.find((l) => re.test(l.label)) || {}).cells;
+  const at = (m, i, label) => m.lines.filter((l) => !l.span)[i].cells[m.columns.findIndex((c) => c.label === label)];
 
-  // Two long-term properties, side by side, with the raw cost above the indexed
-  // one so a reader can see what the indexation did.
+  /* Two long-term properties, a line each, with the raw cost beside the indexed
+     one so a reader can see what the indexation did. */
   const lt = sched(/long term$/);
-  assert.deepEqual(lt.columns.map((c) => c.label), ["Property 1", "Property 2", "Total"]);
-  assert.deepEqual(cell(lt, /^Cost of acquisition$/), [29300, 188424, 217724]);
-  assert.deepEqual(cell(lt, /^Less: Indexed cost of acquisition$/), [50982, 327858, 378840]);
+  assert.deepEqual(lt.columns.map((c) => c.label), [
+    "Sold", "Acquired", "Full value", "Cost", "Indexed cost", "Deductions", "Capital gain",
+  ]);
+  assert.deepEqual([0, 1].map((i) => at(lt, i, "Cost")), [29300, 188424]);
+  assert.deepEqual([0, 1].map((i) => at(lt, i, "Indexed cost")), [50982, 327858]);
+  assert.deepEqual(lt.lines.at(-1).cells, [null, null, 734900, 217724, 378840, 378840, 356060]);
 
   // The short-term property is not indexed — indexation is a long-term relief.
   const st = sched(/short term$/);
-  assert.deepEqual(cell(st, /^Less: Cost of acquisition$/), [900565]);
-  assert.equal(cell(st, /Indexed/), undefined, "no indexation on a short-term gain");
+  assert.equal(at(st, 0, "Cost"), 900565);
+  assert.ok(!st.columns.some((c) => /Indexed/.test(c.label)), "no indexation on a short-term gain");
 
   /* Stamp value equals consideration throughout this return, so the schedule
-     states ONE consideration line. Where s.50C actually substitutes, all three
-     figures appear instead; saying it where it did not happen is as wrong as
-     staying quiet where it did. */
+     states ONE consideration column. Where s.50C actually substitutes, all
+     three figures appear instead; saying it where it did not happen is as wrong
+     as staying quiet where it did. */
   for (const m of [lt, st]) {
-    assert.ok(m.lines.some((l) => l.label === "Full value of consideration"));
-    assert.ok(!m.lines.some((l) => /50C|Stamp-duty/.test(l.label)));
+    assert.ok(m.columns.some((c) => c.label === "Full value"));
+    assert.ok(!m.columns.some((c) => /50C|Stamp-duty|Adopted|Received/.test(c.label)));
   }
 });
 

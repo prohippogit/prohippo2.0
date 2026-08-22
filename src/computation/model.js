@@ -69,8 +69,16 @@ export const matrix = (label, opts = {}) => clean({
   lines: (opts.lines || []).filter(Boolean),
 });
 
-/** One line of a matrix. `cells` is positional against `columns`. */
-export const matrixLine = (label, cells, opts = {}) => clean({ label, cells, ...opts });
+/** One line of a matrix. `cells` is positional against `columns`.
+ *
+ * `span: true` makes the line a BANNER instead: one cell across the whole
+ * schedule, carrying no figures. It exists because two of a property sale's
+ * particulars are long strings — the address, and three joint buyers with their
+ * PANs and their shares — and in a column narrow enough for the figures to fit
+ * beside them they set fourteen lines apiece. Given the width of the page they
+ * set one or two, and they are what a reader identifies the line below by.
+ */
+export const matrixLine = (label, cells, opts = {}) => clean({ label, cells: cells || [], ...opts });
 
 /* A section of the computation. `letter` is assigned later — see finalise().
  *

@@ -187,69 +187,50 @@
      "amount": null,
      "columns": [
       {
-       "label": "Amount"
+       "label": "Sold",
+       "note": "date of transfer"
+      },
+      {
+       "label": "Acquired",
+       "note": "date of purchase"
+      },
+      {
+       "label": "Full value",
+       "note": "of consideration"
+      },
+      {
+       "label": "Cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Indexed cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Deductions",
+       "note": "u/s 48"
+      },
+      {
+       "label": "Capital gain",
+       "note": "long-term"
       }
      ],
      "lines": [
       {
-       "label": "Property",
-       "cells": [
-        "SAMPLE PLACE 7"
-       ]
+       "label": "Property 1 · SAMPLE PLACE 7",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 15 · PAN AAAFZ1000A"
       },
       {
-       "label": "Purchaser",
+       "label": "1",
        "cells": [
-        "SAMPLE NAME 15 · PAN AAAFZ1000A"
-       ]
-      },
-      {
-       "label": "Date of sale",
-       "cells": [
-        "04 May 2022"
-       ]
-      },
-      {
-       "label": "Date of acquisition",
-       "cells": [
-        "29 Sep 2012"
-       ]
-      },
-      {
-       "label": "Full value of consideration",
-       "cells": [
-        4590000
-       ]
-      },
-      {
-       "label": "Cost of acquisition",
-       "cells": [
-        3307536
-       ]
-      },
-      {
-       "label": "Less: Indexed cost of acquisition",
-       "cells": [
-        5473972
-       ]
-      },
-      {
-       "label": "Total deductions u/s 48",
-       "cells": [
-        5473972
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Long-term capital gain",
-       "cells": [
-        -883972
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Long-term capital gain chargeable to tax",
-       "cells": [
+        "04 May 2022",
+        "29 Sep 2012",
+        4590000,
+        3307536,
+        5473972,
+        5473972,
         -883972
        ],
        "kind": "total"

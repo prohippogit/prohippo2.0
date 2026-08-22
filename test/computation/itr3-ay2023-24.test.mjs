@@ -69,18 +69,22 @@ test("unmapped is empty", () => {
 test("a sale below indexed cost is captioned a LOSS, not a gain", () => {
   const { doc } = build();
   const cg = section(doc, "CG");
-  /* One property, so the schedule is a single column captioned "Amount" — and
-     the raw cost and the indexed cost are separate lines rather than a figure
-     with the other in a note. Both belong on the page: the indexation is what
-     turns a 45,90,000 sale of a 33,07,536 asset into a loss, and a reader who
-     cannot see the number it started from cannot check it. */
+  /* One property, so the schedule is one line — the address and the buyer on
+     the banner above it, the figures across. The raw cost and the indexed cost
+     are separate columns: the indexation is what turns a 45,90,000 sale of a
+     33,07,536 asset into a loss, and a reader who cannot see the number it
+     started from cannot check it. */
   const m = cg.rows.find((r) => r.kind === "matrix" && /land or building/.test(r.label));
-  const cell = (re) => (m.lines.find((l) => re.test(l.label)) || {}).cells;
-  assert.deepEqual(m.columns.map((c) => c.label), ["Amount"]);
-  assert.deepEqual(cell(/^Full value of consideration$/), [4590000]);
-  assert.deepEqual(cell(/^Cost of acquisition$/), [3307536]);
-  assert.deepEqual(cell(/^Less: Indexed cost of acquisition$/), [5473972]);
-  assert.deepEqual(cell(/^Long-term capital gain$/), [-883972]);
+  const at = (label) => m.lines.find((l) => !l.span).cells[m.columns.findIndex((c) => c.label === label)];
+  assert.deepEqual(m.columns.map((c) => c.label), [
+    "Sold", "Acquired", "Full value", "Cost", "Indexed cost", "Deductions", "Capital gain",
+  ]);
+  assert.match(m.lines[0].label, /^Property 1 · /);
+  assert.equal(m.lines[0].span, true, "the property and its buyer get the width of the page");
+  assert.equal(at("Full value"), 4590000);
+  assert.equal(at("Cost"), 3307536);
+  assert.equal(at("Indexed cost"), 5473972);
+  assert.equal(at("Capital gain"), -883972);
 
   // The renderer parenthesises a negative either way; the caption must also say
   // the right word. "Total Long-term Capital Gains (8,83,972)" is wrong English

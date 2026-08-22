@@ -111,125 +111,208 @@
      "amount": null,
      "columns": [
       {
-       "label": "Date of sale"
+       "label": "Sold",
+       "note": "date of transfer"
       },
       {
-       "label": "Full value of consideration"
+       "label": "Acquired",
+       "note": "date of purchase"
       },
       {
-       "label": "Deductions u/s 48",
-       "note": "cost, improvement, transfer expenses"
+       "label": "Full value",
+       "note": "of consideration"
       },
       {
-       "label": "Short-term capital gain"
+       "label": "Cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Deductions",
+       "note": "u/s 48"
+      },
+      {
+       "label": "Capital gain",
+       "note": "short-term"
       }
      ],
      "lines": [
       {
-       "label": "Property 1",
+       "label": "Property 1 · SAMPLE PLACE 5",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 5 · PAN AAAPZ1009A · 20%; SAMPLE NAME 6 · 20%; SAMPLE NAME 7 · 20%; SAMPLE NAME 8 · 20%; SAMPLE NAME 9 · 20%"
+      },
+      {
+       "label": "1",
        "cells": [
         "28 Oct 2021",
+        "11 Jun 2021",
         1400000,
         1509575,
+        1509575,
         -109575
-       ],
-       "note": "Acquired 11 Jun 2021 · SAMPLE PLACE 5 · Sold to SAMPLE NAME 5, SAMPLE NAME 6, SAMPLE NAME 7, SAMPLE NAME 8, SAMPLE NAME 9"
+       ]
       },
       {
-       "label": "Property 2",
+       "label": "Property 2 · SAMPLE PLACE 7",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 10 · PAN AAAPZ1008A"
+      },
+      {
+       "label": "2",
        "cells": [
         "31 Oct 2021",
+        "22 Jul 2021",
         318000,
         318100,
+        318100,
         -100
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 7 · Sold to SAMPLE NAME 10"
+       ]
       },
       {
-       "label": "Property 3",
+       "label": "Property 3 · SAMPLE PLACE 8",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 10 · PAN AAAPZ1008A"
+      },
+      {
+       "label": "3",
        "cells": [
         "31 Dec 2021",
+        "22 Jul 2021",
         1050000,
         1059400,
+        1059400,
         -9400
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 8 · Sold to SAMPLE NAME 10"
+       ]
       },
       {
-       "label": "Property 4",
+       "label": "Property 4 · SAMPLE PLACE 9",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 11 · PAN AAAPZ1004A"
+      },
+      {
+       "label": "4",
        "cells": [
         "31 Dec 2021",
+        "22 Jul 2021",
         1202000,
         1200598,
+        1200598,
         1402
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 9 · Sold to SAMPLE NAME 11"
+       ]
       },
       {
-       "label": "Property 5",
+       "label": "Property 5 · SAMPLE PLACE 10",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 12 · PAN AAAPZ1004A"
+      },
+      {
+       "label": "5",
        "cells": [
         "07 Jan 2022",
+        "22 Jul 2021",
         1136000,
         1114104,
+        1114104,
         21896
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 10 · Sold to SAMPLE NAME 12"
+       ]
       },
       {
-       "label": "Property 6",
+       "label": "Property 6 · SAMPLE PLACE 11",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 13 · PAN AAAPZ1008A"
+      },
+      {
+       "label": "6",
        "cells": [
         "31 Dec 2021",
+        "11 Aug 2021",
         4650000,
         4641948,
+        4641948,
         8052
-       ],
-       "note": "Acquired 11 Aug 2021 · SAMPLE PLACE 11 · Sold to SAMPLE NAME 13"
+       ]
       },
       {
-       "label": "Property 7",
+       "label": "Property 7 · SAMPLE PLACE 12",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 14 · PAN AAAPZ1006A"
+      },
+      {
+       "label": "7",
        "cells": [
         "16 Feb 2022",
+        "22 Jul 2021",
         661000,
         660531,
+        660531,
         469
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 12 · Sold to SAMPLE NAME 14"
+       ]
       },
       {
-       "label": "Property 8",
+       "label": "Property 8 · SAMPLE PLACE 13",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 15 · PAN AAAPZ1006A"
+      },
+      {
+       "label": "8",
        "cells": [
         "16 Feb 2022",
+        "22 Jul 2021",
         725000,
         723997,
+        723997,
         1003
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 13 · Sold to SAMPLE NAME 15"
+       ]
       },
       {
-       "label": "Property 9",
+       "label": "Property 9 · SAMPLE PLACE 14",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 13 · PAN AAAPZ1008A · 50%; SAMPLE NAME 14 · PAN AAAPZ1006A · 50%"
+      },
+      {
+       "label": "9",
        "cells": [
         "31 Dec 2021",
+        "22 Jul 2021",
         718000,
         716994,
+        716994,
         1006
-       ],
-       "note": "Acquired 22 Jul 2021 · SAMPLE PLACE 14 · Sold to SAMPLE NAME 13, SAMPLE NAME 14"
+       ]
       },
       {
-       "label": "Property 10",
+       "label": "Property 10 · SAMPLE PLACE 15",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 13 · PAN AAAPZ1008A · 33.33%; SAMPLE NAME 14 · PAN AAAPZ1006A · 33.33%; SAMPLE NAME 16 · PAN AAAPZ1004A · 33.34%"
+      },
+      {
+       "label": "10",
        "cells": [
         "31 Dec 2021",
+        "27 Jul 2021",
         4077000,
         4250473,
+        4250473,
         -173473
-       ],
-       "note": "Acquired 27 Jul 2021 · SAMPLE PLACE 15 · Sold to SAMPLE NAME 13, SAMPLE NAME 14, SAMPLE NAME 16"
+       ]
       },
       {
        "label": "Total",
        "cells": [
         null,
+        null,
         15937000,
+        16195720,
         16195720,
         -258720
        ],
@@ -257,176 +340,170 @@
      "amount": null,
      "columns": [
       {
-       "label": "Property 1",
-       "note": "17 Jul 2021"
+       "label": "Sold",
+       "note": "date of transfer"
       },
       {
-       "label": "Property 2",
-       "note": "17 Jul 2021"
+       "label": "Acquired",
+       "note": "date of purchase"
       },
       {
-       "label": "Property 3",
-       "note": "18 Aug 2021"
+       "label": "Full value",
+       "note": "of consideration"
       },
       {
-       "label": "Property 4",
-       "note": "17 Jul 2021"
+       "label": "Cost",
+       "note": "of acquisition"
       },
       {
-       "label": "Total"
+       "label": "Indexed cost",
+       "note": "of acquisition"
+      },
+      {
+       "label": "Improvement",
+       "note": "cost incurred"
+      },
+      {
+       "label": "Indexed",
+       "note": "cost of improvement, incurred 2020-21"
+      },
+      {
+       "label": "Transfer",
+       "note": "expenditure"
+      },
+      {
+       "label": "Deductions",
+       "note": "u/s 48"
+      },
+      {
+       "label": "Capital gain",
+       "note": "long-term"
+      },
+      {
+       "label": "Exemption",
+       "note": "u/s 54F"
+      },
+      {
+       "label": "Exemption",
+       "note": "u/s 54EC"
+      },
+      {
+       "label": "Chargeable",
+       "note": "gain"
       }
      ],
      "lines": [
       {
-       "label": "Property",
-       "cells": [
-        "SAMPLE PLACE 17",
-        "SAMPLE PLACE 18",
-        "SAMPLE PLACE 19",
-        "SAMPLE PLACE 20",
-        null
-       ]
+       "label": "Property 1 · SAMPLE PLACE 17",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 17 · PAN AAAFZ1005A"
       },
       {
-       "label": "Purchaser",
-       "cells": [
-        "SAMPLE NAME 17 · PAN AAAFZ1005A",
-        "SAMPLE NAME 17 · PAN AAAFZ1005A",
-        "SAMPLE NAME 18 · PAN AAAFZ1002A",
-        "SAMPLE NAME 19 · PAN AAAFZ1003A",
-        null
-       ]
-      },
-      {
-       "label": "Date of sale",
+       "label": "1",
        "cells": [
         "17 Jul 2021",
-        "17 Jul 2021",
-        "18 Aug 2021",
-        "17 Jul 2021",
-        null
-       ]
-      },
-      {
-       "label": "Date of acquisition",
-       "cells": [
         "01 Apr 2000",
-        "01 Apr 2001",
-        "01 Apr 2001",
-        "01 Apr 2001",
-        null
-       ]
-      },
-      {
-       "label": "Full value of consideration",
-       "cells": [
         74205000,
-        51270000,
-        78700000,
-        29475000,
-        233650000
-       ]
-      },
-      {
-       "label": "Cost of acquisition",
-       "cells": [
         2633760,
-        2633760,
-        5923480,
-        2230760,
-        13421760
-       ]
-      },
-      {
-       "label": "Less: Indexed cost of acquisition",
-       "cells": [
         8349019,
-        8349019,
-        18777432,
-        7071509,
-        42546979
-       ]
-      },
-      {
-       "label": "Cost of improvement",
-       "cells": [
         1699462,
-        null,
-        null,
-        null,
-        1699462
-       ]
-      },
-      {
-       "label": "Less: Indexed cost of improvement",
-       "cells": [
         1789799,
-        null,
-        null,
-        null,
-        1789799
-       ],
-       "note": "Incurred in 2020-21"
-      },
-      {
-       "label": "Less: Expenditure on transfer",
-       "cells": [
         32500,
-        4673000,
-        null,
-        null,
-        4705500
-       ]
-      },
-      {
-       "label": "Total deductions u/s 48",
-       "cells": [
         10171318,
-        13022019,
-        18777432,
-        7071509,
-        49042278
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Long-term capital gain",
-       "cells": [
         64033682,
-        38247981,
-        59922568,
-        22403491,
-        184607722
-       ],
-       "kind": "subtotal"
-      },
-      {
-       "label": "Less: Exemption u/s 54F",
-       "cells": [
         28676630,
+        null,
+        35357052
+       ]
+      },
+      {
+       "label": "Property 2 · SAMPLE PLACE 18",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 17 · PAN AAAFZ1005A"
+      },
+      {
+       "label": "2",
+       "cells": [
+        "17 Jul 2021",
+        "01 Apr 2001",
+        51270000,
+        2633760,
+        8349019,
+        null,
+        null,
+        4673000,
+        13022019,
+        38247981,
         5055900,
+        null,
+        33192081
+       ]
+      },
+      {
+       "label": "Property 3 · SAMPLE PLACE 19",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 18 · PAN AAAFZ1002A"
+      },
+      {
+       "label": "3",
+       "cells": [
+        "18 Aug 2021",
+        "01 Apr 2001",
+        78700000,
+        5923480,
+        18777432,
+        null,
+        null,
+        null,
+        18777432,
+        59922568,
         51977324,
-        6000000,
-        91709854
-       ]
-      },
-      {
-       "label": "Less: Exemption u/s 54EC",
-       "cells": [
-        null,
-        null,
         5000000,
-        null,
-        5000000
+        2945244
        ]
       },
       {
-       "label": "Long-term capital gain chargeable to tax",
+       "label": "Property 4 · SAMPLE PLACE 20",
+       "cells": [],
+       "span": true,
+       "note": "Sold to SAMPLE NAME 19 · PAN AAAFZ1003A"
+      },
+      {
+       "label": "4",
        "cells": [
-        35357052,
-        33192081,
-        2945244,
-        16403491,
+        "17 Jul 2021",
+        "01 Apr 2001",
+        29475000,
+        2230760,
+        7071509,
+        null,
+        null,
+        null,
+        7071509,
+        22403491,
+        6000000,
+        null,
+        16403491
+       ]
+      },
+      {
+       "label": "Total",
+       "cells": [
+        null,
+        null,
+        233650000,
+        13421760,
+        42546979,
+        1699462,
+        1789799,
+        4705500,
+        49042278,
+        184607722,
+        91709854,
+        5000000,
         87897868
        ],
        "kind": "total"

@@ -52,7 +52,6 @@ const build = () => {
 
 const section = (doc, id) => doc.sections.find((s) => s.id === id);
 const schedule = (doc, re) => section(doc, "CG").rows.find((r) => r.kind === "matrix" && re.test(r.label));
-const cells = (m, re) => (m.lines.find((l) => re.test(l.label)) || {}).cells;
 
 /* ---------------- §11: the three required tests ---------------- */
 
@@ -97,39 +96,53 @@ test("a gain reinvested down to nil still gets a Capital Gains section", () => {
 
 /* ---------------- the schedule the report asked for ---------------- */
 
-test("each property is a column: sale, purchase, gain and what came off it", () => {
+test("each property is a line: its own banner, then sale, purchase, gain and deduction", () => {
   const { doc, body } = build();
   const m = schedule(doc, /long term$/);
   const stated = body.ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild.SaleofLandBuildDtls;
+  const rows = m.lines.filter((l) => !l.span);
+  const at = (i, label) => rows[i].cells[m.columns.findIndex((c) => c.label === label)];
 
-  assert.deepEqual(m.columns.map((c) => c.label), ["Property 1", "Property 2", "Total"]);
-  assert.deepEqual(m.columns.map((c) => c.note), ["28 Jul 2023", "28 Jul 2023", undefined]);
+  /* THE SECOND HALF OF THE REPORT: "a horizontal property wise data so that the
+     property details and purchaser details can be displayed well". A column per
+     property gave the address 55px and three joint buyers with their PANs
+     fourteen lines. A line per property gives them the width of the page. */
+  assert.equal(m.lines[0].span, true);
+  assert.equal(m.lines[0].label, `Property 1 · ${stated[0].TrnsfImmblPrprty.TrnsfImmblPrprtyDtls[0].AddressOfProperty}`);
+  assert.match(m.lines[0].note, /^Sold to SAMPLE NAME 8 · PAN /);
+  assert.equal(m.lines[2].span, true);
+  assert.match(m.lines[2].label, /^Property 2 · /);
 
-  // The sale and purchase details — the part of the report that was not about
-  // layout at all, because these were never printed.
-  assert.deepEqual(cells(m, /^Date of sale$/), ["28 Jul 2023", "28 Jul 2023", null]);
-  assert.deepEqual(cells(m, /^Date of acquisition$/), ["01 Apr 2001", "01 Apr 2001", null]);
-  assert.equal(cells(m, /^Property$/)[0], stated[0].TrnsfImmblPrprty.TrnsfImmblPrprtyDtls[0].AddressOfProperty);
-  assert.match(cells(m, /^Purchaser$/)[0], /^SAMPLE NAME 8 · PAN /);
+  assert.deepEqual(m.columns.map((c) => c.label), [
+    "Sold", "Acquired", "Full value", "Cost", "Indexed cost", "Deductions",
+    "Capital gain", "Exemption", "Chargeable",
+  ]);
+  // The qualifier lives under the caption, so the statutory words are all there
+  // without any one of them setting the width of its column.
+  assert.deepEqual(m.columns.map((c) => c.note), [
+    "date of transfer", "date of purchase", "of consideration", "of acquisition",
+    "of acquisition", "u/s 48", "long-term", "u/s 54B", "gain",
+  ]);
 
+  // The sale and purchase details.
+  assert.deepEqual([at(0, "Sold"), at(0, "Acquired")], ["28 Jul 2023", "01 Apr 2001"]);
   // The gain thereon.
-  assert.deepEqual(cells(m, /^Full value of consideration$/), [11875000, 11775000, 23650000]);
-  assert.deepEqual(cells(m, /^Cost of acquisition$/), [291550, 303800, 595350]);
-  assert.deepEqual(cells(m, /^Less: Indexed cost of acquisition$/), [1014594, 1057224, 2071818]);
-  assert.deepEqual(cells(m, /^Total deductions u\/s 48$/), [1014594, 1057224, 2071818]);
-  assert.deepEqual(cells(m, /^Long-term capital gain$/), [10860406, 10717776, 21578182]);
-
+  assert.deepEqual([at(0, "Full value"), at(1, "Full value")], [11875000, 11775000]);
+  assert.deepEqual([at(0, "Cost"), at(1, "Cost")], [291550, 303800]);
+  assert.deepEqual([at(0, "Indexed cost"), at(1, "Indexed cost")], [1014594, 1057224]);
+  assert.deepEqual([at(0, "Deductions"), at(1, "Deductions")], [1014594, 1057224]);
+  assert.deepEqual([at(0, "Capital gain"), at(1, "Capital gain")], [10860406, 10717776]);
   // …and the other deduction.
-  assert.deepEqual(cells(m, /^Less: Exemption u\/s 54B$/), [10860406, 10717776, 21578182]);
-  assert.deepEqual(cells(m, /chargeable to tax$/), [0, 0, 0]);
+  assert.deepEqual([at(0, "Exemption"), at(1, "Exemption")], [10860406, 10717776]);
+  assert.deepEqual([at(0, "Chargeable"), at(1, "Chargeable")], [0, 0]);
 
-  // Each column adds up on its own, which is the only thing that makes a
-  // schedule worth printing.
+  // Every line adds up on its own, which is the only thing that makes a
+  // schedule worth printing, and the last line adds the lines up.
   stated.forEach((d, i) => {
-    assert.equal(cells(m, /^Full value of consideration$/)[i]
-      - cells(m, /^Less: Indexed cost of acquisition$/)[i]
-      - cells(m, /^Less: Exemption u\/s 54B$/)[i], d.CapgainonAssets);
+    assert.equal(at(i, "Full value") - at(i, "Deductions") - at(i, "Exemption"), d.CapgainonAssets);
   });
+  assert.deepEqual(m.lines.at(-1).cells, [null, null, 23650000, 595350, 2071818, 2071818, 21578182, 21578182, 0]);
+  assert.equal(m.lines.at(-1).kind, "total");
 });
 
 test("three claims of s.54B against one property are one line, itemised below", () => {
@@ -163,7 +176,7 @@ test("no s.50C line, because the stamp value is the consideration", () => {
     assert.equal(d.PropertyValuation, d.FullConsideration);
   }
   const m = schedule(doc, /long term$/);
-  assert.ok(!m.lines.some((l) => /50C|Stamp-duty/.test(l.label)),
+  assert.ok(!m.columns.some((c) => /50C|Stamp-duty|Adopted|Received/.test(c.label)),
     "saying a substitution happened where it did not is as wrong as staying quiet where it did");
 });
 

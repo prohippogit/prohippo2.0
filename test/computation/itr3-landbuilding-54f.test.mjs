@@ -56,12 +56,16 @@ const closing = (s) => s.rows.filter((r) => r.kind === "total").pop();
  * properties get a column each and a line per figure; more than four turn, and
  * each property becomes a line. These helpers read whichever it is. */
 const schedule = (doc, re) => rows(doc, "CG").find((r) => r.kind === "matrix" && re.test(r.label));
-/* Which way round: in the turned schedule each LINE is a property ("Property
-   3"); in the side-by-side one the lines are figures and the columns are the
-   properties. The column heading is not the tell — a single property's column
-   is captioned "Amount". */
-const byColumn = (m) => !/^Property \d+$/.test(((m.lines || [])[0] || {}).label || "");
-const lineCells = (m, re) => (m.lines.find((l) => re.test(l.label)) || {}).cells;
+/* A property schedule alternates: a banner naming the property and its buyers,
+   then the line of figures for it. `figures` drops the banners, so a property's
+   nth line of figures is at index n whatever the banners did. */
+const figures = (m) => (m.lines || []).filter((l) => !l.span);
+/* Two columns can share a caption — "Exemption" u/s 54F and "Exemption" u/s
+   54EC — so a column is addressed by caption AND note where it needs to be. */
+const columnIndex = (m, label) => {
+  const [, cap, note] = /^(\S+(?: \S+)*?)(?: (u\/s .+))?$/.exec(label) || [];
+  return m.columns.findIndex((c) => c.label === cap && (!note || c.note === note));
+};
 
 /* ---------------- §11: the three required tests ---------------- */
 
@@ -85,32 +89,27 @@ test("unmapped is empty — 13 items surfaced before the fix", () => {
 
 /* ---------------- the working adds up ---------------- */
 
-test("every property's rows net to the gain the return states for it", () => {
-  /* THE TEST THAT WOULD HAVE CAUGHT IT. Read the long-term schedule down each
-     property's column the way a reader does — consideration, less each
-     deduction, less the exemption — and require each to land on its own
-     CapgainonAssets. Before the exemptions were printed, all four overshot. */
+test("every property's figures net to the gain the return states for it", () => {
+  /* THE TEST THAT WOULD HAVE CAUGHT IT. Read each property's line the way a
+     reader does — consideration, less the s.48 deductions, less the exemption —
+     and require it to land on its own CapgainonAssets. Before the exemptions
+     were printed, all four overshot. */
   const { doc, body } = build();
   const stated = body.ScheduleCGFor23.LongTermCapGain23.SaleofLandBuild.SaleofLandBuildDtls;
   assert.equal(stated.length, 4);
 
   const m = schedule(doc, /long term$/);
-  assert.ok(byColumn(m), "four properties still fit side by side");
-  assert.deepEqual(m.columns.map((c) => c.label), ["Property 1", "Property 2", "Property 3", "Property 4", "Total"]);
+  const at = (i, label) => figures(m)[i].cells[columnIndex(m, label)];
 
-  stated.forEach((d, col) => {
-    const start = m.lines.findIndex((l) => /^Full value of consideration/.test(l.label));
-    let running = m.lines[start].cells[col];
-    for (const l of m.lines.slice(start + 1)) {
-      if (/chargeable to tax$/.test(l.label)) break;
-      if (/^Less:/.test(l.label)) running -= Number(l.cells[col] || 0);
-    }
-    assert.equal(running, d.CapgainonAssets, `property ${col + 1} closing at ${d.CapgainonAssets}`);
-    assert.equal(m.lines.at(-1).cells[col], d.CapgainonAssets, "and the schedule says so itself");
+  stated.forEach((d, i) => {
+    const net = at(i, "Full value") - at(i, "Deductions")
+      - Number(at(i, "Exemption u/s 54F") || 0) - Number(at(i, "Exemption u/s 54EC") || 0);
+    assert.equal(net, d.CapgainonAssets, `property ${i + 1} closing at ${d.CapgainonAssets}`);
+    assert.equal(at(i, "Chargeable"), d.CapgainonAssets, "and the schedule says so itself");
   });
 
-  // The total column adds the four up, and the head subtotal states the same.
-  assert.equal(m.lines.at(-1).cells[4], 87897868);
+  // The total line adds the four up, and the head subtotal states the same.
+  assert.equal(m.lines.at(-1).cells.at(-1), 87897868);
   const subtotal = rows(doc, "CG").find((r) => r.kind === "subtotal" && /Long-term/.test(r.label));
   assert.equal(subtotal.amount, stated.reduce((sum, d) => sum + d.CapgainonAssets, 0));
   assert.equal(subtotal.amount, 87897868);
@@ -119,20 +118,22 @@ test("every property's rows net to the gain the return states for it", () => {
 test("9,67,09,854 of exemptions is on the page, per property and by section", () => {
   const { doc } = build();
   const m = schedule(doc, /long term$/);
-  const ex = m.lines.filter((l) => /Exemption/.test(l.label));
+  const cells = (label) => figures(m).slice(0, 4).map((l) => l.cells[columnIndex(m, label)]);
 
-  // A line per section claimed, an amount per property, and the sections named
-  // in the captions — s.54EC (bonds) against s.54F (a house) is exactly the
-  // pair a reader has to be able to tell apart.
-  assert.deepEqual(ex.map((l) => l.label), ["Less: Exemption u/s 54F", "Less: Exemption u/s 54EC"]);
-  assert.deepEqual(lineCells(m, /54F/), [28676630, 5055900, 51977324, 6000000, 91709854]);
-  assert.deepEqual(lineCells(m, /54EC/), [null, null, 5000000, null, 5000000]);
+  // A column per section claimed, an amount per property, and the sections
+  // named — s.54EC (bonds) against s.54F (a house) is exactly the pair a reader
+  // has to be able to tell apart.
+  const ex = m.columns.filter((c) => c.label === "Exemption");
+  assert.deepEqual(ex.map((c) => c.note), ["u/s 54F", "u/s 54EC"]);
+  assert.deepEqual(cells("Exemption u/s 54F"), [28676630, 5055900, 51977324, 6000000]);
+  assert.deepEqual(cells("Exemption u/s 54EC"), [null, null, 5000000, null]);
+  assert.deepEqual(m.lines.at(-1).cells.slice(-3), [91709854, 5000000, 87897868]);
   assert.equal(91709854 + 5000000, 96709854);
 });
 
 test("the parts of a section claimed twice are in its own schedule, with the dates", () => {
   /* Property 1 claims s.54F twice — 1,61,39,820 and 1,25,36,810 — because the
-     sale was reinvested in two houses. The property column carries the 2.86
+     sale was reinvested in two houses. The property's line carries the 2.86
      crore that came off the gain; WHAT it was reinvested in, and when, is the
      substance an officer asks about, and it used to be claimed as a subtree and
      never printed at all. */
@@ -155,27 +156,30 @@ test("the parts of a section claimed twice are in its own schedule, with the dat
   assert.deepEqual(ec.lines[0].cells, ["31 Mar 2022", 5000000, "31 Mar 2022", 5000000]);
 });
 
-test("ten small plots turn the schedule on its side rather than off the page", () => {
-  /* The short-term side of this return is ten sales. A column each is eleven
-     columns of eight-digit figures, which does not fit across A4 at any font a
-     person would sign — so past four properties the schedule turns: a line per
-     property, the figures as columns, and the particulars that identified each
-     one under its label. */
+test("ten small plots are ten lines, each named by the property it is", () => {
+  /* The short-term side of this return is ten sales. Each is a banner naming
+     the plot and its buyers, then a line of figures — which is the shape that
+     made the schedule worth reading and the reason it is not a column per
+     property: eleven columns of eight-digit figures does not fit across A4 at
+     any font a person would sign. */
   const { doc, body } = build();
   const m = schedule(doc, /short term$/);
-  assert.ok(!byColumn(m), "turned on its side");
-  assert.deepEqual(m.columns.map((c) => c.label), [
-    "Date of sale", "Full value of consideration", "Deductions u/s 48", "Short-term capital gain",
-  ]);
   const stated = body.ScheduleCGFor23.ShortTermCapGainFor23.SaleofLandBuild.SaleofLandBuildDtls;
-  assert.equal(m.lines.length, stated.length + 1, "one line each, and a total");
+  assert.deepEqual(m.columns.map((c) => c.label), [
+    "Sold", "Acquired", "Full value", "Cost", "Deductions", "Capital gain",
+  ]);
+  assert.equal(figures(m).length, stated.length + 1, "one line each, and a total");
+  assert.equal(m.lines.filter((l) => l.span).length, stated.length, "and a banner over each");
+
+  stated.forEach((d, i) => {
+    assert.match(m.lines[i * 2].label, new RegExp(`^Property ${i + 1} · `));
+    assert.match(m.lines[i * 2].note, /^Sold to /, "the buyers identify the line");
+    assert.equal(figures(m)[i].cells[2], d.FullConsideration);
+    assert.equal(figures(m)[i].cells.at(-1), d.CapgainonAssets || 0);
+  });
   // No exemption was claimed on any of them, so there is no "chargeable" column
   // repeating the gain to the rupee.
-  stated.forEach((d, i) => {
-    assert.equal(m.lines[i].cells[1], d.FullConsideration);
-    assert.equal(m.lines[i].cells.at(-1), d.CapgainonAssets || 0);
-    assert.match(m.lines[i].note, /^Acquired /, "the buyer and the address identify the line");
-  });
+  assert.ok(!m.columns.some((c) => c.label === "Chargeable"));
   assert.equal(m.lines.at(-1).cells.at(-1), -258720);
 });
 
@@ -197,10 +201,12 @@ test("an improvement is captioned as INDEXED when the return has indexed it", ()
      that is actually deducted. Captioning the indexed one "cost of improvement"
      understated it by the indexation on a document somebody signs. */
   const m = schedule(doc, /long term$/);
-  assert.deepEqual(lineCells(m, /^Cost of improvement$/), [1699462, null, null, null, 1699462]);
-  const idx = m.lines.find((l) => l.label === "Less: Indexed cost of improvement");
-  assert.deepEqual(idx.cells, [1789799, null, null, null, 1789799]);
-  assert.match(idx.note, /Incurred in 2020-21/);
+  const cells = (label) => figures(m).map((l) => l.cells[columnIndex(m, label)]);
+  assert.deepEqual(cells("Improvement"), [1699462, null, null, null, 1699462]);
+  assert.deepEqual(cells("Indexed"), [1789799, null, null, null, 1789799]);
+  // The heading says which of the two it is, and the year it was incurred in.
+  assert.equal(m.columns[columnIndex(m, "Improvement")].note, "cost incurred");
+  assert.match(m.columns[columnIndex(m, "Indexed")].note, /cost of improvement, incurred 2020-21/);
 });
 
 /* ---------------- the same guard, over every fixture we hold ---------------- */
@@ -233,31 +239,21 @@ test("on EVERY fixture, a property sale's figures net to the gain the return sta
       const m = cgSection.rows.find((r) => r.kind === "matrix" && new RegExp(`${term} term$`).test(r.label));
       assert.ok(m, `${file}: no ${term}-term property schedule`);
 
-      if (byColumn(m)) {
-        // A column each: read down it, consideration less every deduction.
-        priced.forEach((d, col) => {
-          const start = m.lines.findIndex((l) => /^Full value of consideration/.test(l.label));
-          let running = m.lines[start].cells[col];
-          for (const l of m.lines.slice(start + 1)) {
-            if (/chargeable to tax$/.test(l.label)) break;
-            if (/^Less:/.test(l.label)) running -= Number(l.cells[col] || 0);
-          }
-          assert.equal(running, d.CapgainonAssets || 0, `${file}: ${term}-term property ${col + 1}`);
-          checked++;
-        });
-      } else {
-        // Turned on its side: read along each property's line instead.
-        const col = (label) => m.columns.findIndex((c) => c.label === label);
-        const gain = m.columns.length - 1;
-        priced.forEach((d, i) => {
-          const cells = m.lines[i].cells;
-          const full = cells[col("Full value of consideration")] ?? cells[col("Adopted u/s 50C")];
-          const less = Number(cells[col("Deductions u/s 48")] || 0) + Number(cells[col("Less: Exemption")] || 0);
-          assert.equal(full - less, d.CapgainonAssets || 0, `${file}: ${term}-term property ${i + 1}`);
-          assert.equal(cells[gain], d.CapgainonAssets || 0);
-          checked++;
-        });
-      }
+      const idx = (label) => m.columns.findIndex((c) => c.label === label);
+      const lines = m.lines.filter((l) => !l.span);
+      assert.equal(lines.length, priced.length + (priced.length > 1 ? 1 : 0), `${file}: ${term}-term line count`);
+
+      priced.forEach((d, i) => {
+        const cells = lines[i].cells;
+        const full = cells[idx("Full value") >= 0 ? idx("Full value") : idx("Adopted")];
+        // Every column captioned as coming off the consideration, whatever it
+        // is called this year: the s.48 total, and each section of exemption.
+        const off = m.columns.reduce((sum, c, j) => (
+          c.label === "Deductions" || c.label === "Exemption" ? sum + Number(cells[j] || 0) : sum
+        ), 0);
+        assert.equal(full - off, d.CapgainonAssets || 0, `${file}: ${term}-term property ${i + 1}`);
+        checked++;
+      });
     }
   }
   // A guard on the guard: a loop that silently matched nothing would pass.

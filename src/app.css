@@ -617,7 +617,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
 
 /* Status and the overflow menu travel together at the end of the foot, so the
    foot's own "last child goes right" rule moves the pair, not just the menu. */
-.mcard-end { display: flex; align-items: center; gap: 4px; }
+.mcard-end { display: flex; align-items: center; gap: 8px; }
 .mcard-menu {
   display: grid; place-items: center;
   width: 30px; height: 30px;
@@ -629,6 +629,31 @@ input, select, textarea { font-family: inherit; color: inherit; }
   -webkit-tap-highlight-color: transparent;
 }
 .mcard-menu:active { background: var(--p-line-2); }
+
+/* Additions for Intimations, which draws the same card for an assessee's
+   position and for one order under it. */
+
+/* What is at stake on the client card: a figure, or the absence of one. */
+.mcard-money { margin-top: 8px; }
+
+/* WHAT THE ORDER DID. A sentence, not a field — on the desk it lived in a
+   column and was cut with an ellipsis at whatever width was left. Here it is
+   given two lines to be a sentence in, which is the one thing on the card that
+   tells a practitioner whether to open it. */
+.mcard-said {
+  margin-top: 6px;
+  font-size: 12.5px; line-height: 1.4; color: var(--p-text);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+/* The flags under it — an appeal running out, a refund that never arrived,
+   a s.245 adjustment. Each is short; together they wrap rather than compete. */
+.mcard-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 7px; }
+
+/* "Agreed" / "To decide" beside who is holding it. */
+.mcard-decision { font-size: 11px; font-weight: 700; color: var(--p-text-3); }
+/* The foot of an order card carries a two-line money block, so it aligns on
+   the top of its content rather than the middle. */
+.mcard-foot:has(.mcard-decision) { align-items: flex-start; }
 
 /* ---------------------------------------------------------------------------
    THE PHONE'S DASHBOARD HEAD
@@ -1728,6 +1753,14 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .matters-filters .tabs { flex: 1 1 100%; min-width: 0; }
   .matters-filters .search { width: 100% !important; flex: 1 1 100%; min-width: 0; }
 
+  /* INTIMATIONS: the search and the three views.
+     A 230px field beside "By client", "By cause" and "By staff" comes to about
+     490px of content in the 362px a phone leaves. The field takes its own row
+     and the three chips share the next one. */
+  .int-views { flex-wrap: wrap; row-gap: 8px; }
+  .int-views .search { flex: 1 1 100%; min-width: 0 !important; }
+  .int-views .fchip { flex: 1 1 auto; text-align: center; }
+
   /* Every card loses a little padding: 20px of chrome each side of a 390px
      screen is a fifth of it. */
   .card { padding: 14px; border-radius: 14px; }
@@ -1810,27 +1843,13 @@ input, select, textarea { font-family: inherit; color: inherit; }
   .matters-list { min-width: 0 !important; }
   .matters-head { display: none !important; }
 
-  .matter-row {
-    grid-template-columns: auto 1fr auto !important;
-    grid-template-areas:
-      "type  .    status"
-      "title title title"
-      "ay    sec  view" !important;
-    column-gap: 10px !important;
-    row-gap: 9px !important;
-    padding: 14px 15px !important;
-    align-items: center;
-  }
-  .matter-row > *:nth-child(1) { grid-area: type; }
-  .matter-row > *:nth-child(2) { grid-area: title; }
-  .matter-row > *:nth-child(3) { grid-area: ay; font-size: 12px; color: var(--p-text-2); font-weight: 600; }
-  .matter-row > *:nth-child(4) { grid-area: sec; justify-self: start; }
-  .matter-row > *:nth-child(5) { grid-area: status; justify-self: end; }
-  .matter-row > *:nth-child(6) { grid-area: view; justify-self: end; }
-  /* The column heading said "AY"; without it the year is a bare number among
-     three other bare numbers. */
-  .matter-row > *:nth-child(3)::before { content: "AY "; color: var(--p-text-3); font-weight: 700; }
-  .matter-row > *:nth-child(2) .strong { white-space: normal !important; font-size: 13.5px !important; }
+  /* The .matter-row grid that used to stand here re-flowed six cells into a
+     card by their position. Every list that reached it on a phone now renders
+     a real card instead — the Matters register, the assessee's Matters tab and
+     both Intimations lists — and .matter-row is a desk-only row again. It was
+     never right for the Intimations lists anyway: those rows have seven and
+     eight cells, and a rule that places children one through six by number
+     would have put the wrong things in the wrong places. */
 
   /* ---- ASSESSEES: eight columns become a card ---------------------------
      30px checkbox | assessee | PAN | entity | proceedings | assigned |

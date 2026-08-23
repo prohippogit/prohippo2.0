@@ -535,16 +535,50 @@ templates. Twelve languages would be 36 variants, and every copy change becomes
 
 ### Step 1 — Meta onboarding, through WATI
 
-WATI onboards through Meta Embedded Signup: a Facebook Business Manager with
-business verification complete, and a phone number not currently registered on
-any WhatsApp app.
+WATI onboards through Meta Embedded Signup: a Facebook Business Manager, and a
+phone number not currently registered on any WhatsApp app.
 
-When approval lands, check two things before going further — the **display name
-reads exactly `ProHippo`**, and the number shows Connected with a Green quality
-rating. Changing the display name afterwards is a fresh Meta review.
+#### The display name is set twice, on purpose
 
-A new number starts limited, typically 250 business-initiated conversations per
-24 hours, scaling automatically with quality and volume.
+Meta reviews the display name against the business it belongs to, so while
+verification is still running the name that passes most easily is the one being
+verified — **`Mehtaji Bizcon LLP`**, the legal entity. `ProHippo` is a product
+name, and a product name on an unverified account is the kind of mismatch a
+reviewer bounces.
+
+So the name starts as the LLP and becomes `ProHippo` once verification clears.
+That is a fresh review each time, which is fine — it is two reviews, not two
+accounts, and the number keeps working under the old name while the new one is
+considered.
+
+**What this sequences is the rollout, not the code.** The name a recipient sees
+matters differently for the two audiences:
+
+| Audience | Under `Mehtaji Bizcon LLP` |
+|---|---|
+| The practitioner | Fine. They signed up; they know whose software this is |
+| A client | **Wait.** A client who gets an unrecognised business name about their own 142(1) notice is a client who reports it as spam — and on a shared number that costs every practice its quality rating |
+
+So the three practitioner messages can go live under the LLP name immediately.
+The three client-facing ones stay off until the display name is what a client
+should see. `profile.whatsapp` already separates them row by row, and
+`noticeAlertClient` already defaults off, so this needs no code — only restraint
+in Settings.
+
+Nothing in the codebase encodes the display name. It is a WATI setting, and the
+templates name the practitioner's own firm in the body (`Sent by {{firm}}.`)
+rather than the sender.
+
+#### What "unverified" actually limits
+
+Business verification governs how far the account can scale, not whether it
+works: an unverified WABA sends to a small number of unique recipients per day
+and holds a smaller template allowance. Template submission, API credentials and
+webhooks are all available before it clears — which is why most of the setup
+below can be done while waiting.
+
+A newly verified number starts at roughly 250 business-initiated conversations
+per 24 hours, scaling automatically with quality and volume.
 
 ### Step 2 — Credentials
 

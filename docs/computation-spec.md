@@ -122,12 +122,16 @@ src/computation/
       index.js         the theme registry + the default            (§14)
       curvy.js         soft violet, Poppins, the practice's accent
       classic.js       navy and gold, Montserrat — design tokens   (§6)
+    fonts/
+      index.js         family → @font-face, by dynamic import      (§14)
+      poppins.js       base64 woff2, ESM — the client's copy
+      montserrat.js
 functions/
   computation.js       headless Chromium → PDF (§13)
   fonts/
-    index.js           theme → embedded typeface (§14)
-    poppins.js         the curvy theme's faces, base64 woff2
-    montserrat.js      the classic theme's face
+    index.js           every embedded family, for an older client  (§14)
+    poppins.js         the same bytes, CJS
+    montserrat.js
 ```
 
 **Every computation carries a standing declaration.** The document restates a
@@ -1355,7 +1359,8 @@ fixtures when returns arrive that carry them.
 ## 13. The render step
 
 `render/template.js` produces one self-contained HTML string: inline CSS, the
-theme's typeface as a base64 `@font-face`, no external references of any kind.
+theme's typeface as a base64 `@font-face` (§14), no external references of any
+kind.
 
 `functions/computation.js` exposes
 `renderComputationPdf({ assesseeId, ay, html, theme })`:
@@ -1441,18 +1446,42 @@ chosen green would otherwise be sending green demands.
 
 ### The typeface
 
-Each theme names a family; the faces are embedded under `functions/fonts/` and
-inlined into `FONT_SLOT` at render time, because 40 KB of woff2 per family has
-no business in a browser bundle for a document most sessions never generate.
+Each theme names a family. **The document carries its own faces**: the client
+calls `await fontCssFor(theme)` and hands the result to `buildComputation` as
+`ctx.fontCss`, which lands in the template's `FONT_SLOT`, so the HTML that
+reaches the render function is already complete and its
+`html.replace(FONT_SLOT, …)` finds nothing to replace.
 
-**The render function sends every family it has, every time.** It used to send
-the one the theme named, which is the obvious design and has a failure mode with
-no error in it: client and server deploy separately, so the first curvy document
-went out to a function that had never heard of the curvy theme — the page asked
-for Poppins, the block held Montserrat, and Chromium set the whole PDF in
-Liberation Sans, because the render container has no system fonts and nothing
-anywhere had to say so. ~80 KB inside an HTML string that is discarded the
-moment the PDF exists buys the two sides being deployable in either order.
+```
+src/computation/render/fonts/
+  index.js      loadFontFaceCss(family) — a dynamic import per family
+  poppins.js    ESM. The client's copy.
+  montserrat.js
+functions/fonts/
+  index.js      fontFaceFor() — every family, for a client that left the slot empty
+  poppins.js    CJS. Byte-for-byte the ESM copy; one script writes both.
+  montserrat.js
+```
+
+Both copies exist because **the browser and the functions deploy separately**,
+and every font failure this feature has had came out of that gap. The first
+curvy document went to a function that had never heard of the curvy theme: the
+page asked for Poppins, the server inlined Montserrat, and Chromium set the
+whole PDF in Liberation Sans, because the render container has no system fonts
+and nothing anywhere had to say so. Making the server send *every* family fixed
+the mismatch but not the dependency — the next document was still in Liberation
+Sans, because the fix had not been deployed. A document that carries its own
+faces cannot be broken by a function that is a version behind, and a new theme
+in a new family now needs no functions deploy at all.
+
+The client's copies cost nothing at load: `loadFontFaceCss` is a dynamic import
+per family, so the chunk arrives the first time a practitioner presses
+*Computation*, in the one family their theme is set in, and never for a session
+that generates none.
+
+`renderHtml` without `fontCss` still leaves the slot — which is what the tests
+and goldens do, because 80 KB of base64 in a golden file helps nobody, and what
+an older client does, which is why the server keeps its copies.
 
 **A rupee face per weight, not one.** Google's latin subset of either family
 stops at U+20AC, so each carries a second face for U+20B9 alone. Poppins is not
@@ -1462,16 +1491,19 @@ with no ₹ in it, and fall through to DejaVu Sans: the refund banner's rupee si
 in a different typeface from the figure beside it. Whatever weights a family
 declares for latin it declares for the rupee, and the test checks exactly that.
 
-Regenerate with `node scripts/fetch-computation-fonts.mjs`. The modules are
-committed, so a deploy never depends on Google being reachable.
+Regenerate with `node scripts/fetch-computation-fonts.mjs` — it writes both
+copies of every family from one download, and the tests require them to be
+identical. The modules are committed, so a deploy never depends on Google being
+reachable.
 
 ### Adding a theme
 
 1. Write `themes/<id>.js` exporting `stylesheet(opts)`.
 2. List it in `themes/index.js` with a name, a description a practitioner can
    choose from, and the family it is set in.
-3. Add the family to `scripts/fetch-computation-fonts.mjs` and
-   `functions/fonts/index.js` if it is not one already embedded. If it is, the
-   server needs no deploy at all — it already sends every family it has.
+3. If it is set in a family not already embedded, add that family to
+   `scripts/fetch-computation-fonts.mjs`, run it, and register the new module in
+   `render/fonts/index.js` (client) and `functions/fonts/index.js` (server).
+   Either way the server needs no deploy: the document carries its own faces.
 4. Run the tests. Nothing else in the feature changes — and if something else
    has to, the change is in the wrong place.

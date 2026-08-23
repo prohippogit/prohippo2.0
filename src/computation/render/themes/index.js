@@ -10,13 +10,13 @@
  * Adding a theme is therefore: write the stylesheet, list it here, and name the
  * typeface it is set in. Nothing else in the feature changes.
  *
- * `font` is an id, not a file. The faces are embedded server-side
- * (functions/fonts/) because they are 40 KB each and nobody should download a
- * typeface for a document they may never generate; the id is what tells the
- * render function which one to inline. functions/fonts/index.js holds the same
- * mapping for the server, and test/computation/themes.test.mjs requires the two
- * to agree — a theme whose font is missing on one side prints in whatever
- * headless Chromium falls back to, which is nothing.
+ * `font` is an id, not a file. ../fonts/index.js turns it into the @font-face
+ * block the document carries, by dynamic import — 40 KB a session that never
+ * generates a computation never downloads. The render function keeps its own
+ * copies under functions/fonts/ for a client old enough to leave the slot
+ * empty, and test/computation/themes.test.mjs requires the two sides to hold
+ * the same bytes: a theme whose face is missing prints in whatever headless
+ * Chromium falls back to, which is nothing.
  */
 import { stylesheet as classic } from "./classic.js";
 import { stylesheet as curvy } from "./curvy.js";

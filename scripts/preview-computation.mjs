@@ -7,20 +7,19 @@
  *   npm run preview:computation -- path/to/itr.json all    # one file per theme
  *
  * Writes .tmp/<name>.html — open it in a browser and it looks exactly as the
- * PDF will, because the render function does nothing to the markup except add
- * the embedded fonts and print it (docs/computation-spec.md §13).
+ * PDF will, because the file is the whole document, fonts and all, and the
+ * render function does nothing to it but print it (docs/computation-spec.md
+ * §13, §14).
  *
  * DO NOT point this at a real client's return and leave the output lying around
  * in the repo. .tmp/ is gitignored for that reason.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import path from "node:path";
 
-import { buildComputation, UnsupportedFormError, ValidationError, THEMES, THEME_IDS } from "../src/computation/index.js";
+import { buildComputation, fontCssFor, UnsupportedFormError, ValidationError, THEMES, THEME_IDS } from "../src/computation/index.js";
 
-const require = createRequire(import.meta.url);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const input = process.argv[2] || path.join(root, "test", "fixtures", "itr5-firm-business-loss-ay2025-26.json");
@@ -31,12 +30,6 @@ const wanted = (process.argv[3] || "").trim();
 const themes = wanted === "all" ? THEME_IDS : [THEMES[wanted] ? wanted : ""];
 const json = JSON.parse(readFileSync(input, "utf8"));
 
-/* The fonts live with the render function, not the browser bundle. Inline them
-   here too, or the preview falls back to a system face and stops being a
-   preview — and the face is the loudest thing a theme changes, so previewing
-   without it shows the wrong document. */
-const { fontFaceFor } = require("../functions/fonts");
-
 const outDir = path.join(root, ".tmp");
 mkdirSync(outDir, { recursive: true });
 const base = path.basename(input).replace(/\.json$/, "");
@@ -45,7 +38,15 @@ let doc = null;
 for (const theme of themes) {
   let built;
   try {
-    built = buildComputation(json, { generatedAt: new Date().toISOString(), theme });
+    /* The same font path the app takes (§14): the document carries its faces,
+       so what lands in .tmp/ is byte-for-byte what the render function prints.
+       A preview without the faces falls back to a system one and shows the
+       wrong document — the typeface is the loudest thing a theme changes. */
+    built = buildComputation(json, {
+      generatedAt: new Date().toISOString(),
+      theme,
+      fontCss: await fontCssFor(theme),
+    });
   } catch (err) {
     if (err instanceof UnsupportedFormError || err instanceof ValidationError) {
       console.error(`\n${err.name}: ${err.message}\n`);
@@ -55,7 +56,7 @@ for (const theme of themes) {
   }
   doc = built.doc;
   const out = path.join(outDir, `${base}${themes.length > 1 ? "." + built.theme : ""}.html`);
-  writeFileSync(out, built.html.replace("/*__COMPUTATION_FONT_FACE__*/", fontFaceFor()));
+  writeFileSync(out, built.html);
   console.log(`wrote ${path.relative(root, out)}   (${THEMES[built.theme].name})`);
 }
 

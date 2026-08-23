@@ -22,15 +22,20 @@ const crypto = require("node:crypto");
 const { fontFaceFor } = require("./fonts");
 const { PROHIPPO_LOGO_DATA_URI } = require("./assets/prohippoLogo.js");
 
-// The template leaves this marker where the @font-face rules belong; the fonts
-// live here rather than in the browser bundle so no user pays 40 KB of woff2 to
-// load a page they may never generate a computation from.
+// Where the @font-face rules belong, IF THE PAGE ARRIVES WITHOUT THEM (§14).
 //
-// EVERY family goes in, whatever theme the document was built in (§14). The
-// request still carries a `theme`, and this function still ignores it for the
-// fonts: narrowing by it is what set the first curvy computation in Liberation
-// Sans, because the client had shipped and the function had not. See
-// fonts/index.js.
+// A current client inlines its own faces and the page reaches here complete, so
+// this replace finds nothing and does nothing. That is the arrangement, not an
+// accident: the browser and this function deploy separately, and every font
+// fault this feature has had came out of that gap — a document that carries its
+// own faces cannot be set in the wrong one by a function that is a version
+// behind. What remains here is the fallback for a client old enough to leave
+// the slot empty.
+//
+// EVERY family goes in when it is used, whatever theme the document was built
+// in. The request still carries a `theme` and this function still ignores it
+// for the fonts: narrowing by it is what set the first curvy computation in
+// Liberation Sans. See fonts/index.js.
 const FONT_SLOT = "/*__COMPUTATION_FONT_FACE__*/";
 
 // Chromium renders header/footer templates in their own isolated document: they

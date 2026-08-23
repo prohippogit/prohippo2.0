@@ -1119,19 +1119,28 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
         throw err;
       }
 
-      const { buildComputation, UnsupportedFormError } = await import("./computation/index.js");
+      const { buildComputation, UnsupportedFormError, fontCssFor } =
+        await import("./computation/index.js");
+
+      /* THE DOCUMENT CARRIES ITS OWN TYPEFACE (§14). The render function has
+         copies of the faces too, but it deploys separately from this bundle,
+         and a computation built in a theme the deployed function has never
+         heard of came back set in whatever headless Chromium falls back to —
+         which is nothing, because that container has no system fonts. Inlining
+         the faces here leaves the server's substitution with nothing to do.
+         ~40 KB, fetched as its own chunk the first time this button is
+         pressed. */
+      const fontCss = await fontCssFor(data.profile?.computationTheme);
 
       let built;
       try {
-        built = buildComputation(itrJson, { assessee: a, profile: data.profile });
+        built = buildComputation(itrJson, { assessee: a, profile: data.profile, fontCss });
       } catch (err) {
         if (err instanceof UnsupportedFormError) { notify(err.message, "alert"); return; }
         throw err;
       }
 
-      /* `theme` is what tells the renderer which typeface to inline: the faces
-         are embedded server-side, not in this bundle (§14). The theme itself
-         and the accent were read off the profile by buildComputation. */
+      /* `theme` still goes up, for a render function old enough to want it. */
       const { data: res } = await httpsCallable(functions, "renderComputationPdf")({
         assesseeId: a.id, ay: r.ay, html: built.html, theme: built.theme,
       });

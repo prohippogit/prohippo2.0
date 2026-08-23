@@ -18,6 +18,7 @@ import { mapItr3, SUPPORTED_YEARS as itr3Years } from "./mappers/itr3/index.js";
 import { mapItr5, SUPPORTED_YEARS as itr5Years } from "./mappers/itr5/index.js";
 import { renderHtml } from "./render/template.js";
 import { resolveTheme, THEMES, THEME_IDS, DEFAULT_THEME } from "./render/themes/index.js";
+import { loadFontFaceCss } from "./render/fonts/index.js";
 
 const MAPPERS = {
   ITR1: mapItr1,
@@ -28,7 +29,14 @@ const MAPPERS = {
 
 /**
  * @param json ITR JSON exactly as downloaded from the portal
- * @param ctx  { assessee, profile, generatedAt, theme }
+ * @param ctx  { assessee, profile, generatedAt, theme, fontCss }
+ *
+ *   `fontCss` is the theme's @font-face block, from `await fontCssFor(theme)`.
+ *   Given one, the HTML leaves here COMPLETE and the render function has
+ *   nothing left to inline (§14). Omitted — which is what every test does,
+ *   because 80 KB of base64 in a golden file helps nobody — the slot stays and
+ *   the server fills it as it always did.
+ *
  * @returns { doc, html, theme } — `theme` is the id that was actually used, so
  *          the caller can tell the render function which typeface to inline
  *          without repeating the resolution (§14)
@@ -64,7 +72,27 @@ export function buildComputation(json, ctx = {}) {
   const theme = resolveTheme(ctx.theme || (ctx.profile || {}).computationTheme);
   const accent = ((ctx.profile || {}).invoiceSettings || {}).accent;
 
-  return { doc, theme: theme.id, html: renderHtml(doc, { theme: theme.id, accent }) };
+  return {
+    doc,
+    theme: theme.id,
+    html: renderHtml(doc, { theme: theme.id, accent, fontCss: ctx.fontCss }),
+  };
+}
+
+/**
+ * The @font-face block for whichever theme this setting names — the thing to
+ * hand `buildComputation` as `ctx.fontCss` (§14).
+ *
+ * It is async and separate from `buildComputation` because the faces are
+ * dynamically imported: a session that never generates a computation never
+ * downloads a typeface, and `buildComputation` itself stays synchronous and
+ * pure, which is what every test and every golden depends on.
+ *
+ * Takes the same value as `ctx.theme` — a theme id, a settings value, or
+ * nothing at all — so a caller resolves the theme once, here.
+ */
+export async function fontCssFor(theme) {
+  return loadFontFaceCss(resolveTheme(theme).font);
 }
 
 export { detect, validate, UnsupportedFormError, ValidationError };

@@ -116,11 +116,18 @@ src/computation/
       ay2025-26.js
       shared.js        helpers stable across years
   render/
-    styles.js          design tokens (§6)
     template.js        HTML string builder
     matrix.js          the schedule block — a `matrix` row (§3)
+    themes/
+      index.js         the theme registry + the default            (§14)
+      curvy.js         soft violet, Poppins, the practice's accent
+      classic.js       navy and gold, Montserrat — design tokens   (§6)
 functions/
   computation.js       headless Chromium → PDF (§13)
+  fonts/
+    index.js           theme → embedded typeface (§14)
+    poppins.js         the curvy theme's faces, base64 woff2
+    montserrat.js      the classic theme's face
 ```
 
 **Every computation carries a standing declaration.** The document restates a
@@ -179,7 +186,9 @@ leaves unconsumed, so §8 surfaces it rather than dropping it.
 ```bash
 npm test                        # all tests (node --test)
 node --test test/computation    # just this module
-npm run preview:computation <fixture>   # writes .tmp/<fixture>.html for eyeballing
+npm run preview:computation <fixture>         # writes .tmp/<fixture>.html
+npm run preview:computation <fixture> curvy   # …in one named theme (§14)
+npm run preview:computation <fixture> all     # …one file per theme, to compare
 ```
 
 ---
@@ -454,6 +463,11 @@ section unless you have verified it applies.
 nearest ₹10 but the tax figure often is *not* (one of our fixtures carries a tax
 of ₹703, not ₹700). If you re-derive rounding, your PDF will disagree with the
 acknowledgement. Print what the return says.
+
+Two themes render these rules; §14 is the registry and the rule that keeps them
+one renderer. Everything below describes the **classic** theme's tokens, which
+are the shared house style; the curvy theme's are derived from the practice's
+own accent.
 
 ### House style tokens
 
@@ -1341,9 +1355,10 @@ fixtures when returns arrive that carry them.
 ## 13. The render step
 
 `render/template.js` produces one self-contained HTML string: inline CSS, the
-Montserrat subset as a base64 `@font-face`, no external references of any kind.
+theme's typeface as a base64 `@font-face`, no external references of any kind.
 
-`functions/computation.js` exposes `renderComputationPdf({ assesseeId, ay, html })`:
+`functions/computation.js` exposes
+`renderComputationPdf({ assesseeId, ay, html, theme })`:
 
 1. Launches headless Chromium (`puppeteer-core` + `@sparticuz/chromium`).
 2. `setContent(html, { waitUntil: 'load' })` — nothing to fetch, so this is fast.
@@ -1370,3 +1385,81 @@ Chromium is the reason this is a server call at all: the design in §6 is
 gradients, rounded cards and print-safe page breaks, and reproducing it in a
 drawing API would be a second renderer to keep in step with the first. §2's "one
 renderer, never forked" applies to output targets as much as to forms.
+
+---
+
+## 14. Themes
+
+A theme is a **stylesheet**, and nothing else. It is the same rule §2 keeps for
+forms, applied to looks: when the document needs to appear differently, the
+renderer gains a stylesheet, not a branch. `render/template.js` emits identical
+markup whichever theme is chosen — `test/computation/themes.test.mjs` strips the
+`<style>` block off both and requires the rest to match character for character.
+
+```
+src/computation/render/themes/
+  index.js     the registry: id, name, description, font, stylesheet
+  curvy.js     soft violet panels in the practice's accent, Poppins   ← default
+  classic.js   navy and gold, Montserrat — the original
+```
+
+### Choosing one
+
+| where | what |
+|-------|------|
+| `profile.computationTheme` | the practice's choice, set in Settings → *Computation of Income — appearance* |
+| `buildComputation(json, { theme })` | an explicit override; the preview script uses it to render both |
+| neither | `DEFAULT_THEME` — **curvy** |
+
+An unknown, empty or mistyped id resolves to the default rather than throwing. A
+settings value that has been hand-edited, or a client older than a theme that has
+since been renamed, must not stop a practitioner getting their document.
+
+### What a theme may and may not touch
+
+It may not touch a figure, a label, a section or the review block. `doc` is
+identical under every theme — it is what `validate()` ties back to the return
+(§7), and a look that could move a number would be a tax engine with a colour
+picker. What a theme owns is colour, type, spacing and rule weight.
+
+### The accent
+
+The curvy theme is coloured by `profile.invoiceSettings.accent` — the same
+setting that colours the invoices, the ledger and the ITR-B working paper, so a
+practice picks its colour once and every document it sends out agrees. Every
+tint is derived from it in the stylesheet rather than listed, because a listed
+tint is one that stays violet when the accent does not.
+
+The classic theme ignores the accent. Its navy and gold are the fixed house
+style §6 describes and are shared with the appellate drafting templates.
+
+### The typeface is half server-side
+
+Each theme names a family; the faces themselves are embedded under
+`functions/fonts/` and inlined at render time, because 40 KB of woff2 per family
+has no business in a browser bundle for a document most sessions never generate.
+That splits one mapping across two files:
+
+| file | holds |
+|------|-------|
+| `src/computation/render/themes/index.js` | `THEMES[id].font` |
+| `functions/fonts/index.js` | `FONT_FOR_THEME[id]` → the module to inline |
+
+`test/computation/themes.test.mjs` requires the two to agree. A theme missing
+from the server's half prints in whatever headless Chromium falls back to —
+which is nothing at all, because the render runs with no system fonts — so the
+failure is a blank page with no error, which is exactly the kind a test has to
+catch instead of a user.
+
+Regenerate the faces with `node scripts/fetch-computation-fonts.mjs`. They are
+committed, so a deploy never depends on Google being reachable.
+
+### Adding a theme
+
+1. Write `themes/<id>.js` exporting `stylesheet(opts)`.
+2. List it in `themes/index.js` with a name, a description a practitioner can
+   choose from, and the family it is set in.
+3. Add the family to `scripts/fetch-computation-fonts.mjs` and
+   `functions/fonts/index.js` if it is not one already embedded.
+4. Run the tests. Nothing else in the feature changes — and if something else
+   has to, the change is in the wrong place.

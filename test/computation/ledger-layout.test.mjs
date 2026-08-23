@@ -19,13 +19,13 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-import { buildComputation } from "../../src/computation/index.js";
+import { buildComputation, THEME_IDS } from "../../src/computation/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(here, "..", "fixtures");
 const CTX = { generatedAt: "2026-01-01T00:00:00.000Z" };
 
-const build = (name) => buildComputation(JSON.parse(readFileSync(path.join(FIXTURES, `${name}.json`), "utf8")), CTX);
+const build = (name, ctx) => buildComputation(JSON.parse(readFileSync(path.join(FIXTURES, `${name}.json`), "utf8")), { ...CTX, ...ctx });
 const files = readdirSync(FIXTURES).filter((f) => f.endsWith(".json")).sort();
 
 test("every carry-forward section built from a fixture is a ledger", () => {
@@ -68,16 +68,22 @@ test("a working is not a ledger — the shape is stated, never assumed", () => {
   }
 });
 
-test("the renderer rules a ledger and floats a working", () => {
-  const { html } = build("itr3-fno-bfloss-setoff-ay2026-27");
-  // One ledger in this document, and it is framed. The frame is what rounds the
-  // corners — a table with collapsed borders cannot round its own.
-  assert.equal(html.match(/class="grid-frame"/g).length, 1);
-  assert.equal(html.match(/<table class="rows grid">/g).length, 1);
-  assert.match(html, /\.grid-frame \{[^}]*border-radius: 16px/);
-  assert.match(html, /table\.rows\.grid \{ border-collapse: collapse/);
-  // The workings above it are untouched.
-  assert.ok(html.match(/<table class="rows">/g).length >= 5);
+test("the renderer rules a ledger and floats a working, in every theme", () => {
+  /* The markup is the same in both themes (§14) and so is the SHAPE: a ledger
+     is framed, its table collapses its borders, and the workings above it are
+     left floating. What differs is the radius and the colour, which is the
+     theme's business and not this test's. */
+  for (const theme of THEME_IDS) {
+    const { html } = build("itr3-fno-bfloss-setoff-ay2026-27", { theme });
+    // One ledger in this document, and it is framed. The frame is what rounds
+    // the corners — a table with collapsed borders cannot round its own.
+    assert.equal(html.match(/class="grid-frame"/g).length, 1, theme);
+    assert.equal(html.match(/<table class="rows grid">/g).length, 1, theme);
+    assert.match(html, /\.grid-frame \{[^}]*border-radius: \d+px[^}]*overflow: hidden/s, theme);
+    assert.match(html, /table\.rows\.grid \{ border-collapse: collapse/, theme);
+    // The workings above it are untouched.
+    assert.ok(html.match(/<table class="rows">/g).length >= 5, theme);
+  }
 });
 
 test("the renderer decides on the layout, never on the form", () => {

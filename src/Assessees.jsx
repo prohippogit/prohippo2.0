@@ -1129,8 +1129,11 @@ export function AssesseeProfile({ assessee, onBack, onNav, initialTab, initialMa
         throw err;
       }
 
+      /* `theme` is what tells the renderer which typeface to inline: the faces
+         are embedded server-side, not in this bundle (§14). The theme itself
+         and the accent were read off the profile by buildComputation. */
       const { data: res } = await httpsCallable(functions, "renderComputationPdf")({
-        assesseeId: a.id, ay: r.ay, html: built.html,
+        assesseeId: a.id, ay: r.ay, html: built.html, theme: built.theme,
       });
       if (!res?.storagePath) throw new Error("The renderer returned no document.");
       await downloadDoc(res.storagePath, returnDocFilename("computation", r, a.name));

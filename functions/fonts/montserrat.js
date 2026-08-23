@@ -1,17 +1,14 @@
-// Montserrat, embedded for the Computation of Income renderer.
+// Montserrat, embedded for the Computation of Income renderer — the classic theme (docs/computation-spec.md §14).
+//
+// From Google Fonts, under the SIL Open Font License 1.1.
 //
 // The render function runs headless Chromium with no system fonts at all, and
 // the page must not reach the network (docs/computation-spec.md §13), so the
 // typeface travels inside the HTML as base64 woff2.
 //
-// Two subsets, both from Google Fonts (SIL Open Font License 1.1):
-//
-//   LATIN  the variable face covering weights 400-800 in one file, so all five
-//          weights the design uses cost 37 KB rather than five separate files.
-//   RUPEE  U+20B9 only. Google's "latin" subset stops at U+20AC and does NOT
-//          include the Indian rupee sign — without this the ₹ in the refund
-//          banner would fall back to a font Chromium does not have, and render
-//          as a blank box. 4 KB for one glyph is worth it.
+// One variable face covering weights 400-800, plus U+20B9 on its own:
+// Google's "latin" subset stops at U+20AC and has no rupee sign, and the ₹ in
+// the refund banner would otherwise render as a blank box.
 //
 // Regenerate with scripts/fetch-computation-fonts.mjs.
 "use strict";

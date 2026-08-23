@@ -137,41 +137,85 @@ test("the curvy theme is coloured by the practice's accent, and the classic one 
 });
 
 test("a nonsense accent falls back rather than emitting broken CSS", () => {
-  for (const bad of ["", "red", "#12", "not a colour", undefined, null]) {
+  for (const bad of ["", "red", "#12", "not a colour", undefined, null, "#000000"]) {
     const css = THEMES.curvy.stylesheet({ accent: bad });
-    assert.match(css, /--accent: #6c5ce7;/i, `accent ${JSON.stringify(bad)} should fall back to the default`);
+    if (bad !== "#000000") {
+      assert.match(css, /--accent: #6c5ce7;/i, `accent ${JSON.stringify(bad)} should fall back to the default`);
+    }
     assert.ok(!/NaN|undefined|null/.test(css), `accent ${JSON.stringify(bad)} leaked into the CSS`);
+    /* Every colour the stylesheet derives has to be a colour. The masthead
+       darkens the accent for its gradient, and a black accent darkened past
+       zero used to emit "#-2e…", which Chromium drops silently — an unpainted
+       masthead, on the practice that picked the darkest colour offered. */
+    for (const m of css.matchAll(/#[0-9a-fA-F-]+/g)) {
+      assert.match(m[0], /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/,
+        `accent ${JSON.stringify(bad)} produced ${m[0]}`);
+    }
   }
 });
 
 /* ---------------- the typeface, which is half server-side ---------------- */
 
-test("the client's font for each theme is one the render function can actually inline", () => {
-  /* The faces are embedded server-side because they are 40 KB each and most
-     sessions never generate a computation. That splits the mapping in two, and
-     a theme missing from the server's half prints in whatever headless Chromium
-     falls back to — which is nothing, because the render has no system fonts.
-     A blank page with no error is exactly what a test has to catch. */
-  const { fontFaceFor, FONT_FOR_THEME } = require("../../functions/fonts");
-
-  assert.deepEqual(
-    Object.fromEntries(ids.map((id) => [id, THEMES[id].font])),
-    FONT_FOR_THEME,
-    "src/computation/render/themes/index.js and functions/fonts/index.js disagree about a typeface"
-  );
+test("every family a theme asks for is one the render function actually embeds", () => {
+  /* THE FAULT THIS REPLACED A MAPPING TO PREVENT.
+   *
+   * The server used to inline ONE family, chosen from the theme id. Client and
+   * server deploy separately, so the first curvy document went out to a
+   * function that had never heard of the curvy theme: the page asked for
+   * Poppins, the @font-face block held Montserrat, and Chromium — which has no
+   * system fonts in the render container — set the whole PDF in Liberation
+   * Sans. Nothing errored. The practitioner just got the wrong document.
+   *
+   * So the server sends every face it has, and the only thing left to check is
+   * that a theme cannot ask for one nobody embedded. */
+  const { fontFaceFor, FAMILIES } = require("../../functions/fonts");
+  const css = fontFaceFor("anything at all");
 
   for (const id of ids) {
-    const css = fontFaceFor(id);
-    assert.ok(css && css.includes("@font-face"), `${id}: no face`);
-    assert.match(css, new RegExp(`font-family: '${THEMES[id].font}'`, "i"));
-    assert.ok(css.includes("U+20B9"), `${id}: no rupee sign — the refund banner would print a blank box`);
-    // Every face travels as base64 in the page; a URL would be a blank (§13).
-    for (const m of css.matchAll(/url\(([^)]*)\)/g)) assert.match(m[1], /^data:font\/woff2;base64,/);
+    const family = THEMES[id].font;
+    assert.ok(FAMILIES[family], `${id}: no embedded face for ${family}`);
+    assert.match(css, new RegExp(`font-family: '${family}'`, "i"),
+      `${id}: ${family} is not in what the render function inlines`);
   }
 
-  // An unknown theme still gets a face, for the same reason resolveTheme falls
-  // back: a document set in the wrong typeface beats a document set in none.
-  assert.ok(fontFaceFor("nope").includes("@font-face"));
+  // Every face travels as base64 in the page; a URL would be a blank (§13).
+  for (const [family, block] of Object.entries(FAMILIES)) {
+    for (const m of block.matchAll(/url\(([^)]*)\)/g)) assert.match(m[1], /^data:font\/woff2;base64,/);
+  }
+
+  /* The theme id changes nothing, deliberately: narrowing by theme is what
+     broke, and a test that let it come back would be worth nothing. */
+  for (const t of [undefined, "curvy", "classic", "a-theme-from-next-year"]) {
+    assert.equal(fontFaceFor(t), css, `fontFaceFor(${JSON.stringify(t)}) must not narrow`);
+  }
+});
+
+test("the rupee sign is declared at every weight the family is", () => {
+  /* THE ₹ THAT CAME OUT IN A DIFFERENT TYPEFACE.
+   *
+   * Google's latin subset stops at U+20AC, so each family carries a second face
+   * for U+20B9 alone. Poppins is not a variable font — it is five static faces
+   * at 400…800 — and the rupee face was declared once, at `400 800`. Chromium
+   * matched the WEIGHT first, picked the 800 latin face, found no ₹ in it and
+   * fell through to DejaVu Sans: the refund banner's rupee sign set in a
+   * different typeface from the figure beside it, on every document.
+   *
+   * The rule that fixes it is structural and can be checked without a browser:
+   * whatever weights a family declares for latin, it declares for the rupee. */
+  const { FAMILIES } = require("../../functions/fonts");
+
+  for (const [family, css] of Object.entries(FAMILIES)) {
+    const weights = { latin: new Set(), rupee: new Set() };
+    for (const block of css.split("@font-face").slice(1)) {
+      const w = /font-weight:\s*([^;]+);/.exec(block);
+      const r = /unicode-range:\s*([^;]+);/s.exec(block);
+      assert.ok(w && r, `${family}: a face with no weight or no range`);
+      weights[/U\+20B9/i.test(r[1]) ? "rupee" : "latin"].add(w[1].trim());
+    }
+    assert.ok(weights.latin.size, `${family}: no latin face`);
+    assert.deepEqual([...weights.rupee].sort(), [...weights.latin].sort(),
+      `${family}: the rupee sign is not available at every weight the text is set in`);
+  }
 });
 
 test("each theme names the family its stylesheet actually asks for", () => {

@@ -50,8 +50,16 @@ function rgb(hex) {
 
 /* Mix towards white. `t` is how much white: 0.9 is the wash behind a section
    band, 0.82 the one behind a table heading. Same function, same numbers, as
-   pdfTheme.js `tint` — the two themes are the same design in two media. */
-const mix = (c, t) => `#${c.map((v) => Math.round(v + (255 - v) * t).toString(16).padStart(2, "0")).join("")}`;
+   pdfTheme.js `tint` — the two themes are the same design in two media.
+
+   A NEGATIVE `t` darkens instead, which is how the masthead's gradient gets a
+   deeper end without a second colour to keep in step. Clamped, because an
+   accent that is already near-black darkens past zero and `(-46).toString(16)`
+   is "-2e" — a hex colour Chromium drops on the floor, silently, leaving an
+   unpainted panel. */
+const mix = (c, t) => `#${c
+  .map((v) => Math.max(0, Math.min(255, Math.round(v + (255 - v) * t))).toString(16).padStart(2, "0"))
+  .join("")}`;
 
 /* Enough contrast to set white on, or not. A practice that picks amber gets
    ink on its chips rather than white, which is the difference between a
@@ -102,54 +110,83 @@ body {
   page-break-inside: avoid;
 }
 
-/* ---- masthead -----------------------------------------------------------
+/* ---- masthead ------------------------------------------------------------
  *
- * White, not a filled band. The curvy documents put the identity on the left
- * with a chip, the document's own name on the right as a wordmark, and one
- * accent rule under both — so a practitioner reading a stack of them finds the
- * same thing in the same place on every one.
+ * A CURVY BLOCK IN THE PRACTICE'S COLOUR. It was a white header with a rule
+ * under it first, which is what the ITR-B working paper does — but that page
+ * carries the FIRM at the top and its own colour arrives lower down. This one
+ * carries the assessee, and a computation opening on white read as though the
+ * theme had not been applied to the top of the page at all.
+ *
+ * So the identity is a filled panel and the particulars below it are a second,
+ * separate one: two blocks, both in the accent, neither pretending to be part
+ * of the other.
  */
 .masthead {
   position: relative;
-  padding: 4px 2px 0;
-  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 16px 20px 15px;
+  margin-bottom: 10px;
+  color: #fff;
+  background: linear-gradient(118deg, ${mix(a, -0.18)} 0%, ${accent} 58%, ${mix(a, 0.14)} 100%);
   display: flex; align-items: flex-start; gap: 14px;
-  border-bottom: 2px solid var(--accent);
-  padding-bottom: 9px;
   break-inside: avoid;
 }
-/* The decorative circles belong to the other theme's gradient. Named one by
-   one as well as by their shared class, because a rule per class is what makes
-   "is every element this template emits styled in every theme?" a question a
-   test can ask (test/computation/themes.test.mjs). */
-.masthead .blob, .masthead .blob-gold, .masthead .blob-white { display: none; }
+/* Two soft discs, the same device the other theme uses and the reason its
+   masthead does not read as a flat rectangle of colour. Kept to a whisper here
+   because the accent is the practice's and may be light. */
+.masthead .blob { position: absolute; border-radius: 50%; pointer-events: none; }
+.masthead .blob-gold { right: -70px; top: -80px; width: 230px; height: 230px; background: #fff; opacity: .10; }
+.masthead .blob-white { right: 46px; bottom: -120px; width: 190px; height: 190px; background: #fff; opacity: .07; }
+
 .masthead .mark {
-  flex: 0 0 auto; width: 37px; height: 37px; border-radius: 11px;
-  background: ${mix(a, 0.88)}; color: var(--accent);
-  font-size: 15pt; font-weight: 800; line-height: 37px; text-align: center;
+  position: relative;
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px;
+  background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.34); color: #fff;
+  font-size: 15pt; font-weight: 700; line-height: 36px; text-align: center;
 }
-.masthead .mast-main { flex: 1 1 auto; min-width: 0; }
+.masthead .mast-main { position: relative; flex: 1 1 auto; min-width: 0; }
 .masthead .eyebrow {
-  font-size: 6.6pt; font-weight: 600; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--muted); margin-bottom: 1px;
+  font-size: 6.6pt; font-weight: 600; letter-spacing: .15em;
+  text-transform: uppercase; color: rgba(255,255,255,.72); margin-bottom: 2px;
 }
-.masthead h1 { margin: 0 0 2px; font-size: 14pt; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
-.masthead .addr { font-size: 7.6pt; color: var(--muted); margin-bottom: 6px; line-height: 1.4; }
+.masthead h1 { margin: 0 0 3px; font-size: 15pt; font-weight: 700; letter-spacing: -.01em; color: #fff; }
+.masthead .addr { font-size: 7.6pt; color: rgba(255,255,255,.80); margin-bottom: 8px; line-height: 1.4; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
-  border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
-  padding: 2px 9px; font-size: 7.4pt; font-weight: 600; color: var(--body);
+  border: 1px solid rgba(255,255,255,.34); background: rgba(255,255,255,.12); border-radius: 999px;
+  padding: 2px 10px; font-size: 7.4pt; font-weight: 500; color: #fff;
 }
-.chip b { color: var(--accent); font-weight: 700; margin-right: 4px; }
-/* The wordmark: what this document is, in the accent, right-aligned. */
+.chip b { color: #fff; font-weight: 700; margin-right: 4px; opacity: .78; }
+/* The wordmark: what this document is, set against the panel rather than in it. */
 .masthead .wordmark {
-  flex: 0 0 auto; text-align: right; padding-top: 2px;
-  font-size: 17pt; font-weight: 800; color: var(--accent);
+  position: relative;
+  flex: 0 0 auto; text-align: right; padding-top: 1px;
+  font-size: 17pt; font-weight: 700; color: rgba(255,255,255,.94);
   letter-spacing: -.02em; line-height: 1.05;
 }
 .masthead .wordmark span {
-  display: block; font-size: 6.4pt; font-weight: 600; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--muted); margin-top: 2px;
+  display: block; font-size: 6.4pt; font-weight: 500; letter-spacing: .13em;
+  text-transform: uppercase; color: rgba(255,255,255,.66); margin-top: 3px;
+}
+
+/* ---- the assessee's particulars: the second block ------------------------
+ *
+ * Its own panel in the accent, washed rather than filled. Filled twice over
+ * would make the top of the page one block of colour with a seam in it, and
+ * these are two different statements: who this is, and what is on record
+ * about them.
+ */
+.card.card-id {
+  background: var(--soft);
+  border: 1px solid ${mix(a, 0.72)};
+  border-radius: 18px;
+}
+/* No band inside a block that is already one — the heading sits on the wash. */
+.card-id .pill {
+  background: transparent; padding: 0 2px; margin-bottom: 10px;
+  color: var(--accent); font-size: 8.6pt; letter-spacing: .06em; text-transform: uppercase;
 }
 
 /* ---- section headers ----------------------------------------------------
@@ -338,8 +375,8 @@ table.m-t tr.m-total .m-note { color: ${mix(a, 0.35)}; }
 .mtx.xxwide .m-frame { zoom: 0.70; }
 
 /* ---- particulars ------------------------------------------------------- */
-.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; }
-.fact .k { font-size: 6.8pt; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--accent); margin-bottom: 1px; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px 16px; }
+.fact .k { font-size: 6.8pt; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: ${mix(a, 0.28)}; margin-bottom: 1px; }
 .fact .v { font-size: 8.6pt; font-weight: 500; color: var(--ink); white-space: pre-line; }
 
 .partners { display: flex; flex-wrap: wrap; gap: 8px; }

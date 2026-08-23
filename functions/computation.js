@@ -24,9 +24,13 @@ const { PROHIPPO_LOGO_DATA_URI } = require("./assets/prohippoLogo.js");
 
 // The template leaves this marker where the @font-face rules belong; the fonts
 // live here rather than in the browser bundle so no user pays 40 KB of woff2 to
-// load a page they may never generate a computation from. WHICH family lands
-// there depends on the theme the document was built in (§14) — the client sends
-// the theme's id and fonts/index.js maps it to a face.
+// load a page they may never generate a computation from.
+//
+// EVERY family goes in, whatever theme the document was built in (§14). The
+// request still carries a `theme`, and this function still ignores it for the
+// fonts: narrowing by it is what set the first curvy computation in Liberation
+// Sans, because the client had shipped and the function had not. See
+// fonts/index.js.
 const FONT_SLOT = "/*__COMPUTATION_FONT_FACE__*/";
 
 // Chromium renders header/footer templates in their own isolated document: they
@@ -96,7 +100,7 @@ function register({ region, storageBucket, db }) {
     async (request) => {
       const uid = request.auth?.uid;
       if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
-      const { assesseeId, ay, html, theme } = request.data || {};
+      const { assesseeId, ay, html } = request.data || {};
       if (!assesseeId || !ay || typeof html !== "string" || !html.trim()) {
         throw new HttpsError("invalid-argument", "assesseeId, ay and html are required.");
       }
@@ -117,7 +121,7 @@ function register({ region, storageBucket, db }) {
          review instead of quietly fetching from a user's document. */
       let pdf;
       try {
-        pdf = await renderHtmlToPdf(html.replace(FONT_SLOT, fontFaceFor(theme)), {
+        pdf = await renderHtmlToPdf(html.replace(FONT_SLOT, fontFaceFor()), {
           footer: FOOTER(name, ay),
           margin: { top: "12mm", right: "11mm", bottom: "16mm", left: "11mm" },
         });

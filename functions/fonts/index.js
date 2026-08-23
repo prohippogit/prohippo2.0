@@ -1,22 +1,28 @@
 /*
- * Which typeface a computation's theme is set in — the server's half of §14.
+ * The typefaces a computation may be set in — the server's half of §14.
  *
- * The client picks the theme and builds the HTML; this function inlines the
- * face, because 40 KB of woff2 per family has no business in the browser bundle
- * for a document most sessions never generate.
+ * The client picks the theme and builds the HTML; this inlines the faces,
+ * because 40 KB of woff2 per family has no business in a browser bundle for a
+ * document most sessions never generate.
  *
- * THE MAPPING EXISTS TWICE and that is why there is a test for it. The client's
- * copy is `THEMES[id].font` in src/computation/render/themes/index.js;
- * test/computation/themes.test.mjs runs both and requires them to agree. A theme
- * missing from this table would print in whatever headless Chromium falls back
- * to — which is nothing at all, because the render runs with no system fonts —
- * so the failure is a blank page, and a blank page with no error is exactly the
- * kind of fault a test has to catch instead of a user.
+ * EVERY FAMILY, EVERY TIME — and that is a correction, not a shortcut.
  *
- * A theme id that is not in here does NOT throw. It falls back to the default
- * family: an unknown theme means a stale client or a mistyped setting, and a
- * document set in the wrong typeface is recoverable in a way a failed render is
- * not.
+ * This used to map the theme id to one family and inline only that. It is the
+ * obvious design and it has a failure mode with no error in it: the client and
+ * the server deploy separately, so a browser running a theme the deployed
+ * function has never heard of gets a page asking for Poppins and an @font-face
+ * block containing Montserrat. Chromium renders it in neither — the render
+ * container has no system fonts — and the PDF comes back set in Liberation
+ * Sans with nothing anywhere saying why. That is exactly what happened the
+ * first time the curvy theme went out ahead of the functions.
+ *
+ * Sending both families costs ~80 KB inside an HTML string that is thrown away
+ * as soon as the PDF exists. It is not a page load and nobody downloads it. In
+ * exchange, a theme can be added, renamed or re-fonted on the client alone, and
+ * the two sides can be deployed in either order or months apart.
+ *
+ * So the rule is: this file knows what faces exist. It does not know what a
+ * theme is, and it does not need to.
  */
 "use strict";
 
@@ -25,18 +31,20 @@ const FAMILIES = {
   montserrat: require("./montserrat.js").FONT_FACE_CSS,
 };
 
-// Keep in step with THEMES in src/computation/render/themes/index.js.
-const FONT_FOR_THEME = {
-  curvy: "poppins",
-  classic: "montserrat",
-};
+/* The @font-face block for the template's FONT_SLOT: every embedded family,
+   concatenated. Built once at module load — it is the same string on every
+   request and re-joining it per render is pure waste. */
+const ALL_FONT_FACE_CSS = Object.values(FAMILIES).join("\n");
 
-const DEFAULT_FAMILY = "poppins";
-
-/** The @font-face block for a theme id. Unknown ids get the default family. */
-function fontFaceFor(theme) {
-  const family = FONT_FOR_THEME[String(theme || "").trim()] || DEFAULT_FAMILY;
-  return FAMILIES[family];
+/**
+ * What to substitute for the template's font slot: every embedded family.
+ *
+ * It takes no argument on purpose. A `theme` parameter here would be an
+ * invitation to narrow by it again, and narrowing is the thing that broke —
+ * see the note above.
+ */
+function fontFaceFor() {
+  return ALL_FONT_FACE_CSS;
 }
 
-module.exports = { fontFaceFor, FONT_FOR_THEME, DEFAULT_FAMILY };
+module.exports = { fontFaceFor, ALL_FONT_FACE_CSS, FAMILIES };

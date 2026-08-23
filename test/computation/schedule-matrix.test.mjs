@@ -24,7 +24,7 @@ import path from "node:path";
 import { buildComputation } from "../../src/computation/index.js";
 import { matrix, matrixLine, section, finalise } from "../../src/computation/model.js";
 import { renderMatrix } from "../../src/computation/render/matrix.js";
-import { stylesheet } from "../../src/computation/render/styles.js";
+import { THEMES } from "../../src/computation/render/themes/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(here, "..", "fixtures");
@@ -123,7 +123,7 @@ test("a schedule interrupts the working; the rows either side keep their own tab
   const { html } = buildComputation(
     JSON.parse(readFileSync(path.join(FIXTURES, "itr3-landsale-54b-ay2024-25.json"), "utf8")), CTX
   );
-  const card = html.slice(html.indexOf("Capital Gains</div>"));
+  const card = html.slice(html.indexOf("Capital Gains</span>"));
   const upto = card.slice(0, card.indexOf('<div class="card">'));
   assert.match(upto, /<table class="rows">[\s\S]*Long-term capital gains[\s\S]*<\/table>[\s\S]*<div class="mtx">/);
   assert.match(upto, /<\/div>\s*<table class="rows">[\s\S]*Income chargeable under the head Capital Gains/);
@@ -152,10 +152,13 @@ test("a schedule wide enough to run off the page is stepped down, not truncated"
   assert.match(build(9), /class="mtx xwide"/);
   assert.match(build(13), /class="mtx xwide xxwide"/);
 
-  // …and every step has to be a rule somebody wrote, or the class does nothing.
-  const css = stylesheet();
-  for (const cls of ["mtx.wide", "mtx.xwide", "mtx.xxwide"]) {
-    assert.ok(css.includes(`.${cls} `), `styles.js has no rule for .${cls}`);
+  // …and every step has to be a rule somebody wrote, in EVERY theme, or the
+  // class does nothing and the schedule runs off the page in one of them.
+  for (const t of Object.values(THEMES)) {
+    const css = t.stylesheet({});
+    for (const cls of ["mtx.wide", "mtx.xwide", "mtx.xxwide"]) {
+      assert.ok(css.includes(`.${cls} `), `the ${t.id} theme has no rule for .${cls}`);
+    }
   }
 });
 

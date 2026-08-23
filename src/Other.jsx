@@ -3,6 +3,10 @@ import React from 'react';
 import { Icon, Avatar, StatusPill, Modal, FormField, TextInput, SelectInput, ComboBox, EmptyState, Toggle, Table, SheetMenu, matterAccent, useIsPhone, titleCase, fmtINR, fmtLakhs, fmtDate, fmtDateLong, daysFromNow } from './shared';
 import { hapticsAvailable } from './haptics';
 import { WHATSAPP_MESSAGES, resolveWhatsAppSettings, userReachability, clientReachability, whatsAppEnabledFor, displayMobile } from './whatsappSettings';
+/* The theme registry only — two stylesheet modules, no mappers. Importing the
+   computation's public API here would pull every ITR mapper into the main
+   bundle; the Returns tab loads that one dynamically for the same reason. */
+import { THEMES, THEME_IDS, resolveTheme } from './computation/render/themes/index.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { useData, invoiceStatus, invoiceOutstanding, totalOutstanding, upcomingHearings, downloadCSV, todayISO, daysAway, toISO,
@@ -1970,6 +1974,82 @@ function HapticsCard() {
   );
 }
 
+/* ---- the theme a Computation of Income is printed in (spec §14) ---- */
+
+/* WHY THIS IS A SETTING AND NOT A DECISION.
+ *
+ * The computation used to print in one look — navy and gold, Montserrat —
+ * while every other document this practice sends out was already drawn in the
+ * soft violet frame the invoices, the ledger and the ITR-B share. A client who
+ * gets a computation and a ledger in the same week should get two documents
+ * from one firm.
+ *
+ * So the curvy look is the default, and the original stays. A practice that has
+ * built its own letterhead around the navy one loses nothing by our changing
+ * our minds about the default; it says so here, once. */
+function ComputationThemeCard() {
+  const { profile, setProfile, notify } = useData();
+  const settings = resolveInvoiceSettings(profile);
+  const current = resolveTheme(profile?.computationTheme).id;
+
+  const choose = (id) => {
+    if (id === current) return;
+    setProfile({ computationTheme: id });
+    notify(`Computations will print in the ${THEMES[id].name.toLowerCase()} theme`);
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">Computation of Income — appearance</div>
+      </div>
+      <div className="muted" style={{fontSize: 12.5, lineHeight: 1.6}}>
+        How the Computation of Income PDF is set. The figures are identical either way — this changes the look of the
+        page, nothing on it.
+      </div>
+      <div className="row" style={{gap: 12, flexWrap: "wrap", marginTop: 12}}>
+        {THEME_IDS.map((id) => {
+          const t = THEMES[id];
+          const on = current === id;
+          // The swatch is drawn from the same accent the invoices use, so what
+          // is offered here is what will actually print.
+          const accent = id === "curvy" ? settings.accent : "#0B2545";
+          const second = id === "curvy" ? "#F8F7FB" : "#C9A227";
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => choose(id)}
+              aria-pressed={on}
+              className="card"
+              style={{
+                flex: "1 1 250px", textAlign: "left", cursor: "pointer", padding: 12, margin: 0,
+                border: `2px solid ${on ? accent : "var(--p-line)"}`,
+                background: on ? "var(--p-card-tint)" : "var(--p-card)",
+              }}
+            >
+              <div className="center" style={{gap: 10, marginBottom: 8}}>
+                <div style={{display: "flex", gap: 3}}>
+                  <div style={{width: 18, height: 24, borderRadius: id === "curvy" ? 6 : 3, background: accent}}/>
+                  <div style={{width: 18, height: 24, borderRadius: id === "curvy" ? 6 : 3, background: second, border: "1px solid var(--p-line)"}}/>
+                </div>
+                <div style={{fontWeight: 700, fontSize: 13.5}}>{t.name}</div>
+                {on && <span className="pill pill-muted" style={{marginLeft: "auto"}}>In use</span>}
+              </div>
+              <div className="muted" style={{fontSize: 11.5, lineHeight: 1.5}}>{t.description}</div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="muted" style={{fontSize: 11.5, marginTop: 10, lineHeight: 1.5}}>
+        The curvy theme takes its colour from the accent in <b>Invoice settings</b>, so every document this practice
+        sends out is the same colour. A computation already generated keeps the look it was generated in until it is
+        generated again.
+      </div>
+    </div>
+  );
+}
+
 function AutoReadCard() {
   const { profile, setProfile, notify } = useData();
   const on = Boolean(profile?.autoReadIntimations);
@@ -2180,6 +2260,7 @@ export function SettingsPage() {
           Google through that sync, so the two are read as one arrangement. */}
       <div style={{marginBottom: 16}}><ItatEmailCard/></div>
       <div style={{marginBottom: 16}}><WhatsAppCard/></div>
+      <div style={{marginBottom: 16}}><ComputationThemeCard/></div>
       <div style={{marginBottom: 16}}><AutoReadCard/></div>
       <div style={{marginBottom: 16}}><HapticsCard/></div>
       <div className="grid-split" style={{gap: 16}}>

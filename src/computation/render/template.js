@@ -10,12 +10,18 @@
  * so anything not in this string does not exist.
  *
  * The @font-face block is injected by the render function, which owns the
- * embedded Montserrat subsets (functions/fonts/montserrat.js). The placeholder
- * below is where it lands.
+ * embedded typefaces (functions/fonts/). The placeholder below is where it
+ * lands, and WHICH face arrives there is decided by the theme (§14).
+ *
+ * THEMES ARE STYLESHEETS. This file emits the same markup whichever one is
+ * chosen — the elements a theme needs that the other has no use for are emitted
+ * for both and hidden by the one that does not want them. That is deliberate:
+ * a second markup path is a second renderer, and §2 exists to stop there being
+ * one of those per form. It applies to looks as well.
  */
 import { amountText, inWords, longDate, esc, inr } from "../format.js";
 import { renderMatrix } from "./matrix.js";
-import { stylesheet } from "./styles.js";
+import { resolveTheme } from "./themes/index.js";
 
 /** The render function replaces this with the base64 @font-face rules. */
 export const FONT_SLOT = "/*__COMPUTATION_FONT_FACE__*/";
@@ -84,10 +90,22 @@ function renderSection(s) {
   flush();
 
   return `<div class="card">
-  <div class="pill ${s.tone === "gold" ? "gold" : s.tone === "slate" ? "slate" : ""}">${esc(s.letter)} · ${esc(s.title)}</div>
+  ${pill(s.tone, `${esc(s.letter)}`, esc(s.title))}
   ${blocks.join("\n")}
   ${footnote ? `<div class="footnote">${esc(footnote)}</div>` : ""}
 </div>`;
+}
+
+/* A section heading, in the parts a theme may want to treat separately.
+ *
+ * One theme prints "A · Capital Gains" as a single navy pill; the other puts
+ * the letter in a solid chip at the left of a tinted band and drops the
+ * separator. Same three pieces of text either way — the letter, the divider and
+ * the title — so both can be built from one string of markup. */
+function pill(tone, letter, title) {
+  const cls = tone === "gold" ? "gold" : tone === "slate" ? "slate" : "";
+  const l = letter ? `<span class="pl">${letter}</span><i class="pd"> · </i>` : "";
+  return `<div class="pill ${cls}">${l}<span class="pt">${title}</span></div>`;
 }
 
 function renderMasthead(doc) {
@@ -100,13 +118,21 @@ function renderMasthead(doc) {
     ["Status", a.status],
   ].filter(([, v]) => v);
 
+  /* `mark` and `wordmark` are the curvy theme's furniture — an initial in a
+     rounded chip, and the document's own name set in the accent on the right.
+     The classic theme hides both; its masthead is a filled gradient and has
+     nowhere to put them. Emitting them either way keeps one markup path (§2). */
   return `<div class="masthead">
   <div class="blob blob-gold"></div>
   <div class="blob blob-white"></div>
-  <div class="eyebrow">Computation of Total Income &amp; Tax Liability</div>
-  <h1>${esc(a.name)}</h1>
-  <div class="addr">${esc(a.address)}</div>
-  <div class="chips">${chips.map(([k, v]) => `<span class="chip"><b>${esc(k)}</b>${esc(v)}</span>`).join("")}</div>
+  <div class="mark">${esc((a.name || "").trim().charAt(0).toUpperCase() || "•")}</div>
+  <div class="mast-main">
+    <div class="eyebrow">Computation of Total Income &amp; Tax Liability</div>
+    <h1>${esc(a.name)}</h1>
+    <div class="addr">${esc(a.address)}</div>
+    <div class="chips">${chips.map(([k, v]) => `<span class="chip"><b>${esc(k)}</b>${esc(v)}</span>`).join("")}</div>
+  </div>
+  <div class="wordmark">COMPUTATION<span>of total income</span></div>
 </div>`;
 }
 
@@ -114,7 +140,7 @@ function renderParticulars(doc) {
   const facts = doc.assessee.facts.filter((f) => f.value || f.value2 != null);
   if (!facts.length) return "";
   return `<div class="card">
-  <div class="pill">Particulars of the Assessee</div>
+  ${pill("", "", "Particulars of the Assessee")}
   <div class="facts">${facts.map((f) => `<div class="fact">
     <div class="k">${esc(f.label)}</div>
     <div class="v">${esc(f.value)}${f.value2 != null ? `\n${esc(inr(f.value2))}` : ""}</div>
@@ -130,7 +156,7 @@ function renderPartners(doc) {
   const partners = doc.assessee.partners || [];
   if (!partners.length) return "";
   return `<div class="card">
-  <div class="pill">${esc(doc.assessee.constitutionTitle || "Constitution")}</div>
+  ${pill("", "", esc(doc.assessee.constitutionTitle || "Constitution"))}
   <div class="partners">${partners.map((p) => `<div class="partner">
     <div class="pn">${esc(p.name)}</div>
     <div class="pd">${esc(p.detail || [
@@ -223,8 +249,18 @@ function renderReview(doc) {
 </div>`;
 }
 
-/** ComputationDocument → a complete, self-contained HTML document. */
-export function renderHtml(doc) {
+/**
+ * ComputationDocument → a complete, self-contained HTML document.
+ *
+ * @param opts.theme  which theme to print in (§14). Unknown or absent → the
+ *                    default, because a document that fails to print because a
+ *                    settings value was mistyped is the wrong failure mode.
+ * @param opts.accent the practice's accent colour, from
+ *                    profile.invoiceSettings.accent. A theme that has no use
+ *                    for it ignores it.
+ */
+export function renderHtml(doc, opts = {}) {
+  const theme = resolveTheme(opts.theme);
   const title = `Computation of Total Income — ${doc.assessee.name} — A.Y. ${doc.meta.assessmentYear}`;
   return `<!doctype html>
 <html lang="en">
@@ -232,9 +268,9 @@ export function renderHtml(doc) {
 <meta charset="utf-8">
 <title>${esc(title)}</title>
 <style>${FONT_SLOT}</style>
-<style>${stylesheet()}</style>
+<style>${theme.stylesheet({ accent: opts.accent })}</style>
 </head>
-<body>
+<body class="t-${theme.id}">
 ${renderMasthead(doc)}
 ${renderParticulars(doc)}
 ${renderPartners(doc)}

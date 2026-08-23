@@ -17,6 +17,7 @@ import { mapItr2, SUPPORTED_YEARS as itr2Years } from "./mappers/itr2/index.js";
 import { mapItr3, SUPPORTED_YEARS as itr3Years } from "./mappers/itr3/index.js";
 import { mapItr5, SUPPORTED_YEARS as itr5Years } from "./mappers/itr5/index.js";
 import { renderHtml } from "./render/template.js";
+import { resolveTheme, THEMES, THEME_IDS, DEFAULT_THEME } from "./render/themes/index.js";
 
 const MAPPERS = {
   ITR1: mapItr1,
@@ -27,8 +28,10 @@ const MAPPERS = {
 
 /**
  * @param json ITR JSON exactly as downloaded from the portal
- * @param ctx  { assessee, profile, generatedAt }
- * @returns { doc, html }
+ * @param ctx  { assessee, profile, generatedAt, theme }
+ * @returns { doc, html, theme } — `theme` is the id that was actually used, so
+ *          the caller can tell the render function which typeface to inline
+ *          without repeating the resolution (§14)
  * @throws  UnsupportedFormError — no mapper for this form/year
  * @throws  ValidationError      — the document does not tie to the return (§7)
  */
@@ -53,10 +56,19 @@ export function buildComputation(json, ctx = {}) {
   const result = validate(doc, body);
   if (!result.ok) throw new ValidationError(result.failures);
 
-  return { doc, html: renderHtml(doc) };
+  /* THE THEME IS A LOOK, NOT A FIGURE. It reaches the renderer and nothing
+     else — no mapper reads it, no validation depends on it, and the same JSON
+     produces the same `doc` in either theme. The accent comes from the same
+     profile setting that colours the invoices and the ITR-B, so a practice that
+     has chosen its colour has chosen it once. */
+  const theme = resolveTheme(ctx.theme || (ctx.profile || {}).computationTheme);
+  const accent = ((ctx.profile || {}).invoiceSettings || {}).accent;
+
+  return { doc, theme: theme.id, html: renderHtml(doc, { theme: theme.id, accent }) };
 }
 
 export { detect, validate, UnsupportedFormError, ValidationError };
+export { THEMES, THEME_IDS, DEFAULT_THEME, resolveTheme };
 
 /* Which form-and-year combinations produce a document today, as the mappers
    themselves report it. The Returns tab does NOT read this — importing it would

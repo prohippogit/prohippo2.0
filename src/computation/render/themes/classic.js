@@ -1,5 +1,11 @@
 /*
- * House style tokens for the Computation of Income — docs/computation-spec.md §6.
+ * The CLASSIC theme — navy and gold, set in Montserrat (spec §6, §14).
+ *
+ * The look the computation shipped with, and still the one a practice can
+ * choose: banded rows on a white page, a navy total closing each section, a
+ * green refund banner. It is not deprecated and nothing here is to be softened
+ * towards the curvy theme — two themes that drift towards each other are one
+ * theme nobody chose.
  *
  * This palette is shared with BillHippo and with the appellate drafting
  * templates. It is settled: match it, don't redesign it.
@@ -80,6 +86,10 @@ body {
 .masthead .blob {
   position: absolute; border-radius: 50%; pointer-events: none;
 }
+/* The curvy theme's furniture: an initial in a chip and a wordmark on the
+   right. This masthead is a filled gradient with nowhere to put either. */
+.masthead .mark, .masthead .wordmark { display: none; }
+.masthead .mast-main { position: relative; }
 .masthead .blob-gold { right: -60px; top: -70px; width: 240px; height: 240px; background: ${t.gold500}; opacity: .22; }
 .masthead .blob-white { right: 40px; bottom: -110px; width: 200px; height: 200px; background: #fff; opacity: .07; }
 .masthead .eyebrow {
@@ -95,12 +105,19 @@ body {
 }
 .chip b { color: var(--gold-300); font-weight: 700; margin-right: 5px; }
 
-/* ---- section headers --------------------------------------------------- */
+/* ---- section headers ---------------------------------------------------
+ *
+ * One filled pill carrying "A · Capital Gains" as a single line of type. The
+ * template emits the letter, the separator and the title in their own spans
+ * because the other theme puts the letter in a chip of its own (§14); here they
+ * are all just text in the pill, and saying so explicitly is what lets a test
+ * ask whether every element the template emits is styled in every theme. */
 .pill {
   display: inline-block; border-radius: 999px; padding: 5px 14px;
   font-size: 8.5pt; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
   color: #fff; background: var(--navy-900); margin-bottom: 10px;
 }
+.pill .pl, .pill .pd, .pill .pt { font: inherit; color: inherit; font-style: normal; }
 .pill.gold { background: var(--gold-500); }
 .pill.slate { background: var(--navy-500); }
 
@@ -264,7 +281,9 @@ table.m-t tr.m-head .m-cn {
 }
 
 /* Amounts never wrap and always line up; text wraps and does not have to. */
+table.m-t tr.m-sub td { background: transparent; }
 table.m-t td.m-c { width: 1%; }
+table.m-t td.m-c.blank { background: transparent; }
 table.m-t td.m-c.num { white-space: nowrap; font-weight: 600; font-size: 9pt; }
 table.m-t td.m-c.num.nil { color: var(--nil); font-weight: 500; }
 table.m-t td.m-c.num.loss { color: var(--loss); }
@@ -278,17 +297,17 @@ table.m-t td.m-c.text.short { white-space: nowrap; width: 1%; }
    it, across the full width of the schedule. Set apart from the figures below
    it by weight and a tint rather than by a rule — it is a heading for the line,
    not a line of its own. */
-table.m-t tr.m-banner td {
+table.m-t tr.m-banner td, table.m-t td.m-span {
   background: var(--nil-bg); text-align: left; font-weight: 700;
   font-size: 8.5pt; white-space: normal; padding-top: 8px;
 }
 table.m-t tr.m-banner .m-note { font-weight: 500; font-size: 8pt; }
 /* No rule under it: the banner and the figures below it are one property, and a
    keepline between them reads as two. */
-table.m-t tr.m-banner td { border-bottom: 0; }
-.mtx.wide table.m-t tr.m-banner td { font-size: 8pt; }
+table.m-t tr.m-banner td, table.m-t td.m-span { border-bottom: 0; }
+.mtx.wide table.m-t tr.m-banner td, table.m-t td.m-span { font-size: 8pt; }
 .mtx.wide table.m-t tr.m-banner .m-note { font-size: 7.5pt; }
-.mtx.xwide table.m-t tr.m-banner td { font-size: 7.5pt; }
+.mtx.xwide table.m-t tr.m-banner td, table.m-t td.m-span { font-size: 7.5pt; }
 .mtx.xwide table.m-t tr.m-banner .m-note { font-size: 7pt; }
 
 table.m-t tr.m-subtotal td { background: var(--gold-bg); font-weight: 700; }

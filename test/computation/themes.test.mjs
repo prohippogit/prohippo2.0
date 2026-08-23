@@ -24,8 +24,10 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { buildComputation } from "../../src/computation/index.js";
+import { buildComputation, fontCssFor } from "../../src/computation/index.js";
 import { THEMES, THEME_IDS, DEFAULT_THEME, resolveTheme } from "../../src/computation/render/themes/index.js";
+import { loadFontFaceCss, FONT_FAMILIES } from "../../src/computation/render/fonts/index.js";
+import { FONT_SLOT } from "../../src/computation/render/template.js";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -216,6 +218,62 @@ test("the rupee sign is declared at every weight the family is", () => {
     assert.deepEqual([...weights.rupee].sort(), [...weights.latin].sort(),
       `${family}: the rupee sign is not available at every weight the text is set in`);
   }
+});
+
+test("the client and the server hold the same bytes for every family", async () => {
+  /* One script writes both copies (scripts/fetch-computation-fonts.mjs) and the
+     only difference is the export statement. If they ever drift, a document
+     built by the client and one filled in by the server stop being the same
+     document, and the second is the one nobody looks at until a PDF comes back
+     wrong. */
+  const { FAMILIES } = require("../../functions/fonts");
+
+  for (const [family, serverCss] of Object.entries(FAMILIES)) {
+    const clientCss = await loadFontFaceCss(family);
+    assert.equal(clientCss, serverCss, `${family}: the two copies have drifted`);
+  }
+  assert.deepEqual(FONT_FAMILIES.slice().sort(), Object.keys(FAMILIES).sort(),
+    "one side embeds a family the other does not");
+});
+
+test("the document carries its own faces, so an old render function cannot change them", async () => {
+  /* THE FAULT THIS PREVENTS, AND IT IS THE SECOND OF ITS KIND.
+   *
+   * Making the server send every family fixed the mismatch above but not the
+   * dependency: the next curvy computation still came back in Liberation Sans,
+   * because the fix had not been deployed. The client and the functions deploy
+   * separately and always will.
+   *
+   * Given `fontCss`, the HTML leaves the browser complete. The server's
+   * `html.replace(FONT_SLOT, …)` then finds nothing to replace and the
+   * document prints in the face it asked for, whatever version the function
+   * happens to be. */
+  for (const id of ids) {
+    const family = THEMES[id].font;
+    const fontCss = await fontCssFor(id);
+    assert.ok(fontCss.length > 1000, `${id}: no faces loaded for ${family}`);
+
+    const { html } = build({ theme: id, fontCss });
+    assert.ok(!html.includes(FONT_SLOT), `${id}: the slot is still there for the server to fill`);
+    assert.match(html, new RegExp(`font-family: '${family}'`, "i"), `${id}: ${family} is not in the page`);
+    assert.ok(html.includes("data:font/woff2;base64,"), `${id}: no face travelled with the document`);
+
+    // Without it, the slot stays — that is what the goldens and an older
+    // client both rely on.
+    assert.ok(build({ theme: id }).html.includes(FONT_SLOT), `${id}: the server's fallback has gone`);
+  }
+});
+
+test("a family nobody embedded loads as nothing rather than failing the document", async () => {
+  /* A theme naming a face that was never generated leaves the slot empty and
+     the server fills it exactly as it always did. A computation that failed to
+     build over a typeface would be the worse outcome by a distance. */
+  for (const bad of [undefined, "", "   ", "helvetica", "poppins.js", "../secrets"]) {
+    assert.equal(await loadFontFaceCss(bad), "", `${JSON.stringify(bad)} should load as nothing`);
+  }
+  // …and the id is matched case- and space-insensitively, because it comes
+  // from a registry a human types into.
+  assert.equal(await loadFontFaceCss(" Poppins "), await loadFontFaceCss("poppins"));
 });
 
 test("each theme names the family its stylesheet actually asks for", () => {

@@ -5,12 +5,30 @@
  *
  * The renderer runs headless Chromium with no system fonts and no network
  * access (docs/computation-spec.md §13), so every face travels inside the HTML
- * as base64 woff2. One module per family, under functions/fonts/.
+ * as base64 woff2.
+ *
+ * TWO COPIES OF EACH FAMILY, written by this one script:
+ *
+ *   src/computation/render/fonts/<family>.js    ESM. The CLIENT inlines the
+ *     face into the document it builds, so the HTML that reaches the render
+ *     function is already complete. It is loaded by dynamic import, so it lands
+ *     in its own chunk and nobody downloads a typeface for a page they never
+ *     generate a computation from.
+ *   functions/fonts/<family>.js                 CJS. The server fills the slot
+ *     for any client old enough to have left it empty.
+ *
+ * The client's copy is the one that matters, and it is why there are two. The
+ * server's copy deploys separately from the browser's, and the first curvy
+ * computation went out to a function that had never heard of the theme: the
+ * page asked for Poppins, the server inlined Montserrat, and the PDF came back
+ * in the container's fallback with nothing anywhere saying so. A document that
+ * carries its own faces cannot be broken by a function that is a version
+ * behind.
+ *
+ * test/computation/themes.test.mjs requires the two copies to be identical.
  *
  * ONE MODULE PER FAMILY: the classic theme is set in Montserrat and the curvy
- * one in Poppins (§14). The render function inlines all of them on every
- * document — see functions/fonts/index.js for why narrowing by theme was tried
- * and abandoned.
+ * one in Poppins (§14).
  *
  * Run it when Google ships a new version of either family (the URLs carry a
  * version today), or when the design needs a character outside the latin
@@ -159,9 +177,16 @@ ${faces}
 module.exports = { FONT_FACE_CSS };
 `;
 
-  const target = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "functions", "fonts", `${spec.module}.js`);
-  await writeFile(target, out);
-  console.log(`wrote ${target} — ${latins.length} latin face(s) + rupee, ${Math.round(bytes / 1024)} KB`);
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const targets = [
+    // The client's copy. ESM, dynamically imported by the theme it belongs to.
+    [path.join(root, "src", "computation", "render", "fonts", `${spec.module}.js`),
+      out.replace("module.exports = { FONT_FACE_CSS };", "export { FONT_FACE_CSS };")],
+    // The server's copy, for a client old enough to leave the slot empty.
+    [path.join(root, "functions", "fonts", `${spec.module}.js`), out],
+  ];
+  for (const [target, body] of targets) await writeFile(target, body);
+  console.log(`wrote ${spec.module}.js to src/ and functions/ — ${latins.length} latin face(s) + rupee, ${Math.round(bytes / 1024)} KB`);
 }
 
 for (const spec of FAMILIES) await build(spec);

@@ -261,6 +261,12 @@ function renderReview(doc) {
  * @param opts.accent the practice's accent colour, from
  *                    profile.invoiceSettings.accent. A theme that has no use
  *                    for it ignores it.
+ * @param opts.fontCss the theme's @font-face block. Given one, the document
+ *                    leaves here COMPLETE and the render function has nothing
+ *                    left to fill — which is the point: a document that carries
+ *                    its own faces cannot be set in the wrong one by a function
+ *                    that is a version behind (§14). Omitted, the slot stays
+ *                    and the server fills it as it always did.
  */
 export function renderHtml(doc, opts = {}) {
   const theme = resolveTheme(opts.theme);
@@ -270,7 +276,7 @@ export function renderHtml(doc, opts = {}) {
 <head>
 <meta charset="utf-8">
 <title>${esc(title)}</title>
-<style>${FONT_SLOT}</style>
+<style>${opts.fontCss || FONT_SLOT}</style>
 <style>${theme.stylesheet({ accent: opts.accent })}</style>
 </head>
 <body class="t-${theme.id}">

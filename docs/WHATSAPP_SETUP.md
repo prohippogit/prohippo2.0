@@ -538,32 +538,37 @@ templates. Twelve languages would be 36 variants, and every copy change becomes
 WATI onboards through Meta Embedded Signup: a Facebook Business Manager, and a
 phone number not currently registered on any WhatsApp app.
 
-#### The display name is set twice, on purpose
+#### Set the display name BEFORE verification completes
 
-Meta reviews the display name against the business it belongs to, so while
-verification is still running the name that passes most easily is the one being
-verified — **`Mehtaji Bizcon LLP`**, the legal entity. `ProHippo` is a product
-name, and a product name on an unverified account is the kind of mismatch a
-reviewer bounces.
+`ProHippo`. Not the legal entity, and not later.
 
-So the name starts as the LLP and becomes `ProHippo` once verification clears.
-That is a fresh review each time, which is fine — it is two reviews, not two
-accounts, and the number keeps working under the old name while the new one is
-considered.
+**While a business is unverified, the display name is confirmed immediately with
+no review.** Once verification completes, Meta initiates display-name review
+across every number on the account, and changes from that point need approval
+and are rate-limited. So the window before verification is the cheap one, and
+the instinct to "start safe with the legal name and rename afterwards" gets it
+exactly backwards — it commits you to making the one change that *does* need
+review, at the point where it is hardest.
 
-**What this sequences is the rollout, not the code.** The name a recipient sees
-matters differently for the two audiences:
+**A brand name is allowed where it is documented as belonging to the business,
+and ours already is.** `prohippo.in/about` states, publicly, that *"ProHippo is
+a product operated by MEHTAJI BIZCON LLP (LLPIN AAV-0638)"*, and the terms and
+contact pages repeat it. That published link between product and entity is what
+Meta's display-name guidance asks for. Keep those pages saying so — they are
+load-bearing now, not just boilerplate.
 
-| Audience | Under `Mehtaji Bizcon LLP` |
-|---|---|
-| The practitioner | Fine. They signed up; they know whose software this is |
-| A client | **Wait.** A client who gets an unrecognised business name about their own 142(1) notice is a client who reports it as spam — and on a shared number that costs every practice its quality rating |
+**Where to set it.** WATI → Settings → WhatsApp Business Profile → Display name.
+If WATI does not expose the field, Meta Business Manager → WhatsApp Manager →
+the WABA → Phone Numbers → hover the name → pencil → Edit display name.
 
-So the three practitioner messages can go live under the LLP name immediately.
-The three client-facing ones stay off until the display name is what a client
-should see. `profile.whatsapp` already separates them row by row, and
-`noticeAlertClient` already defaults off, so this needs no code — only restraint
-in Settings.
+**Which window you are in** is visible on that same Phone Numbers screen, in the
+**Certificate** column: a name confirmed with no label means review has not
+started; a `Pending Review` label means verification has completed and every
+later change is reviewed.
+
+**If it is ever rejected** at post-verification review, the fallback is
+`Mehtaji Bizcon LLP` — no worse than starting there, and by then the client
+messages have had the benefit of the right name for however long it lasted.
 
 Nothing in the codebase encodes the display name. It is a WATI setting, and the
 templates name the practitioner's own firm in the body (`Sent by {{firm}}.`)

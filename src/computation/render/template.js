@@ -139,7 +139,10 @@ function renderMasthead(doc) {
 function renderParticulars(doc) {
   const facts = doc.assessee.facts.filter((f) => f.value || f.value2 != null);
   if (!facts.length) return "";
-  return `<div class="card">
+  /* Its own class: the identity of the assessee is not a head of income, and
+     one theme gives it a block in the practice's colour of its own rather than
+     the plain white card a working gets. */
+  return `<div class="card card-id">
   ${pill("", "", "Particulars of the Assessee")}
   <div class="facts">${facts.map((f) => `<div class="fact">
     <div class="k">${esc(f.label)}</div>

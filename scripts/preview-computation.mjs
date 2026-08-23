@@ -55,7 +55,7 @@ for (const theme of themes) {
   }
   doc = built.doc;
   const out = path.join(outDir, `${base}${themes.length > 1 ? "." + built.theme : ""}.html`);
-  writeFileSync(out, built.html.replace("/*__COMPUTATION_FONT_FACE__*/", fontFaceFor(built.theme)));
+  writeFileSync(out, built.html.replace("/*__COMPUTATION_FONT_FACE__*/", fontFaceFor()));
   console.log(`wrote ${path.relative(root, out)}   (${THEMES[built.theme].name})`);
 }
 

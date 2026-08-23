@@ -339,7 +339,14 @@ table.m-t tr.m-total .m-note { color: rgba(255,255,255,.7); }
    column is dropped. It is the schedule as designed, printed smaller. */
 .mtx.xxwide .m-frame { zoom: 0.66; }
 
-/* ---- particulars ------------------------------------------------------- */
+/* ---- particulars -------------------------------------------------------
+ *
+ * The assessee's block is a card like any other here. The other theme gives it
+ * a panel in the practice's colour, which is why it carries a class of its own;
+ * saying so explicitly is what lets a test ask whether every element the
+ * template emits is styled in every theme. */
+.card.card-id { background: var(--card-bg); }
+
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 18px; }
 .fact .k { font-size: 8pt; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
 .fact .v { font-size: 9.5pt; font-weight: 600; white-space: pre-line; }

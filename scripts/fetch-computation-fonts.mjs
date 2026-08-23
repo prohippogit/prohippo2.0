@@ -7,10 +7,10 @@
  * access (docs/computation-spec.md §13), so every face travels inside the HTML
  * as base64 woff2. One module per family, under functions/fonts/.
  *
- * ONE FAMILY PER THEME, and that is the whole reason there is more than one
- * module here: the classic theme is set in Montserrat and the curvy one in
- * Poppins (§14), and inlining both on every document would put 80 KB of face
- * nobody is reading into every PDF.
+ * ONE MODULE PER FAMILY: the classic theme is set in Montserrat and the curvy
+ * one in Poppins (§14). The render function inlines all of them on every
+ * document — see functions/fonts/index.js for why narrowing by theme was tried
+ * and abandoned.
  *
  * Run it when Google ships a new version of either family (the URLs carry a
  * version today), or when the design needs a character outside the latin
@@ -33,8 +33,16 @@ const LATIN_RANGE =
 /* THE RUPEE SIGN IS NOT IN THE LATIN SUBSET of either family. Google's "latin"
    stops at U+20AC, so without a face for U+20B9 the ₹ in the refund banner
    falls back to a font Chromium does not have and renders as a blank box.
-   `text=₹` asks Google for a subset containing exactly that one glyph — about
-   4 KB, for the one character the whole document turns on. */
+   `text=₹` asks Google for a subset containing exactly that one glyph — under
+   a kilobyte, for the one character the whole document turns on.
+
+   AND IT IS DECLARED AT EVERY WEIGHT THE FAMILY HAS, not once. Declared once at
+   `400 800` beside five static faces at 400…800, Chromium matched the weight
+   first and picked an 800 latin face that does not contain the glyph, then fell
+   through to DejaVu Sans — so the refund banner's ₹ was set in a different
+   typeface from the figure beside it. A variable family has one weight
+   descriptor and therefore one rupee face; a static family has five of each.
+   The file is the same 900 bytes either way. */
 const RUPEE = "%E2%82%B9";
 
 const FAMILIES = [
@@ -113,9 +121,10 @@ async function build(spec) {
     return { name, decl: `const ${name} =\n${wrap(l.data.toString("base64"))};`, weight: l.weight, i };
   });
 
+  const weights = spec.variable ? ["400 800"] : list;
   const faces = consts
     .map((c) => face(spec.family, spec.variable ? "400 800" : c.weight, c.name, LATIN_RANGE))
-    .concat([face(spec.family, "400 800", `${upper}_RUPEE`, "U+20B9")])
+    .concat(weights.map((w) => face(spec.family, w, `${upper}_RUPEE`, "U+20B9")))
     .join("\n");
 
   const bytes = latins.reduce((a, l) => a + l.data.length, 0) + rupee.length;

@@ -1433,25 +1433,30 @@ tint is one that stays violet when the accent does not.
 The classic theme ignores the accent. Its navy and gold are the fixed house
 style §6 describes and are shared with the appellate drafting templates.
 
-### The typeface is half server-side
+### The typeface
 
-Each theme names a family; the faces themselves are embedded under
-`functions/fonts/` and inlined at render time, because 40 KB of woff2 per family
-has no business in a browser bundle for a document most sessions never generate.
-That splits one mapping across two files:
+Each theme names a family; the faces are embedded under `functions/fonts/` and
+inlined into `FONT_SLOT` at render time, because 40 KB of woff2 per family has
+no business in a browser bundle for a document most sessions never generate.
 
-| file | holds |
-|------|-------|
-| `src/computation/render/themes/index.js` | `THEMES[id].font` |
-| `functions/fonts/index.js` | `FONT_FOR_THEME[id]` → the module to inline |
+**The render function sends every family it has, every time.** It used to send
+the one the theme named, which is the obvious design and has a failure mode with
+no error in it: client and server deploy separately, so the first curvy document
+went out to a function that had never heard of the curvy theme — the page asked
+for Poppins, the block held Montserrat, and Chromium set the whole PDF in
+Liberation Sans, because the render container has no system fonts and nothing
+anywhere had to say so. ~80 KB inside an HTML string that is discarded the
+moment the PDF exists buys the two sides being deployable in either order.
 
-`test/computation/themes.test.mjs` requires the two to agree. A theme missing
-from the server's half prints in whatever headless Chromium falls back to —
-which is nothing at all, because the render runs with no system fonts — so the
-failure is a blank page with no error, which is exactly the kind a test has to
-catch instead of a user.
+**A rupee face per weight, not one.** Google's latin subset of either family
+stops at U+20AC, so each carries a second face for U+20B9 alone. Poppins is not
+a variable font — five static faces at 400…800 — and declaring the rupee face
+once at `400 800` made Chromium match the weight first, choose an 800 latin face
+with no ₹ in it, and fall through to DejaVu Sans: the refund banner's rupee sign
+in a different typeface from the figure beside it. Whatever weights a family
+declares for latin it declares for the rupee, and the test checks exactly that.
 
-Regenerate the faces with `node scripts/fetch-computation-fonts.mjs`. They are
+Regenerate with `node scripts/fetch-computation-fonts.mjs`. The modules are
 committed, so a deploy never depends on Google being reachable.
 
 ### Adding a theme
@@ -1460,6 +1465,7 @@ committed, so a deploy never depends on Google being reachable.
 2. List it in `themes/index.js` with a name, a description a practitioner can
    choose from, and the family it is set in.
 3. Add the family to `scripts/fetch-computation-fonts.mjs` and
-   `functions/fonts/index.js` if it is not one already embedded.
+   `functions/fonts/index.js` if it is not one already embedded. If it is, the
+   server needs no deploy at all — it already sends every family it has.
 4. Run the tests. Nothing else in the feature changes — and if something else
    has to, the change is in the wrong place.

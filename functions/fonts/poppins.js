@@ -613,7 +613,35 @@ const FONT_FACE_CSS = `
 @font-face {
   font-family: 'Poppins';
   font-style: normal;
-  font-weight: 400 800;
+  font-weight: 400;
+  src: url(data:font/woff2;base64,${POPPINS_RUPEE}) format('woff2');
+  unicode-range: U+20B9;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  src: url(data:font/woff2;base64,${POPPINS_RUPEE}) format('woff2');
+  unicode-range: U+20B9;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  src: url(data:font/woff2;base64,${POPPINS_RUPEE}) format('woff2');
+  unicode-range: U+20B9;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  src: url(data:font/woff2;base64,${POPPINS_RUPEE}) format('woff2');
+  unicode-range: U+20B9;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 800;
   src: url(data:font/woff2;base64,${POPPINS_RUPEE}) format('woff2');
   unicode-range: U+20B9;
 }

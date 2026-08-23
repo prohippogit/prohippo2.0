@@ -31,9 +31,15 @@ export const TOKENS = {
   line: "#E6E4F0",
   panel: "#F8F7FB",
   page: "#FFFFFF",
-  loss: "#C13378",
+  /* THE TWO COLOURS THAT ARE NOT THE PRACTICE'S.
+     A refund is green and an amount payable is magenta on every document this
+     practice sends out — pdfTheme.js CREDIT and DEBIT, the same two the ledger
+     colours a receipt and a bill with. They are not derived from the accent
+     because they do not mean "us", they mean "money coming" and "money going",
+     and a practice that picked green would otherwise have a green demand. */
   credit: "#1A8C5C",
-  creditInk: "#0E5C3C",
+  debit: "#C13378",
+  loss: "#C13378",
   warn: "#96580C",
   warnBg: "#FDF2E0",
   accent: "#6C5CE7",
@@ -66,6 +72,9 @@ const mix = (c, t) => `#${c
    legible letter and a smudge. */
 const readable = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] > 150 ? TOKENS.ink : "#FFFFFF");
 
+/** Wash a fixed hex towards white — for the two colours that are not the accent. */
+const wash = (hex, t) => mix(rgb(hex), t);
+
 export function stylesheet(opts = {}) {
   const t = TOKENS;
   const a = rgb(opts.accent || t.accent);
@@ -81,7 +90,7 @@ export function stylesheet(opts = {}) {
   --accent: ${accent}; --on-accent: ${on};
   --soft: ${soft}; --softer: ${softer}; --band: ${band}; --edge: ${edge};
   --ink: ${t.ink}; --body: ${t.body}; --muted: ${t.muted}; --line: ${t.line};
-  --panel: ${t.panel}; --loss: ${t.loss}; --credit: ${t.credit}; --credit-ink: ${t.creditInk};
+  --panel: ${t.panel}; --loss: ${t.loss}; --credit: ${t.credit}; --debit: ${t.debit};
 }
 
 * { box-sizing: border-box; }
@@ -112,81 +121,83 @@ body {
 
 /* ---- masthead ------------------------------------------------------------
  *
- * A CURVY BLOCK IN THE PRACTICE'S COLOUR. It was a white header with a rule
- * under it first, which is what the ITR-B working paper does — but that page
- * carries the FIRM at the top and its own colour arrives lower down. This one
- * carries the assessee, and a computation opening on white read as though the
- * theme had not been applied to the top of the page at all.
+ * THE ITR-B WORKING PAPER'S HEADER, WHICH IS THE ONE THAT WAS ASKED FOR: a mark
+ * in a soft chip on the left, what the document IS set large in the accent on
+ * the right, and a single accent rule under both. White, not filled — the rule
+ * carries the colour and the page opens without a block of it.
  *
- * So the identity is a filled panel and the particulars below it are a second,
- * separate one: two blocks, both in the accent, neither pretending to be part
- * of the other.
+ * It went out filled once, on the reasoning that a computation opening on white
+ * looked untouched by the theme. That was wrong twice over: the accent belongs
+ * to the rule and the chips here, and a filled panel put the assessee's name in
+ * reversed type where every other document this practice sends out has it in
+ * ink.
+ *
+ * The firm is deliberately absent. The ITR-B is a working paper the firm sends
+ * and leads with itself; a computation leads with whose return it is.
  */
 .masthead {
   position: relative;
-  overflow: hidden;
-  border-radius: 20px;
-  padding: 16px 20px 15px;
-  margin-bottom: 10px;
-  color: #fff;
-  background: linear-gradient(118deg, ${mix(a, -0.18)} 0%, ${accent} 58%, ${mix(a, 0.14)} 100%);
-  display: flex; align-items: flex-start; gap: 14px;
+  padding: 2px 2px 0;
+  margin-bottom: 12px;
+  display: flex; align-items: flex-start; gap: 15px;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 11px;
   break-inside: avoid;
 }
-/* Two soft discs, the same device the other theme uses and the reason its
-   masthead does not read as a flat rectangle of colour. Kept to a whisper here
-   because the accent is the practice's and may be light. */
-.masthead .blob { position: absolute; border-radius: 50%; pointer-events: none; }
-.masthead .blob-gold { right: -70px; top: -80px; width: 230px; height: 230px; background: #fff; opacity: .10; }
-.masthead .blob-white { right: 46px; bottom: -120px; width: 190px; height: 190px; background: #fff; opacity: .07; }
-
+/* The decorative circles belong to the other theme's gradient. Named one by
+   one as well as by their shared class, because a rule per class is what makes
+   "is every element this template emits styled in every theme?" a question a
+   test can ask (test/computation/themes.test.mjs). */
+.masthead .blob, .masthead .blob-gold, .masthead .blob-white { display: none; }
 .masthead .mark {
-  position: relative;
-  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px;
-  background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.34); color: #fff;
-  font-size: 15pt; font-weight: 700; line-height: 36px; text-align: center;
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 14px;
+  background: ${mix(a, 0.9)}; color: var(--accent);
+  font-size: 17pt; font-weight: 800; line-height: 46px; text-align: center;
 }
-.masthead .mast-main { position: relative; flex: 1 1 auto; min-width: 0; }
+.masthead .mast-main { flex: 1 1 auto; min-width: 0; padding-top: 1px; }
 .masthead .eyebrow {
-  font-size: 6.6pt; font-weight: 600; letter-spacing: .15em;
-  text-transform: uppercase; color: rgba(255,255,255,.72); margin-bottom: 2px;
+  font-size: 6.4pt; font-weight: 600; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 2px;
 }
-.masthead h1 { margin: 0 0 3px; font-size: 15pt; font-weight: 700; letter-spacing: -.01em; color: #fff; }
-.masthead .addr { font-size: 7.6pt; color: rgba(255,255,255,.80); margin-bottom: 8px; line-height: 1.4; }
+.masthead h1 { margin: 0 0 3px; font-size: 14pt; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.masthead .addr { font-size: 8pt; color: var(--muted); margin-bottom: 7px; line-height: 1.4; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
-  border: 1px solid rgba(255,255,255,.34); background: rgba(255,255,255,.12); border-radius: 999px;
-  padding: 2px 10px; font-size: 7.4pt; font-weight: 500; color: #fff;
+  border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
+  padding: 2px 10px; font-size: 7.4pt; font-weight: 500; color: var(--body);
 }
-.chip b { color: #fff; font-weight: 700; margin-right: 4px; opacity: .78; }
-/* The wordmark: what this document is, set against the panel rather than in it. */
+.chip b { color: var(--accent); font-weight: 700; margin-right: 5px; }
+/* The wordmark: what this document is, in the accent, right-aligned and set
+   large enough to be the first thing read on the page. */
 .masthead .wordmark {
-  position: relative;
-  flex: 0 0 auto; text-align: right; padding-top: 1px;
-  font-size: 17pt; font-weight: 700; color: rgba(255,255,255,.94);
-  letter-spacing: -.02em; line-height: 1.05;
+  flex: 0 0 auto; text-align: right; padding-top: 2px;
+  font-size: 21pt; font-weight: 800; color: var(--accent);
+  letter-spacing: -.025em; line-height: 1;
 }
 .masthead .wordmark span {
-  display: block; font-size: 6.4pt; font-weight: 500; letter-spacing: .13em;
-  text-transform: uppercase; color: rgba(255,255,255,.66); margin-top: 3px;
+  display: block; font-size: 6.6pt; font-weight: 600; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--muted); margin-top: 4px;
 }
 
-/* ---- the assessee's particulars: the second block ------------------------
+/* ---- the assessee's particulars: the tile under the header ---------------
  *
- * Its own panel in the accent, washed rather than filled. Filled twice over
- * would make the top of the page one block of colour with a seam in it, and
- * these are two different statements: who this is, and what is on record
- * about them.
+ * The ITR-B's ASSESSEE tile: a soft neutral panel, generously rounded, with the
+ * heading as a small violet eyebrow rather than a band. Neutral rather than
+ * tinted with the accent — the accent's job on this page is the rule, the
+ * chips, the section letters and the totals, and a fifth use of it at the top
+ * makes the first half of the page one colour.
  */
 .card.card-id {
-  background: var(--soft);
-  border: 1px solid ${mix(a, 0.72)};
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 18px;
+  padding: 15px 18px 17px;
 }
-/* No band inside a block that is already one — the heading sits on the wash. */
+/* No band inside a tile that is already one — the heading sits on the panel. */
 .card-id .pill {
-  background: transparent; padding: 0 2px; margin-bottom: 10px;
-  color: var(--accent); font-size: 8.6pt; letter-spacing: .06em; text-transform: uppercase;
+  background: transparent; padding: 0 1px; margin-bottom: 11px;
+  color: var(--accent); font-size: 7.4pt; font-weight: 700;
+  letter-spacing: .16em; text-transform: uppercase;
 }
 
 /* ---- section headers ----------------------------------------------------
@@ -384,26 +395,31 @@ table.m-t tr.m-total .m-note { color: ${mix(a, 0.35)}; }
 .partner .pn { font-weight: 700; font-size: 8.6pt; color: var(--ink); }
 .partner .pd { font-size: 7.6pt; color: var(--muted); margin-top: 1px; }
 
-/* ---- banners -----------------------------------------------------------
+/* ---- the closing position: a green or a magenta badge --------------------
  *
- * A tinted panel with a coloured rail, not a filled gradient: the accent is the
- * loudest thing on a curvy page and a refund banner shouting over it would take
- * the eye off the total it follows.
+ * The ITR-B's own: a washed panel in the tone, the caption letterspaced in it,
+ * the figure large and extrabold in it, and what it is arrived at from set
+ * quietly on the right. Green for a refund, magenta for tax payable — the two
+ * colours this practice's documents have always used for money coming and money
+ * going, so a partner glancing at a stack can sort them without reading a word.
  */
 .banner {
-  border-radius: 14px; padding: 13px 16px; margin-bottom: 10px;
+  border-radius: 16px; padding: 13px 18px; margin-bottom: 10px;
   display: flex; justify-content: space-between; align-items: flex-start; gap: 18px;
   break-inside: avoid;
-  border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border: 1px solid var(--line);
 }
-.banner.refund { border-left-color: var(--credit); background: #F1FAF6; color: var(--credit-ink); }
-.banner.payable { border-left-color: ${t.warn}; background: ${t.warnBg}; color: #7A5018; }
-.banner .eyebrow { font-size: 6.6pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .78; }
-.banner .big { font-size: 18pt; font-weight: 800; margin: 2px 0 1px; }
-.banner .words { font-size: 7.6pt; opacity: .85; }
-.banner .bank { text-align: right; font-size: 7.6pt; }
-.banner .bank .bn { font-weight: 700; font-size: 8.6pt; }
-.banner .bank .bl { opacity: .8; }
+.banner.refund { background: ${wash(t.credit, 0.88)}; border-color: ${wash(t.credit, 0.7)}; color: ${t.credit}; }
+.banner.payable { background: ${wash(t.debit, 0.88)}; border-color: ${wash(t.debit, 0.7)}; color: ${t.debit}; }
+.banner .eyebrow {
+  font-size: 6.8pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: inherit; opacity: .92;
+}
+.banner .big { font-size: 19pt; font-weight: 800; margin: 3px 0 2px; color: inherit; letter-spacing: -.02em; }
+.banner .words { font-size: 7.6pt; font-weight: 500; color: var(--muted); }
+.banner .bank { text-align: right; font-size: 7.6pt; color: var(--muted); }
+.banner .bank .bn { font-weight: 700; font-size: 8.6pt; color: inherit; }
+.banner .bank .bl { color: var(--muted); }
 
 /* ---- notes + signature ------------------------------------------------- */
 .tail { display: flex; gap: 12px; align-items: stretch; break-inside: avoid; }

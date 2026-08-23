@@ -1433,6 +1433,12 @@ tint is one that stays violet when the accent does not.
 The classic theme ignores the accent. Its navy and gold are the fixed house
 style §6 describes and are shared with the appellate drafting templates.
 
+**Two colours are not the accent, in either theme.** A refund is green and an
+amount payable is magenta — `pdfTheme.js` CREDIT and DEBIT, the same two the
+ledger colours a receipt and a bill with. They mean "money coming" and "money
+going", not "us", so they do not follow the practice's colour: a firm that had
+chosen green would otherwise be sending green demands.
+
 ### The typeface
 
 Each theme names a family; the faces are embedded under `functions/fonts/` and

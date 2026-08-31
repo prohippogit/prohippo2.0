@@ -85,6 +85,14 @@ counts) and it also authorises `getEntity`.
 
 How the pieces work:
 
+0. `sync-decisions.js` loads first in the isolated world and puts the rules that
+   decide **whether the portal is asked at all** on `window.__PH_SYNC_DECISIONS`
+   — may this proceeding be skipped, are this notice's replies worth fetching,
+   is there a closure order to ask for. It is a copy of the connector's
+   `syncDecisions.js`, kept honest by `test/syncDecisions.test.mjs`, which runs
+   every case through both. A skip leaves no trace at all, so those rules are
+   kept somewhere they can be read and tested rather than spread through the
+   fetch — and the two paths must not answer differently.
 1. `portal-net.js` installs before the portal's app boots (page's MAIN world)
    and records the portal's own API calls. From the e-Proceedings-service calls
    it learns the `sn` token and the PAN. The token never leaves that page-world

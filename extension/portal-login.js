@@ -568,7 +568,72 @@
       // presence means a "Download Closure Order" set exists for this proceeding.
       proceedingStatus: o.proceedingStatus || "",
       closureSeqNo: (o.proceedingClosureOrder != null ? String(o.proceedingClosureOrder) : ""),
+      /* When a reply was last filed ANYWHERE in this proceeding, as the portal
+         states it on the list row. Carried because it is the only thing on the
+         row that says a reply has moved — the notice count does not change when
+         one is filed, which is how a proceeding with three replies and a closure
+         order was skipped four syncs running as "unchanged". Read by
+         proceedingSettled(); see sync-decisions.js. */
+      lastResponseSubmittedOn: o.lastResponseSubmittedOn || "",
     };
+  }
+
+  /* THE RULES THAT DECIDE WHETHER THE PORTAL IS ASKED AT ALL.
+   *
+   * sync-decisions.js, loaded as a content script just before this one (see
+   * manifest.json) — the same file, rule for rule, as the connector's
+   * syncDecisions.js, with test/syncDecisions.test.mjs running both over the
+   * same payloads. A skip leaves no trace, so the rules for making one are kept
+   * where they can be read and tested rather than spread through the fetch.
+   *
+   * The fallback is not a convenience. If the script were ever missing, silently
+   * falling back to "ask for everything" is the only safe direction: it costs
+   * calls, where the other direction costs data nobody would notice was gone. */
+  const DECIDE = (typeof window !== "undefined" && window.__PH_SYNC_DECISIONS) || {
+    shouldFetchReplies: () => ({ fetch: true, why: "rules unavailable — asking" }),
+    proceedingSettled: () => ({ skip: false, why: "rules unavailable — reading" }),
+    shouldFetchClosureOrder: () => ({ fetch: true, why: "rules unavailable — asking" }),
+  };
+
+  /* Fields on a portal response row that we map by name. Everything else scalar
+     is swept up by extraFields() below. */
+  const RESPONSE_MAPPED = new Set([
+    "responseId", "remarks", "remarksHash", "submittedOn", "respType", "attachmentLst",
+  ]);
+
+  /* Same, for a notice row out of eProceedingDetailsService. */
+  const NOTICE_MAPPED = new Set([
+    "documentIdentificationNumber", "headerSeqNo", "noticeSection", "description",
+    "issuedOn", "servedOn", "responseDueDate", "documentReferenceId",
+    "ay", "pan", "proceedingStatus", "proceedingName",
+  ]);
+
+  /* WHAT THE PORTAL SENDS THAT WE HAVE NO NAME FOR YET.
+   *
+   * "View Notices for e-Proceedings" prints, on each notice, a line reading
+   * "Response viewed by AO on : 21-Jul-2026" — directly under the response due
+   * date. It is the single most useful thing a practitioner can know after
+   * filing: the difference between "he hasn't looked" and "he's looked and said
+   * nothing". What ITBA calls that field in its own JSON is another matter, and
+   * its naming is not consistent across its own services — so rather than guess
+   * once and be silently wrong, every remaining SCALAR on the notice row and the
+   * reply row is carried through under `extra`. Deliberately narrow: strings,
+   * numbers and booleans only, 12 of them, 120 characters each. A discovery
+   * hatch, not a second data model. Kept identical to extraFields() in
+   * connector/src/main/portalFetch.js. */
+  function extraFields(row, mapped) {
+    const out = {};
+    let n = 0;
+    for (const k of Object.keys(row || {})) {
+      const v = row[k];
+      if (mapped.has(k) || v === null || v === undefined || v === "") continue;
+      const t = typeof v;
+      if (t !== "string" && t !== "number" && t !== "boolean") continue;
+      if (n >= 12) break;
+      out[String(k).slice(0, 40)] = t === "string" ? v.slice(0, 120) : v;
+      n++;
+    }
+    return out;
   }
 
   // Phase 2b: pull each proceeding's notices/orders + their PDFs and stream them
@@ -592,12 +657,31 @@
       payload: { serviceName: "itbaResponseService", headerSeqNo, pan, header: FORM },
     });
     const list = (resp.json && Array.isArray(resp.json.respRemrkAttLst)) ? resp.json.respRemrkAttLst : [];
+    let count = 0;
+    /* KNOWN responses, gathered and sent in ONE message at the end.
+     *
+     * They cannot be skipped outright any more: an AO opens a reply days after
+     * it is filed, so the fields that say so only ever appear on a row we have
+     * already seen once. Skipping is exactly why nothing downstream could learn
+     * that a reply had been looked at.
+     *
+     * But one callable per response per sync would be a round trip per reply for
+     * ever, so they ride together — one small message per notice, no PDFs, and
+     * the ingest merges rather than duplicating. */
+    const refresh = [];
     for (const rr of list) {
       const atts = Array.isArray(rr.attachmentLst) ? rr.attachmentLst : [];
-      if (!rr || (!rr.remarks && atts.length === 0)) continue;
-      // A reply already on file needs no work — skip its attachment downloads.
+      /* Remarks TRIMMED, not merely present. ITBA returns reply rows whose
+         remarks are a single space and whose attachment list is empty; stored,
+         they became empty green "Response" cards on the notice — three of them
+         under one s.142(1) notice, saying nothing at all. A row with no words
+         and no file is not a reply anyone can read. */
+      if (!rr || (!String(rr.remarks || "").trim() && atts.length === 0)) continue;
       const responseId = String(rr.responseId || rr.remarksHash || rr.submittedOn || (rr.remarks || "").slice(0, 24));
-      if (knownResp.has(responseId)) continue;
+      if (knownResp.has(responseId)) {
+        refresh.push({ responseId, extra: extraFields(rr, RESPONSE_MAPPED) });
+        continue;
+      }
       const attachments = [];
       for (const at of atts) {
         const adocId = at.docId || at.satDocId || at.documentId || at.attachmentId || at.refId;
@@ -620,11 +704,22 @@
         remarks: rr.remarks || "",
         submittedOn: rr.submittedOn || "",
         respType: rr.respType || "",
+        extra: extraFields(rr, RESPONSE_MAPPED),
         attachments,
       };
       chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "response", response } }, () => {});
+      count++;
       await jsleep(120, 320);
     }
+    // Not counted as a synced response — nothing new arrived, we only refreshed
+    // what the portal now says about replies already on file.
+    if (refresh.length) {
+      chrome.runtime.sendMessage({
+        type: "SYNC_DATA",
+        payload: { assesseeId: creds.assesseeId, kind: "response", response: { noticeKey: din, refresh } },
+      }, () => {});
+    }
+    return count;
   }
 
   // Portal order filenames end in a DDMMYYYY date, e.g. "…_15012022.pdf".
@@ -747,6 +842,24 @@
   async function syncNotices(creds, badge, pan, rows) {
     const known = new Set((creds.knownDins || []).map((d) => String(d)));
     const knownByProc = creds.knownByProc || {};
+    /* Proceedings holding a reply whose portal metadata we have never read.
+     *
+     * THIS IS WHY "Response viewed by AO on" DID NOT ARRIVE. A disposed appeal
+     * is closed and its notice count never changes again, so the old skip took
+     * it out before the detail call that carries the metadata was ever made —
+     * and a disposed appeal is precisely where a practitioner wants to know
+     * whether the officer read the submission before dismissing it.
+     *
+     * Self-limiting: the app lists a proceeding here only while one of its
+     * replied-to notices has no metadata on file, so this costs one call each
+     * until the answer lands and then nothing. The app has been sending this
+     * list all along; until now nothing in the extension read it. */
+    const needsMeta = new Set((creds.procNeedsMeta || []).map((p) => String(p)));
+    /* Replies already on file, per notice — { din: { n, last } }. The portal
+       states on every notice when one was last filed against it, so this is the
+       other half of the comparison that decides whether to ask for them. Also
+       sent all along, also never read. */
+    const heldReplies = creds.noticeReplies || {};
     /* Notices on file from before the sync understood that ONE notice is a SET
        of files. Each holds the single document the old code asked for, while
        the approval, the set note and the search print that came with it are
@@ -767,22 +880,22 @@
     let docCount = 0, skipped = 0, skippedProcs = 0;
     for (let i = 0; i < targets.length; i++) {
       const r = targets[i];
-      // Incremental: a CLOSED proceeding whose notices are all on file can never
-      // change — skip its detail call (and every per-notice reply call) entirely.
-      // Active proceedings are still checked (a reply may be new), but the
-      // per-notice/response loop below only downloads what isn't already held.
       const kp = knownByProc[r.proceedingReqId] || {};
-      const countMatches = (r.viewNoticeCount || 0) <= (kp.n || 0);
-      // Skip a proceeding whose notice count is already on file: always for
-      // closed proceedings, and in e-Proceedings-only mode for active ones too
-      // (that mode treats a notice-count change as the only trigger, so an
-      // unchanged proceeding is left untouched — no detail, no reply calls).
-      // …unless one of its notices is still missing the rest of its documents.
-      // THIS is what makes the fast scope fast — not skipping the closed tab,
-      // which it no longer does. A closed proceeding whose notices are all on
-      // file costs nothing here; one whose are not is finally reachable.
-      if (countMatches && (isClosed(r) || creds.scope === "eproc")
-          && !needsDocs.has(String(r.proceedingReqId))) {
+      /* Skip only what the PORTAL says has not moved — its notice count, its
+         last reply, and its closure order — never the notice count alone. That
+         was the bug: replies and orders do not change a notice count, so the
+         proceeding holding them was the one guaranteed to be skipped. The rules
+         and their reasons are in sync-decisions.js; this line only applies them.
+
+         THIS is also what makes the fast scope fast — not skipping the closed
+         tab, which it no longer does. A closed proceeding with nothing new
+         still costs nothing here. */
+      const settled = DECIDE.proceedingSettled(r, kp, {
+        scope: creds.scope,
+        needsMeta: needsMeta.has(String(r.proceedingReqId)),
+        needsDocs: needsDocs.has(String(r.proceedingReqId)),
+      });
+      if (settled.skip) {
         skipped += (r.viewNoticeCount || 0); skippedProcs++;
         continue;
       }
@@ -793,6 +906,13 @@
       });
       const items = Array.isArray(det.json) ? det.json : [];
       log("notices: proceeding", r.proceedingReqId, "→", items.length, "items");
+      /* Fields on notices we already hold that may have MOVED since we saw them.
+       *
+       * "Response viewed by AO on" is the reason: the officer opens a reply days
+       * after it is filed, which is long after the notice itself first synced. A
+       * known notice used to be skipped outright here, so that date could never
+       * arrive. One small message per proceeding carries them, no PDFs. */
+      const meta = [];
       for (const it of items) {
         const din0 = it.documentIdentificationNumber || "";
         const headerSeqNo = it.headerSeqNo;
@@ -801,6 +921,14 @@
         // against it below — those can be filed AFTER the notice first synced,
         // so skipping known notices entirely would never pick them up.
         const isKnown = din0 && known.has(String(din0));
+        if (isKnown && din0) {
+          meta.push({
+            din: String(din0),
+            responseDueDate: it.responseDueDate || "",
+            servedOn: it.servedOn || "",
+            extra: extraFields(it, NOTICE_MAPPED),
+          });
+        }
 
         // A notice already on file, stored back when one notice meant one file:
         // fetch the rest of its set and attach them. Nothing about the notice
@@ -846,6 +974,7 @@
             ay: it.ay || r.ay || "",
             pan: it.pan || pan,
             proceedingStatus: it.proceedingStatus || "",
+            extra: extraFields(it, NOTICE_MAPPED),
             filename: (pdf && pdf.filename) || "",
             contentType: (pdf && pdf.contentType) || "application/pdf",
             contentBase64: (pdf && pdf.contentBase64) || null,
@@ -862,15 +991,28 @@
           skipped++;
         }
 
-        // Responses the assessee filed against THIS notice (remarks + PDFs) —
-        // fetched for BOTH new and already-known notices. itbaResponseService
-        // returns an empty respRemrkAttLst when nothing was filed (skipped by
-        // the loop), and the ingest dedups responses by id, so re-asking on a
-        // later sync is safe and picks up newly filed responses.
-        if (headerSeqNo && din0) {
+        /* Replies. The portal states on the notice itself whether one has been
+           filed and when — `lastResponseSubmittedOn`, `respStatus: "S"` — so
+           that is what decides, not whether the proceeding is open and not
+           whether the notice is new. Asking for every notice on every sync was
+           the other extreme, and it was a call per notice per run for ever.
+
+           Where the portal says nothing at all, a notice we have never seen is
+           still worth one call and one already on file is not. See
+           shouldFetchReplies() in sync-decisions.js. */
+        const want = DECIDE.shouldFetchReplies(it, heldReplies[String(din0)], isKnown);
+        if (headerSeqNo && din0 && want.fetch) {
           try { await syncResponses(creds, pan, din0, String(headerSeqNo)); }
           catch (e) { log("responses error", e); }
         }
+      }
+      // Not counted as a synced notice — nothing new arrived, we only refreshed
+      // what the portal now says about notices already on file.
+      if (meta.length) {
+        chrome.runtime.sendMessage({
+          type: "SYNC_DATA",
+          payload: { assesseeId: creds.assesseeId, kind: "notice-meta", notices: meta },
+        }, () => {});
       }
     }
 
@@ -887,16 +1029,15 @@
     const withOrders = rows.filter((r) => r.proceedingReqId);
     log("orders: checking " + withOrders.length + " proceeding(s) for closure orders");
     for (const r of withOrders) {
-      // A closed proceeding whose order we already hold is final — skip its
-      // closure-order lookup. Active proceedings are still checked (an order may
-      // newly appear), and within any proceeding known docs are skipped by docKey.
+      /* Whether it is worth asking at all. The portal names the order on the
+         list row, so most of the time this is answerable without a call: an
+         order already on file is never re-fetched, one the row names and we do
+         not hold always is, and the fast scope asks nowhere else — which is what
+         keeps a bulk sync over hundreds of closed proceedings cheap. See
+         shouldFetchClosureOrder() in sync-decisions.js. */
       const kp = knownByProc[r.proceedingReqId] || {};
-      if (isClosed(r) && kp.o) { skipped++; continue; }
-      // e-Proceedings-only: don't probe a still-ACTIVE proceeding for a closure
-      // order unless the list flags one. Closed proceedings are always probed
-      // (the line above already skips the ones whose order we hold) — that is
-      // the whole point of listing the closed tab in this scope.
-      if (creds.scope === "eproc" && !isClosed(r) && !r.closureSeqNo) continue;
+      const wantOrder = DECIDE.shouldFetchClosureOrder(r, kp, { scope: creds.scope });
+      if (!wantOrder.fetch) { if (isClosed(r) && kp.o) skipped++; continue; }
       badge.set("Orders — " + (r.name || "proceeding").slice(0, 28) + "…");
       try {
         const clo = await NET.apiCall({
@@ -1014,13 +1155,28 @@
     } catch (e) { log("appeals: pan details error", e); }
     const F35T = (typeof window !== "undefined" && window.__PH_F35) || null;
     const knownForms = new Set((creds.knownDins || []).map((d) => String(d)));
+    /* HELD, BUT NOT FINISHED — the forms a re-sync used to walk straight past.
+     *
+     * A form is ingested however badly its fetch went, and the ingest writes
+     * `f35:<ackNum>` into the docKeys this pass skips on. So a form whose PDF
+     * 502'd, or whose attachments never came down, was marked as held for ever
+     * and no later sync looked at it again: re-syncing changed nothing, which is
+     * precisely what was reported. syncKnowns turns "saved without a document it
+     * should have" into `appealFormsPending` — capped at APPEAL_MAX_TRIES, so a
+     * form the portal will genuinely never render stops costing every sync — and
+     * the app has been sending that list to this extension all along. Nothing
+     * here read it until now; the connector's copy of this pass has since it was
+     * written (see connector/src/main/portalAppeals.js). */
+    const pending = new Map((creds.appealFormsPending || []).map((p) => [String(p && p.ackNum), p]));
 
     for (const f of forms) {
       const ackNum = f.ackNum || f.ackNo || "";
       if (!ackNum) continue;
       // Already-filed Form 35 on file (deduped by "f35:<ackNum>") — the rendered
-      // form + ARN + attachments are expensive, so skip it entirely.
-      if (knownForms.has("f35:" + ackNum)) { log("appeals: skip already-filed", ackNum); continue; }
+      // form + ARN + attachments are expensive, so skip it entirely. Only once
+      // it is COMPLETE, though: one still missing a document comes back here.
+      if (knownForms.has("f35:" + ackNum) && !pending.has(String(ackNum))) { log("appeals: skip already-filed", ackNum); continue; }
+      if (pending.has(String(ackNum))) log("appeals: re-fetching", ackNum, "— held without a document it should have");
 
       // Full filed-form data (AY, order DIN/date/section, amounts, filing date).
       let d = {};
@@ -1432,6 +1588,10 @@
     // unattended run, which is precisely the noise the app now avoids by
     // asking for e-Proceedings unless told otherwise.
     const scope = creds.scope || "eproc";
+    /* Written back, so every later `creds.scope` read — the per-proceeding skip,
+       the closure-order rule — sees the scope this run actually used rather than
+       the absent one it was handed. The connector does the same with job.scope. */
+    creds.scope = scope;
 
     if (scope === "appeals") {
       log("scope=appeals — Form 35 only");
@@ -1515,7 +1675,11 @@
     for (const pid of (creds.knownActiveProcs || [])) {
       const id = String(pid || "");
       if (id && !listed.has(id)) {
-        rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "" });
+        /* `justClosed` is what tells the order pass to ask despite the row
+           carrying no fields to judge by — without it the fast scope's rule
+           ("ask only where the portal states an order") would skip the one row
+           that exists precisely because the portal states nothing. */
+        rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "", justClosed: true });
         synthesised++;
       }
     }

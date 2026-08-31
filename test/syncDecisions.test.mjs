@@ -13,14 +13,56 @@
  * of which is evidence about a reply or an order. The payloads below are that
  * proceeding's, with the identifiers replaced; every field name and every shape
  * is the portal's own, taken from a HAR capture of the e-Proceedings screens.
+ *
+ * TWO IMPLEMENTATIONS, ONE SET OF TESTS. The connector's copy is CommonJS
+ * loaded by Electron's main process; the extension's is a content script in an
+ * isolated world with no module system at all, so neither can import the other.
+ * Every call below therefore goes through both and asserts they returned the
+ * same thing — the same guard syncKnowns has, and for the same reason: these
+ * two files drifting apart produces no error anywhere, just a sync that quietly
+ * decides not to look. The extension's ran on the OLD rules for months while
+ * the app was already sending it everything the new ones need.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
-const { portalReplyState, shouldFetchReplies, proceedingSettled, shouldFetchClosureOrder } =
-  require("../connector/src/main/syncDecisions.js");
+const connector = require("../connector/src/main/syncDecisions.js");
+
+/* The extension's copy, run the way f35Template.js runs f35-template.js: it is
+   one `window.__PH_SYNC_DECISIONS = …` assignment inside an IIFE, so a bare
+   object stands in for the window. Our own file, no I/O, no chrome APIs. */
+const extension = (() => {
+  const src = readFileSync(new URL("../extension/sync-decisions.js", import.meta.url), "utf8");
+  const window = {};
+  new Function("window", src)(window);
+  return window.__PH_SYNC_DECISIONS;
+})();
+
+// Call one rule on both copies, require them to agree, return the answer.
+const both = (name) => (...args) => {
+  const a = connector[name](...args);
+  const b = extension[name](...args);
+  assert.deepEqual(
+    b, a,
+    `${name}: the extension and the connector disagree about ${JSON.stringify(args)}`
+  );
+  return a;
+};
+
+const portalReplyState = both("portalReplyState");
+const shouldFetchReplies = both("shouldFetchReplies");
+const proceedingSettled = both("proceedingSettled");
+const shouldFetchClosureOrder = both("shouldFetchClosureOrder");
+
+test("both copies expose the same rules", () => {
+  for (const name of ["portalReplyState", "shouldFetchReplies", "proceedingSettled", "shouldFetchClosureOrder"]) {
+    assert.equal(typeof extension[name], "function", `the extension is missing ${name}`);
+    assert.equal(typeof connector[name], "function", `the connector is missing ${name}`);
+  }
+});
 
 /* One row of eProceedingsPaginatedService, "For your Information" tab: the
    closed scrutiny, with four notices, a reply filed on 07 Mar 2026 and a closure
@@ -187,4 +229,20 @@ test("a proceeding that has just left the action list is asked, though its row s
   // held it as Active and the portal no longer lists it.
   const synthetic = { tab: "For your Information", proceedingStatus: "C", proceedingReqId: "54139244", viewNoticeCount: 0, closureSeqNo: "", justClosed: true };
   assert.equal(shouldFetchClosureOrder(synthetic, {}, { scope: "eproc" }).fetch, true);
+});
+
+/* ---------------- the two copies, on the portal's own oddities ---------------- */
+
+test("both copies parse a portal timestamp the same way", () => {
+  // Not decoration: every comparison above is between numbers these two
+  // produced, so a different parse on either side is a wrong answer, not an
+  // error. The portal sends epoch milliseconds as a number on one service and
+  // as a digit string on another, and a date string on a third.
+  const { toMillis: connMs } = require("../connector/src/main/syncKnowns.js");
+  for (const v of [null, "", 0, 1757009961549, "1757009961549", "2026-03-07T00:00:00.000Z", "nonsense", "  "]) {
+    assert.equal(
+      extension.toMillis(v), connMs(v),
+      `toMillis disagrees about ${JSON.stringify(v)}`
+    );
+  }
 });

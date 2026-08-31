@@ -186,14 +186,29 @@ number skipped is reported to the practitioner rather than folded into a silent
 "up to date". Both tabs are listed in every scope; "fast" now means less work
 per proceeding, not less of the portal.
 
-**Both syncs list both tabs.** The connector got this first; the extension now
-does the same — `eproc` used to read *For your Action* only and infer a closure
-from what had left it, which cannot see a proceeding that closed before the app
-ever recorded it as active. What the extension has **not** got is the table
-above: its per-proceeding skip is still the older, cruder one (notice count on
-file + closed, or notice count on file in `eproc`), so a reply filed against a
-proceeding whose notice count has not moved is still invisible to it. Port
-`syncDecisions.js` there and the two paths agree completely.
+**Both syncs decide the same way.** The rules live in two files —
+`connector/src/main/syncDecisions.js` (CommonJS, Electron) and
+`extension/sync-decisions.js` (a content script in an isolated world, with no
+module system to import through) — and `test/syncDecisions.test.mjs` runs every
+case through both and fails if they return anything different. That guard is the
+point of the pair: two copies of a rule that decides *not* to ask the portal can
+drift apart without producing a single error anywhere.
+
+The extension ran on the old, cruder rule for months — notice count on file +
+closed, or notice count on file in `eproc` — so a reply filed against a
+proceeding whose notice count had not moved was invisible to it, in every scope.
+It also read *For your Action* only in `eproc` and inferred closures from what
+had left it, which cannot see a proceeding that closed before the app ever
+recorded it as active. Both are fixed; both paths now list both tabs and skip
+only what the portal says has not moved.
+
+**Carrying a hint is not the same as reading one.** `noticeReplies`,
+`procNeedsMeta` and `appealFormsPending` were computed by `syncKnowns`, passed
+through `openPortalLogin`, relayed by `background.js` — and never mentioned in
+`portal-login.js`. Every one of them makes the sync skip *more* when it is
+missing, silently. `test/syncKnowns.test.mjs` now reads `portal-login.js` as the
+last hop and requires it to mention every field the builder produces, so the
+next one fails a test instead of a client.
 
 A list call that did not **succeed** is never read as "no proceedings", on
 either path: a 500, a WAF 403 or a 401 from a session that is not ready yet

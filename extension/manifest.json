@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ProHippo Sync",
-  "version": "0.47.0",
+  "version": "0.48.0",
   "description": "Logs into the Income-tax e-filing portal for the selected assessee and (later) syncs e-Proceedings into ProHippo.",
   "permissions": ["tabs", "scripting", "storage"],
   "host_permissions": [
@@ -31,7 +31,7 @@
     },
     {
       "matches": ["https://*.incometax.gov.in/*"],
-      "js": ["f35-template.js", "portal-login.js"],
+      "js": ["f35-template.js", "sync-decisions.js", "portal-login.js"],
       "run_at": "document_idle"
     }
   ]

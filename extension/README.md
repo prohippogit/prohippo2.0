@@ -95,6 +95,17 @@ How the pieces work:
    rows, and **times it**. If anything fails it falls back to opening
    e-Proceedings and replaying/scraping.
 
+   **Both tabs, in every scope**, including the fast `eproc` one that is now the
+   default. It used to read `FYA` alone there and work out what had closed from
+   what had left it — which cannot see a proceeding that closed before the app
+   ever recorded it as active, so the assessment order, computation sheet and
+   demand notice that ended it were unreachable for good. The two list calls run
+   concurrently; what keeps the fast scope fast is the per-proceeding skip, not
+   skipping the closed tab. And a list call that did not **succeed** (500, WAF
+   403, or the 401 you get when the session token is not captured yet) is never
+   read as "no proceedings" — the sync hands back to the navigate-and-retry path
+   instead of reporting a clean, empty result.
+
 ### How to test it and read the per-PAN number
 
 1. Reload the extension at `chrome://extensions`, and check the version Chrome

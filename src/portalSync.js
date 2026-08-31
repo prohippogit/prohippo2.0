@@ -58,7 +58,8 @@ export async function detectExtension() {
  *  for why, and for the one case — an assessee never synced before — where the
  *  callers widen it back to "all".
  *   - "all"     — FYA + FYI + notices/orders/replies + Form 35 + filed returns
- *   - "eproc"   — FYA only, incremental; no FYI scan, no Form 35 (fast re-sync)
+ *   - "eproc"   — both proceeding tabs, incremental: only what the portal says
+ *                 has moved is re-read. No Form 35, no filed returns
  *   - "appeals" — filed Form 35s only
  *   - "returns" — filed ITRs + s.143(1) intimations and s.154 orders only
  *   - "returnForm" — one fully rendered ITR form PDF, named by formRequest

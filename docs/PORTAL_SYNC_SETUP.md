@@ -186,6 +186,22 @@ number skipped is reported to the practitioner rather than folded into a silent
 "up to date". Both tabs are listed in every scope; "fast" now means less work
 per proceeding, not less of the portal.
 
+**Both syncs list both tabs.** The connector got this first; the extension now
+does the same — `eproc` used to read *For your Action* only and infer a closure
+from what had left it, which cannot see a proceeding that closed before the app
+ever recorded it as active. What the extension has **not** got is the table
+above: its per-proceeding skip is still the older, cruder one (notice count on
+file + closed, or notice count on file in `eproc`), so a reply filed against a
+proceeding whose notice count has not moved is still invisible to it. Port
+`syncDecisions.js` there and the two paths agree completely.
+
+A list call that did not **succeed** is never read as "no proceedings", on
+either path: a 500, a WAF 403 or a 401 from a session that is not ready yet
+produces no rows, and no rows looks exactly like a clean compliance record. The
+connector raises it (nothing is stamped); the extension hands the run back to
+its navigate-and-retry path. Only a call that returned 200 with a body we cannot
+parse is forgiven, because the portal has changed its own payloads before.
+
 Three tests hold this: `test/syncDecisions.test.mjs` (the rules),
 `test/portalFetchReplies.test.mjs` (the reported case replayed through the real
 fetch loop against the portal's own payloads), and `test/syncKnowns.test.mjs`

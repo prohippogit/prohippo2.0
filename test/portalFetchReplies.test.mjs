@@ -86,11 +86,16 @@ stub("ingest", { ingestSyncMessage: async (m) => { ingested.push(m); return { ok
 stub("portalAppeals", { syncAppealForms: async () => {} });
 stub("portalReturns", { syncReturns: async () => {} });
 
+// null = answer normally. A test sets it to stand in for a portal that did not.
+let listAnswer = null;
+
 const realApi = require("../connector/src/main/portalApi.js");
 stub("portalApi", {
   ...realApi,
   proceedings: async (_page, { statusFlag }) => {
     calls.push(`list:${statusFlag}`);
+    // Overridable per test, for the cases where the portal does not answer.
+    if (listAnswer) return listAnswer(statusFlag);
     return { ok: true, json: { eProceedingPaginatedRequests: statusFlag === "FYI" ? [FYI_ROW] : [] } };
   },
   apiCall: async (_page, { serviceName, payload }) => {
@@ -220,4 +225,46 @@ test("a reply filed after the last sync is picked up on the next one", async () 
   const summary = await run("eproc", almost);
   assert.equal(summary.responses, 1);
   assert.equal(ingested.find((m) => m.kind === "response" && m.response.responseId).response.responseId, "24430153");
+});
+
+/* ---------------- a list call that did not succeed ---------------- */
+
+test("a proceedings list the portal refused is not read as 'no proceedings'", async () => {
+  /* The worst thing this file can do is report a clean sync over data nobody
+     fetched. A 500 or a WAF 403 carries a status rather than an error and had
+     been retried once already by portalApi, so it used to slip past the guard,
+     produce no rows, and end as "no e-Proceedings for this PAN" — after which
+     the PAN is stamped as synced and the practice is told it is up to date. */
+  listAnswer = (flag) => (flag === "FYA"
+    ? { ok: false, status: 500 }
+    : { ok: true, json: { eProceedingPaginatedRequests: [] } });
+  try {
+    await assert.rejects(() => run("eproc", heldEverything()), /e-Proceedings list/);
+    // ...and nothing was written on the way out.
+    assert.equal(ingested.length, 0);
+  } finally {
+    listAnswer = null;
+  }
+});
+
+test("a list call that timed out says so, and still changes nothing", async () => {
+  listAnswer = () => ({ ok: false, timedOut: true, error: "list did not answer within 60s" });
+  try {
+    await assert.rejects(() => run("eproc", heldEverything()), /did not answer/);
+    assert.equal(ingested.length, 0);
+  } finally {
+    listAnswer = null;
+  }
+});
+
+test("a successful call whose body is shaped oddly is still forgiven", async () => {
+  // The other half of the rule: the portal has changed its own payloads before,
+  // and a 200 we cannot parse must not stop a sync — it means "nothing listed".
+  listAnswer = () => ({ ok: true, json: { somethingElseEntirely: true } });
+  try {
+    const summary = await run("eproc", heldEverything());
+    assert.equal(summary.proceedings, 0);
+  } finally {
+    listAnswer = null;
+  }
 });

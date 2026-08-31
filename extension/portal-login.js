@@ -776,8 +776,11 @@
       // Skip a proceeding whose notice count is already on file: always for
       // closed proceedings, and in e-Proceedings-only mode for active ones too
       // (that mode treats a notice-count change as the only trigger, so an
-      // unchanged FYA proceeding is left untouched — no detail, no reply calls).
+      // unchanged proceeding is left untouched — no detail, no reply calls).
       // …unless one of its notices is still missing the rest of its documents.
+      // THIS is what makes the fast scope fast — not skipping the closed tab,
+      // which it no longer does. A closed proceeding whose notices are all on
+      // file costs nothing here; one whose are not is finally reachable.
       if (countMatches && (isClosed(r) || creds.scope === "eproc")
           && !needsDocs.has(String(r.proceedingReqId))) {
         skipped += (r.viewNoticeCount || 0); skippedProcs++;
@@ -889,9 +892,10 @@
       // newly appear), and within any proceeding known docs are skipped by docKey.
       const kp = knownByProc[r.proceedingReqId] || {};
       if (isClosed(r) && kp.o) { skipped++; continue; }
-      // e-Proceedings-only: don't probe a still-active proceeding for a closure
-      // order unless the list flags one. The just-closed synthetic rows (marked
-      // closed) and flagged proceedings are the only ones worth a call here.
+      // e-Proceedings-only: don't probe a still-ACTIVE proceeding for a closure
+      // order unless the list flags one. Closed proceedings are always probed
+      // (the line above already skips the ones whose order we hold) — that is
+      // the whole point of listing the closed tab in this scope.
       if (creds.scope === "eproc" && !isClosed(r) && !r.closureSeqNo) continue;
       badge.set("Orders — " + (r.name || "proceeding").slice(0, 28) + "…");
       try {
@@ -1416,7 +1420,10 @@
 
     // Sync scope (from the app's dropdown):
     //   "all"     — FYA + FYI + notices/orders/replies + Form 35 + filed returns.
-    //   "eproc"   — FYA only → diff → new notices/orders; no FYI scan, no Form 35.
+    //   "eproc"   — both tabs, diffed → new notices/orders/closure orders, but
+    //               only where the portal says something moved; no Form 35, no
+    //               filed returns. "Fast" is about how much is fetched PER
+    //               PROCEEDING, not about how much of the portal is looked at.
     //   "appeals" — filed Form 35s only, nothing else.
     //   "returns" — filed ITRs + s.143(1) intimations and s.154 orders only.
     // The default is the FAST one. A scope that never arrived is a bug in the
@@ -1449,40 +1456,89 @@
     }
 
     const t0 = performance.now();
-    const fya = await NET.proceedings({ pan, statusFlag: "FYA", pageSize: 100 });
+    /* BOTH TABS, IN EVERY SCOPE THAT LISTS PROCEEDINGS AT ALL.
+     *
+     * The fast scope used to read "For your Action" only and infer closures from
+     * what had left it. That inference has one blind spot and it is a wide one:
+     * once any sync has recorded a proceeding as closed it is no longer in FYA,
+     * and it is no longer in `knownActiveProcs` either — so it is in NEITHER of
+     * the two things the fast scope looked at, and the closure order that ended
+     * it (the assessment order, the computation sheet, the demand notice u/s
+     * 156) was unreachable for good on the path every bulk sync uses and the app
+     * defaults to after the first sync.
+     *
+     * The cost of closing that hole is one list call of a few kilobytes, run
+     * concurrently with the one already being made. What makes the fast scope
+     * fast is not skipping it — it is the per-proceeding skip below, which
+     * leaves an unchanged closed proceeding untouched: no detail call, no reply
+     * calls, no order lookup. This mirrors connector/src/main/portalFetch.js,
+     * where the same fix landed first. */
+    const [fya, fyi] = await Promise.all([
+      NET.proceedings({ pan, statusFlag: "FYA", pageSize: 100 }),
+      NET.proceedings({ pan, statusFlag: "FYI", pageSize: 100 }),
+    ]);
+    /* A LIST CALL THAT DID NOT SUCCEED IS NOT AN EMPTY LIST.
+     *
+     * `push` reads the rows out of a response and shrugs at anything else, so a
+     * call that timed out, died on the wire, or came back 401/500 produces no
+     * rows — and no rows is indistinguishable, twenty lines down, from an
+     * assessee with a clean compliance record. This scope would then log out
+     * reporting "nothing to do" on a run that never managed to ask the
+     * question, and stamp the PAN as synced on the way. The 401 is not
+     * hypothetical: this function runs once BEFORE e-Proceedings is opened, on
+     * the chance the session token is already captured, and "not yet" is
+     * exactly what it looks like.
+     *
+     * Returning false hands the run back to the navigate-and-retry path, which
+     * is the right answer to all three. What is still forgiven is a call that
+     * SUCCEEDED and whose body is shaped unexpectedly — the portal has changed
+     * its own payloads before. */
+    if (!fya || !fya.ok) {
+      log("direct api: the FYA list call did not succeed", fya && (fya.error || fya.status));
+      return false; // let the navigate + retry path have a go
+    }
     const rows = [];
     const push = (res, tab) => {
       const list = res && res.json && res.json.eProceedingPaginatedRequests;
       if (Array.isArray(list)) for (const o of list) rows.push(mapRow(o, tab));
     };
     push(fya, "For your Action");
-    // A full sync also pulls the FYI (closed) list; e-Proceedings-only skips it.
-    if (scope === "all") {
-      const fyi = await NET.proceedings({ pan, statusFlag: "FYI", pageSize: 100 });
-      push(fyi, "For your Information");
-    }
+    push(fyi, "For your Information");
     const ms = Math.round(performance.now() - t0);
 
-    // e-Proceedings-only closure detection: a proceeding we knew as ACTIVE that
-    // is no longer in FYA has just closed — add a synthetic (closed) row so its
-    // closure order is fetched and its matter flips to Closed, WITHOUT scanning
-    // the whole FYI list.
-    if (scope === "eproc") {
-      const fyaIds = new Set(rows.map((r) => r.proceedingReqId).filter(Boolean));
-      let added = 0;
-      for (const pid of (creds.knownActiveProcs || [])) {
-        const id = String(pid || "");
-        if (id && !fyaIds.has(id)) {
-          rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "" });
-          added++;
-        }
+    /* A proceeding we hold as ACTIVE that is now in NEITHER list has closed and
+       been archived out of both. Rare, and cheap to cover: a synthetic closed
+       row, so its closure order is still asked for. Used to be the fast scope's
+       only route to a closure at all; now it is the last of three. */
+    const listed = new Set(rows.map((r) => r.proceedingReqId).filter(Boolean));
+    let synthesised = 0;
+    for (const pid of (creds.knownActiveProcs || [])) {
+      const id = String(pid || "");
+      if (id && !listed.has(id)) {
+        rows.push({ tab: "For your Information", proceedingStatus: "C", name: "", ay: "", section: "", pan, assessee: "", proceedingReqId: id, viewNoticeCount: 0, closureSeqNo: "" });
+        synthesised++;
       }
-      if (added) log("eproc: " + added + " proceeding(s) left FYA (just closed) — will fetch their orders");
     }
+    if (synthesised) log(synthesised + " proceeding(s) left both lists (archived after closing) — will fetch their orders");
 
     if (!rows.length) {
-      // Nothing in FYA (and, for a full sync, nothing in FYI either).
-      if (scope === "eproc") { log("eproc: FYA empty — nothing to do, logging out"); await logoutAndClose(badge, creds); return true; }
+      // Nothing in either tab. With the guard above, that is now an answer the
+      // portal gave rather than one nobody asked for.
+      if (scope === "eproc") {
+        /* SAY SO, rather than logging out in silence. An empty portal is the
+           normal state for most assessees, and the app decides "has this PAN
+           ever been synced?" from the last-sync stamp that only an ingest
+           writes — so a sync that sent nothing left the assessee looking as if
+           it had never been synced at all, and every later run would keep
+           treating it as a first sync and fetch the lot. An empty list is a
+           result; ingestPortalProceedings merges and never deletes, so it costs
+           one write and stamps the time. */
+        chrome.runtime.sendMessage({ type: "SYNC_DATA", payload: { assesseeId: creds.assesseeId, kind: "proceedings", via: "api", ms, endpoint: "/auth/getEntity · eProceedingsPaginatedService", proceedings: [] } }, () => {});
+        log("eproc: no e-Proceedings on the portal for this PAN — logging out");
+        badge.set("No e-Proceedings on the portal ✓");
+        await logoutAndClose(badge, creds);
+        return true;
+      }
       // A clean compliance record is the normal state for most assessees, and it
       // says nothing about their filed returns — run the full-sync extras before
       // handing back to the scrape fallback, or a PAN with no proceedings would

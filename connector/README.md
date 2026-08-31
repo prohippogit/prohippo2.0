@@ -64,6 +64,9 @@ connector/
     syncDecisions.js what a re-sync may SKIP, read off what the portal states
                      has moved (pure, tested). A skip leaves no trace, so the
                      rules for making one live in a file of their own
+    syncScope.js     WHAT a run fetches — e-Proceedings unless somebody asked
+                     for more, and one full pass for an assessee never synced
+                     (pure, tested against the web app's copy)
     portalWorker.js  ONE PAN in one isolated context (scaffold + porting plan)
     portalMaster.js  one PAN's profile / jurisdiction / contact, mapped
     assessees.js     add an assessee: fetch from the portal, then create it
@@ -222,6 +225,35 @@ safe: at most five sessions at once, each in its own browser context, launched
 
 `connector-v1.10.0` is the first build with any of it — before that the connector
 only ever synced when somebody pressed a button.
+
+### What an unattended run fetches
+
+**e-Proceedings only** — notices, orders and replies. Not filed Form 35s, not
+filed returns and their CPC orders. Those two passes ask the portal to render a
+PDF on demand and to hand over documents locked with a password built from a
+date of birth the practice may never have recorded, so either can come back
+empty-handed on a portal that is merely busy, and the run then reports the
+assessee as *partly synced*. That is a fair answer to a question somebody asked.
+It is not a fair thing to show a practitioner who asked nothing, about data they
+did not want — and the reported response to a screen of them was to run the
+whole sync again, four and five times, over notices that were already in.
+
+Both scopes are still one click away: the toolbar's **Scope** for *Sync
+selected*, and **Unattended syncs fetch** in the automatic panel for the
+schedule and the launch run.
+
+An assessee that has **never** been synced is fetched in full exactly once,
+whatever either control says: with nothing on file there is no baseline to be
+incremental against, and a first pass that skipped the filed returns would leave
+a hole no later run goes looking for. `syncScope.js` holds that rule; the web
+app holds an ESM copy of it and `test/syncScope.test.mjs` fails if the two ever
+disagree.
+
+The stored setting carries an `autoScopeChosen` flag, because this default
+*moved* — it was "everything" — and `settings.write()` stores the whole object,
+so every install that had ever touched a switch had the old value on disk. Until
+somebody picks a scope themselves the stored one is ignored; the moment they do,
+their choice wins for good.
 
 ### How the timing behaves
 
@@ -394,7 +426,7 @@ with a sentence saying so.
 A practitioner reported browser windows opening with the box ticked, on Windows
 and then on macOS. It was ours, and it was in the wiring rather than in Chrome.
 
-**"Sync everything now" goes through the scheduler**, which calls
+**"Sync all assessees now" goes through the scheduler**, which calls
 `runSync({ scope, trigger })` — with no `headless` key at all. The old line read:
 
 ```js
@@ -416,7 +448,7 @@ headless: !(trigger === "manual" && headless === false)   // hidden unless asked
 ...and the pool defaults the same way (`opts.headless !== false`), so a caller
 that forgets the flag gets a hidden browser rather than five visible windows.
 The smoke test drives each button's real path and asserts what reached the
-launcher: Sync everything now, the schedule, Sync selected ticked and unticked,
+launcher: Sync all assessees now, the schedule, Sync selected ticked and unticked,
 and a call with the flag missing entirely. Against the old code it fails with
 `launched with headless=false`.
 

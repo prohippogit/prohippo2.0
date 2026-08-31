@@ -85,6 +85,14 @@ counts) and it also authorises `getEntity`.
 
 How the pieces work:
 
+0. `sync-decisions.js` loads first in the isolated world and puts the rules that
+   decide **whether the portal is asked at all** on `window.__PH_SYNC_DECISIONS`
+   — may this proceeding be skipped, are this notice's replies worth fetching,
+   is there a closure order to ask for. It is a copy of the connector's
+   `syncDecisions.js`, kept honest by `test/syncDecisions.test.mjs`, which runs
+   every case through both. A skip leaves no trace at all, so those rules are
+   kept somewhere they can be read and tested rather than spread through the
+   fetch — and the two paths must not answer differently.
 1. `portal-net.js` installs before the portal's app boots (page's MAIN world)
    and records the portal's own API calls. From the e-Proceedings-service calls
    it learns the `sn` token and the PAN. The token never leaves that page-world
@@ -94,6 +102,17 @@ How the pieces work:
    Information) — no menu navigation — maps the `eProceedingPaginatedRequests[]`
    rows, and **times it**. If anything fails it falls back to opening
    e-Proceedings and replaying/scraping.
+
+   **Both tabs, in every scope**, including the fast `eproc` one that is now the
+   default. It used to read `FYA` alone there and work out what had closed from
+   what had left it — which cannot see a proceeding that closed before the app
+   ever recorded it as active, so the assessment order, computation sheet and
+   demand notice that ended it were unreachable for good. The two list calls run
+   concurrently; what keeps the fast scope fast is the per-proceeding skip, not
+   skipping the closed tab. And a list call that did not **succeed** (500, WAF
+   403, or the 401 you get when the session token is not captured yet) is never
+   read as "no proceedings" — the sync hands back to the navigate-and-retry path
+   instead of reporting a clean, empty result.
 
 ### How to test it and read the per-PAN number
 

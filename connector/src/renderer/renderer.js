@@ -1112,6 +1112,9 @@ function paintAuto(st) {
   $("autoEvery").checked = Boolean(autoState.enabled);
   $("autoInterval").value = String(autoState.intervalHours || 6);
   $("autoInterval").disabled = !autoState.enabled;
+  /* What an unattended run fetches. Not tied to the "every N hours" switch: the
+     launch sync obeys it too, and that one runs with the timer off. */
+  $("autoScope").value = autoState.scope || "eproc";
   // Linux has no supported login-item API, so the switch is hidden rather than
   // shown doing nothing.
   $("autoLaunchWrap").classList.toggle("hidden", autoState.autoLaunchSupported === false);
@@ -1177,6 +1180,7 @@ $("autoLaunch").addEventListener("change", () => pushAuto({ autoLaunch: $("autoL
 $("autoOnLaunch").addEventListener("change", () => pushAuto({ syncOnLaunch: $("autoOnLaunch").checked }));
 $("autoEvery").addEventListener("change", () => pushAuto({ autoSyncEnabled: $("autoEvery").checked }));
 $("autoInterval").addEventListener("change", () => pushAuto({ intervalHours: Number($("autoInterval").value) }));
+$("autoScope").addEventListener("change", () => pushAuto({ autoScope: $("autoScope").value }));
 
 $("autoRunNow").addEventListener("click", async () => {
   $("autoRunNow").disabled = true;

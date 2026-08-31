@@ -52,9 +52,14 @@ export async function detectExtension() {
 }
 
 /** Ask the extension to open the portal and auto-login (mode "open" or "sync").
- *  scope selects how much a sync fetches:
+ *  scope selects how much a sync fetches. It DEFAULTS to "eproc", not "all":
+ *  a caller that forgets to pass one gets the cheap, quiet run rather than the
+ *  expensive one that pulls Form 35s and filed returns. See src/syncScope.js
+ *  for why, and for the one case — an assessee never synced before — where the
+ *  callers widen it back to "all".
  *   - "all"     — FYA + FYI + notices/orders/replies + Form 35 + filed returns
- *   - "eproc"   — FYA only, incremental; no FYI scan, no Form 35 (fast re-sync)
+ *   - "eproc"   — both proceeding tabs, incremental: only what the portal says
+ *                 has moved is re-read. No Form 35, no filed returns
  *   - "appeals" — filed Form 35s only
  *   - "returns" — filed ITRs + s.143(1) intimations and s.154 orders only
  *   - "returnForm" — one fully rendered ITR form PDF, named by formRequest
@@ -92,7 +97,7 @@ export async function detectExtension() {
  *   - knownFormAcks:     returns whose rendered ITR form PDF is already stored —
  *                        that one is ~11 MB, so it is rationed per sync run
  *  background:true opens the portal tab without stealing focus (bulk sync). */
-export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "all", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeReplies = {}, procNeedsMeta = [], noticeDocsPending = [], procNeedsDocs = [], appealFormsPending = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
+export async function openPortalLogin({ portalUserId, portalPassword, assesseeId, mode = "open", scope = "eproc", knownDins = [], knownByProc = {}, knownResponseIds = [], noticeReplies = {}, procNeedsMeta = [], noticeDocsPending = [], procNeedsDocs = [], appealFormsPending = [], knownActiveProcs = [], knownAckNums = [], knownOrderRefs = [], lockedOrderRefs = [], canUnlockOrders = false, knownFormAcks = [], formRequest = null, background = false, clientRef = null }) {
   /* EVERY FIELD IS NAMED TWICE HERE, and one of them used to be named once.
      `procNeedsMeta` was built by buildSyncKnowns and spread into the call — and
      dropped on this line, because a field this signature does not destructure

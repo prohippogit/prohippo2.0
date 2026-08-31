@@ -85,10 +85,18 @@ across all workers**, blocking the sync each time.
   proceedings.
 - `ingest.js` — no longer awaits `summarizePortalNotice`.
 - `timing.js` — new; per-phase stopwatch, reported per PAN.
-- Default scope is now **Everything**, in both the dropdown and the `pool.js`
-  fallback. With working knowns it costs about two extra list calls on an
-  already-synced PAN, and the old `eproc` default quietly left filed Form 35s
-  and the FYI tab unsynced.
+- Default scope was briefly **Everything**, in both the dropdown and the
+  `pool.js` fallback, on the reasoning that with working knowns it costs about
+  two extra list calls on an already-synced PAN. Two of the three holes that
+  justified it are now closed on their own terms — every scope lists both
+  proceeding tabs, and the per-proceeding skip is decided from what the portal
+  says has moved — and the third, filed Form 35s, was not worth what it cost:
+  the appeals and returns passes fail on their own terms often enough that an
+  unattended "everything" run routinely reported assessees as *partly synced*
+  over data nobody had asked for. **The default is `eproc` again**, everywhere
+  a run is automatic or in bulk, with one exception: an assessee that has never
+  been synced is fetched in full once. See `syncScope.js` and the "What a run
+  nobody is watching fetches" section of `PORTAL_SYNC_SETUP.md`.
 
 **Cloud Functions**
 

@@ -153,6 +153,16 @@ test("every known reaches the connector — each hop names the fields it carries
   const hops = [
     ["src/portalSync.js", readFileSync(new URL("../src/portalSync.js", import.meta.url), "utf8")],
     ["extension/background.js", readFileSync(new URL("../extension/background.js", import.meta.url), "utf8")],
+    /* THE LAST HOP, and the one that was missing from this list.
+     *
+     * Carrying a hint faultlessly to a sync that never reads it fails in exactly
+     * the same way as dropping it, and for months that is what happened:
+     * `noticeReplies`, `procNeedsMeta` and `appealFormsPending` arrived in the
+     * extension's creds and nothing in portal-login.js so much as mentioned
+     * them, so its fetch went on counting notices while the connector's read
+     * what the portal said. Every field ends here, because this one file holds
+     * every pass the extension runs. */
+    ["extension/portal-login.js", readFileSync(new URL("../extension/portal-login.js", import.meta.url), "utf8")],
   ];
   const fields = Object.keys(build(web)).filter((k) => k !== "canUnlockOrders");
   for (const [name, source] of hops) {

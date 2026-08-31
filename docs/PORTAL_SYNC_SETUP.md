@@ -103,6 +103,50 @@ Two extra one-time deploy steps for this phase:
 
    `storage.rules` restricts every user to their own `users/{uid}/…` files.
 
+### What a run nobody is watching fetches
+
+A sync can look at four things: **e-Proceedings** (notices, orders, replies),
+**filed Form 35s**, **filed returns with their CPC intimations and s.154
+orders**, and — on demand only — a **rendered ITR form PDF**.
+
+Every automatic run asks for **e-Proceedings only**. That covers the schedule,
+the sync-at-launch run, the connector's *Sync selected*, and the web app's bulk
+"sync these twelve". Form 35s and filed returns are choices of their own, on the
+same dropdown, one click away.
+
+This is not about speed. The appeals pass asks the portal to render a PDF on
+demand and the returns pass unlocks CPC documents with a password built from a
+date of birth the practice may never have recorded — either can come back
+empty-handed on a portal that is merely busy, and the run then reports the
+assessee as *partly synced*. On a run somebody pressed, that is a fair answer to
+a question they asked. On one nobody asked for, it is a screenful of failures
+about data the practitioner never wanted, and the reported response was to run
+the whole sync again. Four and five times, over notices that were already in.
+
+**The exception is an assessee's first sync.** A PAN with no last-sync time has
+no baseline to be incremental against, so it is fetched in full exactly once —
+whatever the dropdown says — and every run after it is the fast one. The rule
+lives in `src/syncScope.js` and `connector/src/main/syncScope.js` (two copies,
+ESM and CommonJS, because neither side can import the other), and
+`test/syncScope.test.mjs` runs both over the same cases and fails if they
+disagree.
+
+Two settings, both remembered:
+
+| Where | Control | Default |
+|---|---|---|
+| Connector, toolbar | **Scope** — what *Sync selected* fetches | e-Proceedings |
+| Connector, automatic panel | **Unattended syncs fetch** — schedule + launch | e-Proceedings |
+| Web app, bulk bar | the scope dropdown beside *Sync N from portal* | e-Proceedings |
+| Web app, assessee card | the scope dropdown beside *Sync* | e-Proceedings, or **Full sync** if that assessee has never been synced |
+
+The connector's stored setting carries an `autoScopeChosen` flag. The default
+moved from *Everything* to *e-Proceedings*, and `settings.write()` stores the
+whole object — so every install that had ever toggled any switch had
+`autoScope: "all"` on disk. Until somebody picks a scope themselves, that stored
+value is ignored and the current default applies; the moment they do, their
+choice wins for good.
+
 ### What a re-sync decides NOT to fetch — and why that is the dangerous half
 
 A sync that re-read everything every run would be unusable, so it re-reads only
@@ -141,6 +185,37 @@ A proceeding is skipped only when **all** of those are already on file, and the
 number skipped is reported to the practitioner rather than folded into a silent
 "up to date". Both tabs are listed in every scope; "fast" now means less work
 per proceeding, not less of the portal.
+
+**Both syncs decide the same way.** The rules live in two files —
+`connector/src/main/syncDecisions.js` (CommonJS, Electron) and
+`extension/sync-decisions.js` (a content script in an isolated world, with no
+module system to import through) — and `test/syncDecisions.test.mjs` runs every
+case through both and fails if they return anything different. That guard is the
+point of the pair: two copies of a rule that decides *not* to ask the portal can
+drift apart without producing a single error anywhere.
+
+The extension ran on the old, cruder rule for months — notice count on file +
+closed, or notice count on file in `eproc` — so a reply filed against a
+proceeding whose notice count had not moved was invisible to it, in every scope.
+It also read *For your Action* only in `eproc` and inferred closures from what
+had left it, which cannot see a proceeding that closed before the app ever
+recorded it as active. Both are fixed; both paths now list both tabs and skip
+only what the portal says has not moved.
+
+**Carrying a hint is not the same as reading one.** `noticeReplies`,
+`procNeedsMeta` and `appealFormsPending` were computed by `syncKnowns`, passed
+through `openPortalLogin`, relayed by `background.js` — and never mentioned in
+`portal-login.js`. Every one of them makes the sync skip *more* when it is
+missing, silently. `test/syncKnowns.test.mjs` now reads `portal-login.js` as the
+last hop and requires it to mention every field the builder produces, so the
+next one fails a test instead of a client.
+
+A list call that did not **succeed** is never read as "no proceedings", on
+either path: a 500, a WAF 403 or a 401 from a session that is not ready yet
+produces no rows, and no rows looks exactly like a clean compliance record. The
+connector raises it (nothing is stamped); the extension hands the run back to
+its navigate-and-retry path. Only a call that returned 200 with a body we cannot
+parse is forgiven, because the portal has changed its own payloads before.
 
 Three tests hold this: `test/syncDecisions.test.mjs` (the rules),
 `test/portalFetchReplies.test.mjs` (the reported case replayed through the real

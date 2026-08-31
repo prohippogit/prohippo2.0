@@ -520,26 +520,28 @@ async function syncPortalData(page, job, scope, emit, summary) {
     proceedings(page, { pan, statusFlag: "FYA", pageSize: 100 }),
     proceedings(page, { pan, statusFlag: "FYI", pageSize: 100 }),
   ]));
-  /* A LIST CALL THAT NEVER ARRIVED IS NOT AN EMPTY LIST.
+  /* A LIST CALL THAT DID NOT SUCCEED IS NOT AN EMPTY LIST.
    *
    * `push` reads the rows out of the response and shrugs at anything else, so a
-   * call that timed out or died on the wire produced no rows — and no rows is
-   * indistinguishable, three lines further down, from an assessee with a clean
-   * compliance record. The sync then went on to report "Nothing in FYA — up to
-   * date" and stamp the PAN as synced, on a run that had not managed to ask the
-   * question. That is the worst outcome this file can produce: a green tick over
-   * data nobody fetched.
+   * call that timed out, died on the wire, or came back 500 produced no rows —
+   * and no rows is indistinguishable, three lines further down, from an
+   * assessee with a clean compliance record. The sync then went on to report
+   * "Nothing in FYA — up to date" and stamp the PAN as synced, on a run that
+   * had not managed to ask the question. That is the worst outcome this file
+   * can produce: a green tick over data nobody fetched.
    *
-   * Only a transport failure is treated this way. A response that arrived and
-   * simply is not shaped as expected keeps the old, forgiving behaviour — the
-   * portal has changed its own payloads before, and the rest of the sync should
-   * not stop for it. */
+   * The test is the RESPONSE, not the transport: it used to let a refusal
+   * through — a 500, a 403 from the WAF — because those carry a status rather
+   * than an error, and portalApi has already retried one of them by the time it
+   * gets here. What is still forgiven is a call that SUCCEEDED and whose body is
+   * shaped unexpectedly: the portal has changed its own payloads before, and
+   * the rest of the sync should not stop for it. */
   const fya = lists[0];
-  if (!fya || (!fya.ok && (fya.timedOut || fya.error))) {
+  if (!fya || !fya.ok) {
     throw new Error(
       fya && fya.timedOut
         ? "The portal did not answer when asked for this assessee's e-Proceedings. Nothing was changed — try again in a few minutes."
-        : `Couldn't reach the portal's e-Proceedings list (${(fya && fya.error) || "no response"}).`
+        : `Couldn't read the portal's e-Proceedings list (${(fya && (fya.error || (fya.status && `HTTP ${fya.status}`))) || "no response"}). Nothing was changed.`
     );
   }
   push(fya, "For your Action");

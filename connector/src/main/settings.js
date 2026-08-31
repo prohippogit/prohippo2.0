@@ -14,6 +14,7 @@
 const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
+const { SCOPES: ALL_SCOPES, DEFAULT_SCOPE } = require("./syncScope");
 
 const FILE = () => path.join(app.getPath("userData"), "settings.json");
 
@@ -28,7 +29,19 @@ const DEFAULTS = {
   syncOnLaunch: false,    // and sync as soon as it has signed in
   autoSyncEnabled: false, // keep syncing on a timer while it runs
   intervalHours: 6,
-  autoScope: "all",       // what an unattended run fetches
+  /* What an unattended run fetches. e-Proceedings only — see syncScope.js for
+     why the thorough scope is the wrong default for a run nobody is watching,
+     and how a never-synced assessee still gets its one full pass. */
+  autoScope: DEFAULT_SCOPE,
+  /* Whether the line above is the practitioner's choice or ours.
+     The default MOVED, from "all" to "eproc", and every install that had ever
+     saved a setting of any kind had "all" written into its file by the write
+     below — settings.write() stores the whole object, not the changed key. So
+     without this flag the new default would reach only new installs, and the
+     practices actually complaining about noisy unattended runs would keep the
+     old behaviour for ever. Until somebody picks a scope themselves, the stored
+     value is ignored and the current default applies. */
+  autoScopeChosen: false,
   /* How far either side of the interval a run may land, as a fraction. The
      point is that the portal never sees the same schedule twice; see
      schedulePlan.js. Configurable so it can be widened, not so it can be
@@ -41,7 +54,10 @@ const DEFAULTS = {
 // loop is the one change that could make it look like something it isn't.
 const MIN_INTERVAL_HOURS = 1;
 const MAX_INTERVAL_HOURS = 24;
-const SCOPES = ["all", "eproc", "appeals"];
+/* Scopes an unattended run may be set to. "returnForm" is excluded on purpose:
+   it fetches one named year's ITR form on demand and means nothing on a
+   schedule. */
+const SCOPES = ALL_SCOPES.filter((s) => s !== "returnForm");
 
 const MAX_JITTER = 0.4;
 const clampJitter = (v) => {
@@ -72,7 +88,8 @@ function read() {
     syncOnLaunch: Boolean(stored.syncOnLaunch),
     autoSyncEnabled: Boolean(stored.autoSyncEnabled),
     intervalHours: clampInterval(stored.intervalHours),
-    autoScope: SCOPES.includes(stored.autoScope) ? stored.autoScope : DEFAULTS.autoScope,
+    autoScopeChosen: Boolean(stored.autoScopeChosen),
+    autoScope: stored.autoScopeChosen && SCOPES.includes(stored.autoScope) ? stored.autoScope : DEFAULTS.autoScope,
     jitterPct: clampJitter(stored.jitterPct),
     // This machine's id for the cross-machine sync lock. Not a secret and not a
     // credential — a random string whose only job is to tell two computers apart.
@@ -91,6 +108,9 @@ function write(patch) {
   const next = { ...read(), ...patch };
   next.intervalHours = clampInterval(next.intervalHours);
   next.jitterPct = clampJitter(next.jitterPct);
+  // Somebody setting a scope IS the choice — the flag goes up with the value,
+  // so from here on the stored setting outranks whatever the default becomes.
+  if ("autoScope" in patch) next.autoScopeChosen = true;
   if (!SCOPES.includes(next.autoScope)) next.autoScope = DEFAULTS.autoScope;
   cache = next;
   try {

@@ -1419,7 +1419,12 @@
     //   "eproc"   — FYA only → diff → new notices/orders; no FYI scan, no Form 35.
     //   "appeals" — filed Form 35s only, nothing else.
     //   "returns" — filed ITRs + s.143(1) intimations and s.154 orders only.
-    const scope = creds.scope || "all";
+    // The default is the FAST one. A scope that never arrived is a bug in the
+    // caller, and the harm of guessing wrong is asymmetric: guessing "all"
+    // renders Form 35s and unlocks CPC PDFs nobody asked for, on every
+    // unattended run, which is precisely the noise the app now avoids by
+    // asking for e-Proceedings unless told otherwise.
+    const scope = creds.scope || "eproc";
 
     if (scope === "appeals") {
       log("scope=appeals — Form 35 only");

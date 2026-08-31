@@ -36,8 +36,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           portalPassword: creds.portalPassword,
           assesseeId: creds.assesseeId || null,
           mode: creds.mode || "open", // "open" | "sync" | "master"
-          // "all" | "eproc" | "appeals" | "returns" | "returnForm"
-          scope: creds.scope || "all",
+          /* "all" | "eproc" | "appeals" | "returns" | "returnForm".
+             e-Proceedings when the app names none: a missing scope must fall
+             back to the cheap run, not to the one that also renders Form 35s
+             and pulls filed returns. The app widens it to "all" itself for an
+             assessee it has never synced (src/syncScope.js). */
+          scope: creds.scope || "eproc",
           background: Boolean(creds.background), // bulk/unwatched → fast logout pacing
           clientRef: creds.clientRef || null, // correlate a master fetch to a not-yet-saved assessee
           // Which ITR form PDF to fetch, for scope "returnForm" only.

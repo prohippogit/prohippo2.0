@@ -15,6 +15,7 @@ const fb = require("./firebaseClient");
 const { POOL, TIMEOUTS } = require("./config");
 const { jsleep } = require("./pacing");
 const { runPanSync } = require("./portalWorker");
+const { DEFAULT_SCOPE, scopeForAssessee } = require("./syncScope");
 
 // The portal sits behind a bot-filtering WAF that rejects obviously-automated
 // browsers with a "Permission Denied!!" page. Two things trip it: the
@@ -131,17 +132,26 @@ async function withPanDeadline(work, ms, context, reason) {
   }
 }
 
-// job = { assesseeId, pan, label, scope, knowns }
+// job = { assesseeId, pan, label, lastSyncedAt, knowns }
 // onEvent(evt) receives { assesseeId, phase, message, level } for the UI log.
 //
 // opts.onControl is handed a { stop, skip } handle as soon as the run starts,
 // so the window can end a sync that is going nowhere. See main.js.
 async function runPool(jobs, onEvent, opts = {}) {
   const maxConcurrent = opts.maxConcurrent || POOL.maxConcurrent;
-  // "all" is the default: with the incremental knowns in place it costs barely
-  // more than "eproc" on an already-synced PAN (two extra list calls), and
-  // choosing "eproc" quietly leaves filed Form 35s and the FYI tab unsynced.
-  const scope = opts.scope || "all";
+  /* WHAT THE RUN ASKED FOR, AND WHAT EACH PAN ACTUALLY GETS.
+   *
+   * e-Proceedings is the default, and it is not the same choice it once was:
+   * the fast scope now reads BOTH proceeding tabs (see portalFetch.js), so what
+   * it leaves out is Form 35s and filed returns — two passes that change only
+   * when somebody files something, and the two that produce most of the noise
+   * on an unattended run.
+   *
+   * The decision is per assessee rather than per run, because a PAN that has
+   * never been synced has no baseline to be incremental against and needs one
+   * thorough pass whatever the run asked for. syncScope.js holds that rule and
+   * the reasons; here it is only applied. */
+  const requestedScope = opts.scope || DEFAULT_SCOPE;
 
   const queue = [...jobs];
   const results = [];
@@ -213,6 +223,13 @@ async function runPool(jobs, onEvent, opts = {}) {
       live.set(job.assesseeId, context);
 
       const emit = (phase, message, level = "info", pct) => emitFor(job, phase, message, level, pct);
+
+      /* This PAN's scope: the run's choice, widened to a thorough pass on an
+         assessee that has never been synced. Named on the job so every pass
+         below — and the summary the window paints — talks about what was
+         actually fetched rather than what was asked for. */
+      const scope = scopeForAssessee(requestedScope, job.lastSyncedAt);
+      job.scope = scope;
 
       try {
         emit("start", `Sync started (${scope})`, "info", 3);

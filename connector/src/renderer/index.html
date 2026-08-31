@@ -87,11 +87,19 @@
         <span id="selCount" class="sel-count">0 selected</span>
       </div>
       <div class="controls">
+        <!-- e-Proceedings first because it is the default, and the default
+             because it is what a routine check is for: notices, orders and
+             replies, the things that carry a date. Form 35s and filed returns
+             are here as their own choices rather than folded into every run —
+             they change when somebody files something, not on their own.
+             An assessee that has never been synced still gets one full pass
+             whatever is picked here; see syncScope.js. -->
         <label class="ctl">Scope
-          <select id="scope">
-            <option value="all">Everything (recommended)</option>
-            <option value="eproc">e-Proceedings only (quick check)</option>
+          <select id="scope" title="An assessee that has never been synced is always fetched in full once, whatever is picked here.">
+            <option value="eproc">e-Proceedings (recommended)</option>
+            <option value="all">Everything — incl. Form 35 &amp; returns</option>
             <option value="appeals">Appeals only (Form 35)</option>
+            <option value="returns">Returns only (ITRs &amp; CPC orders)</option>
           </select>
         </label>
         <label class="chk"><input type="checkbox" id="headless" checked /> Run hidden</label>
@@ -121,7 +129,10 @@
           <div class="auto-title">Automatic sync</div>
           <div id="autoStatus" class="auto-sub">Off — syncing runs only when you press Sync selected.</div>
         </div>
-        <button id="autoRunNow" class="ghost sm">Sync everything now</button>
+        <!-- "everything" here means every assessee, not every kind of data —
+             what it fetches is the scope below. Renamed for exactly that
+             reason: the two readings were one word apart. -->
+        <button id="autoRunNow" class="ghost sm">Sync all assessees now</button>
       </div>
       <div class="auto-switches">
         <label class="chk" id="autoLaunchWrap"><input type="checkbox" id="autoLaunch"/> Start when I sign in to this computer</label>
@@ -132,6 +143,17 @@
           <option value="6">6 hours</option>
           <option value="12">12 hours</option>
           <option value="24">24 hours</option>
+        </select>
+        <!-- What a run nobody is watching fetches. Offered, but pointed: an
+             unattended "everything" is the run that reports two assessees as
+             partly synced over a Form 35 the portal would not render, which is
+             the complaint this control exists to answer. -->
+        <label class="chk" for="autoScope">Unattended syncs fetch</label>
+        <select id="autoScope" class="fsel" title="What an unattended sync fetches">
+          <option value="eproc">e-Proceedings (recommended)</option>
+          <option value="all">Everything</option>
+          <option value="appeals">Appeals only (Form 35)</option>
+          <option value="returns">Returns only (ITRs &amp; CPC orders)</option>
         </select>
       </div>
 

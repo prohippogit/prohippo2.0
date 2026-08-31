@@ -103,6 +103,50 @@ Two extra one-time deploy steps for this phase:
 
    `storage.rules` restricts every user to their own `users/{uid}/…` files.
 
+### What a run nobody is watching fetches
+
+A sync can look at four things: **e-Proceedings** (notices, orders, replies),
+**filed Form 35s**, **filed returns with their CPC intimations and s.154
+orders**, and — on demand only — a **rendered ITR form PDF**.
+
+Every automatic run asks for **e-Proceedings only**. That covers the schedule,
+the sync-at-launch run, the connector's *Sync selected*, and the web app's bulk
+"sync these twelve". Form 35s and filed returns are choices of their own, on the
+same dropdown, one click away.
+
+This is not about speed. The appeals pass asks the portal to render a PDF on
+demand and the returns pass unlocks CPC documents with a password built from a
+date of birth the practice may never have recorded — either can come back
+empty-handed on a portal that is merely busy, and the run then reports the
+assessee as *partly synced*. On a run somebody pressed, that is a fair answer to
+a question they asked. On one nobody asked for, it is a screenful of failures
+about data the practitioner never wanted, and the reported response was to run
+the whole sync again. Four and five times, over notices that were already in.
+
+**The exception is an assessee's first sync.** A PAN with no last-sync time has
+no baseline to be incremental against, so it is fetched in full exactly once —
+whatever the dropdown says — and every run after it is the fast one. The rule
+lives in `src/syncScope.js` and `connector/src/main/syncScope.js` (two copies,
+ESM and CommonJS, because neither side can import the other), and
+`test/syncScope.test.mjs` runs both over the same cases and fails if they
+disagree.
+
+Two settings, both remembered:
+
+| Where | Control | Default |
+|---|---|---|
+| Connector, toolbar | **Scope** — what *Sync selected* fetches | e-Proceedings |
+| Connector, automatic panel | **Unattended syncs fetch** — schedule + launch | e-Proceedings |
+| Web app, bulk bar | the scope dropdown beside *Sync N from portal* | e-Proceedings |
+| Web app, assessee card | the scope dropdown beside *Sync* | e-Proceedings, or **Full sync** if that assessee has never been synced |
+
+The connector's stored setting carries an `autoScopeChosen` flag. The default
+moved from *Everything* to *e-Proceedings*, and `settings.write()` stores the
+whole object — so every install that had ever toggled any switch had
+`autoScope: "all"` on disk. Until somebody picks a scope themselves, that stored
+value is ignored and the current default applies; the moment they do, their
+choice wins for good.
+
 ### What a re-sync decides NOT to fetch — and why that is the dangerous half
 
 A sync that re-read everything every run would be unusable, so it re-reads only

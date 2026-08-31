@@ -135,6 +135,11 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
         pan: a.pan || a.portalUserId,
         label: a.name || a.pan,
         dob: a.dob || "",
+        /* Carried so the pool can tell a first sync from every one after it.
+           Without it an unattended run would fetch e-Proceedings only for an
+           assessee that has never been synced at all — no filed returns, no
+           appeals, and nothing to say they were missing. See syncScope.js. */
+        lastSyncedAt: a.lastSyncedAt || "",
       }));
       /* Dealt in a different order every run. The same list worked top to
          bottom at roughly the same hour is a pattern in itself — one PAN always
@@ -149,13 +154,13 @@ async function runSync({ jobs, scope, headless, trigger = "manual" }) {
      * This used to read `trigger === "manual" ? headless : true`, which looks
      * right and was the bug behind "it opened numbers of browsers": the
      * scheduler calls runSync({ scope, trigger }) with NO headless key, and
-     * "Sync everything now" goes through the scheduler with trigger "manual".
+     * "Sync all assessees now" goes through the scheduler with trigger "manual".
      * So `headless` was undefined, `undefined === true` was false, and every
      * PAN opened a visible window — on macOS and on Windows alike.
      *
      * Stated the other way round now: a window appears only when the window's
      * own Sync-selected explicitly says so by unticking the box. Every other
-     * path — the schedule, the launch sync, Sync everything now — is hidden,
+     * path — the schedule, the launch sync, Sync all assessees now — is hidden,
      * and an absent flag can no longer mean "show it". */
     return await runPool(list, (evt) => send("sync:event", evt), {
       scope,
@@ -223,7 +228,7 @@ ipcMain.handle("auto:set", async (_e, patch = {}) => {
   return autoPayload();
 });
 
-// "Sync everything now", from the automatic panel rather than the selection.
+// "Sync all assessees now", from the automatic panel rather than the selection.
 ipcMain.handle("auto:runNow", async () => {
   if (!fb.currentUser()) throw new Error("Sign in first.");
   await scheduler.runNow("manual");

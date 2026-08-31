@@ -32,13 +32,24 @@ import { describeVariance, BASELINE_LABEL } from './intimations';
 // and a wrong one is invisible — it produces no error, just data that never
 // arrives. See src/syncKnowns.js.
 import { buildSyncKnowns } from './syncKnowns';
+// What a run fetches, and the one case that overrides it — a never-synced
+// assessee gets its single thorough pass however narrow the choice was. The
+// connector holds the same rules in CommonJS; test/syncScope.test.mjs keeps
+// the two honest. See src/syncScope.js.
+import { scopeForAssessee } from './syncScope';
 
 // Pause between assessees in a bulk sync. The extension emits "sync-done" only
 // AFTER it logs the previous assessee out, so by the time we advance the portal
 // session is already gone — this gap is just light breathing room. Tunable.
 const BULK_GAP_MS = 500; // was 1500
 
-// Sync scopes offered on the assessee's Overview card.
+/* Sync scopes offered on the assessee's Overview card and on the bulk-sync bar.
+ * e-Proceedings leads because it is the default everywhere: notices, orders and
+ * replies are the things that carry a date and the only reason to check the
+ * portal unprompted. Form 35s and filed returns are their own choices, on the
+ * same list, because they change when somebody files something — not on their
+ * own — and folding them into every run is what made a routine sync report
+ * failures nobody had asked about. */
 const SYNC_SCOPES = [
   { value: "eproc", label: "e-Proceedings only (fast)", btn: "Sync e-Proceedings" },
   { value: "all", label: "Full sync — everything", btn: "Full sync" },
@@ -704,6 +715,13 @@ export function Assessees({ onOpen, initialSearch = "" }) {
   const [editAssessee, setEditAssessee] = React.useState(null);
   const [selected, setSelected] = React.useState(() => new Set());
   const [bulk, setBulk] = React.useState(null); // { done, total, current } while a bulk sync runs
+  /* What a bulk sync fetches. e-Proceedings by default — a run over eighty
+     assessees is the one where an "everything" pass costs most and explains
+     itself least: the Form 35 render and the CPC unlock each fail on their own
+     terms, and eighty rows of half-explained failure is what made practices
+     re-run the whole thing four and five times over data that was already in.
+     The other scopes stay one click away for when they are actually wanted. */
+  const [bulkScope, setBulkScope] = React.useState("eproc");
   const doneResolver = React.useRef(null);
   const running = React.useRef(false); // true only while a bulk sync is in progress
 
@@ -740,10 +758,14 @@ export function Assessees({ onOpen, initialSearch = "" }) {
       setBulk({ done: i, total: targets.length, current: a.name });
       try {
         const { data: cred } = await httpsCallable(functions, "getPortalCredential")({ assesseeId: a.id });
-        // Bulk sync uses the fast e-Proceedings-only scope for every assessee.
+        /* Per assessee, not per run: whatever the bar is set to, one that has
+           never been synced is fetched in full this once. Nothing on file means
+           nothing to be incremental against, and a first pass that skipped the
+           filed returns would leave a hole no later run goes looking for. */
+        const scope = scopeForAssessee(bulkScope, a.portalLastSyncedAt);
         const knowns = buildSyncKnowns(data.notices, a.pan, data.matters, data.returns, a.dob);
         const done = new Promise((resolve) => { doneResolver.current = resolve; });
-        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope: "eproc", ...knowns, background: true });
+        await openPortalLogin({ portalUserId: cred.portalUserId, portalPassword: cred.portalPassword, assesseeId: a.id, mode: "sync", scope, ...knowns, background: true });
         await Promise.race([done, new Promise((r) => setTimeout(r, 120000))]); // done or 2-min safety
         doneResolver.current = null;
         await new Promise((r) => setTimeout(r, BULK_GAP_MS)); // small gap between logins
@@ -851,12 +873,31 @@ export function Assessees({ onOpen, initialSearch = "" }) {
                 </div>
                 <div className="center" style={{gap: 8}}>
                   {!bulk && <button className="btn btn-ghost btn-sm" onClick={() => setSelected(new Set())}>Clear</button>}
+                  {/* Form 35s and filed returns are here rather than in every
+                      run — see SYNC_SCOPES at the top of this file. */}
+                  {!bulk && (
+                    <select
+                      className="ph-select"
+                      value={bulkScope}
+                      onChange={(e) => setBulkScope(e.target.value)}
+                      title="What to fetch for each selected assessee"
+                      style={{fontSize: 12.5}}
+                    >
+                      {SYNC_SCOPES.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
+                    </select>
+                  )}
                   <button className="btn btn-primary btn-sm" disabled={Boolean(bulk)} onClick={runBulkSync}>
                     <Icon name="sparkle" size={13}/>{bulk ? "Syncing…" : `Sync ${selected.size} from portal`}
                   </button>
                 </div>
               </div>
-              {!bulk && <div className="muted" style={{fontSize: 11.5, marginTop: 6}}>Only assessees with a saved portal login can be synced. Each opens, syncs and closes in turn.</div>}
+              {!bulk && (
+                <div className="muted" style={{fontSize: 11.5, marginTop: 6}}>
+                  Only assessees with a saved portal login can be synced. Each opens, syncs and closes in turn.
+                  {bulkScope === "eproc" && " New notices, orders and replies only — Form 35 and filed returns are choices of their own above."}
+                  {" Anyone never synced before is fetched in full the first time."}
+                </div>
+              )}
             </div>
           )}
           <div className="between" style={{marginBottom: 12, flexWrap: "wrap", gap: 10, alignItems: "center"}}>
@@ -1588,9 +1629,11 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
   const { data: appData, notify } = useData();
   const [hasExt, setHasExt] = React.useState(null); // null = checking
   const [busy, setBusy] = React.useState(false);
-  // Default scope: first sync (never synced) pulls everything; after that a fast
-  // e-Proceedings-only sync. The user can override from the dropdown.
-  const [scope, setScope] = React.useState(a.portalLastSyncedAt ? "eproc" : "all");
+  /* Default scope: e-Proceedings, except on an assessee that has never been
+     synced — that one gets its single thorough pass. One rule, in one place,
+     shared with the bulk sync and (in its CommonJS twin) the connector, so the
+     three cannot drift apart. The user can override from the dropdown. */
+  const [scope, setScope] = React.useState(() => scopeForAssessee("eproc", a.portalLastSyncedAt));
   // Last sync's method + timing (approach "a" readout). null until a sync runs.
   const [syncInfo, setSyncInfo] = React.useState(null);
   // Counters for the streamed notice documents (used to surface failures).
@@ -1874,9 +1917,10 @@ function PortalCard({ a, onAddLogin, onClosedProceedings }) {
             </button>
           </div>
           <div className="muted" style={{fontSize: 11}}>
-            {scope === "eproc" && "Fast: checks FYA for new notices/orders only — skips Form 35."}
-            {scope === "all" && "Thorough: FYA + FYI + replies + Form 35. Use for the first sync."}
+            {scope === "eproc" && "Fast: new notices, orders and replies only — skips Form 35 and filed returns. The default, including for every scheduled and bulk sync."}
+            {scope === "all" && "Thorough: FYA + FYI + replies + Form 35 + filed returns. Used automatically for an assessee's first sync."}
             {scope === "appeals" && "Re-pulls filed Form 35 appeals only."}
+            {scope === "returns" && "Re-pulls filed ITRs with their s.143(1) intimations and s.154 orders only."}
           </div>
           {/* The hippo narrates a live sync (Phase A → B → done/empty/error). */}
           {fetchState && (

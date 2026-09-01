@@ -695,8 +695,7 @@ and means a T−3 sweep later needs no new approval.
 ```
 More notices are arriving than can be sent one by one.
 
-Five have gone out in the last hour and others are still coming in, so further
-alerts are paused until the hour is out.
+Five have gone out in the last hour and others are still coming in, so further alerts are paused until the hour is out.
 
 Open ProHippo — the dashboard lists everything issued in the last 24 hours.
 ```
@@ -710,8 +709,7 @@ Your cause list for the week of {{1}} is attached.
 
 {{2}} hearings listed · {{3}}
 
-Times and benches are as recorded in ProHippo this morning. Check the portal for
-anything notified after that.
+Times and benches are as recorded in ProHippo this morning. Check the portal for anything notified after that.
 ```
 
 Samples: `17–23 August 2026` · `6` · `2 ITAT, 1 CIT(A), 3 Scrutiny`

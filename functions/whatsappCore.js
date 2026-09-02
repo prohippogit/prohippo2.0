@@ -187,7 +187,7 @@ function noticeDeadlineSentence(notice) {
   return "No date on the notice.";
 }
 
-/* The seven variables of ph_notice_alert_user_v1, in order.
+/* The seven variables of ph_notice_alert_user_v2, in order.
    Every one comes off the record; none is composed by a model. */
 function noticeAlertParams(notice) {
   const n = notice || {};

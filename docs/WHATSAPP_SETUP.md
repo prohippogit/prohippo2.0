@@ -647,7 +647,7 @@ and can be submitted and tested immediately; the fourth carries a PDF and is the
 first that depends on `MEDIA_MODE` being right for your tenant.
 
 <details>
-<summary><code>ph_notice_alert_user_v1</code> — 7 variables</summary>
+<summary><code>ph_notice_alert_user_v2</code> — 7 variables</summary>
 
 ```
 Income-tax notice recorded on your ProHippo account.
@@ -666,14 +666,30 @@ Samples: `Rajesh M. Shah` · `ABCPS1234F` · `142(1)` · `2017-18` ·
 `12 August 2026` · `ITBA/AST/F/142(1)/2026-27/103412` ·
 `Hearing on 13 August 2026.`
 
-**This body was rewritten to be recategorised.** The first version closed on
-*"Open ProHippo to review it and ask the client for documents."* — an imperative
-invitation into an app, which is the shape of a re-engagement prompt rather than
-a transaction update. Meta will not recategorise a live template on request
-inside about four weeks, but an edit to the body triggers fresh categorisation
-immediately, so the wording carries the correction: an account event at the top,
-labelled record fields in the middle, a status statement at the end, and no call
-to action anywhere. Same seven variables in the same order, so no code changed.
+**Why this one is `v2`, and why the body differs from its siblings.** The first
+version went in under the wrong category — Marketing, selected by mistake — and
+Meta will not recategorise a live template on request inside about four weeks.
+Deleting it and resubmitting clears the category, but Meta then blocks reuse of
+a deleted template's name for roughly 30 days, so the name had to move to `v2`.
+That is the whole reason for the version bump; nothing about the message changed
+its meaning.
+
+The body was rewritten at the same time, because it was worth not repeating the
+mistake. The first version closed on *"Open ProHippo to review it and ask the
+client for documents."* — an imperative invitation into an app, which is the
+shape of a re-engagement prompt rather than a transaction update, and exactly
+what an automatic categoriser would read as Marketing. The replacement pushes
+the other way: an account event at the top, labelled record fields in the middle,
+a status statement at the end, and no call to action anywhere.
+
+Same seven variables in the same order, so `noticeAlertParams()` never changed —
+only the template name it is sent under.
+
+> **The same phrasing is still in two others.** `ph_notice_burst_user_v1` and
+> `ph_hearing_reminder_user_v1` both contain an *"Open ProHippo …"* line. They
+> reach the practitioner rather than a client, so the stakes are lower, but if a
+> category is ever determined from content rather than chosen they carry the
+> same risk and want the same treatment.
 </details>
 
 <details>

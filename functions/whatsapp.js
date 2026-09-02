@@ -90,7 +90,10 @@ const MEDIA_MODE = "body"; // "body" — top-level media object | "header-param"
  */
 const TEMPLATES = {
   ph_doc_request_v1: { languages: ["en"], media: "document", feature: "docRequest" },
-  ph_notice_alert_user_v1: { languages: ["en"], media: null, feature: "noticeAlertUser" },
+  /* v2 because v1 was approved under the wrong category and had to be deleted,
+     and Meta blocks reuse of a deleted template's name for about 30 days. The
+     body was rewritten at the same time — see docs/WHATSAPP_SETUP.md. */
+  ph_notice_alert_user_v2: { languages: ["en"], media: null, feature: "noticeAlertUser" },
   // No variables at all — see burstDecision() in whatsappCore.js for why it
   // carries no count.
   ph_notice_burst_user_v1: { languages: ["en"], media: null, feature: "noticeAlertUser" },
@@ -646,7 +649,7 @@ exports.build = function build({ REGIONS, PRIMARY_REGION, TRIGGER_REGION, db, re
           await deliver({
             uid,
             to: reach.mobile,
-            template: "ph_notice_alert_user_v1",
+            template: "ph_notice_alert_user_v2",
             params: noticeAlertParams(n),
             assessee: n.assessee || "",
             recipientRole: "user",

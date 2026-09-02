@@ -650,21 +650,30 @@ first that depends on `MEDIA_MODE` being right for your tenant.
 <summary><code>ph_notice_alert_user_v1</code> — 7 variables</summary>
 
 ```
-New notice on the portal.
+Income-tax notice recorded on your ProHippo account.
 
-{{1}} ({{2}})
-Section {{3}} · AY {{4}}
-Issued {{5}}
-DIN {{6}}
+Assessee: {{1}} ({{2}})
+Section: {{3}} · AY {{4}}
+Issued: {{5}}
+DIN: {{6}}
 
 {{7}}
 
-Open ProHippo to review it and ask the client for documents.
+This notice is on file and awaiting your review.
 ```
 
 Samples: `Rajesh M. Shah` · `ABCPS1234F` · `142(1)` · `2017-18` ·
 `12 August 2026` · `ITBA/AST/F/142(1)/2026-27/103412` ·
 `Hearing on 13 August 2026.`
+
+**This body was rewritten to be recategorised.** The first version closed on
+*"Open ProHippo to review it and ask the client for documents."* — an imperative
+invitation into an app, which is the shape of a re-engagement prompt rather than
+a transaction update. Meta will not recategorise a live template on request
+inside about four weeks, but an edit to the body triggers fresh categorisation
+immediately, so the wording carries the correction: an account event at the top,
+labelled record fields in the middle, a status statement at the end, and no call
+to action anywhere. Same seven variables in the same order, so no code changed.
 </details>
 
 <details>

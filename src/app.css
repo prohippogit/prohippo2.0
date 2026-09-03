@@ -1182,6 +1182,30 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .matter-row:hover .matter-view,
 .matter-row:focus-visible .matter-view { background: var(--p-primary); color: #fff; }
 
+/* "Download the whole proceeding" — the icon form, on a proceeding row and on
+   the phone's proceeding card. It sits inside a row that is itself a button,
+   so it has to read as its own control: a bordered white tile that colours on
+   hover, never a bare glyph floating on the row.
+
+   While it runs it shows a count instead of the glyph, which is why the width
+   is a minimum rather than a fixed 30px — "10/14" is wider than a download
+   arrow, and a button that jumps two pixels every file is worse than one that
+   sits at the width of its longest state. */
+.pbundle-btn {
+  min-width: 30px; height: 30px;
+  padding: 0 6px;
+  display: inline-grid; place-items: center;
+  border-radius: 9px;
+  background: white;
+  border: 1px solid var(--p-line-2);
+  color: var(--p-text-2);
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.pbundle-btn:hover { color: var(--p-primary); border-color: var(--p-primary-3); background: var(--p-lavender-2); }
+.pbundle-btn.busy { color: var(--p-primary-2); border-color: var(--p-primary-3); background: var(--p-lavender-2); cursor: default; }
+.pbundle-count { font-size: 10.5px; font-weight: 800; letter-spacing: -0.02em; }
+
 /* Year rows in the ITR-B block period — the same idiom as .matter-row above,
    with one thing that row does not have to solve: it OPENS IN PLACE, and what
    opens is a whole form. Seven white cards on a pale ground read fine while

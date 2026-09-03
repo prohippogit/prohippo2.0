@@ -25,6 +25,9 @@ import { noticeFilename, returnOrderFilename, returnDocFilename } from './downlo
 import { computationAvailability } from './computation/supported';
 import { orderDocType, isAppealableOrder, DOC_TYPE_LABEL, sameAppeal } from './appeals';
 import NoticeDocuments from './NoticeDocuments';
+// One folder per notice, the reply filed against it inside that folder, the
+// whole proceeding as a single zip. See src/proceedingBundle.js for the layout.
+import ProceedingBundleButton from './ProceedingBundleButton';
 import { noticeDocumentCount, hasDocumentList } from './noticeDocs';
 import { describeVariance, BASELINE_LABEL } from './intimations';
 // What a re-sync already holds, so it fetches only what is genuinely new. The
@@ -2327,8 +2330,8 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
      hides the row must not close the card the user is reading. */
   const selected = matters.find((m) => m.id === openId) || null;
 
-  // type | proceeding (flex) | AY | section (no-wrap) | status | view chip
-  const GRID = "96px minmax(170px, 1fr) 70px 128px 96px 104px";
+  // type | proceeding (flex) | AY | section (no-wrap) | status | download | view chip
+  const GRID = "96px minmax(170px, 1fr) 70px 128px 96px 42px 104px";
   return (
     <>
       {/* The toolbar. Chips for the kind of proceeding, because there are four
@@ -2384,12 +2387,14 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
         </div>
       ) : (
       <div className="matters-surface" style={{overflowX: "auto"}}>
-        <div className="col matters-list" style={{gap: 10, minWidth: 640}}>
-          {/* Column headings for the six-column row below. On a phone the row
-              is not six columns and there is nothing for them to head, so they
-              are hidden there — see .matters-head in app.css. */}
+        <div className="col matters-list" style={{gap: 10, minWidth: 690}}>
+          {/* Column headings for the seven-column row below — the last two,
+              the download and the way in, head nothing and are blank. On a
+              phone the row is not columns at all and there is nothing for any
+              of them to head, so they are hidden there — see .matters-head in
+              app.css. */}
           <div className="matters-head" style={{display: "grid", gridTemplateColumns: GRID, gap: 14, alignItems: "center", padding: "0 18px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#46389C"}}>
-            <span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span><span/>
+            <span>Type</span><span>Proceeding</span><span>AY</span><span>Section</span><span>Status</span><span/><span/>
           </div>
           {ordered.map((m) => {
             const ns = noticesFor(m);
@@ -2418,6 +2423,11 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                   <div className="mcard-top">
                     <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span>
                     <span className="mcard-title">{m.ref || m.proceedingName || "Matter"}</span>
+                    {/* The whole proceeding as one folder. Beside the way in
+                        rather than in the tinted foot, because the foot's last
+                        child is pinned right and that is where the status has
+                        always sat. */}
+                    <ProceedingBundleButton matter={m} notices={ns} assesseeName={assesseeName} notify={notify}/>
                     <Icon name="chevron-right" size={17} className="mcard-go"/>
                   </div>
                   <div className="mcard-sub">
@@ -2461,6 +2471,13 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
                 <span>{m.ay || "—"}</span>
                 <span style={{whiteSpace: "nowrap"}}>{section ? <span className="pill pill-muted">u/s {section}</span> : <span className="muted">—</span>}</span>
                 <span><StatusPill status={m.status}/></span>
+                {/* Every notice, order and reply in this proceeding, as one zip
+                    with a folder per notice — the row is where a practitioner
+                    decides they want the matter, so it is where the folder is
+                    offered. Renders nothing when nothing has synced. */}
+                <span onClick={(e) => e.stopPropagation()}>
+                  <ProceedingBundleButton matter={m} notices={ns} assesseeName={assesseeName} notify={notify}/>
+                </span>
                 <span className="matter-view center" style={{gap: 5, justifySelf: "end", padding: "6px 11px", borderRadius: 999, background: "var(--p-lavender-2)", color: "var(--p-primary-2)", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap"}}>
                   View <Icon name="arrow-right" size={13}/>
                 </span>
@@ -2476,6 +2493,8 @@ function MattersView({ matters, notices, hearings, assesseeName, notify, focusRe
           matter={selected}
           notices={noticesFor(selected)}
           hearings={hearingsFor(selected)}
+          assesseeName={assesseeName}
+          notify={notify}
           parsingId={parsingId}
           onParse={parse}
           onClose={() => setOpenId(null)}
@@ -2549,7 +2568,7 @@ function ProceedingIdentity({ m, section, docCount, hearingCount }) {
   );
 }
 
-function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onParse, onClose }) {
+function ProceedingModal({ matter: m, notices: ns, hearings: hs, assesseeName, notify, parsingId, onParse, onClose }) {
   const [adjourning, setAdjourning] = React.useState(null);
   const [adding, setAdding] = React.useState(false);
   const isPhone = useIsPhone();
@@ -2639,7 +2658,12 @@ function ProceedingModal({ matter: m, notices: ns, hearings: hs, parsingId, onPa
         </div>
 
         <div className="pm-sec">
-          <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8}}>Notices &amp; orders</div>
+          <div className="between" style={{marginBottom: 8, gap: 10}}>
+            <div className="pm-eyebrow" style={{fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase"}}>Notices &amp; orders</div>
+            {/* The same folder the row offers, where somebody reading the
+                proceeding is most likely to want it. */}
+            <ProceedingBundleButton matter={m} notices={ns} assesseeName={assesseeName || m.assessee} notify={notify} variant="full"/>
+          </div>
           {ns.length === 0
             ? <div className="muted" style={{fontSize: 12.5, padding: "10px 12px", background: "var(--p-card-tint)", borderRadius: 10, border: "1px dashed var(--p-line)"}}>No notices/orders synced for this proceeding yet.</div>
             : (

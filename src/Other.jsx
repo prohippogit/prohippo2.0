@@ -20,6 +20,9 @@ import { useCalendarConfig, useCalendarActions, relativeSyncTime } from './googl
 import VoiceHelpLineCard from './voiceAssistant';
 import { sortMatters, nextSort, MATTER_SORT_COLUMNS, MATTER_SORT_HINT } from './matterSort';
 import ItatEmailCard from './ItatEmailCard';
+// The whole proceeding as one zip — a folder per notice, with the reply filed
+// against it inside. Same control as the assessee's Matters tab.
+import ProceedingBundleButton from './ProceedingBundleButton';
 
 const PAY_MODES = ["Cash", "UPI", "Bank transfer", "Cheque", "Card", "Other"];
 
@@ -1142,6 +1145,12 @@ export function Matters({ onOpenMatter }) {
     return "muted";
   };
 
+  /* The notices that belong to one proceeding — what a bundle download is made
+     of. Linked by the portal's own proceeding id, which is the only link that
+     exists: a matter opened by hand has no notices and no bundle button, which
+     is correct. */
+  const noticesFor = (m) => (m.proceedingReqId ? data.notices.filter(n => n.proceedingReqId === m.proceedingReqId) : []);
+
   const active = data.matters.filter(m => !["Closed", "Decided"].includes(m.status));
   const q = search.toLowerCase();
   const filtered = data.matters.filter(m => {
@@ -1240,6 +1249,7 @@ export function Matters({ onOpenMatter }) {
                     <span className="pill" style={{background: accent.tint, color: accent.fg, fontWeight: 700}}>{m.type || "Matter"}</span>
                     {m.priority === "high" && <span className="mcard-urgent" title="High priority"/>}
                     <span className="mcard-title">{titleCase(m.assessee)}</span>
+                    <ProceedingBundleButton matter={m} notices={noticesFor(m)} assesseeName={titleCase(m.assessee)} notify={notify}/>
                     <Icon name="chevron-right" size={17} className="mcard-go"/>
                   </div>
                   {sub && <div className="mcard-sub">{sub}</div>}
@@ -1325,7 +1335,8 @@ export function Matters({ onOpenMatter }) {
                     </td>
                     <td>{m.staff ? <Avatar name={m.staff} color="mint" size="sm"/> : <span className="muted">—</span>}</td>
                     <td>
-                      <div className="row" style={{gap: 4}}>
+                      <div className="row" style={{gap: 4}} onClick={(e) => e.stopPropagation()}>
+                        <ProceedingBundleButton matter={m} notices={noticesFor(m)} assesseeName={titleCase(m.assessee)} notify={notify}/>
                         <button className="btn btn-ghost btn-xs" title="Edit" onClick={(e) => { e.stopPropagation(); setModal(m); }}><Icon name="edit" size={12}/></button>
                         <button className="btn btn-ghost btn-xs" title="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this matter?")) { removeMatter(m.id); notify("Matter deleted"); } }}><Icon name="trash" size={12}/></button>
                       </div>

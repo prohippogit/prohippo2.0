@@ -156,9 +156,9 @@ test("what the portal listed but never gave us is counted and said out loud", ()
   // 3 listed on the s.142(1) notice against 2 held, plus one reply attachment
   // that has no storagePath.
   assert.equal(p.summary.missing, 2);
-  assert.match(p.index.text, /2 files the portal listed could not be included/);
-  assert.match(p.index.text, /! 1 file the portal lists on this notice was not fetched/);
-  assert.match(p.index.text, /! 1 attachment on this reply was listed by the portal but not fetched/);
+  assert.match(p.indexText, /2 files the portal listed could not be included/);
+  assert.match(p.indexText, /! 1 file the portal lists on this notice was not fetched/);
+  assert.match(p.indexText, /! 1 attachment on this reply was listed by the portal but not fetched/);
 });
 
 test("a notice with nothing behind it gets a line in the index, not an empty folder", () => {
@@ -168,12 +168,12 @@ test("a notice with nothing behind it gets a line in the index, not an empty fol
     assesseeName: "A B",
   });
   assert.equal(p.files.length, 0);
-  assert.match(p.index.text, /nothing held for this notice yet/);
+  assert.match(p.indexText, /nothing held for this notice yet/);
   assert.equal(p.summary.missing, 2);
 });
 
 test("the index names the proceeding, the client and every file in it", () => {
-  const text = plan().index.text;
+  const text = plan().indexText;
   assert.match(text, /^PROCEEDING — Assessment Proceeding u\/s 143\(3\)/);
   assert.match(text, /Assessee\s+: Shraddha Rahul Mehta/);
   assert.match(text, /PAN\s+: AIQPC6674E/);
@@ -205,6 +205,72 @@ test("a notice is labelled the way a practitioner says it out loud", () => {
   assert.equal(noticeLabel({ isAppealForm: true }), "Form 35 - Appeal to CIT(A)");
   assert.equal(noticeLabel({ subject: "Show cause notice" }), "Show cause notice");
   assert.equal(noticeLabel({}), "Notice");
+});
+
+/* The closure-order download hands over the order with its computation sheet
+   and its notice of demand — all three with no section and a subject that is
+   nothing but ITBA's concatenated ids. Those three strings were the folder
+   names, which is unreadable in the one place somebody is looking for the
+   order. */
+test("a closure-order bundle is named for what each document is", () => {
+  const order = (subject) => noticeLabel({ isOrder: true, subject, fileName: `${subject}.pdf` });
+  assert.equal(order("70000000139740433_179050140_2025_AST_AIQPC6674E_Computation Sheet_1086"), "Computation sheet");
+  assert.equal(order("70000000139740396_179131965_2025_AST_AIQPC6674E_Order us 143(3)_108641"), "Assessment order u-s 143(3)");
+  assert.equal(order("70000000139740422_179131973_2025_AST_AIQPC6674E_Demand Notice us 156_1"), "Demand notice");
+});
+
+test("a section on the document's own name is used when the record has none", () => {
+  // Read off the name, never inherited from the matter: a s.271AAC penalty
+  // notice inside a scrutiny proceeding would inherit the wrong one.
+  assert.equal(noticeLabel({ isOrder: true, subject: "Penalty Order us 270A", authority: "Penalty" }), "Penalty order u-s 270A");
+  assert.equal(noticeLabel({ isOrder: true, subject: "Order", authority: "Scrutiny" }), "Assessment order");
+});
+
+test("a notice with no section keeps its subject, with ITBA's ids stripped out", () => {
+  assert.equal(
+    noticeLabel({ subject: "70000000145843545_186446841_2025_AST_AIQPC6674E_Notice us 148_1087936850(1)_26032026" }),
+    "Notice us 148"
+  );
+});
+
+test("the outline is the folder as data — what the summary sheet draws", () => {
+  const [first, second] = plan().outline;
+  assert.deepEqual(
+    { no: first.no, label: first.label, date: first.date, kind: first.kind, empty: first.empty },
+    { no: "01", label: "Notice u-s 142(1)", date: "2024-08-12", kind: "notice", empty: false }
+  );
+  assert.deepEqual(first.files.map((f) => f.name), ["Notice u-s 142(1).pdf", "Annexure to notice.pdf"]);
+  assert.equal(first.files[0].kind, "pdf");
+  assert.equal(first.replies.length, 1);
+  assert.deepEqual(first.replies[0].files.map((f) => f.name), ["Remarks.txt", "Submission.pdf"]);
+  assert.equal(first.replies[0].on, "2024-09-02");
+  assert.equal(first.missing, 1);
+  assert.equal(second.kind, "order");
+});
+
+test("the header carries what the summary sheet's masthead needs", () => {
+  assert.deepEqual(plan().header, {
+    title: "Assessment Proceeding u/s 143(3)",
+    assessee: "Shraddha Rahul Mehta",
+    pan: "AIQPC6674E",
+    type: "Scrutiny",
+    ay: "2024-25",
+    section: "143(3)",
+    status: "Active",
+    bench: "",
+    prepared: "2026-09-03",
+    notices: 2,
+    files: 4,
+    replies: 1,
+    missing: 2,
+  });
+});
+
+test("every file in the plan is named in the text fallback", () => {
+  // The two are built from one outline; this is what keeps them saying the
+  // same thing when only one of them is edited.
+  const p = plan();
+  for (const f of p.files) assert.ok(p.indexText.includes(f.path.split("/").pop()), `${f.path} missing from the text index`);
 });
 
 test("a date is a date whether it arrives as ISO, a datetime or portal epoch ms", () => {

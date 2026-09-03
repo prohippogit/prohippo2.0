@@ -42,7 +42,7 @@
  * Pure string and list work — no React, no Firebase — so the layout can be
  * tested on its own. The fetching lives in proceedingDownload.js.
  */
-import { safeFilename, withExtension, documentExt, portalDocLabel } from "./downloadNames.js";
+import { safeFilename, withExtension, documentExt, documentKind, portalDocLabel } from "./downloadNames.js";
 import { noticeDocuments } from "./noticeDocs.js";
 import { orderDocType, DOC_TYPE_LABEL } from "./appeals.js";
 
@@ -70,17 +70,52 @@ export function isoDay(value) {
 }
 
 /* What one notice IS, in the fewest words that still identify it — the folder's
-   name and the name of the notice's own PDF inside it. The section is what a
-   practitioner actually calls these ("the 142(1)"), so it leads wherever there
-   is one; the subject is the fallback because it is long and often boilerplate. */
+   name, the name of the notice's own PDF inside it, and the line it gets on the
+   summary. The section is what a practitioner actually calls these ("the
+   142(1)"), so it leads wherever there is one.
+
+   ORDERS ARE NAMED FOR WHAT THEY ARE. The closure-order download hands over the
+   order bundled with its computation sheet and its notice of demand, all three
+   carrying no section and a subject that is nothing but ITBA's concatenated
+   ids — "70000000139740396_179131965_2025_AST_AIQPC6674E_Order us 143(3)_108641".
+   Printing that as a folder name (which is what happened) is unreadable, and it
+   is unreadable in the one place a practitioner is looking for the order. The
+   classification appeals.js already does for the appeal deadline answers this
+   too, so it is asked here rather than guessed at again.
+*/
+/* The section, read off the document's own name.
+ *
+ * A closure-order bundle carries no `section` field at all, and "Assessment
+ * order" without a section is a weaker line than the document itself offers —
+ * ITBA put "Order us 143(3)" in the filename. Read from the name rather than
+ * inherited from the matter, because a s.271AAC penalty notice sitting inside a
+ * scrutiny proceeding would inherit the wrong one. */
+const SECTION_IN_NAME = /\bu\/?s\.?\s*(\d{2,3}[A-Z]{0,3}(?:\(\s*\d+[a-z]?\s*\))?)/i;
+function sectionFromName(n) {
+  const m = SECTION_IN_NAME.exec(`${n.subject || ""} ${n.fileName || n.filename || ""}`);
+  return m ? m[1].replace(/\s+/g, "") : "";
+}
+
 export function noticeLabel(n) {
   if (n.isAppealForm) return "Form 35 - Appeal to CIT(A)";
   const section = clean(n.section);
-  const kind = n.isOrder ? (DOC_TYPE_LABEL[orderDocType(n)] || "Order") : "Notice";
-  if (section) return `${kind} u-s ${section}`;
+  if (n.isOrder) {
+    const type = orderDocType(n);
+    const kind = DOC_TYPE_LABEL[type] || "Order";
+    /* A demand notice and a computation sheet are named without a section: the
+       one on them is the ORDER's, and nobody calls it a "computation sheet
+       u/s 143(3)". */
+    if (type === "demandNotice" || type === "computationSheet") return kind;
+    const sec = section || sectionFromName(n);
+    return sec ? `${kind} u-s ${sec}` : kind;
+  }
+  if (section) return `Notice u-s ${section}`;
+  /* No section at all. The subject is the last thing that says anything, and
+     it is routinely the ITBA filename — so it goes through the same reader the
+     document tiles use, which drops the id-shaped segments and keeps the words. */
   const subject = clean(n.subject);
-  if (subject) return subject.slice(0, 70);
-  return n.isOrder ? "Order" : "Notice";
+  if (subject) return (portalDocLabel(subject) || subject).slice(0, 70);
+  return "Notice";
 }
 
 /* Every file behind one notice: its own document set, plus — for a Form 35 —
@@ -186,16 +221,19 @@ export function proceedingFileCount(notices) {
  * @param matter        the proceeding record
  * @param notices       its notices/orders, any order — sorted here
  * @param assesseeName  who it belongs to
- * @param now           the date the index is stamped with (injected for tests)
+ * @param now           the date the summary is stamped with (injected for tests)
  *
  * @returns {
- *   folder,   the root folder name
- *   fileName, what the .zip itself is called
- *   files,    [{ path, storagePath, filename, contentType }] — to be fetched
- *   texts,    [{ path, text }] — written from what we already hold
- *   index,    { path, text } — the contents listing, kept apart so the
- *             downloader can append what failed to download
- *   summary   { notices, files, replies, missing }
+ *   folder,    the root folder name
+ *   fileName,  what the .zip itself is called
+ *   files,     [{ path, storagePath, filename, contentType }] — to be fetched
+ *   texts,     [{ path, text }] — written from what we already hold
+ *   header,    what identifies the proceeding, for the summary's masthead
+ *   outline,   the proceeding notice by notice, as data — what the summary PDF
+ *              draws and what the plain-text fallback prints. One shape, so the
+ *              two can never disagree about what is in the folder.
+ *   indexText, that same outline as plain text, for when the PDF cannot be made
+ *   summary    { notices, files, replies, missing }
  * }
  */
 export function planProceedingBundle({ matter, notices, assesseeName, now = new Date() }) {
@@ -203,7 +241,7 @@ export function planProceedingBundle({ matter, notices, assesseeName, now = new 
   const folder = bundleFolderName(m, assesseeName);
   const files = [];
   const texts = [];
-  const lines = [];
+  const outline = [];
   let replyCount = 0;
   let missing = 0;
 
@@ -225,42 +263,49 @@ export function planProceedingBundle({ matter, notices, assesseeName, now = new 
 
     /* A notice with nothing behind it gets no folder — a zip cannot hold an
        empty one, and a folder holding a single line of explanation is worse
-       than a line in the index. It is still counted and still reported. */
+       than a line in the summary. It is still listed and still reported. */
     const hasContent = nFiles.length > 0 || replies.some((r) => r.remarks || r.files.length);
     const noticeFolder = `${folder}/${seg(`${pad2(i + 1)} ${[day, label].filter(Boolean).join(" ")}`, `${pad2(i + 1)} Notice`)}`;
 
-    lines.push("");
-    lines.push(`${pad2(i + 1)}  ${label}${day ? ` — issued ${day}` : ""}${n.din ? ` — DIN ${n.din}` : ""}`);
+    const item = {
+      no: pad2(i + 1),
+      label,
+      date: day,
+      din: clean(n.din),
+      kind: n.isAppealForm ? "appeal" : n.isOrder ? "order" : "notice",
+      folder: hasContent ? noticeFolder.slice(folder.length + 1) : "",
+      files: [],
+      replies: [],
+      missing: short,
+      empty: !hasContent,
+    };
+    outline.push(item);
 
     if (!hasContent) {
       missing += short;
-      lines.push(`      (nothing held for this ${n.isOrder ? "order" : "notice"} yet — run a portal sync)`);
       return;
     }
 
     const nameIn = uniquifier();
     for (const d of nFiles) {
-      const path = `${noticeFolder}/${nameIn(seg(d.label, "Document"), docExt(d))}`;
-      files.push({ path, storagePath: d.storagePath, filename: d.filename, contentType: d.contentType });
-      lines.push(`      ${path.slice(noticeFolder.length + 1)}`);
+      const name = nameIn(seg(d.label, "Document"), docExt(d));
+      files.push({ path: `${noticeFolder}/${name}`, storagePath: d.storagePath, filename: d.filename, contentType: d.contentType });
+      item.files.push({ name, kind: documentKind(name, d.contentType) });
     }
-    if (short) {
-      missing += short;
-      lines.push(`      ! ${short} file${short === 1 ? "" : "s"} the portal lists on this notice ${short === 1 ? "was" : "were"} not fetched — re-run the sync.`);
-    }
+    if (short) missing += short;
 
     replies.forEach((r, ri) => {
       replyCount++;
       const title = replies.length > 1 ? `Reply ${ri + 1}` : "Reply";
       const replyFolder = `${noticeFolder}/${seg([title, r.on].filter(Boolean).join(" - "), title)}`;
       const replyIn = uniquifier();
+      const entry = { title, type: r.type, on: r.on, remarks: "", files: [], missing: r.missing };
       /* The remarks ARE the reply on a good number of these — an adjournment
          request is typed into the portal box with nothing attached — so they
          are written out as a file rather than left on a screen. */
       if (r.remarks) {
-        const path = `${replyFolder}/Remarks.txt`;
         texts.push({
-          path,
+          path: `${replyFolder}/Remarks.txt`,
           text: [
             `${r.type}${r.on ? ` filed on ${r.on}` : ""}`,
             `Against: ${label}${day ? ` issued ${day}` : ""}`,
@@ -269,51 +314,99 @@ export function planProceedingBundle({ matter, notices, assesseeName, now = new 
             "",
           ].join("\n"),
         });
-        lines.push(`      ${path.slice(noticeFolder.length + 1)}`);
+        entry.remarks = r.remarks;
+        entry.files.push({ name: "Remarks.txt", kind: "other" });
       }
       for (const at of r.files) {
         const name = replyIn(seg(clean(at.label) || portalDocLabel(at.filename) || "Attachment", "Attachment"), docExt(at));
-        const path = `${replyFolder}/${name}`;
-        files.push({ path, storagePath: at.storagePath, filename: at.filename, contentType: at.contentType });
-        lines.push(`      ${path.slice(noticeFolder.length + 1)}`);
+        files.push({ path: `${replyFolder}/${name}`, storagePath: at.storagePath, filename: at.filename, contentType: at.contentType });
+        entry.files.push({ name, kind: documentKind(name, at.contentType) });
       }
-      if (r.missing > 0) {
-        missing += r.missing;
-        lines.push(`      ! ${r.missing} attachment${r.missing === 1 ? "" : "s"} on this reply ${r.missing === 1 ? "was" : "were"} listed by the portal but not fetched — re-run the sync.`);
-      }
+      if (r.missing > 0) missing += r.missing;
+      item.replies.push(entry);
     });
   });
 
-  const head = [
-    `PROCEEDING — ${clean(m.ref) || clean(m.proceedingName) || clean(m.type) || "Matter"}`,
-    "",
-    ...[
-      ["Assessee", clean(assesseeName) || clean(m.assessee)],
-      ["PAN", clean(m.pan)],
-      ["Type", clean(m.type)],
-      ["A.Y.", clean(m.ay)],
-      ["Section", clean(m.section) ? `u/s ${clean(m.section)}` : ""],
-      ["Status", clean(m.status)],
-      ["Bench", clean(m.bench)],
-    ].filter(([, v]) => v).map(([k, v]) => `${k.padEnd(10)}: ${v}`),
-    `${"Prepared".padEnd(10)}: ${isoDay(now)} — ProHippo`,
-    "",
-    [
-      `${ordered.length} notice${ordered.length === 1 ? "" : "s"}/orders`,
-      `${files.length} file${files.length === 1 ? "" : "s"}`,
-      replyCount ? `${replyCount} repl${replyCount === 1 ? "y" : "ies"}` : "no replies on record",
-    ].join("  ·  "),
-    ...(missing ? [`${missing} file${missing === 1 ? "" : "s"} the portal listed could not be included — see the marked lines below.`] : []),
-    "",
-    "CONTENTS",
-  ];
+  const header = {
+    title: clean(m.ref) || clean(m.proceedingName) || clean(m.type) || "Proceeding",
+    assessee: clean(assesseeName) || clean(m.assessee),
+    pan: clean(m.pan),
+    type: clean(m.type),
+    ay: clean(m.ay),
+    section: clean(m.section),
+    status: clean(m.status),
+    bench: clean(m.bench),
+    prepared: isoDay(now),
+    notices: ordered.length,
+    files: files.length,
+    replies: replyCount,
+    missing,
+  };
 
   return {
     folder,
     fileName: withExtension(folder, "zip"),
     files,
     texts,
-    index: { path: `${folder}/00 Contents.txt`, text: [...head, ...lines, ""].join("\n") },
+    header,
+    outline,
+    indexText: renderIndexText(header, outline),
     summary: { notices: ordered.length, files: files.length, replies: replyCount, missing },
   };
+}
+
+/* The same outline as plain text.
+ *
+ * The bundle's index is a PDF in the practice's own theme (proceedingSummaryPdf
+ * .js). This is what goes in when that cannot be drawn — a font that failed to
+ * register, a browser that fell over on the generator — because a folder of
+ * fourteen files with nothing to say what they are is the thing this feature
+ * exists to prevent, and "the PDF didn't build" is no reason to hand one over.
+ */
+export function renderIndexText(header, outline) {
+  const lines = [
+    `PROCEEDING — ${header.title}`,
+    "",
+    ...[
+      ["Assessee", header.assessee],
+      ["PAN", header.pan],
+      ["Type", header.type],
+      ["A.Y.", header.ay],
+      ["Section", header.section ? `u/s ${header.section}` : ""],
+      ["Status", header.status],
+      ["Bench", header.bench],
+    ].filter(([, v]) => v).map(([k, v]) => `${k.padEnd(10)}: ${v}`),
+    `${"Prepared".padEnd(10)}: ${header.prepared} — ProHippo`,
+    "",
+    [
+      `${header.notices} notice${header.notices === 1 ? "" : "s"}/orders`,
+      `${header.files} file${header.files === 1 ? "" : "s"}`,
+      header.replies ? `${header.replies} repl${header.replies === 1 ? "y" : "ies"}` : "no replies on record",
+    ].join("  ·  "),
+    ...(header.missing ? [`${header.missing} file${header.missing === 1 ? "" : "s"} the portal listed could not be included — see the marked lines below.`] : []),
+    "",
+    "CONTENTS",
+  ];
+
+  for (const it of outline) {
+    lines.push("");
+    lines.push(`${it.no}  ${it.label}${it.date ? ` — issued ${it.date}` : ""}${it.din ? ` — DIN ${it.din}` : ""}`);
+    if (it.empty) {
+      lines.push(`      (nothing held for this ${it.kind === "order" ? "order" : "notice"} yet — run a portal sync)`);
+      continue;
+    }
+    for (const f of it.files) lines.push(`      ${f.name}`);
+    if (it.missing) {
+      lines.push(`      ! ${it.missing} file${it.missing === 1 ? "" : "s"} the portal lists on this notice ${it.missing === 1 ? "was" : "were"} not fetched — re-run the sync.`);
+    }
+    for (const r of it.replies) {
+      const dir = seg([r.title, r.on].filter(Boolean).join(" - "), r.title);
+      for (const f of r.files) lines.push(`      ${dir}/${f.name}`);
+      if (r.missing > 0) {
+        lines.push(`      ! ${r.missing} attachment${r.missing === 1 ? "" : "s"} on this reply ${r.missing === 1 ? "was" : "were"} listed by the portal but not fetched — re-run the sync.`);
+      }
+    }
+  }
+  lines.push("");
+  return lines.join("\n");
 }

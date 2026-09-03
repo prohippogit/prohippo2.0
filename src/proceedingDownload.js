@@ -22,7 +22,8 @@ import { ref as storageRef, getDownloadURL } from "firebase/storage";
 import { storage } from "./firebase";
 import { saveBlob } from "./downloadFile";
 import { sniffExtension, retypeFilename } from "./downloadNames";
-import { planProceedingBundle } from "./proceedingBundle";
+import { planProceedingBundle, renderIndexText } from "./proceedingBundle";
+import { proceedingSummaryBytes } from "./proceedingSummaryPdf";
 import { zipBlob } from "./zip";
 
 // How many objects are fetched at once. Enough to keep a broadband connection
@@ -50,11 +51,13 @@ async function fetchOne(entry) {
  * @param matter        the proceeding
  * @param notices       its notices/orders, with their responses
  * @param assesseeName  who it belongs to
+ * @param profile       the practice — its name, contact and accent colour, for
+ *                      the summary sheet's masthead
  * @param onProgress    ({ done, total }) while the files come down
  * @returns { fileName, saved, total, failed, missing } — `failed` is what would
  *          not download, `missing` what the portal listed and we never held.
  */
-export async function downloadProceedingBundle({ matter, notices, assesseeName, onProgress }) {
+export async function downloadProceedingBundle({ matter, notices, assesseeName, profile, onProgress }) {
   const plan = planProceedingBundle({ matter, notices, assesseeName });
   const enc = new TextEncoder();
   const total = plan.files.length;
@@ -96,22 +99,42 @@ export async function downloadProceedingBundle({ matter, notices, assesseeName, 
     throw new Error("None of the documents could be downloaded — check your connection and try again.");
   }
 
-  /* What did not come down goes in the index, under its own heading, before the
-     zip is written. The practitioner who opens this folder in a month is the
-     one who needs to know it is short. */
-  const indexText = failed.length
-    ? [
-        plan.index.text,
-        "NOT INCLUDED",
-        ...failed.map((f) => `      ${f.path.slice(plan.folder.length + 1)} — ${f.reason}`),
-        "",
-        "These are held by ProHippo but could not be downloaded just now. Try the bundle again, or save them one at a time from the proceeding.",
-        "",
-      ].join("\n")
-    : plan.index.text;
+  /* THE SHEET THE FOLDER OPENS ON. Drawn in the practice's own theme, because
+     this folder gets e-mailed to clients and carried into hearings and its
+     first page is the firm's cover sheet whether anybody designed it or not.
+     What failed to download is passed in here rather than read off the plan:
+     it is only knowable now, and it is the half a practitioner most needs the
+     sheet to say.
+
+     If the PDF cannot be drawn — a font that did not register, a generator
+     that fell over — the same listing goes in as plain text instead. A folder
+     of twenty-one files with nothing to say what they are is precisely what
+     this feature exists to prevent, and "the PDF didn't build" is no reason to
+     hand one over. */
+  const index = (() => {
+    try {
+      return {
+        name: `${plan.folder}/00 Proceeding summary.pdf`,
+        data: proceedingSummaryBytes({ plan, profile, failed }),
+      };
+    } catch (err) {
+      console.error("bundle: couldn't draw the summary — falling back to text", err);
+      const text = failed.length
+        ? [
+            renderIndexText(plan.header, plan.outline),
+            "NOT INCLUDED",
+            ...failed.map((f) => `      ${f.path.slice(plan.folder.length + 1)} — ${f.reason}`),
+            "",
+            "These are held by ProHippo but could not be downloaded just now. Try the bundle again, or save them one at a time from the proceeding.",
+            "",
+          ].join("\n")
+        : plan.indexText;
+      return { name: `${plan.folder}/00 Contents.txt`, data: enc.encode(text) };
+    }
+  })();
 
   const entries = [
-    { name: plan.index.path, data: enc.encode(indexText) },
+    index,
     ...plan.texts.map((t) => ({ name: t.path, data: enc.encode(t.text) })),
     ...fetched.sort((a, b) => a.i - b.i).map(({ name, data }) => ({ name, data })),
   ];

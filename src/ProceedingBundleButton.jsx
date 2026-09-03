@@ -24,11 +24,16 @@
  */
 import React from "react";
 import { Icon } from "./shared";
+import { useData } from "./store";
 import { proceedingFileCount } from "./proceedingBundle";
 import { downloadProceedingBundle } from "./proceedingDownload";
 
 export default function ProceedingBundleButton({ matter, notices, assesseeName, notify, variant = "icon" }) {
   const [progress, setProgress] = React.useState(null); // { done, total } while running
+  /* The practice's own name, contact and accent — the masthead of the summary
+     sheet inside the bundle. Read here rather than threaded through three call
+     sites, because none of them has any other reason to hold it. */
+  const { profile } = useData();
 
   /* Nothing synced against this proceeding — a matter opened by hand, or one
      whose sync has not run yet. No control at all, rather than one that hands
@@ -43,7 +48,7 @@ export default function ProceedingBundleButton({ matter, notices, assesseeName, 
     setProgress({ done: 0, total: count });
     try {
       const res = await downloadProceedingBundle({
-        matter, notices, assesseeName,
+        matter, notices, assesseeName, profile,
         onProgress: setProgress,
       });
       /* Said in one line, in the order a practitioner needs it: what they got,
